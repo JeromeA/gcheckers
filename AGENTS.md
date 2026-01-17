@@ -10,3 +10,8 @@
 - When a check fail, a return or return NULL is never enough, it should at least be a g_debug, and almost always be a
   g_return_val_if_fail().
 
+## Tests
+
+- Always write tests for new features.
+- Always run the tests before committing.
+
