@@ -458,8 +458,8 @@ static void format_board_square(char *top, size_t top_size, char *bottom, size_t
   }
 
   if (!playable) {
-    g_strlcpy(top, "    ", top_size);
-    g_strlcpy(bottom, "    ", bottom_size);
+    g_strlcpy(top, "\x1b[7m    \x1b[0m", top_size);
+    g_strlcpy(bottom, "\x1b[7m    \x1b[0m", bottom_size);
     return;
   }
 
@@ -471,7 +471,7 @@ static void format_board_square(char *top, size_t top_size, char *bottom, size_t
     return;
   }
 
-  const char *symbol = "·";
+  const char *symbol = " ";
   switch (piece) {
     case CHECKERS_PIECE_WHITE_MAN:
       symbol = "⛀";
@@ -486,7 +486,7 @@ static void format_board_square(char *top, size_t top_size, char *bottom, size_t
       symbol = "⛃";
       break;
     case CHECKERS_PIECE_EMPTY:
-      symbol = "·";
+      symbol = " ";
       break;
     default:
       g_debug("format_board_square received unknown piece %d\n", piece);
@@ -495,16 +495,18 @@ static void format_board_square(char *top, size_t top_size, char *bottom, size_t
   }
 
   top[0] = '\0';
+  g_strlcat(top, " ", top_size);
   g_strlcat(top, symbol, top_size);
-  append_padding(top, top_size, 4 - symbol_display_width(symbol));
+  append_padding(top, top_size, 4 - symbol_display_width(symbol) - 1);
 
   char subscript[8];
   int digit_count = 0;
   format_subscript_number(subscript, sizeof(subscript), square, &digit_count);
 
   bottom[0] = '\0';
+  g_strlcat(bottom, " ", bottom_size);
   g_strlcat(bottom, subscript, bottom_size);
-  append_padding(bottom, bottom_size, 4 - digit_count);
+  append_padding(bottom, bottom_size, 4 - digit_count - 1);
 }
 
 void game_print_state(const Game *game, FILE *out) {
