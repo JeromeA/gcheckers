@@ -15,3 +15,6 @@
 - Always write tests for new features.
 - Always run the tests before committing.
 
+## Bugs
+
+- When fixing a bug, add an entry in BUGS.md.
