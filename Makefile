@@ -23,10 +23,10 @@ test: test_game
 	./test_game
 
 test_game: tests/test_game.c $(SRCS) src/game.h
-	$(CC) $(CFLAGS) -o $@ tests/test_game.c $(SRCS)
+	$(CC) $(CFLAGS) -o $@ tests/test_game.c $(SRCS) $(LDLIBS)
 
 checkers: src/checkers_cli.c $(SRCS) src/game.h
-	$(CC) $(CFLAGS) -o $@ src/checkers_cli.c $(SRCS)
+	$(CC) $(CFLAGS) -o $@ src/checkers_cli.c $(SRCS) $(LDLIBS)
 
 clean:
 	rm -f $(OBJS) libgame.a test_game checkers
