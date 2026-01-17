@@ -1,6 +1,7 @@
 #ifndef GAME_H
 #define GAME_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -62,5 +63,6 @@ void movelist_free(MoveList *list);
 void game_print_state(const Game *game, FILE *out);
 
 int game_apply_move(Game *game, const CheckersMove *move);
+bool game_format_move_notation(const CheckersMove *move, char *buffer, size_t size);
 
 #endif

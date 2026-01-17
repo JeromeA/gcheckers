@@ -75,6 +75,56 @@ static void coord_from_index(uint8_t index, int *row, int *col) {
   *col = base_col + ((*row + 1) % 2);
 }
 
+static bool is_jump_step(uint8_t from, uint8_t to) {
+  int from_row = 0;
+  int from_col = 0;
+  int to_row = 0;
+  int to_col = 0;
+  coord_from_index(from, &from_row, &from_col);
+  coord_from_index(to, &to_row, &to_col);
+  return abs(from_row - to_row) == 2 && abs(from_col - to_col) == 2;
+}
+
+bool game_format_move_notation(const CheckersMove *move, char *buffer, size_t size) {
+  if (!move || !buffer || size == 0) {
+    g_debug("game_format_move_notation received invalid arguments\n");
+    g_return_val_if_fail(move != NULL, false);
+    g_return_val_if_fail(buffer != NULL, false);
+    g_return_val_if_fail(size > 0, false);
+  }
+  if (move->length < 2) {
+    g_debug("game_format_move_notation received too-short move\n");
+    g_return_val_if_fail(move->length >= 2, false);
+  }
+
+  size_t offset = 0;
+  buffer[0] = '\0';
+  for (uint8_t i = 0; i < move->length; ++i) {
+    if (move->path[i] >= 32) {
+      g_debug("game_format_move_notation received out-of-range index\n");
+      g_return_val_if_fail(move->path[i] < 32, false);
+    }
+    int square = (int)move->path[i] + 1;
+    int written = g_snprintf(buffer + offset, size - offset, "%d", square);
+    if (written < 0 || (size_t)written >= size - offset) {
+      g_debug("game_format_move_notation buffer too small\n");
+      return false;
+    }
+    offset += (size_t)written;
+
+    if (i + 1 < move->length) {
+      char separator = is_jump_step(move->path[i], move->path[i + 1]) ? 'x' : '-';
+      if (offset + 1 >= size) {
+        g_debug("game_format_move_notation buffer too small for separator\n");
+        return false;
+      }
+      buffer[offset++] = separator;
+      buffer[offset] = '\0';
+    }
+  }
+  return true;
+}
+
 static void append_move(MoveList *list, const CheckersMove *move) {
   if (!list || !move) {
     g_debug("append_move received invalid arguments\n");
