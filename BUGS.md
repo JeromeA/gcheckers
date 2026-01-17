@@ -11,3 +11,11 @@ In practice, this led to...
 
 The fix consisted of...
 
+## Linker errors for GLib symbols
+
+The goal of the build was to compile the CLI and test binaries with GLib logging and assertion helpers.
+
+In practice, this led to linker failures for GLib symbols because the Makefile did not pass the GLib linker flags when
+producing the binaries.
+
+The fix consisted of adding the GLib linker flags to the test and CLI link commands.
