@@ -153,38 +153,28 @@ static void test_print_state_format(void) {
   assert(line != NULL);
   line += strlen("Winner: None\n");
 
-  const char *row0_expected =
-      "\x1b[7m   \x1b[0m"
-      "B₁ "
-      "\x1b[7m   \x1b[0m"
-      "B₂ "
-      "\x1b[7m   \x1b[0m"
-      "B₃ "
-      "\x1b[7m   \x1b[0m"
-      "B₄ "
-      "\n";
-  const char *row3_expected =
-      "WW₃"
-      "\x1b[7m   \x1b[0m"
-      "BB₄"
-      "\x1b[7m   \x1b[0m"
-      " ₁₅"
-      "\x1b[7m   \x1b[0m"
-      " ₁₆"
-      "\x1b[7m   \x1b[0m"
-      "\n";
+  const char *row0_top_expected = "    ⛂      ⛂      ⛂      ⛂  \n";
+  const char *row0_bottom_expected = "    ₁       ₂       ₃       ₄   \n";
+  const char *row3_top_expected = "⛁      ⛃      ·       ·       \n";
+  const char *row3_bottom_expected = "₁₃      ₁₄      ₁₅      ₁₆      \n";
 
-  assert(strncmp(line, row0_expected, strlen(row0_expected)) == 0);
+  assert(strncmp(line, row0_top_expected, strlen(row0_top_expected)) == 0);
   line = strchr(line, '\n');
   assert(line != NULL);
   line += 1;
+  assert(strncmp(line, row0_bottom_expected, strlen(row0_bottom_expected)) == 0);
+
+  for (int i = 0; i < 5; ++i) {
+    line = strchr(line, '\n');
+    assert(line != NULL);
+    line += 1;
+  }
+
+  assert(strncmp(line, row3_top_expected, strlen(row3_top_expected)) == 0);
   line = strchr(line, '\n');
   assert(line != NULL);
   line += 1;
-  line = strchr(line, '\n');
-  assert(line != NULL);
-  line += 1;
-  assert(strncmp(line, row3_expected, strlen(row3_expected)) == 0);
+  assert(strncmp(line, row3_bottom_expected, strlen(row3_bottom_expected)) == 0);
 
   free(buffer);
   game_destroy(&game);
