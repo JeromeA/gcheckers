@@ -387,30 +387,88 @@ void movelist_free(MoveList *list) {
   list->count = 0;
 }
 
-static void print_board_piece(FILE *out, CheckersPiece piece) {
+static void format_subscript_number(char *buffer, size_t size, int number, int *digit_count) {
+  if (!buffer || !digit_count) {
+    g_debug("format_subscript_number received invalid arguments\n");
+    g_return_if_fail(buffer != NULL);
+    g_return_if_fail(digit_count != NULL);
+  }
+  if (size == 0) {
+    g_debug("format_subscript_number received zero buffer size\n");
+    g_return_if_fail(size > 0);
+  }
+
+  static const char *subscripts[] = {"₀", "₁", "₂", "₃", "₄", "₅", "₆", "₇", "₈", "₉"};
+
+  buffer[0] = '\0';
+  if (number >= 10) {
+    g_strlcat(buffer, subscripts[number / 10], size);
+    g_strlcat(buffer, subscripts[number % 10], size);
+    *digit_count = 2;
+  } else {
+    g_strlcat(buffer, subscripts[number], size);
+    *digit_count = 1;
+  }
+}
+
+static void print_board_piece(FILE *out, CheckersPiece piece, int square) {
   if (!out) {
     g_debug("print_board_piece received null output\n");
     g_return_if_fail(out != NULL);
   }
+  if (square < 1 || square > 32) {
+    g_debug("print_board_piece received invalid square %d\n", square);
+    g_return_if_fail(square >= 1 && square <= 32);
+  }
 
-  const char *symbol = ". ";
+  bool is_king = piece == CHECKERS_PIECE_WHITE_KING || piece == CHECKERS_PIECE_BLACK_KING;
+  int label_number = is_king ? square % 10 : square;
+  char subscript[8];
+  int digit_count = 0;
+  format_subscript_number(subscript, sizeof(subscript), label_number, &digit_count);
+
+  const char *prefix = "";
+  int prefix_chars = 0;
   switch (piece) {
     case CHECKERS_PIECE_WHITE_MAN:
-      symbol = "W ";
+      prefix = "W";
+      prefix_chars = 1;
       break;
     case CHECKERS_PIECE_WHITE_KING:
-      symbol = "WW";
+      prefix = "WW";
+      prefix_chars = 2;
       break;
     case CHECKERS_PIECE_BLACK_MAN:
-      symbol = "B ";
+      prefix = "B";
+      prefix_chars = 1;
       break;
     case CHECKERS_PIECE_BLACK_KING:
-      symbol = "BB";
+      prefix = "BB";
+      prefix_chars = 2;
+      break;
+    case CHECKERS_PIECE_EMPTY:
       break;
     default:
-      symbol = ". ";
+      g_debug("print_board_piece received unknown piece %d\n", piece);
+      break;
   }
-  fputs(symbol, out);
+
+  char output[16];
+  int total_chars = 0;
+  output[0] = '\0';
+  if (piece == CHECKERS_PIECE_EMPTY) {
+    g_strlcat(output, " ", sizeof(output));
+    total_chars += 1;
+  }
+  g_strlcat(output, prefix, sizeof(output));
+  total_chars += prefix_chars;
+  g_strlcat(output, subscript, sizeof(output));
+  total_chars += digit_count;
+  for (int i = total_chars; i < 3; ++i) {
+    g_strlcat(output, " ", sizeof(output));
+  }
+
+  fputs(output, out);
 }
 
 void game_print_state(const Game *game, FILE *out) {
@@ -441,16 +499,16 @@ void game_print_state(const Game *game, FILE *out) {
   for (int row = 0; row < 8; ++row) {
     for (int col = 0; col < 8; ++col) {
       if ((row + col) % 2 == 0) {
-        fprintf(out, "\x1b[7m  \x1b[0m");
+        fprintf(out, "\x1b[7m   \x1b[0m");
         continue;
       }
       int8_t idx = index_from_coord(row, col);
       if (idx < 0) {
-        fprintf(out, "\x1b[7m  \x1b[0m");
+        fprintf(out, "\x1b[7m   \x1b[0m");
         continue;
       }
       CheckersPiece piece = (CheckersPiece)board_get(&game->state, (uint8_t)idx);
-      print_board_piece(out, piece);
+      print_board_piece(out, piece, idx + 1);
     }
     fputc('\n', out);
   }

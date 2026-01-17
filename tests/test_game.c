@@ -154,24 +154,24 @@ static void test_print_state_format(void) {
   line += strlen("Winner: None\n");
 
   const char *row0_expected =
-      "\x1b[7m  \x1b[0m"
-      "B "
-      "\x1b[7m  \x1b[0m"
-      "B "
-      "\x1b[7m  \x1b[0m"
-      "B "
-      "\x1b[7m  \x1b[0m"
-      "B "
+      "\x1b[7m   \x1b[0m"
+      "B₁ "
+      "\x1b[7m   \x1b[0m"
+      "B₂ "
+      "\x1b[7m   \x1b[0m"
+      "B₃ "
+      "\x1b[7m   \x1b[0m"
+      "B₄ "
       "\n";
   const char *row3_expected =
-      "WW"
-      "\x1b[7m  \x1b[0m"
-      "BB"
-      "\x1b[7m  \x1b[0m"
-      ". "
-      "\x1b[7m  \x1b[0m"
-      ". "
-      "\x1b[7m  \x1b[0m"
+      "WW₃"
+      "\x1b[7m   \x1b[0m"
+      "BB₄"
+      "\x1b[7m   \x1b[0m"
+      " ₁₅"
+      "\x1b[7m   \x1b[0m"
+      " ₁₆"
+      "\x1b[7m   \x1b[0m"
       "\n";
 
   assert(strncmp(line, row0_expected, strlen(row0_expected)) == 0);
