@@ -26,9 +26,17 @@ typedef enum {
   CHECKERS_PIECE_BLACK_KING
 } CheckersPiece;
 
+enum {
+  CHECKERS_MAX_BOARD_SIZE = 10,
+  CHECKERS_MAX_SQUARES = 50,
+  CHECKERS_MAX_MOVE_LENGTH = 50,
+  CHECKERS_MAX_BOARD_BYTES = 25
+};
+
 typedef struct {
-  uint8_t path[12];
+  uint8_t path[CHECKERS_MAX_MOVE_LENGTH];
   uint8_t length;
+  uint8_t captures;
 } CheckersMove;
 
 typedef struct {
@@ -37,7 +45,15 @@ typedef struct {
 } MoveList;
 
 typedef struct {
-  uint8_t board[16];
+  uint8_t board_size;
+  bool men_can_jump_backwards;
+  bool capture_mandatory;
+  bool longest_capture_mandatory;
+  bool kings_can_fly;
+} CheckersRules;
+
+typedef struct {
+  uint8_t board[CHECKERS_MAX_BOARD_BYTES];
   CheckersColor turn;
   CheckersWinner winner;
 } GameState;
@@ -46,6 +62,7 @@ typedef struct Game Game;
 
 struct Game {
   GameState state;
+  CheckersRules rules;
   CheckersMove *history;
   size_t history_size;
   size_t history_capacity;
@@ -55,7 +72,11 @@ struct Game {
 };
 
 void game_init(Game *game);
+void game_init_with_rules(Game *game, const CheckersRules *rules);
 void game_destroy(Game *game);
+
+CheckersRules game_rules_american_checkers(void);
+CheckersRules game_rules_international_draughts(void);
 
 MoveList game_list_available_moves(const Game *game);
 void movelist_free(MoveList *list);
