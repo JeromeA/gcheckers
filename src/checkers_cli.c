@@ -5,18 +5,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static void coord_from_index(uint8_t index, int *row, int *col) {
-  if (!row || !col) {
-    g_debug("coord_from_index received null pointers\n");
-    g_return_if_fail(row != NULL);
-    g_return_if_fail(col != NULL);
-  }
-
-  *row = index / 4;
-  int base_col = (index % 4) * 2;
-  *col = base_col + ((*row + 1) % 2);
-}
-
 static void print_move(FILE *out, const CheckersMove *move) {
   if (!out || !move) {
     g_debug("print_move received invalid arguments\n");
@@ -24,15 +12,13 @@ static void print_move(FILE *out, const CheckersMove *move) {
     g_return_if_fail(move != NULL);
   }
 
-  for (uint8_t i = 0; i < move->length; ++i) {
-    int row = 0;
-    int col = 0;
-    coord_from_index(move->path[i], &row, &col);
-    fprintf(out, "(%d,%d)", row + 1, col + 1);
-    if (i + 1 < move->length) {
-      fputs(" -> ", out);
-    }
+  char buffer[128];
+  if (!game_format_move_notation(move, buffer, sizeof(buffer))) {
+    g_debug("Failed to format move notation\n");
+    fputs("?", out);
+    return;
   }
+  fputs(buffer, out);
 }
 
 static void list_moves(const MoveList *moves) {
