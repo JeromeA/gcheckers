@@ -159,11 +159,11 @@ static void test_print_state_format(void) {
   char row3_top_expected[128];
   char row3_bottom_expected[128];
 
-  snprintf(row0_top_expected, sizeof(row0_top_expected), "%s ⛂ %s ⛂ %s ⛂ %s ⛂ \n", reverse, reverse, reverse,
-           reverse);
+  snprintf(row0_top_expected, sizeof(row0_top_expected), "%s ⛂  %s ⛂  %s ⛂  %s ⛂  \n", reverse, reverse,
+           reverse, reverse);
   snprintf(row0_bottom_expected, sizeof(row0_bottom_expected), "%s ₁  %s ₂  %s ₃  %s ₄  \n", reverse, reverse,
            reverse, reverse);
-  snprintf(row3_top_expected, sizeof(row3_top_expected), " ⛁ %s ⛃ %s    %s    %s\n", reverse, reverse, reverse,
+  snprintf(row3_top_expected, sizeof(row3_top_expected), " ⛁  %s ⛃  %s    %s    %s\n", reverse, reverse, reverse,
            reverse);
   snprintf(row3_bottom_expected, sizeof(row3_bottom_expected), " ₁₃ %s ₁₄ %s ₁₅ %s ₁₆ %s\n", reverse, reverse,
            reverse, reverse);

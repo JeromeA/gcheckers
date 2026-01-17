@@ -11,6 +11,15 @@ In practice, this led to...
 
 The fix consisted of...
 
+## Men pieces rendered with 3-character board squares
+
+The goal of the board renderer was to keep each playable square at a consistent 4-character width for alignment.
+
+In practice, the draughts men symbols were treated as double-width, so the padding calculation only added one space and
+the displayed square width collapsed to 3 characters in terminals that render those glyphs as single-width.
+
+The fix consisted of treating the draughts man/king symbols as single-width characters when computing padding.
+
 ## Linker errors for GLib symbols
 
 The goal of the build was to compile the CLI and test binaries with GLib logging and assertion helpers.

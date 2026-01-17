@@ -418,7 +418,7 @@ static int symbol_display_width(const char *symbol) {
 
   gunichar ch = g_utf8_get_char(symbol);
   if (ch >= 0x26C0 && ch <= 0x26C3) {
-    return 2;
+    return 1;
   }
   return g_unichar_iswide(ch) ? 2 : 1;
 }
