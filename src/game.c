@@ -189,8 +189,8 @@ static void generate_simple_moves(const Game *game, uint8_t index, MoveList *mov
   }
 }
 
-static void dfs_jumps(const Game *game, uint8_t index, CheckersMove *partial, MoveList *moves,
-                      bool *visited) {
+static void dfs_jumps(const Game *game, uint8_t index, CheckersMove *partial, MoveList *moves, bool *visited,
+                      CheckersPiece piece) {
   if (!game || !partial || !moves || !visited) {
     g_debug("dfs_jumps received invalid arguments\n");
     g_return_if_fail(game != NULL);
@@ -200,7 +200,6 @@ static void dfs_jumps(const Game *game, uint8_t index, CheckersMove *partial, Mo
   }
 
   bool extended = false;
-  CheckersPiece piece = (CheckersPiece)board_get(&game->state, index);
   int row = 0;
   int col = 0;
   coord_from_index(index, &row, &col);
@@ -235,7 +234,7 @@ static void dfs_jumps(const Game *game, uint8_t index, CheckersMove *partial, Mo
     extended = true;
     visited[land_index] = true;
     partial->path[partial->length++] = (uint8_t)land_index;
-    dfs_jumps(game, (uint8_t)land_index, partial, moves, visited);
+    dfs_jumps(game, (uint8_t)land_index, partial, moves, visited, piece);
     partial->length -= 1;
     visited[land_index] = false;
   }
@@ -260,7 +259,7 @@ static void generate_jump_moves(const Game *game, uint8_t index, MoveList *moves
   CheckersMove move = {.length = 1};
   move.path[0] = index;
   visited[index] = true;
-  dfs_jumps(game, index, &move, moves, visited);
+  dfs_jumps(game, index, &move, moves, visited, piece);
 }
 
 static bool find_jump_available(const MoveList *list) {
