@@ -411,64 +411,100 @@ static void format_subscript_number(char *buffer, size_t size, int number, int *
   }
 }
 
-static void print_board_piece(FILE *out, CheckersPiece piece, int square) {
-  if (!out) {
-    g_debug("print_board_piece received null output\n");
-    g_return_if_fail(out != NULL);
+static int symbol_display_width(const char *symbol) {
+  if (!symbol) {
+    return 0;
   }
+
+  gunichar ch = g_utf8_get_char(symbol);
+  if (ch >= 0x26C0 && ch <= 0x26C3) {
+    return 2;
+  }
+  return g_unichar_iswide(ch) ? 2 : 1;
+}
+
+enum { BOARD_SQUARE_BUFFER_SIZE = 16 };
+
+static void append_padding(char *buffer, size_t size, int count) {
+  if (!buffer) {
+    g_debug("append_padding received null buffer\n");
+    g_return_if_fail(buffer != NULL);
+  }
+  if (size == 0) {
+    g_debug("append_padding received zero buffer size\n");
+    g_return_if_fail(size > 0);
+  }
+  if (count < 0) {
+    g_debug("append_padding received negative count %d\n", count);
+    g_return_if_fail(count >= 0);
+  }
+
+  for (int i = 0; i < count; ++i) {
+    g_strlcat(buffer, " ", size);
+  }
+}
+
+static void format_board_square(char *top, size_t top_size, char *bottom, size_t bottom_size, CheckersPiece piece,
+                                int square, bool playable) {
+  if (!top || !bottom) {
+    g_debug("format_board_square received null buffers\n");
+    g_return_if_fail(top != NULL);
+    g_return_if_fail(bottom != NULL);
+  }
+  if (top_size < BOARD_SQUARE_BUFFER_SIZE || bottom_size < BOARD_SQUARE_BUFFER_SIZE) {
+    g_debug("format_board_square received insufficient buffer sizes\n");
+    g_return_if_fail(top_size >= BOARD_SQUARE_BUFFER_SIZE);
+    g_return_if_fail(bottom_size >= BOARD_SQUARE_BUFFER_SIZE);
+  }
+
+  if (!playable) {
+    g_strlcpy(top, "    ", top_size);
+    g_strlcpy(bottom, "    ", bottom_size);
+    return;
+  }
+
   if (square < 1 || square > 32) {
-    g_debug("print_board_piece received invalid square %d\n", square);
+    g_debug("format_board_square received invalid square %d\n", square);
     g_return_if_fail(square >= 1 && square <= 32);
+    g_strlcpy(top, "    ", top_size);
+    g_strlcpy(bottom, "    ", bottom_size);
+    return;
   }
 
-  bool is_king = piece == CHECKERS_PIECE_WHITE_KING || piece == CHECKERS_PIECE_BLACK_KING;
-  int label_number = is_king ? square % 10 : square;
-  char subscript[8];
-  int digit_count = 0;
-  format_subscript_number(subscript, sizeof(subscript), label_number, &digit_count);
-
-  const char *prefix = "";
-  int prefix_chars = 0;
+  const char *symbol = "·";
   switch (piece) {
     case CHECKERS_PIECE_WHITE_MAN:
-      prefix = "W";
-      prefix_chars = 1;
+      symbol = "⛀";
       break;
     case CHECKERS_PIECE_WHITE_KING:
-      prefix = "WW";
-      prefix_chars = 2;
+      symbol = "⛁";
       break;
     case CHECKERS_PIECE_BLACK_MAN:
-      prefix = "B";
-      prefix_chars = 1;
+      symbol = "⛂";
       break;
     case CHECKERS_PIECE_BLACK_KING:
-      prefix = "BB";
-      prefix_chars = 2;
+      symbol = "⛃";
       break;
     case CHECKERS_PIECE_EMPTY:
+      symbol = "·";
       break;
     default:
-      g_debug("print_board_piece received unknown piece %d\n", piece);
+      g_debug("format_board_square received unknown piece %d\n", piece);
+      symbol = "·";
       break;
   }
 
-  char output[16];
-  int total_chars = 0;
-  output[0] = '\0';
-  if (piece == CHECKERS_PIECE_EMPTY) {
-    g_strlcat(output, " ", sizeof(output));
-    total_chars += 1;
-  }
-  g_strlcat(output, prefix, sizeof(output));
-  total_chars += prefix_chars;
-  g_strlcat(output, subscript, sizeof(output));
-  total_chars += digit_count;
-  for (int i = total_chars; i < 3; ++i) {
-    g_strlcat(output, " ", sizeof(output));
-  }
+  top[0] = '\0';
+  g_strlcat(top, symbol, top_size);
+  append_padding(top, top_size, 4 - symbol_display_width(symbol));
 
-  fputs(output, out);
+  char subscript[8];
+  int digit_count = 0;
+  format_subscript_number(subscript, sizeof(subscript), square, &digit_count);
+
+  bottom[0] = '\0';
+  g_strlcat(bottom, subscript, bottom_size);
+  append_padding(bottom, bottom_size, 4 - digit_count);
 }
 
 void game_print_state(const Game *game, FILE *out) {
@@ -498,17 +534,31 @@ void game_print_state(const Game *game, FILE *out) {
 
   for (int row = 0; row < 8; ++row) {
     for (int col = 0; col < 8; ++col) {
-      if ((row + col) % 2 == 0) {
-        fprintf(out, "\x1b[7m   \x1b[0m");
-        continue;
+      bool playable = (row + col) % 2 != 0;
+      int8_t idx = playable ? index_from_coord(row, col) : -1;
+      CheckersPiece piece = CHECKERS_PIECE_EMPTY;
+      if (idx >= 0) {
+        piece = (CheckersPiece)board_get(&game->state, (uint8_t)idx);
       }
-      int8_t idx = index_from_coord(row, col);
-      if (idx < 0) {
-        fprintf(out, "\x1b[7m   \x1b[0m");
-        continue;
+
+      char top[BOARD_SQUARE_BUFFER_SIZE];
+      char bottom[BOARD_SQUARE_BUFFER_SIZE];
+      format_board_square(top, sizeof(top), bottom, sizeof(bottom), piece, idx + 1, playable);
+      fputs(top, out);
+    }
+    fputc('\n', out);
+    for (int col = 0; col < 8; ++col) {
+      bool playable = (row + col) % 2 != 0;
+      int8_t idx = playable ? index_from_coord(row, col) : -1;
+      CheckersPiece piece = CHECKERS_PIECE_EMPTY;
+      if (idx >= 0) {
+        piece = (CheckersPiece)board_get(&game->state, (uint8_t)idx);
       }
-      CheckersPiece piece = (CheckersPiece)board_get(&game->state, (uint8_t)idx);
-      print_board_piece(out, piece, idx + 1);
+
+      char top[BOARD_SQUARE_BUFFER_SIZE];
+      char bottom[BOARD_SQUARE_BUFFER_SIZE];
+      format_board_square(top, sizeof(top), bottom, sizeof(bottom), piece, idx + 1, playable);
+      fputs(bottom, out);
     }
     fputc('\n', out);
   }
