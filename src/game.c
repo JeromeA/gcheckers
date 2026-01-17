@@ -393,24 +393,24 @@ static void print_board_piece(FILE *out, CheckersPiece piece) {
     g_return_if_fail(out != NULL);
   }
 
-  char symbol = '.';
+  const char *symbol = ". ";
   switch (piece) {
     case CHECKERS_PIECE_WHITE_MAN:
-      symbol = 'w';
+      symbol = "W ";
       break;
     case CHECKERS_PIECE_WHITE_KING:
-      symbol = 'W';
+      symbol = "WW";
       break;
     case CHECKERS_PIECE_BLACK_MAN:
-      symbol = 'b';
+      symbol = "B ";
       break;
     case CHECKERS_PIECE_BLACK_KING:
-      symbol = 'B';
+      symbol = "BB";
       break;
     default:
-      symbol = '.';
+      symbol = ". ";
   }
-  fputc(symbol, out);
+  fputs(symbol, out);
 }
 
 void game_print_state(const Game *game, FILE *out) {
@@ -441,17 +441,16 @@ void game_print_state(const Game *game, FILE *out) {
   for (int row = 0; row < 8; ++row) {
     for (int col = 0; col < 8; ++col) {
       if ((row + col) % 2 == 0) {
-        fputc(' ', out);
+        fprintf(out, "\x1b[7m  \x1b[0m");
         continue;
       }
       int8_t idx = index_from_coord(row, col);
       if (idx < 0) {
-        fputc(' ', out);
+        fprintf(out, "\x1b[7m  \x1b[0m");
         continue;
       }
       CheckersPiece piece = (CheckersPiece)board_get(&game->state, (uint8_t)idx);
       print_board_piece(out, piece);
-      fputc(' ', out);
     }
     fputc('\n', out);
   }
