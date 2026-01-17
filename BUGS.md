@@ -28,3 +28,13 @@ In practice, this led to linker failures for GLib symbols because the Makefile d
 producing the binaries.
 
 The fix consisted of adding the GLib linker flags to the test and CLI link commands.
+
+## Jump generation could capture a friendly piece
+
+The goal of the move generator was to chain captures without mutating the board state during depth-first search.
+
+In practice, the jump continuation used the piece stored on the board at the landing square, which is empty during
+generation. The empty square was treated as a black piece, so the search considered white men to be opponents and
+offered illegal jumps like 28x19x26 that captured a friendly piece.
+
+The fix consisted of passing the moving piece into the jump search so that opponent checks use the correct color.

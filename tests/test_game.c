@@ -190,12 +190,39 @@ static void test_print_state_format(void) {
   game_destroy(&game);
 }
 
+static void test_no_capture_over_own_piece(void) {
+  Game game;
+  game_init(&game);
+  memset(game.state.board, 0, sizeof(game.state.board));
+  game.state.turn = CHECKERS_COLOR_WHITE;
+  game.state.winner = CHECKERS_WINNER_NONE;
+
+  uint8_t black_positions[] = {0, 3, 4, 7, 9, 12, 13, 23};
+  uint8_t white_positions[] = {16, 20, 21, 22, 24, 27, 28, 30};
+  for (size_t i = 0; i < sizeof(black_positions) / sizeof(black_positions[0]); ++i) {
+    board_set(&game.state, black_positions[i], CHECKERS_PIECE_BLACK_MAN);
+  }
+  for (size_t i = 0; i < sizeof(white_positions) / sizeof(white_positions[0]); ++i) {
+    board_set(&game.state, white_positions[i], CHECKERS_PIECE_WHITE_MAN);
+  }
+
+  MoveList moves = game_list_available_moves(&game);
+  assert(moves.count == 1);
+  assert(moves.moves[0].length == 2);
+  assert(moves.moves[0].path[0] == 27);
+  assert(moves.moves[0].path[1] == 18);
+  movelist_free(&moves);
+
+  game_destroy(&game);
+}
+
 int main(void) {
   test_initial_setup();
   test_apply_simple_move();
   test_forced_capture_and_removal();
   test_move_notation();
   test_print_state_format();
+  test_no_capture_over_own_piece();
 
   printf("All tests passed.\n");
   return 0;
