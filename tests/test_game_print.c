@@ -109,9 +109,17 @@ static void test_print_state_format(void) {
   game_destroy(&game);
 }
 
+static void test_winner_label(void) {
+  assert(strcmp(game_winner_label(CHECKERS_WINNER_NONE), "None") == 0);
+  assert(strcmp(game_winner_label(CHECKERS_WINNER_WHITE), "White") == 0);
+  assert(strcmp(game_winner_label(CHECKERS_WINNER_BLACK), "Black") == 0);
+  assert(strcmp(game_winner_label(CHECKERS_WINNER_DRAW), "Draw") == 0);
+}
+
 int main(void) {
   test_move_notation();
   test_print_state_format();
+  test_winner_label();
 
   printf("All tests passed.\n");
   return 0;

@@ -142,20 +142,7 @@ void game_print_state(const Game *game, FILE *out) {
   }
 
   fprintf(out, "Turn: %s\n", game->state.turn == CHECKERS_COLOR_WHITE ? "White" : "Black");
-  fprintf(out, "Winner: ");
-  switch (game->state.winner) {
-    case CHECKERS_WINNER_WHITE:
-      fprintf(out, "White\n");
-      break;
-    case CHECKERS_WINNER_BLACK:
-      fprintf(out, "Black\n");
-      break;
-    case CHECKERS_WINNER_DRAW:
-      fprintf(out, "Draw\n");
-      break;
-    default:
-      fprintf(out, "None\n");
-  }
+  fprintf(out, "Winner: %s\n", game_winner_label(game->state.winner));
 
   int max_square = board_playable_squares(game->rules.board_size);
   for (int row = 0; row < game->rules.board_size; ++row) {
@@ -189,5 +176,21 @@ void game_print_state(const Game *game, FILE *out) {
       fputs(bottom, out);
     }
     fputc('\n', out);
+  }
+}
+
+const char *game_winner_label(CheckersWinner winner) {
+  switch (winner) {
+    case CHECKERS_WINNER_WHITE:
+      return "White";
+    case CHECKERS_WINNER_BLACK:
+      return "Black";
+    case CHECKERS_WINNER_DRAW:
+      return "Draw";
+    case CHECKERS_WINNER_NONE:
+      return "None";
+    default:
+      g_debug("game_winner_label received unknown winner %d\n", winner);
+      return "None";
   }
 }
