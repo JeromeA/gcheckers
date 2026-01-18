@@ -14,9 +14,14 @@ class CoverageLine:
   line_no: str
   code: str
 
+  def is_excluded_defensive(self) -> bool:
+    if self.count != "#####":
+      return False
+    return "g_return_val_if_fail" in self.code or "g_return_if_fail" in self.code
+
   @property
   def is_executable(self) -> bool:
-    return self.count not in {"-", "====="}
+    return self.count not in {"-", "====="} and not self.is_excluded_defensive()
 
   @property
   def is_covered(self) -> bool:
@@ -72,8 +77,8 @@ def render_file_report(output_dir: str, coverage_file: CoverageFile) -> str:
     if line.is_executable:
       classes.append("covered" if line.is_covered else "missed")
     line_rows.append(
-      "<tr class=\"{classes}\"><td class=\"count\">{count}</td>"
-      "<td class=\"line\">{line_no}</td><td class=\"code\"><pre>{code}</pre></td></tr>".format(
+      "<tr class=\"{classes}\"><td class=\"count\">{count}</td><td class=\"line\">{line_no}</td>"
+      "<td class=\"code\"><pre>{code}</pre></td></tr>".format(
         classes=" ".join(classes),
         count=html.escape(line.count or ""),
         line_no=html.escape(line.line_no or ""),
@@ -171,9 +176,15 @@ def render_index(output_dir: str, reports: List[Tuple[CoverageFile, str]]) -> No
 
 
 def main(argv: List[str]) -> int:
-  parser = argparse.ArgumentParser(description="Generate HTML coverage report from gcov output.")
-  parser.add_argument("--gcov-dir", required=True, help="Directory containing .gcov files.")
-  parser.add_argument("--output-dir", required=True, help="Directory to write HTML reports.")
+  parser = argparse.ArgumentParser(
+    description="Generate HTML coverage report from gcov output."
+  )
+  parser.add_argument(
+    "--gcov-dir", required=True, help="Directory containing .gcov files."
+  )
+  parser.add_argument(
+    "--output-dir", required=True, help="Directory to write HTML reports."
+  )
   args = parser.parse_args(argv)
 
   gcov_dir = args.gcov_dir
