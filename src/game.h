@@ -64,6 +64,7 @@ MoveList game_list_available_moves(const Game *game);
 void movelist_free(MoveList *list);
 
 void game_print_state(const Game *game, FILE *out);
+const char *game_winner_label(CheckersWinner winner);
 
 int game_apply_move(Game *game, const CheckersMove *move);
 bool game_format_move_notation(const CheckersMove *move, char *buffer, size_t size);
