@@ -7,6 +7,8 @@ import sys
 from dataclasses import dataclass
 from typing import Iterable, List, Tuple
 
+EXCLUDE_G_RETURN_CALLS = False  # Set True to exclude g_return_* calls from coverage totals.
+
 
 @dataclass
 class CoverageLine:
@@ -15,6 +17,8 @@ class CoverageLine:
   code: str
 
   def is_excluded_defensive(self) -> bool:
+    if not EXCLUDE_G_RETURN_CALLS:
+      return False
     if self.count != "#####":
       return False
     return "g_return_val_if_fail" in self.code or "g_return_if_fail" in self.code
