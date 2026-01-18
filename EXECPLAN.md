@@ -1,4 +1,4 @@
-# Add a GTK4 gcheckers application binary
+# Add GTK move-selection parity with the CLI
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
@@ -7,116 +7,110 @@ This plan is maintained according to PLANS.md at the repository root (`PLANS.md`
 
 ## Purpose / Big Picture
 
-After this change, a user can launch a GTK4 desktop application named `gcheckers` that shows the current game status and
-lets them advance the game with a button. The application uses GObject-based (object-oriented C) types to manage game
-state and the GTK window, and it builds as a new binary alongside the existing CLI. You can see it working by running the
-new `gcheckers` binary, observing a window with a status label, and clicking buttons to step moves or reset the game.
+After this change, the GTK UI shows the full checkers board and lets the user play the same moves as the CLI by
+clicking one of their pieces and then clicking one or more destination squares. The UI only accepts moves that appear
+in the engine-provided move list and prints both the player and computer moves to the console. You can see it working
+by running `./gcheckers`, clicking a white piece followed by valid destinations, and observing that the console logs the
+user move and the AI reply while the board updates in the window.
 
 ## Progress
 
-- [x] (2025-09-19 03:18Z) Review current build system, game core files, and testing setup to decide where GTK4 and
-  GObject code should live.
-- [x] (2025-09-19 03:41Z) Add a GObject-based model that wraps `Game`, emits a state-changed signal, and supports reset
-  and random move stepping, with unit tests.
-- [x] (2025-09-19 03:46Z) Add GTK4 application and window classes that bind to the model and expose controls and a status
-  label.
-- [x] (2025-09-19 03:52Z) Update the Makefile to build the new `gcheckers` binary with GTK4, include new tests, and run
-  the full test suite.
-- [x] (2025-09-19 03:54Z) Update this ExecPlan with final progress, outcomes, and any surprises, then commit.
+- [x] (2026-01-18 18:35Z) Review the existing GTK window, model APIs, and CLI move flow to map the requirements to
+  current code.
+- [x] (2026-01-18 18:35Z) Extend the model API to list moves, apply only valid moves, and report random AI moves, with
+  updated unit tests.
+- [x] (2026-01-18 18:35Z) Build a GTK board grid with selectable squares, move validation via prefixes, and AI
+  responses.
+- [x] (2026-01-18 18:35Z) Update the GTK window to print user/AI moves to the console and keep the status label in sync.
+- [x] (2026-01-18 18:35Z) Run `make all` and `make test`, then commit the changes.
 
 ## Surprises & Discoveries
 
-- Observation: No unexpected behavior encountered during GTK4 wiring or model tests.
-  Evidence: `make test` completed successfully on the first run.
+- Observation: The existing GTK UI had no move selection logic, so the model needed a stricter move-application API to
+  enforce "only from the move list" while keeping the UI simple.
+  Evidence: The previous model only exposed `gcheckers_model_step_random_move`, which could not validate user
+  selections.
 
 ## Decision Log
 
-- Decision: Build a lightweight GTK4 UI that exposes status text plus buttons to step random moves and reset the game.
-  Rationale: Keeps the UI straightforward while still demonstrating a working GTK4 binary integrated with the game
-  logic.
-  Date/Author: 2025-09-19 / Codex.
+- Decision: Implement move validation in `GCheckersModel` so the UI can only apply moves from the authoritative move
+  list.
+  Rationale: Centralizing move validation in the model prevents invalid UI state and matches CLI behavior.
+  Date/Author: 2026-01-18 / Codex.
+- Decision: Represent the board as a GTK grid of buttons and labels instead of a custom drawing surface.
+  Rationale: This keeps the UI simple, uses GTK widgets directly, and supports click handling without new drawing code.
+  Date/Author: 2026-01-18 / Codex.
 
 ## Outcomes & Retrospective
 
-- Outcome: Added a GTK4 `gcheckers` binary backed by a GObject model, plus a new unit test and Makefile updates.
-  Notes: The new UI exposes basic controls and status text while keeping the core game logic reusable and testable.
+- Outcome: The GTK UI now renders the board, enforces legal move selection via click paths, and logs both player and AI
+  moves to the console, matching the CLI flow.
+  Notes: The model API gained list/apply functions, and tests now cover valid and invalid move application.
 
 ## Context and Orientation
 
-The existing codebase is a C checkers engine with a CLI front-end. The core game logic lives in `src/game.c` and
-`src/board.c`, with `src/checkers_cli.c` as the current binary entrypoint and `Makefile` defining build and test targets.
-Tests live under `tests/` and are compiled directly with the source files. The new GTK4 binary should be built in
-parallel with the CLI and should reuse the existing game logic via a new GObject model wrapper.
+The checkers engine lives in `src/game.c`, `src/move_gen.c`, and `src/board.c`. The CLI entrypoint
+`src/checkers_cli.c` shows the move loop: list legal moves for the player, prompt for a choice, then let the AI choose a
+random move. The GTK front-end uses `src/checkers_model.c` as a GObject wrapper around `Game` and
+`src/gcheckers_window.c` for UI widgets. The existing GTK window previously displayed only a status label with
+random-move buttons; it needed a board and click-based move selection. Tests for the model live in
+`tests/test_checkers_model.c` and are run by `make test`.
 
 ## Plan of Work
 
-First, create a new GObject-based model in `src/checkers_model.c` and `src/checkers_model.h` that owns a `Game`, provides
-methods to reset and apply a random move, and emits a `state-changed` signal when the game state updates. Add a unit test
-`tests/test_checkers_model.c` that constructs the model, confirms initial state, steps a move, and resets the game. Next,
-add GTK4 types: a `GCheckersApplication` in `src/gcheckers_application.c`/`.h` that subclasses `GtkApplication`, and a
-`GCheckersWindow` in `src/gcheckers_window.c`/`.h` that subclasses `GtkApplicationWindow`. The window should create a
-status label and buttons for "Play Random Move" and "Reset", listening to the model's signal to refresh the label.
-Finally, add a `src/gcheckers.c` main file that instantiates the application, update the `Makefile` to build the new
-binary with GTK4 and GObject flags, include the new test in the `test` target, and run `make test` before committing.
+Update `src/checkers_model.h` and `src/checkers_model.c` to expose a move list function, a validated move application
+function, and a random-move function that can return the chosen move for logging. Update `tests/test_checkers_model.c`
+to exercise the new APIs with a valid move, an invalid move, and a random move. Replace the GTK window contents in
+`src/gcheckers_window.c` with a grid-based board that renders the current pieces, tracks a click path, validates
+prefixes against the move list, and applies a move once the user has clicked a complete path. After applying the player
+move, let the AI reply with a random legal move and print both moves to stdout. Ensure the status label and board update
+on every state change.
 
 ## Concrete Steps
 
-1) In the repository root, create `src/checkers_model.h` and `src/checkers_model.c` with the GObject wrapper for `Game`.
-   Ensure the model emits a `state-changed` signal and provides methods for reset and random moves.
-2) Add `tests/test_checkers_model.c` with assert-based checks for initial winner/turn, a random move application, and
-   reset behavior.
-3) Create `src/gcheckers_application.h` and `.c` for a `GtkApplication` subclass, plus `src/gcheckers_window.h` and `.c`
-   for a `GtkApplicationWindow` subclass that wires the model to the UI.
-4) Add `src/gcheckers.c` to run the GTK application.
-5) Update `Makefile` to add GTK4 and GObject pkg-config flags, a `gcheckers` binary target, the new test target, and add
-   `gcheckers` to `all`.
-6) From the repository root, run:
+1) Update `src/checkers_model.h` and `src/checkers_model.c` to add move listing and validated move application helpers.
+2) Update `tests/test_checkers_model.c` to cover the new API surface.
+3) Replace the GTK window layout in `src/gcheckers_window.c` with a board grid, selection logic, and console logging.
+4) From the repository root, run:
 
+   make all
    make test
 
-   Expect all tests (including `test_checkers_model`) to pass, and use `make gcheckers` to build the GTK4 binary.
+5) Commit the changes with a descriptive message.
 
 ## Validation and Acceptance
 
-Run `make test` and expect all existing tests plus `test_checkers_model` to pass. Then run `./gcheckers` and observe a GTK
-window with a status label and two buttons. Clicking "Play Random Move" should advance the turn and update the status
-label. Clicking "Reset" should return the game to its initial state with no winner. The status label should reflect the
-current player and winner after each action.
+Run `make all` and expect `libgame.a`, `checkers`, and `gcheckers` to build without warnings. Run `make test` and expect
+all tests to pass, including the updated `test_checkers_model`. Launch `./gcheckers`, click a white piece and one or
+more legal destination squares, and confirm that the UI moves the piece only when the selection matches an available
+move. The console should log lines like `Player plays: 9-14` and `AI plays: 22-18`, and the board should update after
+each move.
 
 ## Idempotence and Recovery
 
-All steps are additive and can be rerun safely. If a build fails due to missing GTK4 dependencies, rerun after installing
-GTK4 development packages and keep the source changes intact. You can clean outputs with `make clean` and rerun `make
-all`.
+All edits are additive and can be re-applied safely. If a build fails due to missing GTK development packages, install
+GTK4 and rerun `make all` and `make test` without changing the source. `make clean` removes built artifacts if you need
+a fresh rebuild.
 
 ## Artifacts and Notes
 
-Example command transcript after implementation:
+Example console output after a player move:
 
-  $ make test
-  ./test_game
-  ./test_game_print
-  ./test_board
-  ./test_move_gen
-  ./test_checkers_model
-  All tests passed.
+  Player plays: 9-14
+  AI plays: 22-18
 
 ## Interfaces and Dependencies
 
-The new model should expose the following interface in `src/checkers_model.h`:
+`src/checkers_model.h` must expose:
 
-  G_DECLARE_FINAL_TYPE(GCheckersModel, gcheckers_model, GCHECKERS, MODEL, GObject)
-  GCheckersModel *gcheckers_model_new(void);
-  void gcheckers_model_reset(GCheckersModel *self);
-  gboolean gcheckers_model_step_random_move(GCheckersModel *self);
-  char *gcheckers_model_format_status(GCheckersModel *self);
-  const GameState *gcheckers_model_peek_state(GCheckersModel *self);
+  MoveList gcheckers_model_list_moves(GCheckersModel *self);
+  gboolean gcheckers_model_apply_move(GCheckersModel *self, const CheckersMove *move);
+  gboolean gcheckers_model_step_random_move(GCheckersModel *self, CheckersMove *out_move);
 
-The GTK4 application should subclass `GtkApplication` and create a `GtkApplicationWindow` subclass that accepts a
-`GCheckersModel` instance, constructs a label and buttons, connects signals for button actions, and updates the label when
-`state-changed` fires. The build should use `pkg-config --cflags --libs gtk4` and `gobject-2.0` to ensure proper GTK4 and
-GObject linkage.
+`src/gcheckers_window.c` must build a GTK grid for the board, update square labels from the `GameState`, and use the
+model APIs to validate and apply moves. The UI should emit move logs with `game_format_move_notation` so the console
+matches CLI formatting.
 
 Plan updates:
-- 2025-09-19: Initial plan created to deliver the GTK4 gcheckers binary with a GObject model and test coverage.
-- 2025-09-19: Updated progress, outcomes, and discoveries after implementing the GTK4 binary and running tests.
+- 2026-01-18: Replaced the previous GTK bootstrap plan with the new parity plan after implementing board rendering and
+  click-based move selection.
