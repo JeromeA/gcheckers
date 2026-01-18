@@ -6,117 +6,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-static uint8_t board_get_raw(const uint8_t *board, uint8_t index) {
-  g_return_val_if_fail(board != NULL, 0);
-
-  uint8_t packed = board[index / 2];
-  if (index % 2 == 0) {
-    return packed & 0x0F;
-  }
-  return (packed >> 4) & 0x0F;
-}
-
-static void board_set_raw(uint8_t *board, uint8_t index, uint8_t value) {
-  g_return_if_fail(board != NULL);
-
-  uint8_t *packed = &board[index / 2];
-  if (index % 2 == 0) {
-    *packed = (uint8_t)((*packed & 0xF0) | (value & 0x0F));
-  } else {
-    *packed = (uint8_t)((*packed & 0x0F) | ((value & 0x0F) << 4));
-  }
-}
-
-static uint8_t board_get(const GameState *state, uint8_t index) {
-  g_return_val_if_fail(state != NULL, 0);
-
-  return board_get_raw(state->board, index);
-}
-
-static void board_set(GameState *state, uint8_t index, uint8_t value) {
-  g_return_if_fail(state != NULL);
-
-  board_set_raw(state->board, index, value);
-}
-
-static CheckersColor piece_color(CheckersPiece piece) {
-  if (piece == CHECKERS_PIECE_WHITE_MAN || piece == CHECKERS_PIECE_WHITE_KING) {
-    return CHECKERS_COLOR_WHITE;
-  }
-  return CHECKERS_COLOR_BLACK;
-}
-
-static bool is_opponent(CheckersPiece piece, CheckersColor player) {
-  if (piece == CHECKERS_PIECE_EMPTY) {
-    return false;
-  }
-  return piece_color(piece) != player;
-}
-
 static bool rules_valid(const CheckersRules *rules) {
   if (!rules) {
     return false;
   }
   return rules->board_size == 8 || rules->board_size == 10;
-}
-
-static uint8_t playable_squares(const CheckersRules *rules) {
-  g_return_val_if_fail(rules != NULL, 0);
-
-  return (uint8_t)((rules->board_size / 2) * rules->board_size);
-}
-
-static size_t board_byte_count(const CheckersRules *rules) {
-  uint8_t squares = playable_squares(rules);
-  return (size_t)((squares + 1) / 2);
-}
-
-static void reset_board(Game *game) {
-  if (!game) {
-    g_debug("reset_board received null game\n");
-    g_return_if_fail(game != NULL);
-  }
-  if (!rules_valid(&game->rules)) {
-    g_debug("reset_board received invalid rules\n");
-    g_return_if_fail(rules_valid(&game->rules));
-  }
-
-  memset(game->state.board, 0, sizeof(game->state.board));
-  uint8_t squares = playable_squares(&game->rules);
-  uint8_t row_pieces = (uint8_t)(game->rules.board_size / 2);
-  uint8_t rows = (uint8_t)(row_pieces - 1);
-  uint8_t total_pieces = (uint8_t)(rows * row_pieces);
-
-  for (uint8_t i = 0; i < total_pieces; ++i) {
-    board_set(&game->state, i, CHECKERS_PIECE_BLACK_MAN);
-  }
-  for (uint8_t i = (uint8_t)(squares - total_pieces); i < squares; ++i) {
-    board_set(&game->state, i, CHECKERS_PIECE_WHITE_MAN);
-  }
-}
-
-static int8_t index_from_coord(int row, int col, uint8_t board_size) {
-  if (row < 0 || row >= board_size || col < 0 || col >= board_size) {
-    return -1;
-  }
-  if ((row + col) % 2 == 0) {
-    return -1;
-  }
-  int per_row = board_size / 2;
-  return (int8_t)(row * per_row + col / 2);
-}
-
-static void coord_from_index(uint8_t index, int *row, int *col, uint8_t board_size) {
-  if (!row || !col) {
-    g_debug("coord_from_index received null pointers\n");
-    g_return_if_fail(row != NULL);
-    g_return_if_fail(col != NULL);
-  }
-
-  int per_row = board_size / 2;
-  *row = index / per_row;
-  int base_col = (index % per_row) * 2;
-  *col = base_col + ((*row + 1) % 2);
 }
 
 static bool is_forward(CheckersColor color, int delta_row) {
@@ -210,14 +104,14 @@ static void generate_simple_moves(const Game *game, uint8_t index, MoveList *mov
     g_return_if_fail(moves != NULL);
   }
 
-  CheckersPiece piece = (CheckersPiece)board_get(&game->state, index);
+  CheckersPiece piece = board_get(&game->state.board, index);
   if (piece == CHECKERS_PIECE_EMPTY) {
     return;
   }
 
   int row = 0;
   int col = 0;
-  coord_from_index(index, &row, &col, game->rules.board_size);
+  board_coord_from_index(index, &row, &col, game->rules.board_size);
 
   int directions[4][2] = {{1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
   bool is_king = piece == CHECKERS_PIECE_WHITE_KING || piece == CHECKERS_PIECE_BLACK_KING;
@@ -225,7 +119,7 @@ static void generate_simple_moves(const Game *game, uint8_t index, MoveList *mov
   for (size_t i = 0; i < 4; ++i) {
     int dr = directions[i][0];
     int dc = directions[i][1];
-    if (!is_king && !is_forward(piece_color(piece), dr)) {
+    if (!is_king && !is_forward(board_piece_color(piece), dr)) {
       continue;
     }
 
@@ -233,11 +127,11 @@ static void generate_simple_moves(const Game *game, uint8_t index, MoveList *mov
     for (;;) {
       int nr = row + dr * step;
       int nc = col + dc * step;
-      int8_t target_index = index_from_coord(nr, nc, game->rules.board_size);
+      int8_t target_index = board_index_from_coord(nr, nc, game->rules.board_size);
       if (target_index < 0) {
         break;
       }
-      if (board_get(&game->state, (uint8_t)target_index) != CHECKERS_PIECE_EMPTY) {
+      if (board_get(&game->state.board, (uint8_t)target_index) != CHECKERS_PIECE_EMPTY) {
         break;
       }
 
@@ -259,8 +153,7 @@ static void dfs_jumps(const Game *game,
                       CheckersPiece piece,
                       CheckersMove *partial,
                       MoveList *moves,
-                      uint8_t *board,
-                      size_t board_bytes) {
+                      CheckersBoard *board) {
   if (!game || !partial || !moves || !board) {
     g_debug("dfs_jumps received invalid arguments\n");
     g_return_if_fail(game != NULL);
@@ -272,14 +165,14 @@ static void dfs_jumps(const Game *game,
   bool extended = false;
   int row = 0;
   int col = 0;
-  coord_from_index(index, &row, &col, game->rules.board_size);
+  board_coord_from_index(index, &row, &col, game->rules.board_size);
   int directions[4][2] = {{1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
   bool is_king = piece == CHECKERS_PIECE_WHITE_KING || piece == CHECKERS_PIECE_BLACK_KING;
 
   for (size_t i = 0; i < 4; ++i) {
     int dr = directions[i][0];
     int dc = directions[i][1];
-    if (!is_king && !game->rules.men_can_jump_backwards && !is_forward(piece_color(piece), dr)) {
+    if (!is_king && !game->rules.men_can_jump_backwards && !is_forward(board_piece_color(piece), dr)) {
       continue;
     }
 
@@ -288,13 +181,13 @@ static void dfs_jumps(const Game *game,
       int mid_c = col + dc;
       int land_r = row + dr * 2;
       int land_c = col + dc * 2;
-      int8_t mid_index = index_from_coord(mid_r, mid_c, game->rules.board_size);
-      int8_t land_index = index_from_coord(land_r, land_c, game->rules.board_size);
+      int8_t mid_index = board_index_from_coord(mid_r, mid_c, game->rules.board_size);
+      int8_t land_index = board_index_from_coord(land_r, land_c, game->rules.board_size);
       if (mid_index < 0 || land_index < 0) {
         continue;
       }
       CheckersPiece middle_piece = (CheckersPiece)board_get_raw(board, (uint8_t)mid_index);
-      if (!is_opponent(middle_piece, piece_color(piece))) {
+      if (!board_is_opponent(middle_piece, board_piece_color(piece))) {
         continue;
       }
       if (board_get_raw(board, (uint8_t)land_index) != CHECKERS_PIECE_EMPTY) {
@@ -306,15 +199,14 @@ static void dfs_jumps(const Game *game,
       }
 
       extended = true;
-      uint8_t next_board[CHECKERS_MAX_BOARD_BYTES];
-      memcpy(next_board, board, board_bytes);
-      board_set_raw(next_board, index, CHECKERS_PIECE_EMPTY);
-      board_set_raw(next_board, (uint8_t)mid_index, CHECKERS_PIECE_EMPTY);
-      board_set_raw(next_board, (uint8_t)land_index, piece);
+      CheckersBoard next_board = *board;
+      board_set_raw(&next_board, index, CHECKERS_PIECE_EMPTY);
+      board_set_raw(&next_board, (uint8_t)mid_index, CHECKERS_PIECE_EMPTY);
+      board_set_raw(&next_board, (uint8_t)land_index, piece);
 
       partial->path[partial->length++] = (uint8_t)land_index;
       partial->captures += 1;
-      dfs_jumps(game, (uint8_t)land_index, piece, partial, moves, next_board, board_bytes);
+      dfs_jumps(game, (uint8_t)land_index, piece, partial, moves, &next_board);
       partial->length -= 1;
       partial->captures -= 1;
       continue;
@@ -325,7 +217,7 @@ static void dfs_jumps(const Game *game,
     for (int step = 1;; ++step) {
       int scan_r = row + dr * step;
       int scan_c = col + dc * step;
-      int8_t scan_index = index_from_coord(scan_r, scan_c, game->rules.board_size);
+      int8_t scan_index = board_index_from_coord(scan_r, scan_c, game->rules.board_size);
       if (scan_index < 0) {
         break;
       }
@@ -339,21 +231,20 @@ static void dfs_jumps(const Game *game,
           continue;
         }
         extended = true;
-        uint8_t next_board[CHECKERS_MAX_BOARD_BYTES];
-        memcpy(next_board, board, board_bytes);
-        board_set_raw(next_board, index, CHECKERS_PIECE_EMPTY);
-        board_set_raw(next_board, opponent_index, CHECKERS_PIECE_EMPTY);
-        board_set_raw(next_board, (uint8_t)scan_index, piece);
+        CheckersBoard next_board = *board;
+        board_set_raw(&next_board, index, CHECKERS_PIECE_EMPTY);
+        board_set_raw(&next_board, opponent_index, CHECKERS_PIECE_EMPTY);
+        board_set_raw(&next_board, (uint8_t)scan_index, piece);
 
         partial->path[partial->length++] = (uint8_t)scan_index;
         partial->captures += 1;
-        dfs_jumps(game, (uint8_t)scan_index, piece, partial, moves, next_board, board_bytes);
+        dfs_jumps(game, (uint8_t)scan_index, piece, partial, moves, &next_board);
         partial->length -= 1;
         partial->captures -= 1;
         continue;
       }
 
-      if (is_opponent(scan_piece, piece_color(piece)) && !found_opponent) {
+      if (board_is_opponent(scan_piece, board_piece_color(piece)) && !found_opponent) {
         found_opponent = true;
         opponent_index = (uint8_t)scan_index;
         continue;
@@ -374,17 +265,15 @@ static void generate_jump_moves(const Game *game, uint8_t index, MoveList *moves
     g_return_if_fail(moves != NULL);
   }
 
-  CheckersPiece piece = (CheckersPiece)board_get(&game->state, index);
+  CheckersPiece piece = board_get(&game->state.board, index);
   if (piece == CHECKERS_PIECE_EMPTY) {
     return;
   }
 
   CheckersMove move = {.length = 1, .captures = 0};
   move.path[0] = index;
-  uint8_t board_copy[CHECKERS_MAX_BOARD_BYTES];
-  size_t bytes = board_byte_count(&game->rules);
-  memcpy(board_copy, game->state.board, bytes);
-  dfs_jumps(game, index, piece, &move, moves, board_copy, bytes);
+  CheckersBoard board_copy = game->state.board;
+  dfs_jumps(game, index, piece, &move, moves, &board_copy);
 }
 
 static void filter_longest_captures(MoveList *moves) {
@@ -449,7 +338,7 @@ void game_init_with_rules(Game *game, const CheckersRules *rules) {
 
   memset(game, 0, sizeof(*game));
   game->rules = *rules;
-  reset_board(game);
+  board_reset(&game->state.board, game->rules.board_size);
   game->state.turn = CHECKERS_COLOR_WHITE;
   game->state.winner = CHECKERS_WINNER_NONE;
   game->print_state = game_print_state;
@@ -478,13 +367,13 @@ MoveList game_list_available_moves(const Game *game) {
     return moves;
   }
 
-  uint8_t squares = playable_squares(&game->rules);
+  uint8_t squares = board_playable_squares(game->rules.board_size);
   for (uint8_t i = 0; i < squares; ++i) {
-    CheckersPiece piece = (CheckersPiece)board_get(&game->state, i);
+    CheckersPiece piece = board_get(&game->state.board, i);
     if (piece == CHECKERS_PIECE_EMPTY) {
       continue;
     }
-    if (piece_color(piece) != game->state.turn) {
+    if (board_piece_color(piece) != game->state.turn) {
       continue;
     }
     generate_jump_moves(game, i, &moves);
@@ -498,11 +387,11 @@ MoveList game_list_available_moves(const Game *game) {
   }
 
   for (uint8_t i = 0; i < squares; ++i) {
-    CheckersPiece piece = (CheckersPiece)board_get(&game->state, i);
+    CheckersPiece piece = board_get(&game->state.board, i);
     if (piece == CHECKERS_PIECE_EMPTY) {
       continue;
     }
-    if (piece_color(piece) != game->state.turn) {
+    if (board_piece_color(piece) != game->state.turn) {
       continue;
     }
     generate_simple_moves(game, i, &moves);
@@ -675,14 +564,14 @@ void game_print_state(const Game *game, FILE *out) {
       fprintf(out, "None\n");
   }
 
-  int max_square = playable_squares(&game->rules);
+  int max_square = board_playable_squares(game->rules.board_size);
   for (int row = 0; row < game->rules.board_size; ++row) {
     for (int col = 0; col < game->rules.board_size; ++col) {
       bool playable = (row + col) % 2 != 0;
-      int8_t idx = playable ? index_from_coord(row, col, game->rules.board_size) : -1;
+      int8_t idx = playable ? board_index_from_coord(row, col, game->rules.board_size) : -1;
       CheckersPiece piece = CHECKERS_PIECE_EMPTY;
       if (idx >= 0) {
-        piece = (CheckersPiece)board_get(&game->state, (uint8_t)idx);
+        piece = board_get(&game->state.board, (uint8_t)idx);
       }
 
       char top[BOARD_SQUARE_BUFFER_SIZE];
@@ -693,10 +582,10 @@ void game_print_state(const Game *game, FILE *out) {
     fputc('\n', out);
     for (int col = 0; col < game->rules.board_size; ++col) {
       bool playable = (row + col) % 2 != 0;
-      int8_t idx = playable ? index_from_coord(row, col, game->rules.board_size) : -1;
+      int8_t idx = playable ? board_index_from_coord(row, col, game->rules.board_size) : -1;
       CheckersPiece piece = CHECKERS_PIECE_EMPTY;
       if (idx >= 0) {
-        piece = (CheckersPiece)board_get(&game->state, (uint8_t)idx);
+        piece = board_get(&game->state.board, (uint8_t)idx);
       }
 
       char top[BOARD_SQUARE_BUFFER_SIZE];
@@ -736,19 +625,19 @@ static void remove_captured(Game *game, const CheckersMove *move) {
     int from_col = 0;
     int to_row = 0;
     int to_col = 0;
-    coord_from_index(from, &from_row, &from_col, game->rules.board_size);
-    coord_from_index(to, &to_row, &to_col, game->rules.board_size);
+    board_coord_from_index(from, &from_row, &from_col, game->rules.board_size);
+    board_coord_from_index(to, &to_row, &to_col, game->rules.board_size);
 
     int dr = (to_row > from_row) ? 1 : -1;
     int dc = (to_col > from_col) ? 1 : -1;
     for (int r = from_row + dr, c = from_col + dc; r != to_row && c != to_col; r += dr, c += dc) {
-      int8_t mid_index = index_from_coord(r, c, game->rules.board_size);
+      int8_t mid_index = board_index_from_coord(r, c, game->rules.board_size);
       if (mid_index < 0) {
         continue;
       }
-      CheckersPiece mid_piece = (CheckersPiece)board_get(state, (uint8_t)mid_index);
+      CheckersPiece mid_piece = board_get(&state->board, (uint8_t)mid_index);
       if (mid_piece != CHECKERS_PIECE_EMPTY) {
-        board_set(state, (uint8_t)mid_index, CHECKERS_PIECE_EMPTY);
+        board_set(&state->board, (uint8_t)mid_index, CHECKERS_PIECE_EMPTY);
         break;
       }
     }
@@ -780,23 +669,23 @@ int game_apply_move(Game *game, const CheckersMove *move) {
     g_debug("game_apply_move called after game ended\n");
     return -1;
   }
-  CheckersPiece piece = (CheckersPiece)board_get(&game->state, move->path[0]);
-  if (piece == CHECKERS_PIECE_EMPTY || piece_color(piece) != game->state.turn) {
+  CheckersPiece piece = board_get(&game->state.board, move->path[0]);
+  if (piece == CHECKERS_PIECE_EMPTY || board_piece_color(piece) != game->state.turn) {
     g_debug("game_apply_move called with wrong player piece\n");
     return -1;
   }
 
   GameState *state = &game->state;
-  board_set(state, move->path[0], CHECKERS_PIECE_EMPTY);
+  board_set(&state->board, move->path[0], CHECKERS_PIECE_EMPTY);
   uint8_t destination = move->path[move->length - 1];
   int dest_row = 0;
   int dest_col = 0;
-  coord_from_index(destination, &dest_row, &dest_col, game->rules.board_size);
+  board_coord_from_index(destination, &dest_row, &dest_col, game->rules.board_size);
   if (promote_needed(piece, dest_row, game->rules.board_size)) {
-    piece = piece_color(piece) == CHECKERS_COLOR_WHITE ? CHECKERS_PIECE_WHITE_KING
-                                                       : CHECKERS_PIECE_BLACK_KING;
+    piece = board_piece_color(piece) == CHECKERS_COLOR_WHITE ? CHECKERS_PIECE_WHITE_KING
+                                                             : CHECKERS_PIECE_BLACK_KING;
   }
-  board_set(state, destination, piece);
+  board_set(&state->board, destination, piece);
   remove_captured(game, move);
 
   ensure_capacity(game);

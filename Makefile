@@ -6,7 +6,8 @@ LDLIBS := $(GLIB_LIBS)
 
 CFLAGS += $(GLIB_CFLAGS)
 
-SRCS := src/game.c
+SRCS := src/board.c src/game.c
+BOARD_SRCS := src/board.c
 OBJS := $(SRCS:.c=.o)
 
 .PHONY: all clean test
@@ -16,17 +17,21 @@ all: libgame.a checkers
 libgame.a: $(OBJS)
 	ar rcs $@ $^
 
-%.o: %.c src/game.h
+%.o: %.c src/game.h src/board.h src/checkers_constants.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
-test: test_game
+test: test_game test_board
 	./test_game
+	./test_board
 
 test_game: tests/test_game.c $(SRCS) src/game.h
 	$(CC) $(CFLAGS) -o $@ tests/test_game.c $(SRCS) $(LDLIBS)
+
+test_board: tests/test_board.c $(BOARD_SRCS) src/board.h src/checkers_constants.h
+	$(CC) $(CFLAGS) -o $@ tests/test_board.c $(BOARD_SRCS) $(LDLIBS)
 
 checkers: src/checkers_cli.c $(SRCS) src/game.h
 	$(CC) $(CFLAGS) -o $@ src/checkers_cli.c $(SRCS) $(LDLIBS)
 
 clean:
-	rm -f $(OBJS) libgame.a test_game checkers
+	rm -f $(OBJS) libgame.a test_game test_board checkers

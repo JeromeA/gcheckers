@@ -3,13 +3,10 @@
 
 #include <stdbool.h>
 #include <stddef.h>
-#include <stdint.h>
 #include <stdio.h>
 
-typedef enum {
-  CHECKERS_COLOR_WHITE = 0,
-  CHECKERS_COLOR_BLACK = 1
-} CheckersColor;
+#include "board.h"
+#include "checkers_constants.h"
 
 typedef enum {
   CHECKERS_WINNER_NONE = 0,
@@ -17,21 +14,6 @@ typedef enum {
   CHECKERS_WINNER_BLACK,
   CHECKERS_WINNER_DRAW
 } CheckersWinner;
-
-typedef enum {
-  CHECKERS_PIECE_EMPTY = 0,
-  CHECKERS_PIECE_WHITE_MAN,
-  CHECKERS_PIECE_WHITE_KING,
-  CHECKERS_PIECE_BLACK_MAN,
-  CHECKERS_PIECE_BLACK_KING
-} CheckersPiece;
-
-enum {
-  CHECKERS_MAX_BOARD_SIZE = 10,
-  CHECKERS_MAX_SQUARES = 50,
-  CHECKERS_MAX_MOVE_LENGTH = 50,
-  CHECKERS_MAX_BOARD_BYTES = 25
-};
 
 typedef struct {
   uint8_t path[CHECKERS_MAX_MOVE_LENGTH];
@@ -53,7 +35,7 @@ typedef struct {
 } CheckersRules;
 
 typedef struct {
-  uint8_t board[CHECKERS_MAX_BOARD_BYTES];
+  CheckersBoard board;
   CheckersColor turn;
   CheckersWinner winner;
 } GameState;
