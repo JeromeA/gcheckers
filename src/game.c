@@ -6,9 +6,8 @@
 #include <string.h>
 
 static bool rules_valid(const CheckersRules *rules) {
-  if (!rules) {
-    return false;
-  }
+  g_return_val_if_fail(rules != NULL, false);
+
   return rules->board_size == 8 || rules->board_size == 10;
 }
 
@@ -135,10 +134,7 @@ int game_apply_move(Game *game, const CheckersMove *move) {
   g_return_val_if_fail(game != NULL, -1);
   g_return_val_if_fail(move != NULL, -1);
   g_return_val_if_fail(move->length >= 2, -1);
-  if (game->state.winner != CHECKERS_WINNER_NONE) {
-    g_debug("game_apply_move called after game ended\n");
-    return -1;
-  }
+  g_return_val_if_fail(game->state.winner == CHECKERS_WINNER_NONE, -1);
   CheckersPiece piece = board_get(&game->state.board, move->path[0]);
   if (piece == CHECKERS_PIECE_EMPTY || board_piece_color(piece) != game->state.turn) {
     g_debug("game_apply_move called with wrong player piece\n");
