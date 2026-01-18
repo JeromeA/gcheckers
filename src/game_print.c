@@ -8,24 +8,15 @@
 enum { BOARD_SQUARE_BUFFER_SIZE = 16 };
 
 bool game_format_move_notation(const CheckersMove *move, char *buffer, size_t size) {
-  if (!move || !buffer || size == 0) {
-    g_debug("game_format_move_notation received invalid arguments\n");
-    g_return_val_if_fail(move != NULL, false);
-    g_return_val_if_fail(buffer != NULL, false);
-    g_return_val_if_fail(size > 0, false);
-  }
-  if (move->length < 2) {
-    g_debug("game_format_move_notation received too-short move\n");
-    g_return_val_if_fail(move->length >= 2, false);
-  }
+  g_return_val_if_fail(move != NULL, false);
+  g_return_val_if_fail(buffer != NULL, false);
+  g_return_val_if_fail(size > 0, false);
+  g_return_val_if_fail(move->length >= 2, false);
 
   size_t offset = 0;
   buffer[0] = '\0';
   for (uint8_t i = 0; i < move->length; ++i) {
-    if (move->path[i] >= CHECKERS_MAX_SQUARES) {
-      g_debug("game_format_move_notation received out-of-range index\n");
-      g_return_val_if_fail(move->path[i] < CHECKERS_MAX_SQUARES, false);
-    }
+    g_return_val_if_fail(move->path[i] < CHECKERS_MAX_SQUARES, false);
     int square = (int)move->path[i] + 1;
     int written = g_snprintf(buffer + offset, size - offset, "%d", square);
     if (written < 0 || (size_t)written >= size - offset) {
@@ -48,15 +39,9 @@ bool game_format_move_notation(const CheckersMove *move, char *buffer, size_t si
 }
 
 static void format_subscript_number(char *buffer, size_t size, int number, int *digit_count) {
-  if (!buffer || !digit_count) {
-    g_debug("format_subscript_number received invalid arguments\n");
-    g_return_if_fail(buffer != NULL);
-    g_return_if_fail(digit_count != NULL);
-  }
-  if (size == 0) {
-    g_debug("format_subscript_number received zero buffer size\n");
-    g_return_if_fail(size > 0);
-  }
+  g_return_if_fail(buffer != NULL);
+  g_return_if_fail(digit_count != NULL);
+  g_return_if_fail(size > 0);
 
   static const char *subscripts[] = {"₀", "₁", "₂", "₃", "₄", "₅", "₆", "₇", "₈", "₉"};
 
@@ -84,18 +69,9 @@ static int symbol_display_width(const char *symbol) {
 }
 
 static void append_padding(char *buffer, size_t size, int count) {
-  if (!buffer) {
-    g_debug("append_padding received null buffer\n");
-    g_return_if_fail(buffer != NULL);
-  }
-  if (size == 0) {
-    g_debug("append_padding received zero buffer size\n");
-    g_return_if_fail(size > 0);
-  }
-  if (count < 0) {
-    g_debug("append_padding received negative count %d\n", count);
-    g_return_if_fail(count >= 0);
-  }
+  g_return_if_fail(buffer != NULL);
+  g_return_if_fail(size > 0);
+  g_return_if_fail(count >= 0);
 
   for (int i = 0; i < count; ++i) {
     g_strlcat(buffer, " ", size);
@@ -110,16 +86,10 @@ static void format_board_square(char *top,
                                 int square,
                                 bool playable,
                                 int max_square) {
-  if (!top || !bottom) {
-    g_debug("format_board_square received null buffers\n");
-    g_return_if_fail(top != NULL);
-    g_return_if_fail(bottom != NULL);
-  }
-  if (top_size < BOARD_SQUARE_BUFFER_SIZE || bottom_size < BOARD_SQUARE_BUFFER_SIZE) {
-    g_debug("format_board_square received insufficient buffer sizes\n");
-    g_return_if_fail(top_size >= BOARD_SQUARE_BUFFER_SIZE);
-    g_return_if_fail(bottom_size >= BOARD_SQUARE_BUFFER_SIZE);
-  }
+  g_return_if_fail(top != NULL);
+  g_return_if_fail(bottom != NULL);
+  g_return_if_fail(top_size >= BOARD_SQUARE_BUFFER_SIZE);
+  g_return_if_fail(bottom_size >= BOARD_SQUARE_BUFFER_SIZE);
 
   if (!playable) {
     g_strlcpy(top, "\x1b[7m    \x1b[0m", top_size);
@@ -127,13 +97,7 @@ static void format_board_square(char *top,
     return;
   }
 
-  if (square < 1 || square > max_square) {
-    g_debug("format_board_square received invalid square %d\n", square);
-    g_return_if_fail(square >= 1 && square <= max_square);
-    g_strlcpy(top, "    ", top_size);
-    g_strlcpy(bottom, "    ", bottom_size);
-    return;
-  }
+  g_return_if_fail(square >= 1 && square <= max_square);
 
   const char *symbol = " ";
   switch (piece) {
@@ -174,10 +138,7 @@ static void format_board_square(char *top,
 }
 
 void game_print_state(const Game *game, FILE *out) {
-  if (!game) {
-    g_debug("game_print_state received null game\n");
-    g_return_if_fail(game != NULL);
-  }
+  g_return_if_fail(game != NULL);
   if (!out) {
     out = stdout;
   }

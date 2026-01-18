@@ -12,11 +12,8 @@ static bool is_forward(CheckersColor color, int delta_row) {
 }
 
 static void append_move(MoveList *list, const CheckersMove *move) {
-  if (!list || !move) {
-    g_debug("append_move received invalid arguments\n");
-    g_return_if_fail(list != NULL);
-    g_return_if_fail(move != NULL);
-  }
+  g_return_if_fail(list != NULL);
+  g_return_if_fail(move != NULL);
 
   CheckersMove *expanded = realloc(list->moves, sizeof(CheckersMove) * (list->count + 1));
   if (!expanded) {
@@ -29,11 +26,8 @@ static void append_move(MoveList *list, const CheckersMove *move) {
 }
 
 static void generate_simple_moves(const Game *game, uint8_t index, MoveList *moves) {
-  if (!game || !moves) {
-    g_debug("generate_simple_moves received invalid arguments\n");
-    g_return_if_fail(game != NULL);
-    g_return_if_fail(moves != NULL);
-  }
+  g_return_if_fail(game != NULL);
+  g_return_if_fail(moves != NULL);
 
   CheckersPiece piece = board_get(&game->state.board, index);
   if (piece == CHECKERS_PIECE_EMPTY) {
@@ -85,13 +79,10 @@ static void dfs_jumps(const Game *game,
                       CheckersMove *partial,
                       MoveList *moves,
                       CheckersBoard *board) {
-  if (!game || !partial || !moves || !board) {
-    g_debug("dfs_jumps received invalid arguments\n");
-    g_return_if_fail(game != NULL);
-    g_return_if_fail(partial != NULL);
-    g_return_if_fail(moves != NULL);
-    g_return_if_fail(board != NULL);
-  }
+  g_return_if_fail(game != NULL);
+  g_return_if_fail(partial != NULL);
+  g_return_if_fail(moves != NULL);
+  g_return_if_fail(board != NULL);
 
   bool extended = false;
   int row = 0;
@@ -191,11 +182,8 @@ static void dfs_jumps(const Game *game,
 }
 
 static void generate_jump_moves(const Game *game, uint8_t index, MoveList *moves) {
-  if (!game || !moves) {
-    g_debug("generate_jump_moves received invalid arguments\n");
-    g_return_if_fail(game != NULL);
-    g_return_if_fail(moves != NULL);
-  }
+  g_return_if_fail(game != NULL);
+  g_return_if_fail(moves != NULL);
 
   CheckersPiece piece = board_get(&game->state.board, index);
   if (piece == CHECKERS_PIECE_EMPTY) {
@@ -209,10 +197,7 @@ static void generate_jump_moves(const Game *game, uint8_t index, MoveList *moves
 }
 
 static void filter_longest_captures(MoveList *moves) {
-  if (!moves) {
-    g_debug("filter_longest_captures received null moves\n");
-    g_return_if_fail(moves != NULL);
-  }
+  g_return_if_fail(moves != NULL);
 
   uint8_t max_captures = 0;
   for (size_t i = 0; i < moves->count; ++i) {
@@ -235,10 +220,7 @@ static void filter_longest_captures(MoveList *moves) {
 
 MoveList game_list_available_moves(const Game *game) {
   MoveList moves = {.moves = NULL, .count = 0};
-  if (!game) {
-    g_debug("game_list_available_moves received null game\n");
-    g_return_val_if_fail(game != NULL, moves);
-  }
+  g_return_val_if_fail(game != NULL, moves);
   if (game->state.winner != CHECKERS_WINNER_NONE) {
     return moves;
   }
@@ -277,10 +259,7 @@ MoveList game_list_available_moves(const Game *game) {
 }
 
 void movelist_free(MoveList *list) {
-  if (!list) {
-    g_debug("movelist_free received null list\n");
-    g_return_if_fail(list != NULL);
-  }
+  g_return_if_fail(list != NULL);
 
   free(list->moves);
   list->moves = NULL;
