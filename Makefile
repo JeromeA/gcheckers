@@ -3,11 +3,15 @@ CFLAGS := -std=c99 -Wall -Wextra -Werror -Isrc
 COVERAGE_CFLAGS := --coverage -O0 -g
 GLIB_CFLAGS := $(shell pkg-config --cflags glib-2.0)
 GLIB_LIBS := $(shell pkg-config --libs glib-2.0)
-LDLIBS := $(GLIB_LIBS)
+GOBJECT_CFLAGS := $(shell pkg-config --cflags gobject-2.0)
+GOBJECT_LIBS := $(shell pkg-config --libs gobject-2.0)
+GTK_CFLAGS := $(shell pkg-config --cflags gtk4)
+GTK_LIBS := $(shell pkg-config --libs gtk4)
+LDLIBS := $(GLIB_LIBS) $(GOBJECT_LIBS)
 
-CFLAGS += $(GLIB_CFLAGS)
+CFLAGS += $(GLIB_CFLAGS) $(GOBJECT_CFLAGS)
 
-SRCS := src/board.c src/game.c src/game_print.c src/move_gen.c
+SRCS := src/board.c src/game.c src/game_print.c src/move_gen.c src/checkers_model.c
 BOARD_SRCS := src/board.c
 OBJS := $(SRCS:.c=.o)
 COV_DIR := coverage
@@ -20,7 +24,7 @@ COV_BOARD_OBJS := $(BOARD_SRCS:%.c=$(COV_OBJ_DIR)/%.o)
 
 .PHONY: all clean test coverage
 
-all: libgame.a checkers
+all: libgame.a checkers gcheckers
 
 libgame.a: $(OBJS)
 	ar rcs $@ $^
@@ -28,11 +32,12 @@ libgame.a: $(OBJS)
 %.o: %.c src/game.h src/board.h src/checkers_constants.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
-test: test_game test_game_print test_board test_move_gen
+test: test_game test_game_print test_board test_move_gen test_checkers_model
 	./test_game
 	./test_game_print
 	./test_board
 	./test_move_gen
+	./test_checkers_model
 
 test_game: tests/test_game.c $(SRCS) src/game.h
 	$(CC) $(CFLAGS) -o $@ tests/test_game.c $(SRCS) $(LDLIBS)
@@ -49,8 +54,17 @@ test_move_gen: tests/test_move_gen.c $(SRCS) src/game.h
 checkers: src/checkers_cli.c $(SRCS) src/game.h
 	$(CC) $(CFLAGS) -o $@ src/checkers_cli.c $(SRCS) $(LDLIBS)
 
+test_checkers_model: tests/test_checkers_model.c $(SRCS) src/checkers_model.h
+	$(CC) $(CFLAGS) -o $@ tests/test_checkers_model.c $(SRCS) $(LDLIBS)
+
+gcheckers: src/gcheckers.c src/gcheckers_application.c src/gcheckers_window.c src/gcheckers_window.h \
+	src/gcheckers_application.h src/checkers_model.c src/checkers_model.h $(SRCS)
+	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/gcheckers.c src/gcheckers_application.c \
+		src/gcheckers_window.c $(SRCS) $(LDLIBS) $(GTK_LIBS)
+
 clean:
-	rm -f $(OBJS) libgame.a test_game test_game_print test_board test_move_gen checkers
+	rm -f $(OBJS) libgame.a test_game test_game_print test_board test_move_gen test_checkers_model \
+		checkers gcheckers
 	rm -rf $(COV_DIR)
 
 $(COV_OBJ_DIR)/%.o: %.c src/game.h src/board.h src/checkers_constants.h
