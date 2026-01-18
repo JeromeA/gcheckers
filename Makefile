@@ -6,7 +6,7 @@ LDLIBS := $(GLIB_LIBS)
 
 CFLAGS += $(GLIB_CFLAGS)
 
-SRCS := src/board.c src/game.c src/game_print.c
+SRCS := src/board.c src/game.c src/game_print.c src/move_gen.c
 BOARD_SRCS := src/board.c
 OBJS := $(SRCS:.c=.o)
 
@@ -20,10 +20,11 @@ libgame.a: $(OBJS)
 %.o: %.c src/game.h src/board.h src/checkers_constants.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
-test: test_game test_game_print test_board
+test: test_game test_game_print test_board test_move_gen
 	./test_game
 	./test_game_print
 	./test_board
+	./test_move_gen
 
 test_game: tests/test_game.c $(SRCS) src/game.h
 	$(CC) $(CFLAGS) -o $@ tests/test_game.c $(SRCS) $(LDLIBS)
@@ -34,8 +35,11 @@ test_game_print: tests/test_game_print.c $(SRCS) src/game.h
 test_board: tests/test_board.c $(BOARD_SRCS) src/board.h src/checkers_constants.h
 	$(CC) $(CFLAGS) -o $@ tests/test_board.c $(BOARD_SRCS) $(LDLIBS)
 
+test_move_gen: tests/test_move_gen.c $(SRCS) src/game.h
+	$(CC) $(CFLAGS) -o $@ tests/test_move_gen.c $(SRCS) $(LDLIBS)
+
 checkers: src/checkers_cli.c $(SRCS) src/game.h
 	$(CC) $(CFLAGS) -o $@ src/checkers_cli.c $(SRCS) $(LDLIBS)
 
 clean:
-	rm -f $(OBJS) libgame.a test_game test_game_print test_board checkers
+	rm -f $(OBJS) libgame.a test_game test_game_print test_board test_move_gen checkers
