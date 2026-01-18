@@ -14,6 +14,7 @@
 
 - Always write tests for new features.
 - Always run the tests before committing.
+- Always build all the binaries before committing.
 
 # Bugs
 
