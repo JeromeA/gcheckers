@@ -8,28 +8,16 @@ static bool board_size_valid(uint8_t board_size) {
 }
 
 void board_init(CheckersBoard *board, uint8_t board_size) {
-  if (!board) {
-    g_debug("board_init received null board\n");
-    g_return_if_fail(board != NULL);
-  }
-  if (!board_size_valid(board_size)) {
-    g_debug("board_init received invalid board size\n");
-    g_return_if_fail(board_size_valid(board_size));
-  }
+  g_return_if_fail(board != NULL);
+  g_return_if_fail(board_size_valid(board_size));
 
   memset(board, 0, sizeof(*board));
   board->board_size = board_size;
 }
 
 void board_reset(CheckersBoard *board, uint8_t board_size) {
-  if (!board) {
-    g_debug("board_reset received null board\n");
-    g_return_if_fail(board != NULL);
-  }
-  if (!board_size_valid(board_size)) {
-    g_debug("board_reset received invalid board size\n");
-    g_return_if_fail(board_size_valid(board_size));
-  }
+  g_return_if_fail(board != NULL);
+  g_return_if_fail(board_size_valid(board_size));
 
   memset(board->data, 0, sizeof(board->data));
   board->board_size = board_size;
@@ -92,11 +80,8 @@ int8_t board_index_from_coord(int row, int col, uint8_t board_size) {
 }
 
 void board_coord_from_index(uint8_t index, int *row, int *col, uint8_t board_size) {
-  if (!row || !col) {
-    g_debug("board_coord_from_index received null pointers\n");
-    g_return_if_fail(row != NULL);
-    g_return_if_fail(col != NULL);
-  }
+  g_return_if_fail(row != NULL);
+  g_return_if_fail(col != NULL);
 
   int per_row = board_size / 2;
   *row = index / per_row;
@@ -105,10 +90,7 @@ void board_coord_from_index(uint8_t index, int *row, int *col, uint8_t board_siz
 }
 
 uint8_t board_playable_squares(uint8_t board_size) {
-  if (!board_size_valid(board_size)) {
-    g_debug("board_playable_squares received invalid board size\n");
-    g_return_val_if_fail(board_size_valid(board_size), 0);
-  }
+  g_return_val_if_fail(board_size_valid(board_size), 0);
   return (uint8_t)((board_size / 2) * board_size);
 }
 

@@ -6,11 +6,8 @@
 #include <stdlib.h>
 
 static void print_move(FILE *out, const CheckersMove *move) {
-  if (!out || !move) {
-    g_debug("print_move received invalid arguments\n");
-    g_return_if_fail(out != NULL);
-    g_return_if_fail(move != NULL);
-  }
+  g_return_if_fail(out != NULL);
+  g_return_if_fail(move != NULL);
 
   char buffer[128];
   if (!game_format_move_notation(move, buffer, sizeof(buffer))) {
@@ -22,10 +19,7 @@ static void print_move(FILE *out, const CheckersMove *move) {
 }
 
 static void list_moves(const MoveList *moves) {
-  if (!moves) {
-    g_debug("list_moves received null MoveList\n");
-    g_return_if_fail(moves != NULL);
-  }
+  g_return_if_fail(moves != NULL);
 
   for (size_t i = 0; i < moves->count; ++i) {
     printf("%zu) ", i + 1);
@@ -35,10 +29,7 @@ static void list_moves(const MoveList *moves) {
 }
 
 static void set_winner_for_no_moves(Game *game) {
-  if (!game) {
-    g_debug("set_winner_for_no_moves received null game\n");
-    g_return_if_fail(game != NULL);
-  }
+  g_return_if_fail(game != NULL);
 
   g_debug("No available moves for current player\n");
   game->state.winner =
@@ -70,10 +61,7 @@ static int prompt_move_index(size_t move_count) {
 }
 
 static bool play_turn_human(Game *game) {
-  if (!game) {
-    g_debug("play_turn_human received null game\n");
-    g_return_val_if_fail(game != NULL, false);
-  }
+  g_return_val_if_fail(game != NULL, false);
 
   MoveList moves = game->available_moves(game);
   if (moves.count == 0) {
@@ -101,10 +89,7 @@ static bool play_turn_human(Game *game) {
 }
 
 static bool play_turn_ai(Game *game) {
-  if (!game) {
-    g_debug("play_turn_ai received null game\n");
-    g_return_val_if_fail(game != NULL, false);
-  }
+  g_return_val_if_fail(game != NULL, false);
 
   MoveList moves = game->available_moves(game);
   if (moves.count == 0) {

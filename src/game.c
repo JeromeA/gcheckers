@@ -33,10 +33,7 @@ CheckersRules game_rules_international_draughts(void) {
 }
 
 static void ensure_capacity(Game *game) {
-  if (!game) {
-    g_debug("ensure_capacity received null game\n");
-    g_return_if_fail(game != NULL);
-  }
+  g_return_if_fail(game != NULL);
 
   if (game->history_size < game->history_capacity) {
     return;
@@ -57,15 +54,9 @@ void game_init(Game *game) {
 }
 
 void game_init_with_rules(Game *game, const CheckersRules *rules) {
-  if (!game || !rules) {
-    g_debug("game_init_with_rules received invalid arguments\n");
-    g_return_if_fail(game != NULL);
-    g_return_if_fail(rules != NULL);
-  }
-  if (!rules_valid(rules)) {
-    g_debug("game_init_with_rules received invalid rules\n");
-    g_return_if_fail(rules_valid(rules));
-  }
+  g_return_if_fail(game != NULL);
+  g_return_if_fail(rules != NULL);
+  g_return_if_fail(rules_valid(rules));
 
   memset(game, 0, sizeof(*game));
   game->rules = *rules;
@@ -77,10 +68,7 @@ void game_init_with_rules(Game *game, const CheckersRules *rules) {
 }
 
 void game_destroy(Game *game) {
-  if (!game) {
-    g_debug("game_destroy received null game\n");
-    g_return_if_fail(game != NULL);
-  }
+  g_return_if_fail(game != NULL);
 
   free(game->history);
   game->history = NULL;
@@ -99,11 +87,8 @@ static bool promote_needed(CheckersPiece piece, int row, uint8_t board_size) {
 }
 
 static void remove_captured(Game *game, const CheckersMove *move) {
-  if (!game || !move) {
-    g_debug("remove_captured received invalid arguments\n");
-    g_return_if_fail(game != NULL);
-    g_return_if_fail(move != NULL);
-  }
+  g_return_if_fail(game != NULL);
+  g_return_if_fail(move != NULL);
   if (move->captures == 0) {
     return;
   }
@@ -136,10 +121,7 @@ static void remove_captured(Game *game, const CheckersMove *move) {
 }
 
 static void update_winner(Game *game) {
-  if (!game) {
-    g_debug("update_winner received null game\n");
-    g_return_if_fail(game != NULL);
-  }
+  g_return_if_fail(game != NULL);
 
   MoveList moves = game_list_available_moves(game);
   if (moves.count == 0) {
@@ -150,12 +132,9 @@ static void update_winner(Game *game) {
 }
 
 int game_apply_move(Game *game, const CheckersMove *move) {
-  if (!game || !move || move->length < 2) {
-    g_debug("game_apply_move received invalid arguments\n");
-    g_return_val_if_fail(game != NULL, -1);
-    g_return_val_if_fail(move != NULL, -1);
-    g_return_val_if_fail(move->length >= 2, -1);
-  }
+  g_return_val_if_fail(game != NULL, -1);
+  g_return_val_if_fail(move != NULL, -1);
+  g_return_val_if_fail(move->length >= 2, -1);
   if (game->state.winner != CHECKERS_WINNER_NONE) {
     g_debug("game_apply_move called after game ended\n");
     return -1;
