@@ -36,6 +36,6 @@ GCheckersApplication *gcheckers_application_new(void) {
                       "application-id",
                       "com.example.gcheckers",
                       "flags",
-                      G_APPLICATION_FLAGS_NONE,
+                      G_APPLICATION_DEFAULT_FLAGS,
                       NULL);
 }

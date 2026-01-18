@@ -38,3 +38,11 @@ generation. The empty square was treated as a black piece, so the search conside
 offered illegal jumps like 28x19x26 that captured a friendly piece.
 
 The fix consisted of passing the moving piece into the jump search so that opponent checks use the correct color.
+
+## GTK application build failed with deprecated flags
+
+The goal of the GTK application constructor was to set the application flags for the GtkApplication instance.
+
+In practice, the build failed under -Werror because G_APPLICATION_FLAGS_NONE is deprecated in newer GLib versions.
+
+The fix consisted of switching to G_APPLICATION_DEFAULT_FLAGS to match the updated API and clear the warning.
