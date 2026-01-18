@@ -7,8 +7,8 @@
 - fix all compilation warnings.
 - Wrap at 120 characters.
 - Convert existing code to wrap at 120 characters.
-- When a check fail, a return or return NULL is never enough, it should at least be a g_debug, and almost always be a
-  g_return_val_if_fail().
+- When a check fail, a return or return NULL is never enough, it should almost always be a g_return_val_if_fail(), or at
+  least a g_debug().
 
 ## Tests
 
