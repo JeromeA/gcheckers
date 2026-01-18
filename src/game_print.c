@@ -57,9 +57,7 @@ static void format_subscript_number(char *buffer, size_t size, int number, int *
 }
 
 static int symbol_display_width(const char *symbol) {
-  if (!symbol) {
-    return 0;
-  }
+  g_return_val_if_fail(symbol != NULL, 0);
 
   gunichar ch = g_utf8_get_char(symbol);
   if (ch >= 0x26C0 && ch <= 0x26C3) {
