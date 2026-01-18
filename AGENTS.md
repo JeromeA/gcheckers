@@ -1,4 +1,4 @@
-## Coding Conventions
+# Coding Conventions
 
 - Use 2 space indentation
 - Convert existing code to use 2 space indentation
@@ -10,11 +10,16 @@
 - When a check fail, a return or return NULL is never enough, it should almost always be a g_return_val_if_fail(), or at
   least a g_debug().
 
-## Tests
+# Tests
 
 - Always write tests for new features.
 - Always run the tests before committing.
 
-## Bugs
+# Bugs
 
 - When fixing a bug, add an entry in BUGS.md.
+
+# ExecPlans
+ 
+When writing complex features or significant refactors, use an ExecPlan (as described in PLANS.md) from design to implementation.
+
