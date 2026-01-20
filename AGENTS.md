@@ -13,8 +13,12 @@
 # Tests
 
 - Always write tests for new features.
+
+# Before committing
+
 - Always run the tests before committing.
 - Always build all the binaries before committing.
+- Use "make screenshot" to validate the UI before committing.
 
 # Bugs
 
