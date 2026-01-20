@@ -4,6 +4,8 @@ set -euo pipefail
 output_path="${1:-gcheckers.png}"
 display_num="${DISPLAY_NUM:-99}"
 screen_geometry="${SCREEN_GEOMETRY:-1280x720x24}"
+gsk_renderer="${GSK_RENDERER:-cairo}"
+gdk_backend="${GDK_BACKEND:-x11}"
 
 if ! command -v Xvfb >/dev/null 2>&1; then
   echo "Xvfb is required to capture screenshots." >&2
@@ -39,6 +41,8 @@ trap cleanup EXIT
 Xvfb ":${display_num}" -screen 0 "$screen_geometry" >/dev/null 2>&1 &
 xvfb_pid=$!
 export DISPLAY=":${display_num}"
+export GDK_BACKEND="$gdk_backend"
+export GSK_RENDERER="$gsk_renderer"
 
 sleep 0.2
 ./gcheckers >/dev/null 2>&1 &

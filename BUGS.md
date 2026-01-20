@@ -55,3 +55,12 @@ In practice, the label ended up in a layout slot that could be compressed by the
 faintly or not at all when the button height matched the piece artwork.
 
 The fix consisted of using a GtkOverlay to position the index label on top of the square so it always renders visibly.
+
+## Screenshot captures were black under Xvfb
+
+The goal of the screenshot helper was to launch the GTK app under Xvfb and capture the rendered window.
+
+In practice, GTK's default renderer produced a black frame buffer under Xvfb, so screenshots were entirely black.
+
+The fix consisted of forcing the GTK renderer to the Cairo backend (and explicitly using the X11 backend) in the
+screenshot helper so the UI is rasterized correctly under Xvfb.
