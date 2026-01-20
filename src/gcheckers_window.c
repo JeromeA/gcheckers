@@ -20,6 +20,8 @@ struct _GCheckersWindow {
 
 G_DEFINE_TYPE(GCheckersWindow, gcheckers_window, GTK_TYPE_APPLICATION_WINDOW)
 
+static const int gcheckers_window_square_size = 63;
+
 static gboolean gcheckers_window_selection_contains(GCheckersWindow *self, uint8_t index) {
   g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), FALSE);
 
@@ -143,7 +145,9 @@ static GtkWidget *gcheckers_window_build_square_content(GtkWidget *button) {
 
   GtkWidget *piece_picture = gtk_picture_new();
   gtk_picture_set_content_fit(GTK_PICTURE(piece_picture), GTK_CONTENT_FIT_CONTAIN);
-  gtk_widget_set_size_request(piece_picture, 63, 63);
+  gtk_widget_set_size_request(piece_picture,
+                              gcheckers_window_square_size,
+                              gcheckers_window_square_size);
   gtk_widget_add_css_class(piece_picture, "piece-picture");
   gtk_stack_add_named(GTK_STACK(piece_stack), piece_picture, "picture");
 
@@ -482,7 +486,9 @@ static void gcheckers_window_build_board(GCheckersWindow *self) {
       GtkWidget *square = NULL;
       if ((row + col) % 2 == 0) {
         GtkWidget *label = gtk_label_new(" ");
-        gtk_widget_set_size_request(label, 52, 52);
+        gtk_widget_set_size_request(label,
+                                    gcheckers_window_square_size,
+                                    gcheckers_window_square_size);
         gtk_widget_set_hexpand(label, TRUE);
         gtk_widget_set_vexpand(label, TRUE);
         gtk_widget_add_css_class(label, "board-light");
@@ -490,7 +496,9 @@ static void gcheckers_window_build_board(GCheckersWindow *self) {
       } else {
         int8_t index = board_index_from_coord(row, col, board_size);
         GtkWidget *button = gtk_button_new();
-        gtk_widget_set_size_request(button, 52, 52);
+        gtk_widget_set_size_request(button,
+                                    gcheckers_window_square_size,
+                                    gcheckers_window_square_size);
         gtk_widget_set_hexpand(button, TRUE);
         gtk_widget_set_vexpand(button, TRUE);
         gtk_widget_add_css_class(button, "board-dark");

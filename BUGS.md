@@ -37,3 +37,13 @@ dark background color was ignored.
 
 The fix explicitly targeted the button class and cleared the default background image so the board-dark background color
 is applied.
+
+## Piece size request did not resize the men
+
+The goal was to enlarge the men visuals by increasing the size request on the piece picture widget.
+
+In practice, the picture lives inside a button that still had a 52x52 size request, so the button constrained the
+overlay and prevented the picture from growing.
+
+The fix introduced a single square size constant and applied it to both playable buttons and light-square labels so the
+square size matches the requested piece dimensions.
