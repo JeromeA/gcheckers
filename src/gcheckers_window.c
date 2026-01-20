@@ -131,7 +131,7 @@ static void gcheckers_window_set_square_piece(GCheckersWindow *self, GtkWidget *
 static GtkWidget *gcheckers_window_build_square_content(GtkWidget *button) {
   g_return_val_if_fail(GTK_IS_BUTTON(button), NULL);
 
-  GtkWidget *container = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+  GtkWidget *container = gtk_overlay_new();
   gtk_widget_set_hexpand(container, TRUE);
   gtk_widget_set_vexpand(container, TRUE);
 
@@ -154,11 +154,12 @@ static GtkWidget *gcheckers_window_build_square_content(GtkWidget *button) {
 
   GtkWidget *index_label = gtk_label_new(NULL);
   gtk_label_set_xalign(GTK_LABEL(index_label), 0.5f);
+  gtk_widget_set_halign(index_label, GTK_ALIGN_CENTER);
   gtk_widget_set_valign(index_label, GTK_ALIGN_END);
   gtk_widget_add_css_class(index_label, "square-index");
 
-  gtk_box_append(GTK_BOX(container), piece_stack);
-  gtk_box_append(GTK_BOX(container), index_label);
+  gtk_overlay_set_child(GTK_OVERLAY(container), piece_stack);
+  gtk_overlay_add_overlay(GTK_OVERLAY(container), index_label);
 
   g_object_set_data(G_OBJECT(button), "piece-stack", piece_stack);
   g_object_set_data(G_OBJECT(button), "piece-picture", piece_picture);
