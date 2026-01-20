@@ -55,9 +55,9 @@ static GdkTexture *gcheckers_window_build_man_texture(const char *fill_color, co
 
   g_autofree char *svg = g_strdup_printf(
       "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>"
-      "<path fill='%s' stroke='%s' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'"
+      "<path fill='%s' stroke='%s' stroke-width='1' stroke-linecap='round' stroke-linejoin='round'"
       " d='M16 20 L48 20 L48 32 Q32 38 16 32 Z'/>"
-      "<ellipse cx='32' cy='20' rx='16' ry='6' fill='%s' stroke='%s' stroke-width='2'"
+      "<ellipse cx='32' cy='20' rx='16' ry='6' fill='%s' stroke='%s' stroke-width='1'"
       " stroke-linecap='round' stroke-linejoin='round'/>"
       "</svg>",
       fill_color,
@@ -143,7 +143,7 @@ static GtkWidget *gcheckers_window_build_square_content(GtkWidget *button) {
 
   GtkWidget *piece_picture = gtk_picture_new();
   gtk_picture_set_content_fit(GTK_PICTURE(piece_picture), GTK_CONTENT_FIT_CONTAIN);
-  gtk_widget_set_size_request(piece_picture, 28, 28);
+  gtk_widget_set_size_request(piece_picture, 42, 42);
   gtk_widget_add_css_class(piece_picture, "piece-picture");
   gtk_stack_add_named(GTK_STACK(piece_stack), piece_picture, "picture");
 
@@ -474,6 +474,8 @@ static void gcheckers_window_build_board(GCheckersWindow *self) {
 
   gtk_grid_set_row_homogeneous(GTK_GRID(self->board_grid), TRUE);
   gtk_grid_set_column_homogeneous(GTK_GRID(self->board_grid), TRUE);
+  gtk_grid_set_row_spacing(GTK_GRID(self->board_grid), 1);
+  gtk_grid_set_column_spacing(GTK_GRID(self->board_grid), 1);
 
   for (int row = 0; row < (int)board_size; ++row) {
     for (int col = 0; col < (int)board_size; ++col) {
@@ -555,10 +557,11 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   GtkCssProvider *provider = gtk_css_provider_new();
   gtk_css_provider_load_from_string(
       provider,
-      ".board-light { background-color: #f5f5f5; border: 1px solid #111; border-radius: 0; }"
-      ".board-dark { background-color: #2b2b2b; border: 1px solid #111; border-radius: 0; }"
+      ".board { background-color: #1f1208; }"
+      ".board-light { background-color: #f1e2c5; border-radius: 0; }"
+      ".board-dark { background-color: #4a2e16; border-radius: 0; }"
       ".board-square { padding: 0; border-radius: 0; }"
-      ".piece-label { font-size: 20px; }"
+      ".piece-label { font-size: 30px; }"
       ".square-index {"
       "  font-size: 12px;"
       "  font-weight: 600;"
