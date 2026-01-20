@@ -55,9 +55,9 @@ static GdkTexture *gcheckers_window_build_man_texture(const char *fill_color, co
 
   g_autofree char *svg = g_strdup_printf(
       "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>"
-      "<path fill='%s' stroke='%s' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'"
-      " d='M16 20 L48 20 L48 44 Q32 56 16 44 Z'/>"
-      "<ellipse cx='32' cy='20' rx='16' ry='6' fill='%s' stroke='%s' stroke-width='4'"
+      "<path fill='%s' stroke='%s' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'"
+      " d='M16 20 L48 20 L48 32 Q32 38 16 32 Z'/>"
+      "<ellipse cx='32' cy='20' rx='16' ry='6' fill='%s' stroke='%s' stroke-width='2'"
       " stroke-linecap='round' stroke-linejoin='round'/>"
       "</svg>",
       fill_color,
@@ -553,25 +553,26 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_window_set_default_size(GTK_WINDOW(self), 600, 700);
 
   GtkCssProvider *provider = gtk_css_provider_new();
-  gtk_css_provider_load_from_string(provider,
-                                    ".board-light { background-color: #f5f5f5; border-radius: 0; }"
-                                    ".board-dark { background-color: #2b2b2b; border-radius: 0; }"
-                                    ".board-square { padding: 0; border-radius: 0; }"
-                                    ".piece-label { font-size: 20px; }"
-                                    ".square-index {"
-                                    "  font-size: 12px;"
-                                    "  font-weight: 600;"
-                                    "  padding: 1px 4px;"
-                                    "  border-radius: 6px;"
-                                    "  background-color: rgba(245, 245, 245, 0.8);"
-                                    "  color: #111;"
-                                    "}"
-                                    ".board-dark .square-index {"
-                                    "  background-color: rgba(17, 17, 17, 0.75);"
-                                    "  color: #f5f5f5;"
-                                    "}"
-                                    ".board-dark .piece-label { color: #f5f5f5; }"
-                                    ".board-selected { outline: 2px solid #4a90e2; }");
+  gtk_css_provider_load_from_string(
+      provider,
+      ".board-light { background-color: #f5f5f5; border: 1px solid #111; border-radius: 0; }"
+      ".board-dark { background-color: #2b2b2b; border: 1px solid #111; border-radius: 0; }"
+      ".board-square { padding: 0; border-radius: 0; }"
+      ".piece-label { font-size: 20px; }"
+      ".square-index {"
+      "  font-size: 12px;"
+      "  font-weight: 600;"
+      "  padding: 1px 4px;"
+      "  border-radius: 6px;"
+      "  background-color: rgba(255, 255, 255, 0.8);"
+      "  color: #111;"
+      "}"
+      ".board-dark .square-index {"
+      "  background-color: rgba(255, 255, 255, 0.8);"
+      "  color: #111;"
+      "}"
+      ".board-dark .piece-label { color: #f5f5f5; }"
+      ".board-selected { outline: 2px solid #4a90e2; }");
   GdkDisplay *display = gdk_display_get_default();
   if (!display) {
     g_debug("Failed to fetch default display for CSS styling\n");
