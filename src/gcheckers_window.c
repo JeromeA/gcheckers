@@ -112,8 +112,8 @@ static void gcheckers_window_set_square_piece(GCheckersWindow *self, GtkWidget *
       label_text = gcheckers_window_piece_symbol(piece);
       break;
     case CHECKERS_PIECE_EMPTY:
-      label_text = "";
-      break;
+      gtk_widget_set_visible(piece_stack, FALSE);
+      return;
     default:
       g_debug("gcheckers_window_set_square_piece received unknown piece %d\n", piece);
       label_text = "?";
