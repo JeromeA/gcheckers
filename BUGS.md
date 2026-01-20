@@ -46,3 +46,12 @@ The goal of the GTK application constructor was to set the application flags for
 In practice, the build failed under -Werror because G_APPLICATION_FLAGS_NONE is deprecated in newer GLib versions.
 
 The fix consisted of switching to G_APPLICATION_DEFAULT_FLAGS to match the updated API and clear the warning.
+
+## Square index numbers disappeared on the GTK board
+
+The goal of the GTK board view was to show square numbers beneath each playable square.
+
+In practice, the label ended up in a layout slot that could be compressed by the piece stack, so the numbers rendered
+faintly or not at all when the button height matched the piece artwork.
+
+The fix consisted of using a GtkOverlay to position the index label on top of the square so it always renders visibly.
