@@ -21,8 +21,11 @@ COV_GCOV_DIR := $(COV_DIR)/gcov
 COV_REPORT_DIR := $(COV_DIR)/report
 COV_OBJS := $(SRCS:%.c=$(COV_OBJ_DIR)/%.o)
 COV_BOARD_OBJS := $(BOARD_SRCS:%.c=$(COV_OBJ_DIR)/%.o)
+SCREENSHOT ?= gcheckers.png
+DISPLAY_NUM ?= 99
+SCREEN_GEOMETRY ?= 1280x720x24
 
-.PHONY: all clean test coverage
+.PHONY: all clean test coverage screenshot test_screenshot
 
 all: libgame.a checkers gcheckers
 
@@ -32,7 +35,7 @@ libgame.a: $(OBJS)
 %.o: %.c src/game.h src/board.h src/checkers_constants.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
-test: test_game test_game_print test_board test_move_gen test_checkers_model
+test: test_game test_game_print test_board test_move_gen test_checkers_model test_screenshot
 	./test_game
 	./test_game_print
 	./test_board
@@ -57,6 +60,20 @@ checkers: src/checkers_cli.c $(SRCS) src/game.h
 test_checkers_model: tests/test_checkers_model.c $(SRCS) src/checkers_model.h
 	$(CC) $(CFLAGS) -o $@ tests/test_checkers_model.c $(SRCS) $(LDLIBS)
 
+test_screenshot: gcheckers tools/screenshot_gcheckers.sh
+	@if ! command -v Xvfb >/dev/null 2>&1; then \
+		echo "Skipping screenshot test: Xvfb not available."; \
+		exit 0; \
+	fi; \
+	if ! command -v import >/dev/null 2>&1; then \
+		echo "Skipping screenshot test: ImageMagick import not available."; \
+		exit 0; \
+	fi; \
+	tmp_file=$$(mktemp -t gcheckers_screenshot.XXXXXX.png); \
+		DISPLAY_NUM=99 SCREEN_GEOMETRY=1280x720x24 tools/screenshot_gcheckers.sh "$$tmp_file"; \
+		test -s "$$tmp_file"; \
+		rm -f "$$tmp_file"
+
 gcheckers: src/gcheckers.c src/gcheckers_application.c src/gcheckers_window.c src/gcheckers_window.h \
 	src/gcheckers_application.h src/checkers_model.c src/checkers_model.h $(SRCS)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/gcheckers.c src/gcheckers_application.c \
@@ -64,8 +81,11 @@ gcheckers: src/gcheckers.c src/gcheckers_application.c src/gcheckers_window.c sr
 
 clean:
 	rm -f $(OBJS) libgame.a test_game test_game_print test_board test_move_gen test_checkers_model \
-		checkers gcheckers
+		test_screenshot checkers gcheckers
 	rm -rf $(COV_DIR)
+
+screenshot: gcheckers tools/screenshot_gcheckers.sh
+	DISPLAY_NUM=$(DISPLAY_NUM) SCREEN_GEOMETRY=$(SCREEN_GEOMETRY) tools/screenshot_gcheckers.sh $(SCREENSHOT)
 
 $(COV_OBJ_DIR)/%.o: %.c src/game.h src/board.h src/checkers_constants.h
 	@mkdir -p $(dir $@)
