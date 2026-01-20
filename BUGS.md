@@ -19,3 +19,11 @@ In practice, GTK's default renderer produced a black frame buffer under Xvfb, so
 
 The fix consisted of forcing the GTK renderer to the Cairo backend (and explicitly using the X11 backend) in the
 screenshot helper so the UI is rasterized correctly under Xvfb.
+
+## Square index numbers were not visible
+
+The goal was to show square index numbers on each playable board square.
+
+In practice, the index labels blended into the board and were too subtle to read against the square colors.
+
+The fix added contrast styling and spacing to the square index labels so the numbers render with a visible background.
