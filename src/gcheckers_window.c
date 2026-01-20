@@ -143,7 +143,7 @@ static GtkWidget *gcheckers_window_build_square_content(GtkWidget *button) {
 
   GtkWidget *piece_picture = gtk_picture_new();
   gtk_picture_set_content_fit(GTK_PICTURE(piece_picture), GTK_CONTENT_FIT_CONTAIN);
-  gtk_widget_set_size_request(piece_picture, 42, 42);
+  gtk_widget_set_size_request(piece_picture, 63, 63);
   gtk_widget_add_css_class(piece_picture, "piece-picture");
   gtk_stack_add_named(GTK_STACK(piece_stack), piece_picture, "picture");
 
@@ -569,20 +569,21 @@ static void gcheckers_window_init(GCheckersWindow *self) {
       "  background-image: none;"
       "}"
       ".board-square { padding: 0; border-radius: 0; }"
-      ".piece-label { font-size: 30px; }"
-      ".square-index {"
-      "  font-size: 12px;"
-      "  font-weight: 600;"
-      "  padding: 1px 4px;"
+      ".piece-label {"
+      "  font-size: 30px;"
+      "  color: #fff;"
+      "  background-color: rgba(0, 0, 0, 0.6);"
       "  border-radius: 6px;"
-      "  background-color: rgba(255, 255, 255, 0.8);"
-      "  color: #111;"
+      "  padding: 2px 6px;"
       "}"
-      ".board-dark .square-index {"
-      "  background-color: rgba(255, 255, 255, 0.8);"
-      "  color: #111;"
+      ".square-index {"
+      "  font-size: 6px;"
+      "  font-weight: 600;"
+      "  padding: 1px 3px;"
+      "  border-radius: 6px;"
+      "  background-color: rgba(0, 0, 0, 0.6);"
+      "  color: #fff;"
       "}"
-      ".board-dark .piece-label { color: #f5f5f5; }"
       ".board-selected { outline: 2px solid #4a90e2; }");
   GdkDisplay *display = gdk_display_get_default();
   if (!display) {
