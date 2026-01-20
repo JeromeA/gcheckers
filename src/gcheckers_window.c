@@ -156,6 +156,7 @@ static GtkWidget *gcheckers_window_build_square_content(GtkWidget *button) {
   gtk_label_set_xalign(GTK_LABEL(index_label), 0.5f);
   gtk_widget_set_halign(index_label, GTK_ALIGN_CENTER);
   gtk_widget_set_valign(index_label, GTK_ALIGN_END);
+  gtk_widget_set_margin_bottom(index_label, 2);
   gtk_widget_add_css_class(index_label, "square-index");
 
   gtk_overlay_set_child(GTK_OVERLAY(container), piece_stack);
@@ -557,8 +558,18 @@ static void gcheckers_window_init(GCheckersWindow *self) {
                                     ".board-dark { background-color: #2b2b2b; border-radius: 0; }"
                                     ".board-square { padding: 0; border-radius: 0; }"
                                     ".piece-label { font-size: 20px; }"
-                                    ".square-index { font-size: 10px; margin-bottom: 4px; color: #111; }"
-                                    ".board-dark .square-index { color: #f5f5f5; }"
+                                    ".square-index {"
+                                    "  font-size: 12px;"
+                                    "  font-weight: 600;"
+                                    "  padding: 1px 4px;"
+                                    "  border-radius: 6px;"
+                                    "  background-color: rgba(245, 245, 245, 0.8);"
+                                    "  color: #111;"
+                                    "}"
+                                    ".board-dark .square-index {"
+                                    "  background-color: rgba(17, 17, 17, 0.75);"
+                                    "  color: #f5f5f5;"
+                                    "}"
                                     ".board-dark .piece-label { color: #f5f5f5; }"
                                     ".board-selected { outline: 2px solid #4a90e2; }");
   GdkDisplay *display = gdk_display_get_default();
