@@ -557,9 +557,9 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   GtkCssProvider *provider = gtk_css_provider_new();
   gtk_css_provider_load_from_string(
       provider,
-      ".board { background-color: #1f1208; }"
-      ".board-light { background-color: #f1e2c5; border-radius: 0; }"
-      ".board-dark { background-color: #4a2e16; border-radius: 0; }"
+      ".board { background-color: #2a160b; border: 2px solid #000; }"
+      ".board-light { background-color: #e6d1a8; border-radius: 0; }"
+      ".board-dark { background-color: #3b2412; border-radius: 0; }"
       ".board-square { padding: 0; border-radius: 0; }"
       ".piece-label { font-size: 30px; }"
       ".square-index {"
