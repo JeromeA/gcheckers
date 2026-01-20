@@ -27,3 +27,13 @@ The goal was to show square index numbers on each playable board square.
 In practice, the index labels blended into the board and were too subtle to read against the square colors.
 
 The fix added contrast styling and spacing to the square index labels so the numbers render with a visible background.
+
+## Dark board squares stayed white
+
+The goal was for playable squares to use the dark brown board color when the board was built.
+
+In practice, the playable squares are buttons and the theme button background styling overrode the custom class, so the
+dark background color was ignored.
+
+The fix explicitly targeted the button class and cleared the default background image so the board-dark background color
+is applied.
