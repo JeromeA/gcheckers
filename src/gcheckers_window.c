@@ -14,6 +14,8 @@ struct _GCheckersWindow {
   uint8_t selected_length;
   gulong state_handler_id;
   gboolean ai_in_progress;
+  GdkTexture *white_man_texture;
+  GdkTexture *black_man_texture;
 };
 
 G_DEFINE_TYPE(GCheckersWindow, gcheckers_window, GTK_TYPE_APPLICATION_WINDOW)
@@ -45,6 +47,125 @@ static const char *gcheckers_window_piece_symbol(CheckersPiece piece) {
       g_debug("gcheckers_window_piece_symbol received unknown piece %d\n", piece);
       return "?";
   }
+}
+
+static GdkTexture *gcheckers_window_build_man_texture(const char *fill_color, const char *stroke_color) {
+  g_return_val_if_fail(fill_color != NULL, NULL);
+  g_return_val_if_fail(stroke_color != NULL, NULL);
+
+  g_autofree char *svg = g_strdup_printf(
+      "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>"
+      "<path fill='%s' stroke='%s' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'"
+      " d='M16 20 L48 20 L48 44 Q32 56 16 44 Z'/>"
+      "<ellipse cx='32' cy='20' rx='16' ry='6' fill='%s' stroke='%s' stroke-width='4'"
+      " stroke-linecap='round' stroke-linejoin='round'/>"
+      "</svg>",
+      fill_color,
+      stroke_color,
+      fill_color,
+      stroke_color);
+  if (!svg) {
+    g_debug("Failed to allocate SVG for men\n");
+    return NULL;
+  }
+
+  g_autoptr(GBytes) bytes = g_bytes_new(svg, strlen(svg));
+  g_autoptr(GError) error = NULL;
+  GdkTexture *texture = gdk_texture_new_from_bytes(bytes, &error);
+  if (!texture) {
+    g_debug("Failed to create texture for men: %s\n", error ? error->message : "unknown error");
+  }
+  return texture;
+}
+
+static void gcheckers_window_set_square_piece(GCheckersWindow *self, GtkWidget *button, CheckersPiece piece) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(GTK_IS_BUTTON(button));
+
+  GtkWidget *piece_stack = g_object_get_data(G_OBJECT(button), "piece-stack");
+  GtkWidget *piece_picture = g_object_get_data(G_OBJECT(button), "piece-picture");
+  GtkWidget *piece_label = g_object_get_data(G_OBJECT(button), "piece-label");
+
+  g_return_if_fail(GTK_IS_STACK(piece_stack));
+  g_return_if_fail(GTK_IS_PICTURE(piece_picture));
+  g_return_if_fail(GTK_IS_LABEL(piece_label));
+
+  const char *label_text = "";
+  GdkTexture *texture = NULL;
+  gboolean show_picture = FALSE;
+
+  switch (piece) {
+    case CHECKERS_PIECE_WHITE_MAN:
+      texture = self->white_man_texture;
+      show_picture = texture != NULL;
+      label_text = show_picture ? "" : gcheckers_window_piece_symbol(piece);
+      break;
+    case CHECKERS_PIECE_BLACK_MAN:
+      texture = self->black_man_texture;
+      show_picture = texture != NULL;
+      label_text = show_picture ? "" : gcheckers_window_piece_symbol(piece);
+      break;
+    case CHECKERS_PIECE_WHITE_KING:
+    case CHECKERS_PIECE_BLACK_KING:
+      label_text = gcheckers_window_piece_symbol(piece);
+      break;
+    case CHECKERS_PIECE_EMPTY:
+      label_text = "";
+      break;
+    default:
+      g_debug("gcheckers_window_set_square_piece received unknown piece %d\n", piece);
+      label_text = "?";
+      break;
+  }
+
+  if (show_picture) {
+    gtk_picture_set_paintable(GTK_PICTURE(piece_picture), GDK_PAINTABLE(texture));
+    gtk_stack_set_visible_child(GTK_STACK(piece_stack), piece_picture);
+  } else {
+    gtk_label_set_text(GTK_LABEL(piece_label), label_text);
+    gtk_stack_set_visible_child(GTK_STACK(piece_stack), piece_label);
+  }
+  gtk_widget_set_visible(piece_stack, TRUE);
+}
+
+static GtkWidget *gcheckers_window_build_square_content(GtkWidget *button) {
+  g_return_val_if_fail(GTK_IS_BUTTON(button), NULL);
+
+  GtkWidget *container = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+  gtk_widget_set_hexpand(container, TRUE);
+  gtk_widget_set_vexpand(container, TRUE);
+
+  GtkWidget *piece_stack = gtk_stack_new();
+  gtk_stack_set_hhomogeneous(GTK_STACK(piece_stack), TRUE);
+  gtk_stack_set_vhomogeneous(GTK_STACK(piece_stack), TRUE);
+  gtk_widget_set_hexpand(piece_stack, TRUE);
+  gtk_widget_set_vexpand(piece_stack, TRUE);
+
+  GtkWidget *piece_picture = gtk_picture_new();
+  gtk_picture_set_content_fit(GTK_PICTURE(piece_picture), GTK_CONTENT_FIT_CONTAIN);
+  gtk_widget_set_size_request(piece_picture, 28, 28);
+  gtk_widget_add_css_class(piece_picture, "piece-picture");
+  gtk_stack_add_named(GTK_STACK(piece_stack), piece_picture, "picture");
+
+  GtkWidget *piece_label = gtk_label_new(NULL);
+  gtk_label_set_xalign(GTK_LABEL(piece_label), 0.5f);
+  gtk_widget_add_css_class(piece_label, "piece-label");
+  gtk_stack_add_named(GTK_STACK(piece_stack), piece_label, "label");
+
+  GtkWidget *index_label = gtk_label_new(NULL);
+  gtk_label_set_xalign(GTK_LABEL(index_label), 0.5f);
+  gtk_widget_set_valign(index_label, GTK_ALIGN_END);
+  gtk_widget_add_css_class(index_label, "square-index");
+
+  gtk_box_append(GTK_BOX(container), piece_stack);
+  gtk_box_append(GTK_BOX(container), index_label);
+
+  g_object_set_data(G_OBJECT(button), "piece-stack", piece_stack);
+  g_object_set_data(G_OBJECT(button), "piece-picture", piece_picture);
+  g_object_set_data(G_OBJECT(button), "piece-label", piece_label);
+  g_object_set_data(G_OBJECT(button), "index-label", index_label);
+
+  return container;
 }
 
 static void gcheckers_window_print_move(const char *label, const CheckersMove *move) {
@@ -138,10 +259,13 @@ static void gcheckers_window_update_board(GCheckersWindow *self) {
       }
 
       CheckersPiece piece = board_get(&state->board, (uint8_t)idx);
-      const char *symbol = gcheckers_window_piece_symbol(piece);
-      char label[16];
-      g_snprintf(label, sizeof(label), "%s\n%d", symbol, idx + 1);
-      gtk_button_set_label(GTK_BUTTON(button), label);
+      gcheckers_window_set_square_piece(self, button, piece);
+
+      GtkWidget *index_label = g_object_get_data(G_OBJECT(button), "index-label");
+      g_return_if_fail(GTK_IS_LABEL(index_label));
+      char label[8];
+      g_snprintf(label, sizeof(label), "%d", idx + 1);
+      gtk_label_set_text(GTK_LABEL(index_label), label);
 
       if (gcheckers_window_selection_contains(self, (uint8_t)idx)) {
         gtk_widget_add_css_class(button, "board-selected");
@@ -367,6 +491,8 @@ static void gcheckers_window_build_board(GCheckersWindow *self) {
         gtk_widget_set_vexpand(button, TRUE);
         gtk_widget_add_css_class(button, "board-dark");
         gtk_widget_add_css_class(button, "board-square");
+        GtkWidget *content = gcheckers_window_build_square_content(button);
+        gtk_button_set_child(GTK_BUTTON(button), content);
         g_object_set_data(G_OBJECT(button), "board-index", GINT_TO_POINTER(index));
         g_signal_connect(button, "clicked", G_CALLBACK(gcheckers_window_on_square_clicked), self);
         square = button;
@@ -408,6 +534,8 @@ static void gcheckers_window_dispose(GObject *object) {
     self->state_handler_id = 0;
   }
   g_clear_object(&self->model);
+  g_clear_object(&self->white_man_texture);
+  g_clear_object(&self->black_man_texture);
 
   G_OBJECT_CLASS(gcheckers_window_parent_class)->dispose(object);
 }
@@ -424,9 +552,13 @@ static void gcheckers_window_init(GCheckersWindow *self) {
 
   GtkCssProvider *provider = gtk_css_provider_new();
   gtk_css_provider_load_from_string(provider,
-                                    ".board-light { background-color: #f0d9b5; }"
-                                    ".board-dark { background-color: #b58863; }"
-                                    ".board-square { font-size: 20px; padding: 0; }"
+                                    ".board-light { background-color: #f5f5f5; border-radius: 0; }"
+                                    ".board-dark { background-color: #2b2b2b; border-radius: 0; }"
+                                    ".board-square { padding: 0; border-radius: 0; }"
+                                    ".piece-label { font-size: 20px; }"
+                                    ".square-index { font-size: 10px; margin-bottom: 4px; color: #111; }"
+                                    ".board-dark .square-index { color: #f5f5f5; }"
+                                    ".board-dark .piece-label { color: #f5f5f5; }"
                                     ".board-selected { outline: 2px solid #4a90e2; }");
   GdkDisplay *display = gdk_display_get_default();
   if (!display) {
@@ -462,6 +594,9 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   self->reset_button = gtk_button_new_with_label("Reset");
   g_signal_connect(self->reset_button, "clicked", G_CALLBACK(gcheckers_window_on_reset_clicked), self);
   gtk_box_append(GTK_BOX(button_row), self->reset_button);
+
+  self->white_man_texture = gcheckers_window_build_man_texture("#ffffff", "#111111");
+  self->black_man_texture = gcheckers_window_build_man_texture("#111111", "#ffffff");
 }
 
 GCheckersWindow *gcheckers_window_new(GtkApplication *app, GCheckersModel *model) {
