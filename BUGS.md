@@ -47,3 +47,12 @@ overlay and prevented the picture from growing.
 
 The fix introduced a single square size constant and applied it to both playable buttons and light-square labels so the
 square size matches the requested piece dimensions.
+
+## Empty playable squares appeared nearly black
+
+The goal was for empty dark squares to render using the same brown background as occupied dark squares.
+
+In practice, empty squares were showing a dark overlay because the piece label widget (with a semi-transparent black
+background) was visible even when there was no piece.
+
+The fix hides the piece overlay entirely when a square is empty, preventing the label background from tinting the square.
