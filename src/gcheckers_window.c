@@ -574,7 +574,7 @@ static void gcheckers_window_on_square_clicked(GtkButton *button, gpointer user_
     g_debug("Missing board index for clicked square\n");
     return;
   }
-  int index = GPOINTER_TO_INT(data);
+  int index = GPOINTER_TO_INT(data) - 1;
   if (index < 0) {
     g_debug("Invalid board index for clicked square\n");
     return;
@@ -683,7 +683,11 @@ static void gcheckers_window_build_board(GCheckersWindow *self) {
         gtk_widget_add_css_class(button, "board-square");
         GtkWidget *content = gcheckers_window_build_square_content(button);
         gtk_button_set_child(GTK_BUTTON(button), content);
-        g_object_set_data(G_OBJECT(button), "board-index", GINT_TO_POINTER(index));
+        if (index < 0) {
+          g_debug("Invalid board index while building board\n");
+        } else {
+          g_object_set_data(G_OBJECT(button), "board-index", GINT_TO_POINTER(index + 1));
+        }
         g_signal_connect(button, "clicked", G_CALLBACK(gcheckers_window_on_square_clicked), self);
         square = button;
         if (index >= 0 && index < CHECKERS_MAX_SQUARES) {
