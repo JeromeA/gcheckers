@@ -11,6 +11,14 @@ mistakes in the future. The first entry below shows a template.
 
 [How it was fixed]
 
+## Man cylinder bottom curve was shallower than the top
+
+The goal was for the checker men to have identical curvature on the top and bottom edges of the cylinder.
+
+In practice, the bottom arc used a smaller vertical radius than the top arc, so the base appeared flatter.
+
+The fix reuses the same outer radius for the bottom arc as the top to keep the curves identical.
+
 ## Screenshot captures were black under Xvfb
 
 The goal of the screenshot helper was to launch the GTK app under Xvfb and capture the rendered window.
