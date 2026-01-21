@@ -75,9 +75,10 @@ test_screenshot: gcheckers tools/screenshot_gcheckers.sh
 		rm -f "$$tmp_file"
 
 gcheckers: src/gcheckers.c src/gcheckers_application.c src/gcheckers_window.c src/gcheckers_window.h \
-	src/gcheckers_application.h src/checkers_model.c src/checkers_model.h $(SRCS)
+	src/gcheckers_application.h src/gcheckers_man_paintable.c src/gcheckers_man_paintable.h \
+	src/checkers_model.c src/checkers_model.h $(SRCS)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/gcheckers.c src/gcheckers_application.c \
-		src/gcheckers_window.c $(SRCS) $(LDLIBS) $(GTK_LIBS)
+		src/gcheckers_window.c src/gcheckers_man_paintable.c $(SRCS) $(LDLIBS) $(GTK_LIBS)
 
 clean:
 	rm -f $(OBJS) libgame.a test_game test_game_print test_board test_move_gen test_checkers_model \
