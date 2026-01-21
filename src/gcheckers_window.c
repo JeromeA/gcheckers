@@ -462,22 +462,18 @@ static void gcheckers_window_update_board(GCheckersWindow *self) {
       g_snprintf(label, sizeof(label), "%d", idx + 1);
       gtk_label_set_text(GTK_LABEL(index_label), label);
 
-      GtkWidget *piece_stack = g_object_get_data(G_OBJECT(button), "piece-stack");
-      g_return_if_fail(GTK_IS_STACK(piece_stack));
-
       gboolean is_selected = gcheckers_window_selection_contains(self, (uint8_t)idx);
+      gboolean is_selectable = highlight_moves && playable_starts[idx];
       gboolean is_destination = highlight_moves && possible_destinations[idx];
-      if (is_selected || is_destination) {
+      if (is_selected) {
+        gtk_widget_add_css_class(button, "board-halo-selected");
+        gtk_widget_remove_css_class(button, "board-halo");
+      } else if (is_selectable || is_destination) {
         gtk_widget_add_css_class(button, "board-halo");
+        gtk_widget_remove_css_class(button, "board-halo-selected");
       } else {
         gtk_widget_remove_css_class(button, "board-halo");
-      }
-
-      if (highlight_moves && piece != CHECKERS_PIECE_EMPTY &&
-          board_piece_color(piece) == CHECKERS_COLOR_WHITE && !playable_starts[idx]) {
-        gtk_widget_add_css_class(piece_stack, "piece-inactive");
-      } else {
-        gtk_widget_remove_css_class(piece_stack, "piece-inactive");
+        gtk_widget_remove_css_class(button, "board-halo-selected");
       }
     }
   }
@@ -795,7 +791,6 @@ static void gcheckers_window_init(GCheckersWindow *self) {
       "  border-radius: 6px;"
       "  padding: 2px 6px;"
       "}"
-      ".piece-inactive { opacity: 0.5; }"
       ".square-index {"
       "  font-size: 6px;"
       "  font-weight: 600;"
@@ -811,12 +806,26 @@ static void gcheckers_window_init(GCheckersWindow *self) {
       "      rgba(247, 215, 77, 0.4) 50%,"
       "      rgba(247, 215, 77, 0.0) 72%);"
       "}"
+      ".board-halo-selected {"
+      "  background-image:"
+      "    radial-gradient(circle,"
+      "      rgba(96, 214, 120, 0.85) 0,"
+      "      rgba(96, 214, 120, 0.4) 50%,"
+      "      rgba(96, 214, 120, 0.0) 72%);"
+      "}"
       "button.board-halo {"
       "  background-image:"
       "    radial-gradient(circle,"
       "      rgba(247, 215, 77, 0.85) 0,"
       "      rgba(247, 215, 77, 0.4) 50%,"
       "      rgba(247, 215, 77, 0.0) 72%);"
+      "}"
+      "button.board-halo-selected {"
+      "  background-image:"
+      "    radial-gradient(circle,"
+      "      rgba(96, 214, 120, 0.85) 0,"
+      "      rgba(96, 214, 120, 0.4) 50%,"
+      "      rgba(96, 214, 120, 0.0) 72%);"
       "}");
   GdkDisplay *display = gdk_display_get_default();
   if (!display) {
