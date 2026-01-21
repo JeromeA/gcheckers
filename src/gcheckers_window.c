@@ -1,5 +1,6 @@
 #include "gcheckers_window.h"
 
+#include <math.h>
 #include <stdbool.h>
 #include <string.h>
 
@@ -8,7 +9,9 @@ struct _GCheckersWindow {
   GCheckersModel *model;
   GtkWidget *status_label;
   GtkWidget *reset_button;
+  GtkWidget *board_overlay;
   GtkWidget *board_grid;
+  GtkWidget *board_drawing_area;
   GtkWidget *square_buttons[CHECKERS_MAX_SQUARES];
   guint board_size;
   uint8_t selected_path[CHECKERS_MAX_MOVE_LENGTH];
@@ -34,6 +37,9 @@ static const double gcheckers_window_man_outer_radius_y = 8.0 * gcheckers_window
 static const double gcheckers_window_man_top_inner_radius_x = 14.0;
 static const double gcheckers_window_man_top_inner_radius_y = 5.0 * gcheckers_window_man_height_scale;
 static const double gcheckers_window_king_stack_offset = gcheckers_window_man_outer_radius_y;
+static const double gcheckers_window_last_move_alpha = 0.5;
+static const double gcheckers_window_last_move_stroke_width = 4.0;
+static const double gcheckers_window_last_move_arrow_scale = 0.28;
 
 typedef struct _GCheckersManPaintable {
   GObject parent_instance;
@@ -194,6 +200,109 @@ static gboolean gcheckers_window_selection_contains(GCheckersWindow *self, uint8
     }
   }
   return FALSE;
+}
+
+static void gcheckers_window_draw_arrow(cairo_t *cr,
+                                        double start_x,
+                                        double start_y,
+                                        double end_x,
+                                        double end_y,
+                                        double arrow_size) {
+  g_return_if_fail(cr != NULL);
+
+  double dx = end_x - start_x;
+  double dy = end_y - start_y;
+  double distance = sqrt(dx * dx + dy * dy);
+  if (distance <= 0.0) {
+    return;
+  }
+
+  double angle = atan2(dy, dx);
+  double head_length = arrow_size;
+  if (head_length > distance * 0.6) {
+    head_length = distance * 0.6;
+  }
+  double head_width = head_length * 0.6;
+
+  double left_x = end_x - head_length * cos(angle) + head_width * sin(angle);
+  double left_y = end_y - head_length * sin(angle) - head_width * cos(angle);
+  double right_x = end_x - head_length * cos(angle) - head_width * sin(angle);
+  double right_y = end_y - head_length * sin(angle) + head_width * cos(angle);
+
+  cairo_move_to(cr, start_x, start_y);
+  cairo_line_to(cr, end_x, end_y);
+  cairo_stroke(cr);
+
+  cairo_move_to(cr, end_x, end_y);
+  cairo_line_to(cr, left_x, left_y);
+  cairo_line_to(cr, right_x, right_y);
+  cairo_close_path(cr);
+  cairo_fill(cr);
+}
+
+static void gcheckers_window_draw_last_move(GtkDrawingArea * /*area*/,
+                                            cairo_t *cr,
+                                            int width,
+                                            int height,
+                                            gpointer user_data) {
+  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
+
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
+  g_return_if_fail(cr != NULL);
+
+  if (width <= 0 || height <= 0) {
+    return;
+  }
+
+  const GameState *state = gcheckers_model_peek_state(self->model);
+  if (!state) {
+    g_debug("Failed to fetch game state for last move overlay\n");
+    return;
+  }
+  if (state->board.board_size == 0) {
+    g_debug("Board size was zero when drawing last move overlay\n");
+    return;
+  }
+
+  const CheckersMove *last_move = gcheckers_model_peek_last_move(self->model);
+  if (!last_move || last_move->length < 2) {
+    return;
+  }
+
+  double cell_width = (double)width / state->board.board_size;
+  double cell_height = (double)height / state->board.board_size;
+  double arrow_size = fmin(cell_width, cell_height) * gcheckers_window_last_move_arrow_scale;
+
+  cairo_save(cr);
+  cairo_set_line_width(cr, gcheckers_window_last_move_stroke_width);
+  cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+  cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+  cairo_set_source_rgba(cr, 0.2, 0.85, 0.2, gcheckers_window_last_move_alpha);
+
+  for (uint8_t i = 1; i < last_move->length; ++i) {
+    int start_row = 0;
+    int start_col = 0;
+    int end_row = 0;
+    int end_col = 0;
+    board_coord_from_index(last_move->path[i - 1],
+                           &start_row,
+                           &start_col,
+                           state->board.board_size);
+    board_coord_from_index(last_move->path[i],
+                           &end_row,
+                           &end_col,
+                           state->board.board_size);
+
+    double start_x = ((double)start_col + 0.5) * cell_width;
+    double start_y = ((double)start_row + 0.5) * cell_height;
+    double end_x = ((double)end_col + 0.5) * cell_width;
+    double end_y = ((double)end_row + 0.5) * cell_height;
+
+    gcheckers_window_draw_arrow(cr, start_x, start_y, end_x, end_y, arrow_size);
+  }
+
+  cairo_restore(cr);
 }
 
 static const char *gcheckers_window_piece_symbol(CheckersPiece piece) {
@@ -540,6 +649,9 @@ static void gcheckers_window_update_status(GCheckersWindow *self) {
   gtk_label_set_text(GTK_LABEL(self->status_label), status);
 
   gcheckers_window_update_board(self);
+  if (self->board_drawing_area) {
+    gtk_widget_queue_draw(self->board_drawing_area);
+  }
 
   const GameState *state = gcheckers_model_peek_state(self->model);
   g_return_if_fail(state != NULL);
@@ -849,11 +961,26 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_label_set_wrap(GTK_LABEL(self->status_label), TRUE);
   gtk_box_append(GTK_BOX(content), self->status_label);
 
+  self->board_overlay = gtk_overlay_new();
+  gtk_widget_set_hexpand(self->board_overlay, TRUE);
+  gtk_widget_set_vexpand(self->board_overlay, TRUE);
+  gtk_box_append(GTK_BOX(content), self->board_overlay);
+
   self->board_grid = gtk_grid_new();
   gtk_widget_add_css_class(self->board_grid, "board");
   gtk_widget_set_hexpand(self->board_grid, TRUE);
   gtk_widget_set_vexpand(self->board_grid, TRUE);
-  gtk_box_append(GTK_BOX(content), self->board_grid);
+  gtk_overlay_set_child(GTK_OVERLAY(self->board_overlay), self->board_grid);
+
+  self->board_drawing_area = gtk_drawing_area_new();
+  gtk_widget_set_hexpand(self->board_drawing_area, TRUE);
+  gtk_widget_set_vexpand(self->board_drawing_area, TRUE);
+  gtk_widget_set_can_target(self->board_drawing_area, FALSE);
+  gtk_overlay_add_overlay(GTK_OVERLAY(self->board_overlay), self->board_drawing_area);
+  gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(self->board_drawing_area),
+                                 gcheckers_window_draw_last_move,
+                                 self,
+                                 NULL);
 
   GtkWidget *button_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
   gtk_box_append(GTK_BOX(content), button_row);
