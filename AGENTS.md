@@ -34,13 +34,8 @@ implementation.
 
 This overview lists each non-trivial file so you can quickly find where functionality and documentation live.
 
-- AGENTS.md: contributor instructions, coding conventions, and workflow requirements for this repo.
-- BUGS.md: log of past bugs, symptoms, and fixes to avoid regressions.
-- EXECPLAN.md: current execution plan for GTK move-selection parity work, including progress and decisions.
-- PLANS.md: detailed specification for writing and maintaining ExecPlans.
 - README.md: high-level project description, dependencies, and basic build/run steps.
 - Makefile: build targets for the library, CLI, GTK app, tests, coverage, and screenshots.
-- .gitignore: ignored build artifacts and temporary files for Git.
 - src/board.h: board data structures and public helpers for coordinates, pieces, and playable squares.
 - src/board.c: board storage logic, reset/init, coordinate conversion, and piece helpers.
 - src/checkers_constants.h: shared size limits for boards, moves, and byte storage.
@@ -56,11 +51,7 @@ This overview lists each non-trivial file so you can quickly find where function
 - src/gcheckers_application.c: GTK application activation that creates the main window and model.
 - src/gcheckers_window.h: GTK window type declaration.
 - src/gcheckers_window.c: GTK UI, board rendering, move selection, and styling logic.
-- tests/test_board.c: unit tests for board initialization, getters, and coordinate helpers.
-- tests/test_game.c: unit tests for applying moves and rule presets.
-- tests/test_game_print.c: tests for move notation formatting and board rendering output.
-- tests/test_move_gen.c: unit tests for move generation rules, captures, and helper utilities.
-- tests/test_checkers_model.c: unit tests for the GObject model APIs and state transitions.
+- tests: directory for all unit tests
 - tools/coverage_report.py: generates HTML coverage reports from gcov output.
-- tools/setup.sh: installs GTK/Xvfb/ImageMagick dependencies on Debian-based systems.
+- tools/setup.sh: installs dependencies (GTK/Xvfb/ImageMagick) on Debian-based systems.
 - tools/screenshot_gcheckers.sh: runs the GTK app under Xvfb and captures a screenshot.
