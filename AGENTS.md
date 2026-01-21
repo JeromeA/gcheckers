@@ -18,7 +18,7 @@
 
 - Always run the tests before committing.
 - Always build all the binaries before committing.
-- Use "make screenshot" to validate the UI before committing.
+- Use "make screenshot" to check the UI, when doing a UI change (but make sure you don't commit the screenshots).
 
 # Bugs
 
