@@ -18,6 +18,7 @@ gboolean gcheckers_model_apply_move(GCheckersModel *self, const CheckersMove *mo
 gboolean gcheckers_model_step_random_move(GCheckersModel *self, CheckersMove *out_move);
 char *gcheckers_model_format_status(GCheckersModel *self);
 const GameState *gcheckers_model_peek_state(GCheckersModel *self);
+const CheckersMove *gcheckers_model_peek_last_move(GCheckersModel *self);
 
 G_END_DECLS
 

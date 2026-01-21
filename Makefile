@@ -7,7 +7,7 @@ GOBJECT_CFLAGS := $(shell pkg-config --cflags gobject-2.0)
 GOBJECT_LIBS := $(shell pkg-config --libs gobject-2.0)
 GTK_CFLAGS := $(shell pkg-config --cflags gtk4)
 GTK_LIBS := $(shell pkg-config --libs gtk4)
-LDLIBS := $(GLIB_LIBS) $(GOBJECT_LIBS)
+LDLIBS := $(GLIB_LIBS) $(GOBJECT_LIBS) -lm
 
 CFLAGS += $(GLIB_CFLAGS) $(GOBJECT_CFLAGS)
 

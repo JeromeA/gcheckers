@@ -69,10 +69,36 @@ static void test_model_random_move_outputs_move(void) {
   g_object_unref(model);
 }
 
+static void test_model_peek_last_move(void) {
+  GCheckersModel *model = gcheckers_model_new();
+
+  const CheckersMove *last_move = gcheckers_model_peek_last_move(model);
+  assert(last_move == NULL);
+
+  MoveList moves = gcheckers_model_list_moves(model);
+  assert(moves.count > 0);
+  CheckersMove first_move = moves.moves[0];
+  movelist_free(&moves);
+
+  bool moved = gcheckers_model_apply_move(model, &first_move);
+  assert(moved);
+
+  last_move = gcheckers_model_peek_last_move(model);
+  assert(last_move != NULL);
+  assert(last_move->length == first_move.length);
+  assert(last_move->captures == first_move.captures);
+  assert(memcmp(last_move->path,
+                first_move.path,
+                first_move.length * sizeof(first_move.path[0])) == 0);
+
+  g_object_unref(model);
+}
+
 int main(void) {
   test_model_reset_and_moves();
   test_model_rejects_invalid_move();
   test_model_random_move_outputs_move();
+  test_model_peek_last_move();
 
   return 0;
 }
