@@ -22,6 +22,14 @@ G_DEFINE_TYPE(GCheckersWindow, gcheckers_window, GTK_TYPE_APPLICATION_WINDOW)
 
 static const int gcheckers_window_square_size = 63;
 static const double gcheckers_window_man_viewbox_size = 64.0;
+static const double gcheckers_window_man_center = 32.0;
+static const double gcheckers_window_man_top_center_y = 28.0;
+static const double gcheckers_window_man_base_width = 44.0;
+static const double gcheckers_window_man_base_height = 10.0;
+static const double gcheckers_window_man_top_outer_radius_y = 8.0;
+static const double gcheckers_window_man_top_inner_radius_x = 14.0;
+static const double gcheckers_window_man_top_inner_radius_y = 5.0;
+static const double gcheckers_window_man_base_bottom_radius_y = 5.5;
 
 typedef struct _GCheckersManPaintable {
   GObject parent_instance;
@@ -69,16 +77,19 @@ static void gcheckers_man_paintable_draw_base(GCheckersManPaintable *self, cairo
   g_return_if_fail(self != NULL);
   g_return_if_fail(cr != NULL);
 
-  const double top_y = 20.0;
-  const double base_height = 8.4;
+  const double top_y = gcheckers_window_man_top_center_y;
+  const double base_height = gcheckers_window_man_base_height;
   const double bottom_y = top_y + base_height;
+  const double radius_x = gcheckers_window_man_base_width / 2.0;
+  const double left_x = gcheckers_window_man_center - radius_x;
+  const double right_x = gcheckers_window_man_center + radius_x;
 
-  cairo_move_to(cr, 16.0, top_y);
-  cairo_line_to(cr, 48.0, top_y);
-  cairo_line_to(cr, 48.0, bottom_y);
+  cairo_move_to(cr, left_x, top_y);
+  cairo_line_to(cr, right_x, top_y);
+  cairo_line_to(cr, right_x, bottom_y);
   cairo_save(cr);
-  cairo_translate(cr, 32.0, bottom_y);
-  cairo_scale(cr, 16.0, 6.0);
+  cairo_translate(cr, gcheckers_window_man_center, bottom_y);
+  cairo_scale(cr, radius_x, gcheckers_window_man_base_bottom_radius_y);
   cairo_arc(cr, 0.0, 0.0, 1.0, 0.0, G_PI);
   cairo_restore(cr);
   cairo_close_path(cr);
@@ -93,8 +104,8 @@ static void gcheckers_man_paintable_draw_top(GCheckersManPaintable *self, cairo_
   g_return_if_fail(cr != NULL);
 
   cairo_save(cr);
-  cairo_translate(cr, 32.0, 20.0);
-  cairo_scale(cr, 16.0, 6.0);
+  cairo_translate(cr, gcheckers_window_man_center, gcheckers_window_man_top_center_y);
+  cairo_scale(cr, gcheckers_window_man_base_width / 2.0, gcheckers_window_man_top_outer_radius_y);
   cairo_arc(cr, 0.0, 0.0, 1.0, 0.0, 2.0 * G_PI);
   cairo_restore(cr);
   gdk_cairo_set_source_rgba(cr, &self->fill_color);
@@ -103,8 +114,8 @@ static void gcheckers_man_paintable_draw_top(GCheckersManPaintable *self, cairo_
   cairo_stroke(cr);
 
   cairo_save(cr);
-  cairo_translate(cr, 32.0, 20.0);
-  cairo_scale(cr, 10.0, 3.5);
+  cairo_translate(cr, gcheckers_window_man_center, gcheckers_window_man_top_center_y);
+  cairo_scale(cr, gcheckers_window_man_top_inner_radius_x, gcheckers_window_man_top_inner_radius_y);
   cairo_arc(cr, 0.0, 0.0, 1.0, 0.0, 2.0 * G_PI);
   cairo_restore(cr);
   gdk_cairo_set_source_rgba(cr, &self->stroke_color);
