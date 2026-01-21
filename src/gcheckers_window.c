@@ -72,7 +72,11 @@ static void gcheckers_man_paintable_draw_base(GCheckersManPaintable *self, cairo
   cairo_move_to(cr, 16.0, 20.0);
   cairo_line_to(cr, 48.0, 20.0);
   cairo_line_to(cr, 48.0, 32.0);
-  cairo_curve_to(cr, 37.3333, 36.0, 26.6667, 36.0, 16.0, 32.0);
+  cairo_save(cr);
+  cairo_translate(cr, 32.0, 32.0);
+  cairo_scale(cr, 16.0, 6.0);
+  cairo_arc(cr, 0.0, 0.0, 1.0, 0.0, G_PI);
+  cairo_restore(cr);
   cairo_close_path(cr);
   gdk_cairo_set_source_rgba(cr, &self->fill_color);
   cairo_fill_preserve(cr);

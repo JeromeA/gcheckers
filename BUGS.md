@@ -65,3 +65,11 @@ In practice, the SVG was rasterized into a fixed-size texture and then scaled, w
 grew.
 
 The fix replaced the one-time rasterization with a custom paintable that redraws the vector shapes at snapshot time.
+
+## Bottom curvature did not match the top of the man cylinder
+
+The goal was for the checker piece cylinder to have matching top and bottom curvature.
+
+In practice, the bottom curvature was a custom bezier curve, so it did not match the ellipse used for the top.
+
+The fix draws the bottom edge using the same scaled arc as the top, ensuring the curvature matches.
