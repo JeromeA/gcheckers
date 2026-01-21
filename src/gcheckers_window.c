@@ -1,5 +1,6 @@
 #include "gcheckers_window.h"
 
+#include <stdbool.h>
 #include <string.h>
 
 struct _GCheckersWindow {
@@ -388,6 +389,26 @@ static void gcheckers_window_update_board(GCheckersWindow *self) {
     return;
   }
 
+  MoveList moves = {0};
+  gboolean moves_loaded = FALSE;
+  gboolean highlight_moves = FALSE;
+  bool playable_starts[CHECKERS_MAX_SQUARES] = {false};
+  bool possible_destinations[CHECKERS_MAX_SQUARES] = {false};
+  if (state->winner == CHECKERS_WINNER_NONE && state->turn == CHECKERS_COLOR_WHITE) {
+    moves = gcheckers_model_list_moves(self->model);
+    moves_loaded = TRUE;
+    highlight_moves = moves.count > 0;
+    if (highlight_moves) {
+      game_moves_collect_starts(&moves, playable_starts);
+      if (self->selected_length > 0) {
+        game_moves_collect_next_destinations(&moves,
+                                             self->selected_path,
+                                             self->selected_length,
+                                             possible_destinations);
+      }
+    }
+  }
+
   guint board_size = state->board.board_size;
   int max_square = board_playable_squares(board_size);
   for (int row = 0; row < (int)board_size; ++row) {
@@ -414,12 +435,28 @@ static void gcheckers_window_update_board(GCheckersWindow *self) {
       g_snprintf(label, sizeof(label), "%d", idx + 1);
       gtk_label_set_text(GTK_LABEL(index_label), label);
 
-      if (gcheckers_window_selection_contains(self, (uint8_t)idx)) {
-        gtk_widget_add_css_class(button, "board-selected");
+      GtkWidget *piece_stack = g_object_get_data(G_OBJECT(button), "piece-stack");
+      g_return_if_fail(GTK_IS_STACK(piece_stack));
+
+      gboolean is_selected = gcheckers_window_selection_contains(self, (uint8_t)idx);
+      gboolean is_destination = highlight_moves && possible_destinations[idx];
+      if (is_selected || is_destination) {
+        gtk_widget_add_css_class(button, "board-halo");
       } else {
-        gtk_widget_remove_css_class(button, "board-selected");
+        gtk_widget_remove_css_class(button, "board-halo");
+      }
+
+      if (highlight_moves && piece != CHECKERS_PIECE_EMPTY &&
+          board_piece_color(piece) == CHECKERS_COLOR_WHITE && !playable_starts[idx]) {
+        gtk_widget_add_css_class(piece_stack, "piece-inactive");
+      } else {
+        gtk_widget_remove_css_class(piece_stack, "piece-inactive");
       }
     }
+  }
+
+  if (moves_loaded) {
+    movelist_free(&moves);
   }
 }
 
@@ -725,6 +762,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
       "  border-radius: 6px;"
       "  padding: 2px 6px;"
       "}"
+      ".piece-inactive { opacity: 0.5; }"
       ".square-index {"
       "  font-size: 6px;"
       "  font-weight: 600;"
@@ -733,7 +771,11 @@ static void gcheckers_window_init(GCheckersWindow *self) {
       "  background-color: rgba(0, 0, 0, 0.6);"
       "  color: #fff;"
       "}"
-      ".board-selected { outline: 2px solid #4a90e2; }");
+      ".board-halo {"
+      "  background-image:"
+      "    radial-gradient(circle, rgba(247, 215, 77, 0.7) 0, rgba(247, 215, 77, 0.3) 45%,"
+      "    rgba(247, 215, 77, 0.0) 70%);"
+      "}");
   GdkDisplay *display = gdk_display_get_default();
   if (!display) {
     g_debug("Failed to fetch default display for CSS styling\n");

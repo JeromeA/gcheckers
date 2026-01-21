@@ -90,3 +90,11 @@ In practice, the man drawing used a top circle center that was above the viewbox
 bottom edge of the top half of the square.
 
 The fix aligns the man drawing center with the viewbox midpoint so the piece renders centered in its square.
+
+## Selected square outline only rendered two sides
+
+The goal was for selected pieces and destinations to have a reliable selection indicator.
+
+In practice, the blue outline on selected squares only appeared on two edges, so the selection looked broken.
+
+The fix replaces the outline with a halo background and adds destination halos plus dimmed inactive pieces.

@@ -62,6 +62,11 @@ CheckersRules game_rules_international_draughts(void);
 
 MoveList game_list_available_moves(const Game *game);
 void movelist_free(MoveList *list);
+void game_moves_collect_starts(const MoveList *moves, bool starts[CHECKERS_MAX_SQUARES]);
+void game_moves_collect_next_destinations(const MoveList *moves,
+                                          const uint8_t *path,
+                                          uint8_t length,
+                                          bool destinations[CHECKERS_MAX_SQUARES]);
 
 void game_print_state(const Game *game, FILE *out);
 const char *game_winner_label(CheckersWinner winner);

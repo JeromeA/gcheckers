@@ -37,6 +37,36 @@ static void test_initial_setup_moves(void) {
   game_destroy(&game);
 }
 
+static void test_move_selection_helpers(void) {
+  Game game;
+  game_init(&game);
+  memset(game.state.board.data, 0, sizeof(game.state.board.data));
+  game.state.turn = CHECKERS_COLOR_WHITE;
+
+  int8_t white_index = board_index_from_coord(5, 0, game.rules.board_size);
+  int8_t landing_index = board_index_from_coord(4, 1, game.rules.board_size);
+  assert(white_index >= 0 && landing_index >= 0);
+
+  board_set(&game.state.board, (uint8_t)white_index, CHECKERS_PIECE_WHITE_MAN);
+
+  MoveList moves = game_list_available_moves(&game);
+  assert(moves.count == 1);
+
+  bool starts[CHECKERS_MAX_SQUARES];
+  game_moves_collect_starts(&moves, starts);
+  assert(starts[white_index]);
+  assert(!starts[landing_index]);
+
+  bool destinations[CHECKERS_MAX_SQUARES];
+  uint8_t path[] = {(uint8_t)white_index};
+  game_moves_collect_next_destinations(&moves, path, 1, destinations);
+  assert(destinations[landing_index]);
+  assert(!destinations[white_index]);
+
+  movelist_free(&moves);
+  game_destroy(&game);
+}
+
 static void test_forced_capture_and_removal_moves(void) {
   Game game;
   game_init(&game);
@@ -241,6 +271,7 @@ static void test_kings_can_fly(void) {
 
 int main(void) {
   test_initial_setup_moves();
+  test_move_selection_helpers();
   test_forced_capture_and_removal_moves();
   test_no_capture_over_own_piece();
   test_men_backward_jump_rule();

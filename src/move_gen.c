@@ -3,6 +3,7 @@
 #include <glib.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 
 static bool is_forward(CheckersColor color, int delta_row) {
   if (color == CHECKERS_COLOR_WHITE) {
@@ -264,4 +265,55 @@ void movelist_free(MoveList *list) {
   free(list->moves);
   list->moves = NULL;
   list->count = 0;
+}
+
+static bool move_has_prefix(const CheckersMove *move, const uint8_t *path, uint8_t length) {
+  g_return_val_if_fail(move != NULL, false);
+  g_return_val_if_fail(path != NULL, false);
+
+  if (move->length < length) {
+    return false;
+  }
+  if (length == 0) {
+    return true;
+  }
+  return memcmp(move->path, path, length * sizeof(move->path[0])) == 0;
+}
+
+void game_moves_collect_starts(const MoveList *moves, bool starts[CHECKERS_MAX_SQUARES]) {
+  g_return_if_fail(moves != NULL);
+  g_return_if_fail(starts != NULL);
+
+  memset(starts, 0, sizeof(bool) * CHECKERS_MAX_SQUARES);
+
+  for (size_t i = 0; i < moves->count; ++i) {
+    const CheckersMove *move = &moves->moves[i];
+    if (move->length == 0) {
+      continue;
+    }
+    starts[move->path[0]] = true;
+  }
+}
+
+void game_moves_collect_next_destinations(const MoveList *moves,
+                                          const uint8_t *path,
+                                          uint8_t length,
+                                          bool destinations[CHECKERS_MAX_SQUARES]) {
+  g_return_if_fail(moves != NULL);
+  g_return_if_fail(path != NULL);
+  g_return_if_fail(destinations != NULL);
+  g_return_if_fail(length > 0);
+
+  memset(destinations, 0, sizeof(bool) * CHECKERS_MAX_SQUARES);
+
+  for (size_t i = 0; i < moves->count; ++i) {
+    const CheckersMove *move = &moves->moves[i];
+    if (move->length <= length) {
+      continue;
+    }
+    if (!move_has_prefix(move, path, length)) {
+      continue;
+    }
+    destinations[move->path[length]] = true;
+  }
 }
