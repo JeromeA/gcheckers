@@ -63,7 +63,8 @@ The goal was for empty dark squares to render using the same brown background as
 In practice, empty squares were showing a dark overlay because the piece label widget (with a semi-transparent black
 background) was visible even when there was no piece.
 
-The fix hides the piece overlay entirely when a square is empty, preventing the label background from tinting the square.
+The fix hides the piece overlay entirely when a square is empty, preventing the label background from tinting the
+square.
 
 ## Men SVGs were pixelated when resizing
 
@@ -98,3 +99,12 @@ The goal was for selected pieces and destinations to have a reliable selection i
 In practice, the blue outline on selected squares only appeared on two edges, so the selection looked broken.
 
 The fix replaces the outline with a halo background and adds destination halos plus dimmed inactive pieces.
+
+## Yellow halo was missing on some playable squares
+
+The goal was for selected squares and destinations to display a visible yellow halo.
+
+In practice, dark playable squares are buttons whose theme reset the background image, so the halo gradient never drew.
+
+The fix applies the halo background-image directly on button-based squares with stronger specificity so it always
+renders.

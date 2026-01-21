@@ -773,8 +773,17 @@ static void gcheckers_window_init(GCheckersWindow *self) {
       "}"
       ".board-halo {"
       "  background-image:"
-      "    radial-gradient(circle, rgba(247, 215, 77, 0.7) 0, rgba(247, 215, 77, 0.3) 45%,"
-      "    rgba(247, 215, 77, 0.0) 70%);"
+      "    radial-gradient(circle,"
+      "      rgba(247, 215, 77, 0.85) 0,"
+      "      rgba(247, 215, 77, 0.4) 50%,"
+      "      rgba(247, 215, 77, 0.0) 72%);"
+      "}"
+      "button.board-halo {"
+      "  background-image:"
+      "    radial-gradient(circle,"
+      "      rgba(247, 215, 77, 0.85) 0,"
+      "      rgba(247, 215, 77, 0.4) 50%,"
+      "      rgba(247, 215, 77, 0.0) 72%);"
       "}");
   GdkDisplay *display = gdk_display_get_default();
   if (!display) {
