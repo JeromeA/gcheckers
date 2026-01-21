@@ -11,6 +11,18 @@ mistakes in the future. The first entry below shows a template.
 
 [How it was fixed]
 
+## Clicking square 1 did not register
+
+The goal was for every playable square to store its board index so click handling can apply moves, including multi-jump
+destinations that land on square 1.
+
+In practice, square 1 corresponds to board index 0 and was stored with GINT_TO_POINTER(0), which is NULL. When the
+square was clicked the handler treated the missing data as an error, so multi-jump sequences ending on square 1 never
+applied.
+
+The fix stores board indices offset by one (and subtracts during lookup) so index 0 is preserved and clicks on square 1
+are handled correctly.
+
 ## Man cylinder bottom curve was shallower than the top
 
 The goal was for the checker men to have identical curvature on the top and bottom edges of the cylinder.
