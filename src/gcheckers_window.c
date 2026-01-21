@@ -29,7 +29,6 @@ static const double gcheckers_window_man_base_height = 10.0;
 static const double gcheckers_window_man_top_outer_radius_y = 8.0;
 static const double gcheckers_window_man_top_inner_radius_x = 14.0;
 static const double gcheckers_window_man_top_inner_radius_y = 5.0;
-static const double gcheckers_window_man_base_bottom_radius_y = 5.5;
 
 typedef struct _GCheckersManPaintable {
   GObject parent_instance;
@@ -89,7 +88,7 @@ static void gcheckers_man_paintable_draw_base(GCheckersManPaintable *self, cairo
   cairo_line_to(cr, right_x, bottom_y);
   cairo_save(cr);
   cairo_translate(cr, gcheckers_window_man_center, bottom_y);
-  cairo_scale(cr, radius_x, gcheckers_window_man_base_bottom_radius_y);
+  cairo_scale(cr, radius_x, gcheckers_window_man_top_outer_radius_y);
   cairo_arc(cr, 0.0, 0.0, 1.0, 0.0, G_PI);
   cairo_restore(cr);
   cairo_close_path(cr);
