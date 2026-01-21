@@ -658,6 +658,10 @@ void gcheckers_board_view_update(GCheckersBoardView *self) {
 static void gcheckers_board_view_dispose(GObject *object) {
   GCheckersBoardView *self = GCHECKERS_BOARD_VIEW(object);
 
+  if (self->root && gtk_widget_get_parent(self->root)) {
+    gtk_widget_unparent(self->root);
+  }
+
   g_clear_object(&self->model);
   g_clear_object(&self->white_man_paintable);
   g_clear_object(&self->black_man_paintable);
