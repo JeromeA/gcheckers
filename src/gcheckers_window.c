@@ -69,11 +69,15 @@ static void gcheckers_man_paintable_draw_base(GCheckersManPaintable *self, cairo
   g_return_if_fail(self != NULL);
   g_return_if_fail(cr != NULL);
 
-  cairo_move_to(cr, 16.0, 20.0);
-  cairo_line_to(cr, 48.0, 20.0);
-  cairo_line_to(cr, 48.0, 32.0);
+  const double top_y = 20.0;
+  const double base_height = 8.4;
+  const double bottom_y = top_y + base_height;
+
+  cairo_move_to(cr, 16.0, top_y);
+  cairo_line_to(cr, 48.0, top_y);
+  cairo_line_to(cr, 48.0, bottom_y);
   cairo_save(cr);
-  cairo_translate(cr, 32.0, 32.0);
+  cairo_translate(cr, 32.0, bottom_y);
   cairo_scale(cr, 16.0, 6.0);
   cairo_arc(cr, 0.0, 0.0, 1.0, 0.0, G_PI);
   cairo_restore(cr);
@@ -95,6 +99,14 @@ static void gcheckers_man_paintable_draw_top(GCheckersManPaintable *self, cairo_
   cairo_restore(cr);
   gdk_cairo_set_source_rgba(cr, &self->fill_color);
   cairo_fill_preserve(cr);
+  gdk_cairo_set_source_rgba(cr, &self->stroke_color);
+  cairo_stroke(cr);
+
+  cairo_save(cr);
+  cairo_translate(cr, 32.0, 20.0);
+  cairo_scale(cr, 10.0, 3.5);
+  cairo_arc(cr, 0.0, 0.0, 1.0, 0.0, 2.0 * G_PI);
+  cairo_restore(cr);
   gdk_cairo_set_source_rgba(cr, &self->stroke_color);
   cairo_stroke(cr);
 }
