@@ -120,3 +120,13 @@ In practice, dark playable squares are buttons whose theme reset the background 
 
 The fix applies the halo background-image directly on button-based squares with stronger specificity so it always
 renders.
+
+## King pieces fell back to text glyphs after promotion
+
+The goal was for promoted king pieces to continue using the vector-rendered checker artwork.
+
+In practice, only men used paintables and the king cases always used the Unicode glyphs, so promoted pieces switched
+from vector art to text.
+
+The fix adds king paintables that stack two vector layers, with the second base offset by the same amount as the top,
+and uses them when rendering kings, keeping the visuals consistent.
