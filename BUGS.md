@@ -130,3 +130,13 @@ from vector art to text.
 
 The fix adds king paintables that stack two vector layers, with the second base offset by the same amount as the top,
 and uses them when rendering kings, keeping the visuals consistent.
+
+## GtkOverlay warning during gcheckers window dispose
+
+The goal was for the board view to clean up its widget tree without GTK reporting dispose-time critical warnings.
+
+In practice, the board view unref'd its root overlay while it was still parented by the window layout, so GTK logged
+a critical warning and trapped during disposal.
+
+The fix explicitly unparents the root widget in the board view dispose handler before releasing the widget reference so
+the overlay is detached from its parent first.
