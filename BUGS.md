@@ -56,3 +56,12 @@ In practice, empty squares were showing a dark overlay because the piece label w
 background) was visible even when there was no piece.
 
 The fix hides the piece overlay entirely when a square is empty, preventing the label background from tinting the square.
+
+## Men SVGs were pixelated when resizing
+
+The goal was for the SVG men to stay crisp at any window size.
+
+In practice, the SVG was rasterized into a fixed-size texture and then scaled, which caused pixelation when the board
+grew.
+
+The fix replaced the one-time rasterization with a custom paintable that redraws the vector shapes at snapshot time.

@@ -14,13 +14,137 @@ struct _GCheckersWindow {
   uint8_t selected_length;
   gulong state_handler_id;
   gboolean ai_in_progress;
-  GdkTexture *white_man_texture;
-  GdkTexture *black_man_texture;
+  GdkPaintable *white_man_paintable;
+  GdkPaintable *black_man_paintable;
 };
 
 G_DEFINE_TYPE(GCheckersWindow, gcheckers_window, GTK_TYPE_APPLICATION_WINDOW)
 
 static const int gcheckers_window_square_size = 63;
+static const double gcheckers_window_man_viewbox_size = 64.0;
+
+typedef struct _GCheckersManPaintable {
+  GObject parent_instance;
+  GdkRGBA fill_color;
+  GdkRGBA stroke_color;
+} GCheckersManPaintable;
+
+typedef struct _GCheckersManPaintableClass {
+  GObjectClass parent_class;
+} GCheckersManPaintableClass;
+
+#define GCHECKERS_TYPE_MAN_PAINTABLE (gcheckers_man_paintable_get_type())
+#define GCHECKERS_MAN_PAINTABLE(obj) \
+  (G_TYPE_CHECK_INSTANCE_CAST((obj), GCHECKERS_TYPE_MAN_PAINTABLE, GCheckersManPaintable))
+
+static void gcheckers_man_paintable_snapshot(GdkPaintable *paintable,
+                                             GdkSnapshot *snapshot,
+                                             double width,
+                                             double height);
+static int gcheckers_man_paintable_get_intrinsic_width(GdkPaintable *paintable);
+static int gcheckers_man_paintable_get_intrinsic_height(GdkPaintable *paintable);
+static double gcheckers_man_paintable_get_intrinsic_aspect_ratio(GdkPaintable *paintable);
+
+static void gcheckers_man_paintable_paintable_init(GdkPaintableInterface *iface) {
+  iface->snapshot = gcheckers_man_paintable_snapshot;
+  iface->get_intrinsic_width = gcheckers_man_paintable_get_intrinsic_width;
+  iface->get_intrinsic_height = gcheckers_man_paintable_get_intrinsic_height;
+  iface->get_intrinsic_aspect_ratio = gcheckers_man_paintable_get_intrinsic_aspect_ratio;
+}
+
+G_DEFINE_TYPE_WITH_CODE(GCheckersManPaintable,
+                        gcheckers_man_paintable,
+                        G_TYPE_OBJECT,
+                        G_IMPLEMENT_INTERFACE(GDK_TYPE_PAINTABLE, gcheckers_man_paintable_paintable_init))
+
+static void gcheckers_man_paintable_class_init(GCheckersManPaintableClass *klass) {
+  (void)klass;
+}
+
+static void gcheckers_man_paintable_init(GCheckersManPaintable *self) {
+  (void)self;
+}
+
+static void gcheckers_man_paintable_draw_base(GCheckersManPaintable *self, cairo_t *cr) {
+  g_return_if_fail(self != NULL);
+  g_return_if_fail(cr != NULL);
+
+  cairo_move_to(cr, 16.0, 20.0);
+  cairo_line_to(cr, 48.0, 20.0);
+  cairo_line_to(cr, 48.0, 32.0);
+  cairo_curve_to(cr, 37.3333, 36.0, 26.6667, 36.0, 16.0, 32.0);
+  cairo_close_path(cr);
+  gdk_cairo_set_source_rgba(cr, &self->fill_color);
+  cairo_fill_preserve(cr);
+  gdk_cairo_set_source_rgba(cr, &self->stroke_color);
+  cairo_stroke(cr);
+}
+
+static void gcheckers_man_paintable_draw_top(GCheckersManPaintable *self, cairo_t *cr) {
+  g_return_if_fail(self != NULL);
+  g_return_if_fail(cr != NULL);
+
+  cairo_save(cr);
+  cairo_translate(cr, 32.0, 20.0);
+  cairo_scale(cr, 16.0, 6.0);
+  cairo_arc(cr, 0.0, 0.0, 1.0, 0.0, 2.0 * G_PI);
+  cairo_restore(cr);
+  gdk_cairo_set_source_rgba(cr, &self->fill_color);
+  cairo_fill_preserve(cr);
+  gdk_cairo_set_source_rgba(cr, &self->stroke_color);
+  cairo_stroke(cr);
+}
+
+static void gcheckers_man_paintable_snapshot(GdkPaintable *paintable,
+                                             GdkSnapshot *snapshot,
+                                             double width,
+                                             double height) {
+  g_return_if_fail(GDK_IS_PAINTABLE(paintable));
+  g_return_if_fail(GDK_IS_SNAPSHOT(snapshot));
+
+  if (width <= 0.0 || height <= 0.0) {
+    return;
+  }
+
+  GCheckersManPaintable *self = GCHECKERS_MAN_PAINTABLE(paintable);
+  graphene_rect_t bounds = GRAPHENE_RECT_INIT(0.0f, 0.0f, (float)width, (float)height);
+  cairo_t *cr = gtk_snapshot_append_cairo(snapshot, &bounds);
+
+  cairo_scale(cr, width / gcheckers_window_man_viewbox_size, height / gcheckers_window_man_viewbox_size);
+  cairo_set_line_width(cr, 1.0);
+  cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+  cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+
+  gcheckers_man_paintable_draw_base(self, cr);
+  gcheckers_man_paintable_draw_top(self, cr);
+
+  cairo_destroy(cr);
+}
+
+static int gcheckers_man_paintable_get_intrinsic_width(GdkPaintable *paintable) {
+  g_return_val_if_fail(GDK_IS_PAINTABLE(paintable), 0);
+  return (int)gcheckers_window_man_viewbox_size;
+}
+
+static int gcheckers_man_paintable_get_intrinsic_height(GdkPaintable *paintable) {
+  g_return_val_if_fail(GDK_IS_PAINTABLE(paintable), 0);
+  return (int)gcheckers_window_man_viewbox_size;
+}
+
+static double gcheckers_man_paintable_get_intrinsic_aspect_ratio(GdkPaintable *paintable) {
+  g_return_val_if_fail(GDK_IS_PAINTABLE(paintable), 0.0);
+  return 1.0;
+}
+
+static GdkPaintable *gcheckers_man_paintable_new(const GdkRGBA *fill_color, const GdkRGBA *stroke_color) {
+  g_return_val_if_fail(fill_color != NULL, NULL);
+  g_return_val_if_fail(stroke_color != NULL, NULL);
+
+  GCheckersManPaintable *paintable = g_object_new(gcheckers_man_paintable_get_type(), NULL);
+  paintable->fill_color = *fill_color;
+  paintable->stroke_color = *stroke_color;
+  return GDK_PAINTABLE(paintable);
+}
 
 static gboolean gcheckers_window_selection_contains(GCheckersWindow *self, uint8_t index) {
   g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), FALSE);
@@ -51,33 +175,23 @@ static const char *gcheckers_window_piece_symbol(CheckersPiece piece) {
   }
 }
 
-static GdkTexture *gcheckers_window_build_man_texture(const char *fill_color, const char *stroke_color) {
+static GdkPaintable *gcheckers_window_build_man_paintable(const char *fill_color, const char *stroke_color) {
   g_return_val_if_fail(fill_color != NULL, NULL);
   g_return_val_if_fail(stroke_color != NULL, NULL);
 
-  g_autofree char *svg = g_strdup_printf(
-      "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>"
-      "<path fill='%s' stroke='%s' stroke-width='1' stroke-linecap='round' stroke-linejoin='round'"
-      " d='M16 20 L48 20 L48 32 Q32 38 16 32 Z'/>"
-      "<ellipse cx='32' cy='20' rx='16' ry='6' fill='%s' stroke='%s' stroke-width='1'"
-      " stroke-linecap='round' stroke-linejoin='round'/>"
-      "</svg>",
-      fill_color,
-      stroke_color,
-      fill_color,
-      stroke_color);
-  if (!svg) {
-    g_debug("Failed to allocate SVG for men\n");
+  GdkRGBA fill;
+  GdkRGBA stroke;
+
+  if (!gdk_rgba_parse(&fill, fill_color)) {
+    g_debug("Failed to parse fill color for men: %s\n", fill_color);
+    return NULL;
+  }
+  if (!gdk_rgba_parse(&stroke, stroke_color)) {
+    g_debug("Failed to parse stroke color for men: %s\n", stroke_color);
     return NULL;
   }
 
-  g_autoptr(GBytes) bytes = g_bytes_new(svg, strlen(svg));
-  g_autoptr(GError) error = NULL;
-  GdkTexture *texture = gdk_texture_new_from_bytes(bytes, &error);
-  if (!texture) {
-    g_debug("Failed to create texture for men: %s\n", error ? error->message : "unknown error");
-  }
-  return texture;
+  return gcheckers_man_paintable_new(&fill, &stroke);
 }
 
 static void gcheckers_window_set_square_piece(GCheckersWindow *self, GtkWidget *button, CheckersPiece piece) {
@@ -93,18 +207,18 @@ static void gcheckers_window_set_square_piece(GCheckersWindow *self, GtkWidget *
   g_return_if_fail(GTK_IS_LABEL(piece_label));
 
   const char *label_text = "";
-  GdkTexture *texture = NULL;
+  GdkPaintable *paintable = NULL;
   gboolean show_picture = FALSE;
 
   switch (piece) {
     case CHECKERS_PIECE_WHITE_MAN:
-      texture = self->white_man_texture;
-      show_picture = texture != NULL;
+      paintable = self->white_man_paintable;
+      show_picture = paintable != NULL;
       label_text = show_picture ? "" : gcheckers_window_piece_symbol(piece);
       break;
     case CHECKERS_PIECE_BLACK_MAN:
-      texture = self->black_man_texture;
-      show_picture = texture != NULL;
+      paintable = self->black_man_paintable;
+      show_picture = paintable != NULL;
       label_text = show_picture ? "" : gcheckers_window_piece_symbol(piece);
       break;
     case CHECKERS_PIECE_WHITE_KING:
@@ -121,7 +235,7 @@ static void gcheckers_window_set_square_piece(GCheckersWindow *self, GtkWidget *
   }
 
   if (show_picture) {
-    gtk_picture_set_paintable(GTK_PICTURE(piece_picture), GDK_PAINTABLE(texture));
+    gtk_picture_set_paintable(GTK_PICTURE(piece_picture), paintable);
     gtk_stack_set_visible_child(GTK_STACK(piece_stack), piece_picture);
   } else {
     gtk_label_set_text(GTK_LABEL(piece_label), label_text);
@@ -546,8 +660,8 @@ static void gcheckers_window_dispose(GObject *object) {
     self->state_handler_id = 0;
   }
   g_clear_object(&self->model);
-  g_clear_object(&self->white_man_texture);
-  g_clear_object(&self->black_man_texture);
+  g_clear_object(&self->white_man_paintable);
+  g_clear_object(&self->black_man_paintable);
 
   G_OBJECT_CLASS(gcheckers_window_parent_class)->dispose(object);
 }
@@ -628,8 +742,8 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   g_signal_connect(self->reset_button, "clicked", G_CALLBACK(gcheckers_window_on_reset_clicked), self);
   gtk_box_append(GTK_BOX(button_row), self->reset_button);
 
-  self->white_man_texture = gcheckers_window_build_man_texture("#ffffff", "#111111");
-  self->black_man_texture = gcheckers_window_build_man_texture("#111111", "#ffffff");
+  self->white_man_paintable = gcheckers_window_build_man_paintable("#ffffff", "#111111");
+  self->black_man_paintable = gcheckers_window_build_man_paintable("#111111", "#ffffff");
 }
 
 GCheckersWindow *gcheckers_window_new(GtkApplication *app, GCheckersModel *model) {
