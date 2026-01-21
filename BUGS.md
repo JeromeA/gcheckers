@@ -81,3 +81,12 @@ The goal was for the checker piece cylinder to have matching top and bottom curv
 In practice, the bottom curvature was a custom bezier curve, so it did not match the ellipse used for the top.
 
 The fix draws the bottom edge using the same scaled arc as the top, ensuring the curvature matches.
+
+## Men were not centered in their squares
+
+The goal was for the man paintable to appear vertically centered in each playable square.
+
+In practice, the man drawing used a top circle center that was above the viewbox midpoint, so each man sat near the
+bottom edge of the top half of the square.
+
+The fix aligns the man drawing center with the viewbox midpoint so the piece renders centered in its square.
