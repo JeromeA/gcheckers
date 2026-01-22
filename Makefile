@@ -38,13 +38,15 @@ libgame.a: $(OBJS)
 %.o: %.c src/game.h src/board.h src/checkers_constants.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
-test: test_game test_game_print test_board test_move_gen test_checkers_model test_sgf_tree test_screenshot
+test: test_game test_game_print test_board test_move_gen test_checkers_model test_sgf_tree test_sgf_view \
+	test_screenshot
 	./test_game
 	./test_game_print
 	./test_board
 	./test_move_gen
 	./test_checkers_model
 	./test_sgf_tree
+	./test_sgf_view
 
 test_game: tests/test_game.c $(SRCS) src/game.h
 	$(CC) $(CFLAGS) -o $@ tests/test_game.c $(SRCS) $(LDLIBS)
@@ -66,6 +68,10 @@ test_checkers_model: tests/test_checkers_model.c $(SRCS) src/checkers_model.h
 
 test_sgf_tree: tests/test_sgf_tree.c $(SGF_TREE_SRCS) src/sgf_tree.h
 	$(CC) $(CFLAGS) -o $@ tests/test_sgf_tree.c $(SGF_TREE_SRCS) $(LDLIBS)
+
+test_sgf_view: tests/test_sgf_view.c $(SGF_VIEW_SRCS) $(SGF_TREE_SRCS) src/sgf_view.h src/sgf_tree.h
+	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_sgf_view.c $(SGF_VIEW_SRCS) $(SGF_TREE_SRCS) \
+		$(LDLIBS) $(GTK_LIBS)
 
 test_screenshot: gcheckers tools/screenshot_gcheckers.sh
 	@if ! command -v broadwayd >/dev/null 2>&1; then \
@@ -92,7 +98,7 @@ gcheckers: src/gcheckers.c src/gcheckers_application.c src/gcheckers_window.c sr
 
 clean:
 	rm -f $(OBJS) libgame.a test_game test_game_print test_board test_move_gen test_checkers_model \
-		test_sgf_tree test_screenshot checkers gcheckers
+		test_sgf_tree test_sgf_view test_screenshot checkers gcheckers
 	rm -rf $(COV_DIR)
 
 screenshot: gcheckers tools/screenshot_gcheckers.sh
