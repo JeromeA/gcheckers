@@ -11,6 +11,17 @@ mistakes in the future. The first entry below shows a template.
 
 [How it was fixed]
 
+## SGF branch discs were not aligned with main line columns
+
+The SGF move tree should keep discs aligned in strict columns so that main line moves and variations share the same
+horizontal positions.
+
+The layout relied on per-row indentation inside horizontal boxes, so any accumulated width differences from previous
+rows or styling could shift branch rows just enough that variation discs drifted between columns.
+
+The fix switches the move tree layout to a GtkGrid with homogeneous columns and attaches each disc to an explicit row
+and column, keeping branches aligned regardless of depth or styling.
+
 ## Split panes shrank below their content sizes on launch
 
 The goal was for the left board pane and right controls pane to respect their natural minimum sizes when the window
