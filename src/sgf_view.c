@@ -20,7 +20,9 @@ enum { SIGNAL_NODE_SELECTED, SIGNAL_LAST };
 static guint sgf_view_signals[SIGNAL_LAST] = {0};
 
 static const int sgf_view_disc_size = 32;
+static const int sgf_view_disc_border = 1;
 static const int sgf_view_disc_spacing = 8;
+static const int sgf_view_disc_stride = sgf_view_disc_size + (sgf_view_disc_border * 2);
 
 static void sgf_view_clear_box(GtkWidget *box) {
   GtkWidget *child = gtk_widget_get_first_child(box);
@@ -33,7 +35,7 @@ static void sgf_view_clear_box(GtkWidget *box) {
 
 static GtkWidget *sgf_view_build_row(guint depth) {
   GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, sgf_view_disc_spacing);
-  gtk_widget_set_margin_start(row, (int)depth * (sgf_view_disc_size + sgf_view_disc_spacing));
+  gtk_widget_set_margin_start(row, (int)depth * (sgf_view_disc_stride + sgf_view_disc_spacing));
   return row;
 }
 
@@ -157,7 +159,7 @@ static GtkWidget *sgf_view_build_disc(SgfView *self, const SgfNode *node) {
 
   GtkWidget *button = gtk_button_new_with_label(label);
   gtk_widget_add_css_class(button, "sgf-disc");
-  gtk_widget_set_size_request(button, sgf_view_disc_size, sgf_view_disc_size);
+  gtk_widget_set_size_request(button, sgf_view_disc_stride, sgf_view_disc_stride);
   gtk_widget_set_halign(button, GTK_ALIGN_START);
   gtk_widget_set_valign(button, GTK_ALIGN_CENTER);
 
