@@ -41,3 +41,14 @@ destination disc. Variation rows also started without a connector, so branch lin
 
 The fix anchors connector drawing to the bottom of the row and ensures branch rows include an initial connector so
 variation lines render consistently.
+
+## SGF tree connectors did not link disc centers or branch correctly
+
+The SGF move list should draw connector lines behind the discs, connect each parent and child disc center, and show
+branching lines from a single parent to multiple children.
+
+The connector widgets only drew horizontal segments in front of the discs, so they were misaligned and did not link
+the parent disc to both branch discs.
+
+The fix draws connectors in a dedicated background drawing layer, connects disc centers for every parent/child
+relationship, and rebuilds the view without per-disc connector widgets.
