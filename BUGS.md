@@ -151,3 +151,14 @@ a `g_object_unref` critical.
 
 The fix explicitly sinks a reference to the root overlay when it is created, keeping it alive until the board view
 releases it during disposal.
+
+## Split panes shrank below their content sizes on launch
+
+The goal was for the left board pane and right controls pane to respect their natural minimum sizes when the window
+opens.
+
+In practice, the paned container allowed both sides to shrink below their minimum content sizes, so the board and
+controls were clipped in a too-small window.
+
+The fix disables shrinking for both paned children, ensuring each pane retains its minimum content size and the window
+enforces a larger minimum size at startup.

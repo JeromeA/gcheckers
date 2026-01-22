@@ -422,6 +422,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_widget_set_hexpand(left_panel, TRUE);
   gtk_widget_set_vexpand(left_panel, TRUE);
   gtk_paned_set_start_child(GTK_PANED(paned), left_panel);
+  gtk_paned_set_shrink_start_child(GTK_PANED(paned), FALSE);
 
   self->status_label = gtk_label_new(NULL);
   gtk_label_set_xalign(GTK_LABEL(self->status_label), 0.0f);
@@ -442,6 +443,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_widget_set_hexpand(right_panel, TRUE);
   gtk_widget_set_vexpand(right_panel, TRUE);
   gtk_paned_set_end_child(GTK_PANED(paned), right_panel);
+  gtk_paned_set_shrink_end_child(GTK_PANED(paned), FALSE);
 
   GtkWidget *controls_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
   gtk_box_append(GTK_BOX(right_panel), controls_row);
