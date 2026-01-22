@@ -53,6 +53,16 @@ the parent disc to both branch discs.
 The fix draws connectors in a dedicated background drawing layer, connects disc centers for every parent/child
 relationship, and rebuilds the view without per-disc connector widgets.
 
+## SGF move tree discs drifted left on lower rows
+
+The goal was for the SGF move tree to place every disc on the same horizontal grid so identical move numbers align
+vertically across rows.
+
+The layout calculated row indentation using the disc size alone, but each disc's allocated size also included its
+border, so every deeper row started slightly too far left.
+
+The fix accounts for the full disc stride (including the border) when calculating row indentation and sizing the disc
+widgets so each row lands on the same x positions.
 ## SGF move playback duplicated existing child nodes
 
 When replaying or re-entering a previously explored move, the SGF tree should have reused an existing child node
