@@ -82,3 +82,13 @@ The move tree should center each disc in its row so the columns line up visually
 Each disc button was aligned to the start of its row, which pulled every disc left relative to its row spacing.
 
 The fix centers the disc widgets within their row slots so the grid alignment matches the expected positions.
+
+## Screenshot test reported Chromium missing when chromium-browser was installed
+
+The screenshot test should skip only when Chromium is truly unavailable.
+
+The detection logic only looked for a `chromium` binary, but Debian-style installs often provide
+`chromium-browser` instead, so the test incorrectly reported Chromium as missing.
+
+The fix switches the check to `chromium-browser` and threads it through the screenshot script using a Makefile
+variable.
