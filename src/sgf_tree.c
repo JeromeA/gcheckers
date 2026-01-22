@@ -66,6 +66,30 @@ static gboolean sgf_node_is_descendant(const SgfNode *node, const SgfNode *root)
   return FALSE;
 }
 
+static gboolean sgf_node_payload_matches(GBytes *payload, GBytes *candidate) {
+  if (!payload && !candidate) {
+    return TRUE;
+  }
+
+  if (!payload || !candidate) {
+    return FALSE;
+  }
+
+  return g_bytes_equal(payload, candidate);
+}
+
+static gboolean sgf_node_matches_move(const SgfNode *node, SgfColor color, GBytes *payload) {
+  if (!node) {
+    return FALSE;
+  }
+
+  if (node->color != color) {
+    return FALSE;
+  }
+
+  return sgf_node_payload_matches(node->payload, payload);
+}
+
 static void sgf_tree_clear_internal(SgfTree *self) {
   if (self->root) {
     sgf_node_free(self->root);
@@ -123,6 +147,16 @@ const SgfNode *sgf_tree_get_current(SgfTree *self) {
 const SgfNode *sgf_tree_append_move(SgfTree *self, SgfColor color, GBytes *payload) {
   g_return_val_if_fail(SGF_IS_TREE(self), NULL);
   g_return_val_if_fail(self->current != NULL, NULL);
+
+  if (self->current->children) {
+    for (guint i = 0; i < self->current->children->len; ++i) {
+      SgfNode *candidate = g_ptr_array_index(self->current->children, i);
+      if (sgf_node_matches_move(candidate, color, payload)) {
+        self->current = candidate;
+        return candidate;
+      }
+    }
+  }
 
   guint move_number = self->current->move_number + 1;
   SgfNode *node = sgf_node_new(self->current, color, move_number, payload);
