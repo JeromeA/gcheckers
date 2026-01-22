@@ -63,9 +63,31 @@ static void test_sgf_tree_main_line(void) {
   g_object_unref(tree);
 }
 
+static void test_sgf_tree_append_existing_child(void) {
+  SgfTree *tree = sgf_tree_new();
+  const SgfNode *root = sgf_tree_get_root(tree);
+  DummyPayload payload = {.value = 99};
+  GBytes *bytes = g_bytes_new(&payload, sizeof(payload));
+
+  const SgfNode *first = sgf_tree_append_move(tree, SGF_COLOR_WHITE, bytes);
+  assert(first != NULL);
+  assert(sgf_tree_set_current(tree, root));
+
+  const SgfNode *second = sgf_tree_append_move(tree, SGF_COLOR_WHITE, bytes);
+  assert(second == first);
+
+  const GPtrArray *children = sgf_node_get_children(root);
+  assert(children != NULL);
+  assert(children->len == 1);
+
+  g_bytes_unref(bytes);
+  g_object_unref(tree);
+}
+
 int main(void) {
   test_sgf_tree_append_and_select();
   test_sgf_tree_main_line();
+  test_sgf_tree_append_existing_child();
 
   return 0;
 }
