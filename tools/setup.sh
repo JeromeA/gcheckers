@@ -3,8 +3,7 @@
 set +x
 
 sudo apt update
-sudo apt install -y libgtk-4-dev xvfb imagemagick
+sudo apt install -y libgtk-4-bin libgtk-4-dev chromium
 
-ls -l /usr/bin/Xvfb
-dpkg -S /usr/bin/Xvfb
-
+command -v broadwayd
+command -v chromium
