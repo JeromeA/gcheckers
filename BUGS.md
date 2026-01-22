@@ -52,3 +52,14 @@ the parent disc to both branch discs.
 
 The fix draws connectors in a dedicated background drawing layer, connects disc centers for every parent/child
 relationship, and rebuilds the view without per-disc connector widgets.
+
+## SGF move playback duplicated existing child nodes
+
+When replaying or re-entering a previously explored move, the SGF tree should have reused an existing child node
+instead of adding a duplicate.
+
+The append logic always created a new node, even when a child with the same move payload and color already existed,
+causing multiple identical branches to appear.
+
+The fix compares the next move against existing children and reuses the matching node, updating the current pointer
+instead of creating a duplicate.
