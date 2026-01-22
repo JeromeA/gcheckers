@@ -21,3 +21,12 @@ controls were clipped in a too-small window.
 
 The fix disables shrinking for both paned children, ensuring each pane retains its minimum content size and the window
 enforces a larger minimum size at startup.
+
+## SGF move list showed black moves as light discs
+
+The goal was for the SGF move list to display black moves as dark discs so move colors match the board state.
+
+Instead, black move buttons inherited the theme's default button background image, so the dark background color never
+appeared and the discs looked like light outline buttons.
+
+The fix clears the button background image and applies a consistent border so the black disc background color shows up.
