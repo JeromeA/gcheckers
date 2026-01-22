@@ -29,9 +29,32 @@ static void sgf_view_clear_box(GtkWidget *box) {
 }
 
 static GtkWidget *sgf_view_build_row(guint depth) {
-  GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, sgf_view_disc_spacing);
+  GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_widget_set_margin_start(row, (int)depth * (sgf_view_disc_size + sgf_view_disc_spacing));
   return row;
+}
+
+static void sgf_view_draw_connector(GtkDrawingArea * /*area*/,
+                                    cairo_t *cr,
+                                    int width,
+                                    int height,
+                                    gpointer /*user_data*/) {
+  double y = height / 2.0;
+  cairo_set_source_rgb(cr, 0.45, 0.45, 0.45);
+  cairo_set_line_width(cr, 2.0);
+  cairo_move_to(cr, 0.0, y);
+  cairo_line_to(cr, width, y);
+  cairo_stroke(cr);
+}
+
+static GtkWidget *sgf_view_build_connector(void) {
+  GtkWidget *connector = gtk_drawing_area_new();
+  gtk_widget_set_size_request(connector, sgf_view_disc_size + sgf_view_disc_spacing, sgf_view_disc_size);
+  gtk_widget_set_valign(connector, GTK_ALIGN_CENTER);
+  gtk_widget_set_margin_start(connector, -(sgf_view_disc_size / 2));
+  gtk_widget_set_margin_end(connector, -(sgf_view_disc_size / 2));
+  gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(connector), sgf_view_draw_connector, NULL, NULL);
+  return connector;
 }
 
 static void sgf_view_on_disc_clicked(GtkButton *button, gpointer user_data) {
@@ -80,6 +103,20 @@ static GtkWidget *sgf_view_build_disc(SgfView *self, const SgfNode *node) {
   return button;
 }
 
+static void sgf_view_append_disc(SgfView *self, GtkWidget *row, const SgfNode *node) {
+  g_return_if_fail(SGF_IS_VIEW(self));
+  g_return_if_fail(GTK_IS_BOX(row));
+  g_return_if_fail(node != NULL);
+
+  if (gtk_widget_get_first_child(row)) {
+    GtkWidget *connector = sgf_view_build_connector();
+    gtk_box_append(GTK_BOX(row), connector);
+  }
+
+  GtkWidget *disc = sgf_view_build_disc(self, node);
+  gtk_box_append(GTK_BOX(row), disc);
+}
+
 static void sgf_view_append_branch(SgfView *self, const SgfNode *parent, GtkWidget *row, guint depth) {
   const GPtrArray *children = sgf_node_get_children(parent);
   if (!children || children->len == 0) {
@@ -89,14 +126,12 @@ static void sgf_view_append_branch(SgfView *self, const SgfNode *parent, GtkWidg
   for (guint i = 0; i < children->len; ++i) {
     const SgfNode *child = g_ptr_array_index(children, i);
     if (i == 0) {
-      GtkWidget *disc = sgf_view_build_disc(self, child);
-      gtk_box_append(GTK_BOX(row), disc);
+      sgf_view_append_disc(self, row, child);
       sgf_view_append_branch(self, child, row, depth + 1);
     } else {
       GtkWidget *branch_row = sgf_view_build_row(depth);
       gtk_box_append(GTK_BOX(self->tree_box), branch_row);
-      GtkWidget *disc = sgf_view_build_disc(self, child);
-      gtk_box_append(GTK_BOX(branch_row), disc);
+      sgf_view_append_disc(self, branch_row, child);
       sgf_view_append_branch(self, child, branch_row, depth + 1);
     }
   }
