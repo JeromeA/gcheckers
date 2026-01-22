@@ -27,6 +27,7 @@ SCREENSHOT ?= gcheckers.png
 BROADWAY_DISPLAY_NUM ?= 5
 BROADWAY_PORT ?= 8085
 SCREEN_SIZE ?= 1280x720
+BROADWAYD_BIN ?= gtk4-broadwayd
 
 .PHONY: all clean test coverage screenshot test_screenshot
 
@@ -74,8 +75,8 @@ test_sgf_view: tests/test_sgf_view.c $(SGF_VIEW_SRCS) $(SGF_TREE_SRCS) src/sgf_v
 		$(LDLIBS) $(GTK_LIBS)
 
 test_screenshot: gcheckers tools/screenshot_gcheckers.sh
-	@if ! command -v broadwayd >/dev/null 2>&1; then \
-		echo "Skipping screenshot test: broadwayd not available."; \
+	@if ! command -v $(BROADWAYD_BIN) >/dev/null 2>&1; then \
+		echo "Skipping screenshot test: $(BROADWAYD_BIN) not available."; \
 		exit 0; \
 	fi; \
 	if ! command -v chromium >/dev/null 2>&1; then \
