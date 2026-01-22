@@ -2,18 +2,19 @@
 set -euo pipefail
 
 output_path="${1:-gcheckers.png}"
-display_num="${DISPLAY_NUM:-99}"
-screen_geometry="${SCREEN_GEOMETRY:-1280x720x24}"
+broadway_display="${BROADWAY_DISPLAY_NUM:-5}"
+broadway_port="${BROADWAY_PORT:-8085}"
+screen_size="${SCREEN_SIZE:-1280x720}"
 gsk_renderer="${GSK_RENDERER:-cairo}"
-gdk_backend="${GDK_BACKEND:-x11}"
+gdk_backend="${GDK_BACKEND:-broadway}"
 
-if ! command -v Xvfb >/dev/null 2>&1; then
-  echo "Xvfb is required to capture screenshots." >&2
+if ! command -v broadwayd >/dev/null 2>&1; then
+  echo "broadwayd is required to capture screenshots." >&2
   exit 1
 fi
 
-if ! command -v import >/dev/null 2>&1; then
-  echo "ImageMagick 'import' is required to capture screenshots." >&2
+if ! command -v chromium >/dev/null 2>&1; then
+  echo "Chromium is required to capture screenshots." >&2
   exit 1
 fi
 
@@ -22,7 +23,7 @@ if [[ ! -x ./gcheckers ]]; then
   exit 1
 fi
 
-xvfb_pid=""
+broadway_pid=""
 app_pid=""
 
 cleanup() {
@@ -30,23 +31,30 @@ cleanup() {
     kill "$app_pid" >/dev/null 2>&1 || true
     wait "$app_pid" >/dev/null 2>&1 || true
   fi
-  if [[ -n "$xvfb_pid" ]]; then
-    kill "$xvfb_pid" >/dev/null 2>&1 || true
-    wait "$xvfb_pid" >/dev/null 2>&1 || true
+  if [[ -n "$broadway_pid" ]]; then
+    kill "$broadway_pid" >/dev/null 2>&1 || true
+    wait "$broadway_pid" >/dev/null 2>&1 || true
   fi
 }
 
 trap cleanup EXIT
 
-Xvfb ":${display_num}" -screen 0 "$screen_geometry" >/dev/null 2>&1 &
-xvfb_pid=$!
-export DISPLAY=":${display_num}"
+broadwayd --port "$broadway_port" ":${broadway_display}" >/dev/null 2>&1 &
+broadway_pid=$!
 export GDK_BACKEND="$gdk_backend"
 export GSK_RENDERER="$gsk_renderer"
+export BROADWAY_DISPLAY=":${broadway_display}"
+
+IFS='x' read -r screen_width screen_height <<<"$screen_size"
+if [[ -z "$screen_width" || -z "$screen_height" ]]; then
+  echo "SCREEN_SIZE must be in WIDTHxHEIGHT format (got '$screen_size')." >&2
+  exit 1
+fi
 
 sleep 0.2
 ./gcheckers >/dev/null 2>&1 &
 app_pid=$!
 
 sleep 1
-import -display "$DISPLAY" -window root "$output_path"
+chromium --headless --disable-gpu --no-sandbox --window-size="${screen_width},${screen_height}" \
+  --screenshot="$output_path" "http://127.0.0.1:${broadway_port}/"

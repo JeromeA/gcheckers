@@ -24,8 +24,9 @@ COV_REPORT_DIR := $(COV_DIR)/report
 COV_OBJS := $(SRCS:%.c=$(COV_OBJ_DIR)/%.o)
 COV_BOARD_OBJS := $(BOARD_SRCS:%.c=$(COV_OBJ_DIR)/%.o)
 SCREENSHOT ?= gcheckers.png
-DISPLAY_NUM ?= 99
-SCREEN_GEOMETRY ?= 1280x720x24
+BROADWAY_DISPLAY_NUM ?= 5
+BROADWAY_PORT ?= 8085
+SCREEN_SIZE ?= 1280x720
 
 .PHONY: all clean test coverage screenshot test_screenshot
 
@@ -67,16 +68,17 @@ test_sgf_tree: tests/test_sgf_tree.c $(SGF_TREE_SRCS) src/sgf_tree.h
 	$(CC) $(CFLAGS) -o $@ tests/test_sgf_tree.c $(SGF_TREE_SRCS) $(LDLIBS)
 
 test_screenshot: gcheckers tools/screenshot_gcheckers.sh
-	@if ! command -v Xvfb >/dev/null 2>&1; then \
-		echo "Skipping screenshot test: Xvfb not available."; \
+	@if ! command -v broadwayd >/dev/null 2>&1; then \
+		echo "Skipping screenshot test: broadwayd not available."; \
 		exit 0; \
 	fi; \
-	if ! command -v import >/dev/null 2>&1; then \
-		echo "Skipping screenshot test: ImageMagick import not available."; \
+	if ! command -v chromium >/dev/null 2>&1; then \
+		echo "Skipping screenshot test: Chromium not available."; \
 		exit 0; \
 	fi; \
 	tmp_file=$$(mktemp -t gcheckers_screenshot.XXXXXX.png); \
-		DISPLAY_NUM=99 SCREEN_GEOMETRY=1280x720x24 tools/screenshot_gcheckers.sh "$$tmp_file"; \
+		BROADWAY_DISPLAY_NUM=5 BROADWAY_PORT=8085 SCREEN_SIZE=1280x720 \
+		tools/screenshot_gcheckers.sh "$$tmp_file"; \
 		test -s "$$tmp_file"; \
 		rm -f "$$tmp_file"
 
@@ -94,7 +96,8 @@ clean:
 	rm -rf $(COV_DIR)
 
 screenshot: gcheckers tools/screenshot_gcheckers.sh
-	DISPLAY_NUM=$(DISPLAY_NUM) SCREEN_GEOMETRY=$(SCREEN_GEOMETRY) tools/screenshot_gcheckers.sh $(SCREENSHOT)
+	BROADWAY_DISPLAY_NUM=$(BROADWAY_DISPLAY_NUM) BROADWAY_PORT=$(BROADWAY_PORT) \
+		SCREEN_SIZE=$(SCREEN_SIZE) tools/screenshot_gcheckers.sh $(SCREENSHOT)
 
 $(COV_OBJ_DIR)/%.o: %.c src/game.h src/board.h src/checkers_constants.h
 	@mkdir -p $(dir $@)
