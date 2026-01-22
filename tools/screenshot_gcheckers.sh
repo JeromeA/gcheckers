@@ -8,8 +8,8 @@ screen_size="${SCREEN_SIZE:-1280x720}"
 gsk_renderer="${GSK_RENDERER:-cairo}"
 gdk_backend="${GDK_BACKEND:-broadway}"
 
-if ! command -v broadwayd >/dev/null 2>&1; then
-  echo "broadwayd is required to capture screenshots." >&2
+if ! command -v gtk4-broadwayd >/dev/null 2>&1; then
+  echo "gtk4-broadwayd is required to capture screenshots." >&2
   exit 1
 fi
 
@@ -39,7 +39,7 @@ cleanup() {
 
 trap cleanup EXIT
 
-broadwayd --port "$broadway_port" ":${broadway_display}" >/dev/null 2>&1 &
+gtk4-broadwayd --port "$broadway_port" ":${broadway_display}" >/dev/null 2>&1 &
 broadway_pid=$!
 export GDK_BACKEND="$gdk_backend"
 export GSK_RENDERER="$gsk_renderer"
