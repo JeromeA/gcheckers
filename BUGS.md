@@ -140,3 +140,14 @@ a critical warning and trapped during disposal.
 
 The fix explicitly unparents the root widget in the board view dispose handler before releasing the widget reference so
 the overlay is detached from its parent first.
+
+## g_object_unref critical when closing the main window
+
+The goal was for the board view's root widget to stay valid for as long as the board view itself exists.
+
+In practice, the board view stored the root overlay without taking ownership, so when GTK dropped its parent reference
+the widget could be destroyed. Later, the board view dispose handler attempted to unref the stale pointer, triggering
+a `g_object_unref` critical.
+
+The fix explicitly sinks a reference to the root overlay when it is created, keeping it alive until the board view
+releases it during disposal.
