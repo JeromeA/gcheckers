@@ -160,7 +160,7 @@ static GtkWidget *sgf_view_build_disc(SgfView *self, const SgfNode *node) {
   GtkWidget *button = gtk_button_new_with_label(label);
   gtk_widget_add_css_class(button, "sgf-disc");
   gtk_widget_set_size_request(button, sgf_view_disc_stride, sgf_view_disc_stride);
-  gtk_widget_set_halign(button, GTK_ALIGN_START);
+  gtk_widget_set_halign(button, GTK_ALIGN_CENTER);
   gtk_widget_set_valign(button, GTK_ALIGN_CENTER);
 
   SgfColor color = sgf_node_get_color(node);

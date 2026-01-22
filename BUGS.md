@@ -63,6 +63,7 @@ border, so every deeper row started slightly too far left.
 
 The fix accounts for the full disc stride (including the border) when calculating row indentation and sizing the disc
 widgets so each row lands on the same x positions.
+
 ## SGF move playback duplicated existing child nodes
 
 When replaying or re-entering a previously explored move, the SGF tree should have reused an existing child node
@@ -73,3 +74,11 @@ causing multiple identical branches to appear.
 
 The fix compares the next move against existing children and reuses the matching node, updating the current pointer
 instead of creating a duplicate.
+
+## SGF move tree discs were offset to the left
+
+The move tree should center each disc in its row so the columns line up visually.
+
+Each disc button was aligned to the start of its row, which pulled every disc left relative to its row spacing.
+
+The fix centers the disc widgets within their row slots so the grid alignment matches the expected positions.
