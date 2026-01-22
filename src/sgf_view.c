@@ -39,7 +39,7 @@ static void sgf_view_draw_connector(GtkDrawingArea * /*area*/,
                                     int width,
                                     int height,
                                     gpointer /*user_data*/) {
-  double y = height / 2.0;
+  double y = height - (sgf_view_disc_spacing / 2.0);
   cairo_set_source_rgb(cr, 0.45, 0.45, 0.45);
   cairo_set_line_width(cr, 2.0);
   cairo_move_to(cr, 0.0, y);
@@ -50,7 +50,7 @@ static void sgf_view_draw_connector(GtkDrawingArea * /*area*/,
 static GtkWidget *sgf_view_build_connector(void) {
   GtkWidget *connector = gtk_drawing_area_new();
   gtk_widget_set_size_request(connector, sgf_view_disc_size + sgf_view_disc_spacing, sgf_view_disc_size);
-  gtk_widget_set_valign(connector, GTK_ALIGN_CENTER);
+  gtk_widget_set_valign(connector, GTK_ALIGN_END);
   gtk_widget_set_margin_start(connector, -(sgf_view_disc_size / 2));
   gtk_widget_set_margin_end(connector, -(sgf_view_disc_size / 2));
   gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(connector), sgf_view_draw_connector, NULL, NULL);
@@ -103,12 +103,12 @@ static GtkWidget *sgf_view_build_disc(SgfView *self, const SgfNode *node) {
   return button;
 }
 
-static void sgf_view_append_disc(SgfView *self, GtkWidget *row, const SgfNode *node) {
+static void sgf_view_append_disc(SgfView *self, GtkWidget *row, const SgfNode *node, gboolean include_connector) {
   g_return_if_fail(SGF_IS_VIEW(self));
   g_return_if_fail(GTK_IS_BOX(row));
   g_return_if_fail(node != NULL);
 
-  if (gtk_widget_get_first_child(row)) {
+  if (include_connector || gtk_widget_get_first_child(row)) {
     GtkWidget *connector = sgf_view_build_connector();
     gtk_box_append(GTK_BOX(row), connector);
   }
@@ -126,12 +126,12 @@ static void sgf_view_append_branch(SgfView *self, const SgfNode *parent, GtkWidg
   for (guint i = 0; i < children->len; ++i) {
     const SgfNode *child = g_ptr_array_index(children, i);
     if (i == 0) {
-      sgf_view_append_disc(self, row, child);
+      sgf_view_append_disc(self, row, child, FALSE);
       sgf_view_append_branch(self, child, row, depth + 1);
     } else {
       GtkWidget *branch_row = sgf_view_build_row(depth);
       gtk_box_append(GTK_BOX(self->tree_box), branch_row);
-      sgf_view_append_disc(self, branch_row, child);
+      sgf_view_append_disc(self, branch_row, child, TRUE);
       sgf_view_append_branch(self, child, branch_row, depth + 1);
     }
   }
