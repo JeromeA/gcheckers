@@ -388,6 +388,8 @@ static void gcheckers_window_init(GCheckersWindow *self) {
       "}"
       ".sgf-panel { background-color: #f5f5f5; border: 1px solid #ccc; }"
       ".sgf-disc {"
+      "  background-image: none;"
+      "  border: 1px solid #222;"
       "  border-radius: 999px;"
       "  padding: 0;"
       "  min-width: 32px;"
