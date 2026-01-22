@@ -30,3 +30,14 @@ Instead, black move buttons inherited the theme's default button background imag
 appeared and the discs looked like light outline buttons.
 
 The fix clears the button background image and applies a consistent border so the black disc background color shows up.
+
+## SGF connector lines did not align with discs or show variations
+
+The SGF move list should show connector lines below both the source and destination discs, and it should show lines for
+variation branches.
+
+The connectors were vertically centered in the disc rows, which put them above the source disc and below the
+destination disc. Variation rows also started without a connector, so branch links were missing entirely.
+
+The fix anchors connector drawing to the bottom of the row and ensures branch rows include an initial connector so
+variation lines render consistently.
