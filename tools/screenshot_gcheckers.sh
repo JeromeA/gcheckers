@@ -7,13 +7,14 @@ broadway_port="${BROADWAY_PORT:-8085}"
 screen_size="${SCREEN_SIZE:-1280x720}"
 gsk_renderer="${GSK_RENDERER:-cairo}"
 gdk_backend="${GDK_BACKEND:-broadway}"
+chromium_bin="${CHROMIUM_BIN:-chromium-browser}"
 
 if ! command -v gtk4-broadwayd >/dev/null 2>&1; then
   echo "gtk4-broadwayd is required to capture screenshots." >&2
   exit 1
 fi
 
-if ! command -v chromium >/dev/null 2>&1; then
+if ! command -v "$chromium_bin" >/dev/null 2>&1; then
   echo "Chromium is required to capture screenshots." >&2
   exit 1
 fi
@@ -56,5 +57,5 @@ sleep 0.2
 app_pid=$!
 
 sleep 1
-chromium --headless --disable-gpu --no-sandbox --window-size="${screen_width},${screen_height}" \
+"$chromium_bin" --headless --disable-gpu --no-sandbox --window-size="${screen_width},${screen_height}" \
   --screenshot="$output_path" "http://127.0.0.1:${broadway_port}/"
