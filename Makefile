@@ -13,6 +13,8 @@ CFLAGS += $(GLIB_CFLAGS) $(GOBJECT_CFLAGS)
 
 SRCS := src/board.c src/game.c src/game_print.c src/move_gen.c src/checkers_model.c
 BOARD_SRCS := src/board.c
+SGF_TREE_SRCS := src/sgf_tree.c
+SGF_VIEW_SRCS := src/sgf_view.c
 OBJS := $(SRCS:.c=.o)
 COV_DIR := coverage
 COV_OBJ_DIR := $(COV_DIR)/obj
@@ -35,12 +37,13 @@ libgame.a: $(OBJS)
 %.o: %.c src/game.h src/board.h src/checkers_constants.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
-test: test_game test_game_print test_board test_move_gen test_checkers_model test_screenshot
+test: test_game test_game_print test_board test_move_gen test_checkers_model test_sgf_tree test_screenshot
 	./test_game
 	./test_game_print
 	./test_board
 	./test_move_gen
 	./test_checkers_model
+	./test_sgf_tree
 
 test_game: tests/test_game.c $(SRCS) src/game.h
 	$(CC) $(CFLAGS) -o $@ tests/test_game.c $(SRCS) $(LDLIBS)
@@ -60,6 +63,9 @@ checkers: src/checkers_cli.c $(SRCS) src/game.h
 test_checkers_model: tests/test_checkers_model.c $(SRCS) src/checkers_model.h
 	$(CC) $(CFLAGS) -o $@ tests/test_checkers_model.c $(SRCS) $(LDLIBS)
 
+test_sgf_tree: tests/test_sgf_tree.c $(SGF_TREE_SRCS) src/sgf_tree.h
+	$(CC) $(CFLAGS) -o $@ tests/test_sgf_tree.c $(SGF_TREE_SRCS) $(LDLIBS)
+
 test_screenshot: gcheckers tools/screenshot_gcheckers.sh
 	@if ! command -v Xvfb >/dev/null 2>&1; then \
 		echo "Skipping screenshot test: Xvfb not available."; \
@@ -77,14 +83,14 @@ test_screenshot: gcheckers tools/screenshot_gcheckers.sh
 gcheckers: src/gcheckers.c src/gcheckers_application.c src/gcheckers_window.c src/gcheckers_window.h \
 	src/gcheckers_board_view.c src/gcheckers_board_view.h src/gcheckers_application.h \
 	src/gcheckers_man_paintable.c src/gcheckers_man_paintable.h src/checkers_model.c \
-	src/checkers_model.h $(SRCS)
+	src/checkers_model.h src/sgf_tree.c src/sgf_tree.h src/sgf_view.c src/sgf_view.h $(SRCS)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/gcheckers.c src/gcheckers_application.c \
-		src/gcheckers_window.c src/gcheckers_board_view.c src/gcheckers_man_paintable.c $(SRCS) \
-		$(LDLIBS) $(GTK_LIBS)
+		src/gcheckers_window.c src/gcheckers_board_view.c src/gcheckers_man_paintable.c \
+		src/sgf_tree.c src/sgf_view.c $(SRCS) $(LDLIBS) $(GTK_LIBS)
 
 clean:
 	rm -f $(OBJS) libgame.a test_game test_game_print test_board test_move_gen test_checkers_model \
-		test_screenshot checkers gcheckers
+		test_sgf_tree test_screenshot checkers gcheckers
 	rm -rf $(COV_DIR)
 
 screenshot: gcheckers tools/screenshot_gcheckers.sh

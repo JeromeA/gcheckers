@@ -16,6 +16,7 @@ GtkWidget *gcheckers_board_view_get_widget(GCheckersBoardView *self);
 void gcheckers_board_view_set_model(GCheckersBoardView *self, GCheckersModel *model);
 void gcheckers_board_view_update(GCheckersBoardView *self);
 void gcheckers_board_view_clear_selection(GCheckersBoardView *self);
+void gcheckers_board_view_set_input_enabled(GCheckersBoardView *self, gboolean enabled);
 
 G_END_DECLS
 

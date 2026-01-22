@@ -180,3 +180,9 @@ const CheckersMove *gcheckers_model_peek_last_move(GCheckersModel *self) {
 
   return &self->game.history[self->game.history_size - 1];
 }
+
+guint gcheckers_model_get_history_size(GCheckersModel *self) {
+  g_return_val_if_fail(GCHECKERS_IS_MODEL(self), 0);
+
+  return (guint)self->game.history_size;
+}

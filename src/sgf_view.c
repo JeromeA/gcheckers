@@ -1,0 +1,211 @@
+#include "sgf_view.h"
+
+#include <string.h>
+
+struct _SgfView {
+  GObject parent_instance;
+  GtkWidget *root;
+  GtkWidget *tree_box;
+  SgfTree *tree;
+  const SgfNode *selected;
+};
+
+G_DEFINE_TYPE(SgfView, sgf_view, G_TYPE_OBJECT)
+
+enum { SIGNAL_NODE_SELECTED, SIGNAL_LAST };
+
+static guint sgf_view_signals[SIGNAL_LAST] = {0};
+
+static const int sgf_view_disc_size = 32;
+static const int sgf_view_disc_spacing = 8;
+
+static void sgf_view_clear_box(GtkWidget *box) {
+  GtkWidget *child = gtk_widget_get_first_child(box);
+  while (child) {
+    GtkWidget *next = gtk_widget_get_next_sibling(child);
+    gtk_box_remove(GTK_BOX(box), child);
+    child = next;
+  }
+}
+
+static GtkWidget *sgf_view_build_row(guint depth) {
+  GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, sgf_view_disc_spacing);
+  gtk_widget_set_margin_start(row, (int)depth * (sgf_view_disc_size + sgf_view_disc_spacing));
+  return row;
+}
+
+static void sgf_view_on_disc_clicked(GtkButton *button, gpointer user_data) {
+  SgfView *self = SGF_VIEW(user_data);
+
+  g_return_if_fail(SGF_IS_VIEW(self));
+  g_return_if_fail(GTK_IS_BUTTON(button));
+
+  const SgfNode *node = g_object_get_data(G_OBJECT(button), "sgf-node");
+  if (!node) {
+    g_debug("Missing SGF node for clicked disc\n");
+    return;
+  }
+
+  sgf_view_set_selected(self, node);
+  g_signal_emit(self, sgf_view_signals[SIGNAL_NODE_SELECTED], 0, node);
+}
+
+static GtkWidget *sgf_view_build_disc(SgfView *self, const SgfNode *node) {
+  g_return_val_if_fail(SGF_IS_VIEW(self), NULL);
+  g_return_val_if_fail(node != NULL, NULL);
+
+  char label[16];
+  g_snprintf(label, sizeof(label), "%u", sgf_node_get_move_number(node));
+
+  GtkWidget *button = gtk_button_new_with_label(label);
+  gtk_widget_add_css_class(button, "sgf-disc");
+  gtk_widget_set_size_request(button, sgf_view_disc_size, sgf_view_disc_size);
+  gtk_widget_set_halign(button, GTK_ALIGN_START);
+  gtk_widget_set_valign(button, GTK_ALIGN_CENTER);
+
+  SgfColor color = sgf_node_get_color(node);
+  if (color == SGF_COLOR_BLACK) {
+    gtk_widget_add_css_class(button, "sgf-disc-black");
+  } else if (color == SGF_COLOR_WHITE) {
+    gtk_widget_add_css_class(button, "sgf-disc-white");
+  }
+
+  if (self->selected == node) {
+    gtk_widget_add_css_class(button, "sgf-disc-selected");
+  }
+
+  g_object_set_data(G_OBJECT(button), "sgf-node", (gpointer)node);
+  g_signal_connect(button, "clicked", G_CALLBACK(sgf_view_on_disc_clicked), self);
+
+  return button;
+}
+
+static void sgf_view_append_branch(SgfView *self, const SgfNode *parent, GtkWidget *row, guint depth) {
+  const GPtrArray *children = sgf_node_get_children(parent);
+  if (!children || children->len == 0) {
+    return;
+  }
+
+  for (guint i = 0; i < children->len; ++i) {
+    const SgfNode *child = g_ptr_array_index(children, i);
+    if (i == 0) {
+      GtkWidget *disc = sgf_view_build_disc(self, child);
+      gtk_box_append(GTK_BOX(row), disc);
+      sgf_view_append_branch(self, child, row, depth + 1);
+    } else {
+      GtkWidget *branch_row = sgf_view_build_row(depth);
+      gtk_box_append(GTK_BOX(self->tree_box), branch_row);
+      GtkWidget *disc = sgf_view_build_disc(self, child);
+      gtk_box_append(GTK_BOX(branch_row), disc);
+      sgf_view_append_branch(self, child, branch_row, depth + 1);
+    }
+  }
+}
+
+static void sgf_view_rebuild(SgfView *self) {
+  g_return_if_fail(SGF_IS_VIEW(self));
+
+  sgf_view_clear_box(self->tree_box);
+
+  if (!self->tree) {
+    return;
+  }
+
+  GtkWidget *row = sgf_view_build_row(0);
+  gtk_box_append(GTK_BOX(self->tree_box), row);
+
+  const SgfNode *root = sgf_tree_get_root(self->tree);
+  if (!root) {
+    return;
+  }
+
+  sgf_view_append_branch(self, root, row, 0);
+}
+
+static void sgf_view_dispose(GObject *object) {
+  SgfView *self = SGF_VIEW(object);
+
+  if (self->root && gtk_widget_get_parent(self->root)) {
+    gtk_widget_unparent(self->root);
+  }
+
+  g_clear_object(&self->tree);
+  g_clear_object(&self->root);
+
+  G_OBJECT_CLASS(sgf_view_parent_class)->dispose(object);
+}
+
+static void sgf_view_class_init(SgfViewClass *klass) {
+  GObjectClass *object_class = G_OBJECT_CLASS(klass);
+
+  object_class->dispose = sgf_view_dispose;
+
+  sgf_view_signals[SIGNAL_NODE_SELECTED] = g_signal_new("node-selected",
+                                                       G_TYPE_FROM_CLASS(klass),
+                                                       G_SIGNAL_RUN_LAST,
+                                                       0,
+                                                       NULL,
+                                                       NULL,
+                                                       NULL,
+                                                       G_TYPE_NONE,
+                                                       1,
+                                                       G_TYPE_POINTER);
+}
+
+static void sgf_view_init(SgfView *self) {
+  self->root = gtk_scrolled_window_new();
+  g_object_ref_sink(self->root);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(self->root),
+                                 GTK_POLICY_AUTOMATIC,
+                                 GTK_POLICY_AUTOMATIC);
+  gtk_widget_set_hexpand(self->root, TRUE);
+  gtk_widget_set_vexpand(self->root, TRUE);
+
+  self->tree_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+  gtk_widget_set_margin_top(self->tree_box, 8);
+  gtk_widget_set_margin_bottom(self->tree_box, 8);
+  gtk_widget_set_margin_start(self->tree_box, 8);
+  gtk_widget_set_margin_end(self->tree_box, 8);
+  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(self->root), self->tree_box);
+}
+
+SgfView *sgf_view_new(void) {
+  return g_object_new(SGF_TYPE_VIEW, NULL);
+}
+
+GtkWidget *sgf_view_get_widget(SgfView *self) {
+  g_return_val_if_fail(SGF_IS_VIEW(self), NULL);
+
+  return self->root;
+}
+
+void sgf_view_set_tree(SgfView *self, SgfTree *tree) {
+  g_return_if_fail(SGF_IS_VIEW(self));
+
+  if (self->tree == tree) {
+    sgf_view_rebuild(self);
+    return;
+  }
+
+  if (self->tree) {
+    g_clear_object(&self->tree);
+  }
+
+  self->tree = tree ? g_object_ref(tree) : NULL;
+  self->selected = tree ? sgf_tree_get_current(tree) : NULL;
+
+  sgf_view_rebuild(self);
+}
+
+void sgf_view_set_selected(SgfView *self, const SgfNode *node) {
+  g_return_if_fail(SGF_IS_VIEW(self));
+
+  self->selected = node;
+  sgf_view_rebuild(self);
+}
+
+void sgf_view_refresh(SgfView *self) {
+  g_return_if_fail(SGF_IS_VIEW(self));
+
+  sgf_view_rebuild(self);
+}

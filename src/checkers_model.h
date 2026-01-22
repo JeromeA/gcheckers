@@ -19,6 +19,7 @@ gboolean gcheckers_model_step_random_move(GCheckersModel *self, CheckersMove *ou
 char *gcheckers_model_format_status(GCheckersModel *self);
 const GameState *gcheckers_model_peek_state(GCheckersModel *self);
 const CheckersMove *gcheckers_model_peek_last_move(GCheckersModel *self);
+guint gcheckers_model_get_history_size(GCheckersModel *self);
 
 G_END_DECLS
 
