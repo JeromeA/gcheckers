@@ -16,6 +16,7 @@ struct _GCheckersBoardView {
   guint board_size;
   uint8_t selected_path[CHECKERS_MAX_MOVE_LENGTH];
   uint8_t selected_length;
+  gboolean input_enabled;
   GdkPaintable *white_man_paintable;
   GdkPaintable *black_man_paintable;
   GdkPaintable *white_king_paintable;
@@ -425,7 +426,7 @@ static void gcheckers_board_view_update_sensitivity(GCheckersBoardView *self, co
   g_return_if_fail(GCHECKERS_IS_BOARD_VIEW(self));
   g_return_if_fail(state != NULL);
 
-  gboolean can_play = state->winner == CHECKERS_WINNER_NONE && state->turn == CHECKERS_COLOR_WHITE;
+  gboolean can_play = state->winner == CHECKERS_WINNER_NONE && self->input_enabled;
   for (int i = 0; i < CHECKERS_MAX_SQUARES; ++i) {
     if (self->square_buttons[i]) {
       gtk_widget_set_sensitive(self->square_buttons[i], can_play);
@@ -470,8 +471,8 @@ static void gcheckers_board_view_on_square_clicked(GtkButton *button, gpointer u
     g_debug("Ignoring click after game end\n");
     return;
   }
-  if (state->turn != CHECKERS_COLOR_WHITE) {
-    g_debug("Ignoring click while waiting for AI\n");
+  if (!self->input_enabled) {
+    g_debug("Ignoring click while input is disabled\n");
     return;
   }
 
@@ -655,6 +656,24 @@ void gcheckers_board_view_update(GCheckersBoardView *self) {
   }
 }
 
+void gcheckers_board_view_set_input_enabled(GCheckersBoardView *self, gboolean enabled) {
+  g_return_if_fail(GCHECKERS_IS_BOARD_VIEW(self));
+
+  self->input_enabled = enabled;
+
+  if (!self->model) {
+    return;
+  }
+
+  const GameState *state = gcheckers_model_peek_state(self->model);
+  if (!state) {
+    g_debug("Failed to fetch game state while updating input sensitivity\n");
+    return;
+  }
+
+  gcheckers_board_view_update_sensitivity(self, state);
+}
+
 static void gcheckers_board_view_dispose(GObject *object) {
   GCheckersBoardView *self = GCHECKERS_BOARD_VIEW(object);
 
@@ -704,6 +723,8 @@ static void gcheckers_board_view_init(GCheckersBoardView *self) {
   self->black_man_paintable = gcheckers_board_view_build_man_paintable("#111111", "#ffffff");
   self->white_king_paintable = gcheckers_board_view_build_king_paintable("#ffffff", "#111111");
   self->black_king_paintable = gcheckers_board_view_build_king_paintable("#111111", "#ffffff");
+
+  self->input_enabled = TRUE;
 }
 
 GCheckersBoardView *gcheckers_board_view_new(void) {

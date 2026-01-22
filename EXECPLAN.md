@@ -1,4 +1,4 @@
-# Add GTK move-selection parity with the CLI
+# Add SGF move tree and navigation panel
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
@@ -7,110 +7,152 @@ This plan is maintained according to PLANS.md at the repository root (`PLANS.md`
 
 ## Purpose / Big Picture
 
-After this change, the GTK UI shows the full checkers board and lets the user play the same moves as the CLI by
-clicking one of their pieces and then clicking one or more destination squares. The UI only accepts moves that appear
-in the engine-provided move list and prints both the player and computer moves to the console. You can see it working
-by running `./gcheckers`, clicking a white piece followed by valid destinations, and observing that the console logs the
-user move and the AI reply while the board updates in the window.
+After this change, the GTK app shows a split window with the checkers board on the left and an SGF move tree panel on
+the right. Each move played adds a numbered black or white disc to the SGF panel, selects it, and lets the user click
+any prior move to restore the game state by replaying moves from the beginning. The SGF data model and view are generic
+and reusable for other games. The UI also exposes per-color dropdowns to choose between human and computer control and a
+"Force move" button that triggers an AI move for the current player without auto-playing when navigating the SGF.
+You can see it working by running `./gcheckers`, making a few moves, and clicking earlier discs to jump the board state
+back; the SGF panel should reflect the current selection, and the Force move button should cause the AI to play a move
+when clicked.
 
 ## Progress
 
-- [x] (2026-01-18 18:35Z) Review the existing GTK window, model APIs, and CLI move flow to map the requirements to
-  current code.
-- [x] (2026-01-18 18:35Z) Extend the model API to list moves, apply only valid moves, and report random AI moves, with
-  updated unit tests.
-- [x] (2026-01-18 18:35Z) Build a GTK board grid with selectable squares, move validation via prefixes, and AI
-  responses.
-- [x] (2026-01-18 18:35Z) Update the GTK window to print user/AI moves to the console and keep the status label in sync.
-- [x] (2026-01-18 18:35Z) Run `make all` and `make test`, then commit the changes.
+- [x] (2026-01-18 20:05Z) Review existing GTK layout, model APIs, and tests to determine integration points for an SGF
+  model/view and AI control widgets.
+- [x] (2026-01-18 20:20Z) Define a generic SGF tree object with nodes, colors, payload storage, and selection APIs, plus
+  unit tests.
+- [x] (2026-01-18 20:30Z) Add a generic SGF view widget that renders numbered discs with selection handling and emits
+  node-selection signals.
+- [x] (2026-01-18 20:40Z) Integrate SGF tree and view into the GTK window with a split layout, AI control dropdowns, and
+  Force move button.
+- [x] (2026-01-18 20:50Z) Wire the checkers model to append moves to SGF, replay moves on selection, and ensure AI only
+  moves when forced.
+- [x] (2026-01-18 20:55Z) Run `make all`, `make test`, and `make screenshot`, then update the plan and commit.
 
 ## Surprises & Discoveries
 
-- Observation: The existing GTK UI had no move selection logic, so the model needed a stricter move-application API to
-  enforce "only from the move list" while keeping the UI simple.
-  Evidence: The previous model only exposed `gcheckers_model_step_random_move`, which could not validate user
-  selections.
+- Observation: The board view previously hard-coded white as the only human-controlled side, so it needed explicit input
+  gating to support user/computer control per color.
+  Evidence: The pre-change board view only enabled clicks when `state->turn == CHECKERS_COLOR_WHITE`.
 
 ## Decision Log
 
-- Decision: Implement move validation in `GCheckersModel` so the UI can only apply moves from the authoritative move
-  list.
-  Rationale: Centralizing move validation in the model prevents invalid UI state and matches CLI behavior.
-  Date/Author: 2026-01-18 / Codex.
-- Decision: Represent the board as a GTK grid of buttons and labels instead of a custom drawing surface.
-  Rationale: This keeps the UI simple, uses GTK widgets directly, and supports click handling without new drawing code.
-  Date/Author: 2026-01-18 / Codex.
+- Decision: Store SGF node payloads as `GBytes` to keep the SGF tree generic and decoupled from game-specific structs.
+  Rationale: `GBytes` gives copyable, ref-counted storage that callers can interpret without the SGF tree knowing the
+  payload type.
+  Date/Author: 2026-01-18 / Codex
+- Decision: Use the model's history size to detect newly applied moves for SGF updates instead of comparing move
+  contents.
+  Rationale: Move content can repeat, while the history counter accurately signals when a new move has been applied.
+  Date/Author: 2026-01-18 / Codex
+- Decision: Remove automatic AI turns in favor of the explicit Force move button.
+  Rationale: The requirement states navigation should never auto-trigger AI and introduces Force move for manual control.
+  Date/Author: 2026-01-18 / Codex
 
 ## Outcomes & Retrospective
 
-- Outcome: The GTK UI now renders the board, enforces legal move selection via click paths, and logs both player and AI
-  moves to the console, matching the CLI flow.
-  Notes: The model API gained list/apply functions, and tests now cover valid and invalid move application.
+- Outcome: The GTK UI now includes a split SGF panel with selectable move discs, generic SGF tree/view components, and
+  explicit player-control widgets plus a Force move action. SGF navigation replays moves without triggering AI. Tests,
+  builds, and UI screenshot checks were run.
 
 ## Context and Orientation
 
-The checkers engine lives in `src/game.c`, `src/move_gen.c`, and `src/board.c`. The CLI entrypoint
-`src/checkers_cli.c` shows the move loop: list legal moves for the player, prompt for a choice, then let the AI choose a
-random move. The GTK front-end uses `src/checkers_model.c` as a GObject wrapper around `Game` and
-`src/gcheckers_window.c` for UI widgets. The existing GTK window previously displayed only a status label with
-random-move buttons; it needed a board and click-based move selection. Tests for the model live in
-`tests/test_checkers_model.c` and are run by `make test`.
+The checkers engine is wrapped by `src/checkers_model.c`, which exposes move listing, application, and random AI
+selection; the GTK window in `src/gcheckers_window.c` builds the UI and responds to state changes. The board itself is
+rendered via `src/gcheckers_board_view.c`. The new SGF model and SGF view must be generic and not depend on checkers
+code, so they should live in new `src/sgf_*.{c,h}` files with GLib/GObject patterns. The SGF view will be a GObject
+wrapper around GTK widgets, similar to `GCheckersBoardView`, and will emit signals for selection changes so the window
+can replay moves via the checkers model. Unit tests live under `tests/` and are run by `make test`.
 
 ## Plan of Work
 
-Update `src/checkers_model.h` and `src/checkers_model.c` to expose a move list function, a validated move application
-function, and a random-move function that can return the chosen move for logging. Update `tests/test_checkers_model.c`
-to exercise the new APIs with a valid move, an invalid move, and a random move. Replace the GTK window contents in
-`src/gcheckers_window.c` with a grid-based board that renders the current pieces, tracks a click path, validates
-prefixes against the move list, and applies a move once the user has clicked a complete path. After applying the player
-move, let the AI reply with a random legal move and print both moves to stdout. Ensure the status label and board update
-on every state change.
+First, inspect the existing GTK window layout, model API, and tests to choose integration points for new objects. Next,
+add a generic SGF tree implementation with nodes that store color, move numbers, and arbitrary payload bytes. Provide
+functions to append moves, retrieve the root and current nodes, change the current node, and traverse the main line for
+rendering; add unit tests in `tests/test_sgf_tree.c` that cover append, selection, and payload access. Then implement a
+generic SGF view object that owns a GTK container, renders a chain of numbered black/white discs with selection
+highlighting, and emits a signal when a node is selected by clicking. After that, update the GTK window to use a split
+pane with the board on the left and a sidebar containing the SGF view plus AI control widgets (dropdowns for human vs.
+computer for each color, and a Force move button). Finally, wire the checkers model to append each applied move to the
+SGF tree, to replay moves from the SGF when a node is selected, and to only let the AI move when the Force move button
+is pressed.
 
 ## Concrete Steps
 
-1) Update `src/checkers_model.h` and `src/checkers_model.c` to add move listing and validated move application helpers.
-2) Update `tests/test_checkers_model.c` to cover the new API surface.
-3) Replace the GTK window layout in `src/gcheckers_window.c` with a board grid, selection logic, and console logging.
-4) From the repository root, run:
+1) Review `src/gcheckers_window.c`, `src/checkers_model.c`, and the current tests in `tests/` to plan integration.
+2) Add `src/sgf_tree.h` and `src/sgf_tree.c` defining the SGF tree API and implement unit tests in
+   `tests/test_sgf_tree.c`.
+3) Add `src/sgf_view.h` and `src/sgf_view.c` to render a chain/tree of numbered discs with selection and signals.
+4) Update `src/gcheckers_window.c` to build the split UI, add AI controls, and integrate SGF view events.
+5) Update `src/checkers_model.c` or window logic to append moves to the SGF tree and replay moves from selection.
+6) From the repository root, run:
 
    make all
    make test
+   make screenshot
 
-5) Commit the changes with a descriptive message.
+7) Update this plan with progress, surprises, and decisions, then commit.
 
 ## Validation and Acceptance
 
-Run `make all` and expect `libgame.a`, `checkers`, and `gcheckers` to build without warnings. Run `make test` and expect
-all tests to pass, including the updated `test_checkers_model`. Launch `./gcheckers`, click a white piece and one or
-more legal destination squares, and confirm that the UI moves the piece only when the selection matches an available
-move. The console should log lines like `Player plays: 9-14` and `AI plays: 22-18`, and the board should update after
-each move.
+The GTK window should show a split layout with the board on the left and an SGF panel on the right. As the user plays
+moves, the SGF panel should show new numbered discs with the correct color, and the newest disc should be selected.
+Clicking an earlier disc should restore the board to that position by replaying moves from the start, without triggering
+an automatic AI move. The Force move button should apply one AI move for the current player, regardless of the dropdown
+settings. `make all` should build all binaries without warnings, `make test` should pass including the new SGF unit
+tests, and `make screenshot` should produce a UI screenshot without committing it.
 
 ## Idempotence and Recovery
 
-All edits are additive and can be re-applied safely. If a build fails due to missing GTK development packages, install
-GTK4 and rerun `make all` and `make test` without changing the source. `make clean` removes built artifacts if you need
-a fresh rebuild.
+All steps are additive and can be repeated safely. If build tools or GTK dependencies are missing, install them using the
+existing tooling described in README.md or tools/setup.sh, then rerun the build and tests. If the SGF view layout needs
+adjustment, modify the GTK widgets and rerun `make screenshot` without committing the generated images.
 
 ## Artifacts and Notes
 
-Example console output after a player move:
+Expected SGF unit test output excerpt:
 
-  Player plays: 9-14
-  AI plays: 22-18
+  PASS: sgf tree append and selection
 
 ## Interfaces and Dependencies
 
-`src/checkers_model.h` must expose:
+`src/sgf_tree.h` should define:
 
-  MoveList gcheckers_model_list_moves(GCheckersModel *self);
-  gboolean gcheckers_model_apply_move(GCheckersModel *self, const CheckersMove *move);
-  gboolean gcheckers_model_step_random_move(GCheckersModel *self, CheckersMove *out_move);
+  typedef enum {
+    SGF_COLOR_NONE = 0,
+    SGF_COLOR_BLACK,
+    SGF_COLOR_WHITE
+  } SgfColor;
 
-`src/gcheckers_window.c` must build a GTK grid for the board, update square labels from the `GameState`, and use the
-model APIs to validate and apply moves. The UI should emit move logs with `game_format_move_notation` so the console
-matches CLI formatting.
+  typedef struct _SgfNode SgfNode;
+  G_DECLARE_FINAL_TYPE(SgfTree, sgf_tree, SGF, TREE, GObject)
+
+  SgfTree *sgf_tree_new(void);
+  void sgf_tree_reset(SgfTree *self);
+  const SgfNode *sgf_tree_get_root(SgfTree *self);
+  const SgfNode *sgf_tree_get_current(SgfTree *self);
+  const SgfNode *sgf_tree_append_move(SgfTree *self, SgfColor color, GBytes *payload);
+  gboolean sgf_tree_set_current(SgfTree *self, const SgfNode *node);
+  GPtrArray *sgf_tree_build_main_line(SgfTree *self);
+  SgfColor sgf_node_get_color(const SgfNode *node);
+  guint sgf_node_get_move_number(const SgfNode *node);
+  const SgfNode *sgf_node_get_parent(const SgfNode *node);
+  const GPtrArray *sgf_node_get_children(const SgfNode *node);
+  GBytes *sgf_node_get_payload(const SgfNode *node);
+
+`src/sgf_view.h` should define:
+
+  G_DECLARE_FINAL_TYPE(SgfView, sgf_view, SGF, VIEW, GObject)
+
+  SgfView *sgf_view_new(void);
+  GtkWidget *sgf_view_get_widget(SgfView *self);
+  void sgf_view_set_tree(SgfView *self, SgfTree *tree);
+  void sgf_view_set_selected(SgfView *self, const SgfNode *node);
+  void sgf_view_refresh(SgfView *self);
+
+The SGF view should emit a `node-selected` signal with the selected node pointer when the user clicks a disc.
 
 Plan updates:
-- 2026-01-18: Replaced the previous GTK bootstrap plan with the new parity plan after implementing board rendering and
-  click-based move selection.
+- 2026-01-18: Plan created for SGF move tree, view, and UI integration.
+- 2026-01-18: Updated interfaces to include sgf tree reset, node child access, and SGF view refresh.
