@@ -680,6 +680,7 @@ static void gcheckers_board_view_class_init(GCheckersBoardViewClass *klass) {
 
 static void gcheckers_board_view_init(GCheckersBoardView *self) {
   self->root = gtk_overlay_new();
+  g_object_ref_sink(self->root);
   gtk_widget_set_hexpand(self->root, TRUE);
   gtk_widget_set_vexpand(self->root, TRUE);
 
