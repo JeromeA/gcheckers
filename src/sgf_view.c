@@ -24,19 +24,13 @@ static const int sgf_view_disc_border = 1;
 static const int sgf_view_disc_spacing = 8;
 static const int sgf_view_disc_stride = sgf_view_disc_size + (sgf_view_disc_border * 2);
 
-static void sgf_view_clear_box(GtkWidget *box) {
-  GtkWidget *child = gtk_widget_get_first_child(box);
+static void sgf_view_clear_container(GtkWidget *container) {
+  GtkWidget *child = gtk_widget_get_first_child(container);
   while (child) {
     GtkWidget *next = gtk_widget_get_next_sibling(child);
-    gtk_box_remove(GTK_BOX(box), child);
+    gtk_widget_unparent(child);
     child = next;
   }
-}
-
-static GtkWidget *sgf_view_build_row(guint depth) {
-  GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, sgf_view_disc_spacing);
-  gtk_widget_set_margin_start(row, (int)depth * (sgf_view_disc_stride + sgf_view_disc_spacing));
-  return row;
 }
 
 static gboolean sgf_view_get_disc_center(SgfView *self, const SgfNode *node, double *x, double *y) {
@@ -184,39 +178,39 @@ static GtkWidget *sgf_view_build_disc(SgfView *self, const SgfNode *node) {
   return button;
 }
 
-static void sgf_view_append_disc(SgfView *self, GtkWidget *row, const SgfNode *node) {
+static void sgf_view_attach_disc(SgfView *self, const SgfNode *node, guint row, guint column) {
   g_return_if_fail(SGF_IS_VIEW(self));
-  g_return_if_fail(GTK_IS_BOX(row));
   g_return_if_fail(node != NULL);
 
   GtkWidget *disc = sgf_view_build_disc(self, node);
-  gtk_box_append(GTK_BOX(row), disc);
+  gtk_grid_attach(GTK_GRID(self->tree_box), disc, (int)column, (int)row, 1, 1);
 }
 
-static void sgf_view_append_branch(SgfView *self, const SgfNode *parent, GtkWidget *row, guint depth) {
+static guint sgf_view_append_branch(SgfView *self, const SgfNode *parent, guint row, guint depth) {
   const GPtrArray *children = sgf_node_get_children(parent);
   if (!children || children->len == 0) {
-    return;
+    return row;
   }
 
+  guint current_row = row;
   for (guint i = 0; i < children->len; ++i) {
     const SgfNode *child = g_ptr_array_index(children, i);
     if (i == 0) {
-      sgf_view_append_disc(self, row, child);
-      sgf_view_append_branch(self, child, row, depth + 1);
+      sgf_view_attach_disc(self, child, row, depth);
+      current_row = sgf_view_append_branch(self, child, row, depth + 1);
     } else {
-      GtkWidget *branch_row = sgf_view_build_row(depth);
-      gtk_box_append(GTK_BOX(self->tree_box), branch_row);
-      sgf_view_append_disc(self, branch_row, child);
-      sgf_view_append_branch(self, child, branch_row, depth + 1);
+      guint branch_row = current_row + 1;
+      sgf_view_attach_disc(self, child, branch_row, depth);
+      current_row = sgf_view_append_branch(self, child, branch_row, depth + 1);
     }
   }
+  return current_row;
 }
 
 static void sgf_view_rebuild(SgfView *self) {
   g_return_if_fail(SGF_IS_VIEW(self));
 
-  sgf_view_clear_box(self->tree_box);
+  sgf_view_clear_container(self->tree_box);
   g_clear_pointer(&self->node_widgets, g_hash_table_unref);
   self->node_widgets = g_hash_table_new(g_direct_hash, g_direct_equal);
 
@@ -225,16 +219,13 @@ static void sgf_view_rebuild(SgfView *self) {
     return;
   }
 
-  GtkWidget *row = sgf_view_build_row(0);
-  gtk_box_append(GTK_BOX(self->tree_box), row);
-
   const SgfNode *root = sgf_tree_get_root(self->tree);
   if (!root) {
     gtk_widget_queue_draw(self->lines_area);
     return;
   }
 
-  sgf_view_append_branch(self, root, row, 0);
+  sgf_view_append_branch(self, root, 0, 0);
   gtk_widget_queue_draw(self->lines_area);
 }
 
@@ -288,7 +279,10 @@ static void sgf_view_init(SgfView *self) {
   gtk_overlay_set_child(GTK_OVERLAY(self->overlay), self->lines_area);
   gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(self->lines_area), sgf_view_draw_tree, self, NULL);
 
-  self->tree_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+  self->tree_box = gtk_grid_new();
+  gtk_grid_set_row_spacing(GTK_GRID(self->tree_box), sgf_view_disc_spacing);
+  gtk_grid_set_column_spacing(GTK_GRID(self->tree_box), sgf_view_disc_spacing);
+  gtk_grid_set_column_homogeneous(GTK_GRID(self->tree_box), TRUE);
   gtk_widget_set_margin_top(self->tree_box, 8);
   gtk_widget_set_margin_bottom(self->tree_box, 8);
   gtk_widget_set_margin_start(self->tree_box, 8);
