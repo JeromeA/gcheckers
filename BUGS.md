@@ -5,7 +5,7 @@ mistakes in the future. The first entry below shows a template.
 
 ## Short description of the bug
 
-[What the goal of the code was]
+[How the code was trying to do things right]
 
 [What was actually happening and why]
 
