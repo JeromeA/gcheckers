@@ -20,8 +20,18 @@ This overview lists each non-trivial file so you can quickly find where function
 - src/gcheckers.c: GTK application entry point that launches the GApplication.
 - src/gcheckers_application.h: GTK application type declaration.
 - src/gcheckers_application.c: GTK application activation that creates the main window and model.
-- src/gcheckers_board_view.h: board view widget API.
-- src/gcheckers_board_view.c: board view rendering and input handling.
+- src/board_view.h: board view widget API.
+- src/board_view.c: board view coordination, rendering updates, and input handling.
+- src/board_grid.h: board grid helper API for laying out squares.
+- src/board_grid.c: board grid construction and square bookkeeping.
+- src/board_square.h: board square widget API for piece/index rendering.
+- src/board_square.c: board square widget creation and state updates.
+- src/board_move_overlay.h: last-move overlay renderer API.
+- src/board_move_overlay.c: cairo overlay drawing for the last move arrows.
+- src/board_selection_controller.h: move selection controller API for click paths.
+- src/board_selection_controller.c: selection path logic and move application.
+- src/piece_palette.h: piece palette API for paintables and fallback symbols.
+- src/piece_palette.c: piece palette implementation for checker men and kings.
 - src/gcheckers_man_paintable.h: GdkPaintable factory for board pieces.
 - src/gcheckers_man_paintable.c: paintable implementation for checker men and kings.
 - src/gcheckers_window.h: GTK window type declaration.

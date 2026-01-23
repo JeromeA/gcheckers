@@ -97,17 +97,21 @@ test_screenshot: gcheckers tools/screenshot_gcheckers.sh
 		rm -f "$$tmp_file"
 
 gcheckers: src/gcheckers.c src/gcheckers_application.c src/gcheckers_window.c src/gcheckers_window.h \
-	src/gcheckers_board_view.c src/gcheckers_board_view.h src/gcheckers_application.h \
-	src/gcheckers_man_paintable.c src/gcheckers_man_paintable.h src/checkers_model.c \
-	src/checkers_model.h src/sgf_tree.c src/sgf_tree.h src/sgf_view.c src/sgf_view.h \
-	src/sgf_view_disc_factory.c src/sgf_view_disc_factory.h src/sgf_view_layout.c \
-	src/sgf_view_layout.h src/sgf_view_link_renderer.c src/sgf_view_link_renderer.h \
-	src/sgf_view_scroller.c src/sgf_view_scroller.h src/sgf_view_selection_controller.c \
+	src/board_view.c src/board_view.h src/board_grid.c src/board_grid.h src/board_square.c \
+	src/board_square.h src/board_move_overlay.c src/board_move_overlay.h \
+	src/board_selection_controller.c src/board_selection_controller.h src/piece_palette.c \
+	src/piece_palette.h src/gcheckers_application.h src/gcheckers_man_paintable.c \
+	src/gcheckers_man_paintable.h src/checkers_model.c src/checkers_model.h src/sgf_tree.c \
+	src/sgf_tree.h src/sgf_view.c src/sgf_view.h src/sgf_view_disc_factory.c \
+	src/sgf_view_disc_factory.h src/sgf_view_layout.c src/sgf_view_layout.h \
+	src/sgf_view_link_renderer.c src/sgf_view_link_renderer.h src/sgf_view_scroller.c \
+	src/sgf_view_scroller.h src/sgf_view_selection_controller.c \
 	src/sgf_view_selection_controller.h $(SRCS)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/gcheckers.c src/gcheckers_application.c \
-		src/gcheckers_window.c src/gcheckers_board_view.c src/gcheckers_man_paintable.c \
-		src/sgf_tree.c src/sgf_view.c src/sgf_view_disc_factory.c src/sgf_view_layout.c \
-		src/sgf_view_link_renderer.c src/sgf_view_scroller.c \
+		src/gcheckers_window.c src/board_view.c src/board_grid.c src/board_square.c \
+		src/board_move_overlay.c src/board_selection_controller.c src/piece_palette.c \
+		src/gcheckers_man_paintable.c src/sgf_tree.c src/sgf_view.c src/sgf_view_disc_factory.c \
+		src/sgf_view_layout.c src/sgf_view_link_renderer.c src/sgf_view_scroller.c \
 		src/sgf_view_selection_controller.c $(SRCS) $(LDLIBS) $(GTK_LIBS)
 
 clean:
