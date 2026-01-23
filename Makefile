@@ -14,7 +14,13 @@ CFLAGS += $(GLIB_CFLAGS) $(GOBJECT_CFLAGS)
 SRCS := src/board.c src/game.c src/game_print.c src/move_gen.c src/checkers_model.c
 BOARD_SRCS := src/board.c
 SGF_TREE_SRCS := src/sgf_tree.c
-SGF_VIEW_SRCS := src/sgf_view.c
+SGF_VIEW_SRCS := \
+  src/sgf_view.c \
+  src/sgf_view_disc_factory.c \
+  src/sgf_view_layout.c \
+  src/sgf_view_link_renderer.c \
+  src/sgf_view_scroller.c \
+  src/sgf_view_selection_controller.c
 OBJS := $(SRCS:.c=.o)
 COV_DIR := coverage
 COV_OBJ_DIR := $(COV_DIR)/obj
@@ -93,10 +99,16 @@ test_screenshot: gcheckers tools/screenshot_gcheckers.sh
 gcheckers: src/gcheckers.c src/gcheckers_application.c src/gcheckers_window.c src/gcheckers_window.h \
 	src/gcheckers_board_view.c src/gcheckers_board_view.h src/gcheckers_application.h \
 	src/gcheckers_man_paintable.c src/gcheckers_man_paintable.h src/checkers_model.c \
-	src/checkers_model.h src/sgf_tree.c src/sgf_tree.h src/sgf_view.c src/sgf_view.h $(SRCS)
+	src/checkers_model.h src/sgf_tree.c src/sgf_tree.h src/sgf_view.c src/sgf_view.h \
+	src/sgf_view_disc_factory.c src/sgf_view_disc_factory.h src/sgf_view_layout.c \
+	src/sgf_view_layout.h src/sgf_view_link_renderer.c src/sgf_view_link_renderer.h \
+	src/sgf_view_scroller.c src/sgf_view_scroller.h src/sgf_view_selection_controller.c \
+	src/sgf_view_selection_controller.h $(SRCS)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/gcheckers.c src/gcheckers_application.c \
 		src/gcheckers_window.c src/gcheckers_board_view.c src/gcheckers_man_paintable.c \
-		src/sgf_tree.c src/sgf_view.c $(SRCS) $(LDLIBS) $(GTK_LIBS)
+		src/sgf_tree.c src/sgf_view.c src/sgf_view_disc_factory.c src/sgf_view_layout.c \
+		src/sgf_view_link_renderer.c src/sgf_view_scroller.c \
+		src/sgf_view_selection_controller.c $(SRCS) $(LDLIBS) $(GTK_LIBS)
 
 clean:
 	rm -f $(OBJS) libgame.a test_game test_game_print test_board test_move_gen test_checkers_model \
