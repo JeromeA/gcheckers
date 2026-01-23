@@ -30,4 +30,6 @@ implementation.
 
 # Repository overview
 
-See REPOSITORY_OVERVIEW.md for the repository overview.
+See REPOSITORY_OVERVIEW.md for the repository overview. It's a short document that gives a good overview of the whole
+project structure.
+
