@@ -113,15 +113,45 @@ static void test_sgf_view_connectors_skip(void) {
   g_test_skip("GTK display not available.");
 }
 
+static void test_sgf_view_navigation(void) {
+  SgfTree *tree = sgf_tree_new();
+  const SgfNode *move_1 = sgf_tree_append_move(tree, SGF_COLOR_BLACK, NULL);
+  const SgfNode *move_2 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, NULL);
+  sgf_tree_append_move(tree, SGF_COLOR_BLACK, NULL);
+  g_assert_true(sgf_tree_set_current(tree, move_1));
+  const SgfNode *branch_2 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, NULL);
+
+  SgfView *view = sgf_view_new();
+  sgf_view_set_tree(view, tree);
+  sgf_view_set_selected(view, move_1);
+
+  g_assert_true(sgf_view_navigate(view, SGF_VIEW_NAVIGATE_CHILD));
+  g_assert_true(sgf_view_get_selected(view) == move_2);
+
+  g_assert_true(sgf_view_navigate(view, SGF_VIEW_NAVIGATE_NEXT_SIBLING));
+  g_assert_true(sgf_view_get_selected(view) == branch_2);
+
+  g_assert_true(sgf_view_navigate(view, SGF_VIEW_NAVIGATE_PREVIOUS_SIBLING));
+  g_assert_true(sgf_view_get_selected(view) == move_2);
+
+  g_assert_true(sgf_view_navigate(view, SGF_VIEW_NAVIGATE_PARENT));
+  g_assert_true(sgf_view_get_selected(view) == move_1);
+
+  g_clear_object(&view);
+  g_clear_object(&tree);
+}
+
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   if (!gtk_init_check()) {
     g_test_add_func("/sgf-view/connectors", test_sgf_view_connectors_skip);
     g_test_add_func("/sgf-view/branches", test_sgf_view_connectors_skip);
+    g_test_add_func("/sgf-view/navigation", test_sgf_view_connectors_skip);
     return g_test_run();
   }
 
   g_test_add_func("/sgf-view/connectors", test_sgf_view_connectors);
   g_test_add_func("/sgf-view/branches", test_sgf_view_branch_columns);
+  g_test_add_func("/sgf-view/navigation", test_sgf_view_navigation);
   return g_test_run();
 }

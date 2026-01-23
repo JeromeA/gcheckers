@@ -2,6 +2,8 @@
 
 #include <string.h>
 
+#include <gdk/gdkkeysyms.h>
+
 struct _SgfView {
   GObject parent_instance;
   GtkWidget *root;
@@ -23,6 +25,9 @@ static const int sgf_view_disc_size = 32;
 static const int sgf_view_disc_border = 1;
 static const int sgf_view_disc_spacing = 8;
 static const int sgf_view_disc_stride = sgf_view_disc_size + (sgf_view_disc_border * 2);
+
+static void sgf_view_rebuild(SgfView *self);
+static void sgf_view_queue_scroll_to_selected(SgfView *self);
 
 static void sgf_view_clear_container(GtkWidget *container) {
   GtkWidget *child = gtk_widget_get_first_child(container);
@@ -111,23 +116,6 @@ static void sgf_view_draw_tree(GtkDrawingArea * /*area*/, cairo_t *cr, int width
   cairo_restore(cr);
 }
 
-static void sgf_view_on_tree_size_allocate(GtkWidget *widget,
-                                           int width,
-                                           int height,
-                                           int /*baseline*/,
-                                           gpointer user_data) {
-  SgfView *self = SGF_VIEW(user_data);
-
-  g_return_if_fail(SGF_IS_VIEW(self));
-  g_return_if_fail(GTK_IS_WIDGET(widget));
-
-  if (!self->lines_area) {
-    return;
-  }
-
-  gtk_widget_set_size_request(self->lines_area, width, height);
-}
-
 static void sgf_view_on_disc_clicked(GtkButton *button, gpointer user_data) {
   SgfView *self = SGF_VIEW(user_data);
 
@@ -142,6 +130,178 @@ static void sgf_view_on_disc_clicked(GtkButton *button, gpointer user_data) {
 
   sgf_view_set_selected(self, node);
   g_signal_emit(self, sgf_view_signals[SIGNAL_NODE_SELECTED], 0, node);
+}
+
+static void sgf_view_update_content_size(SgfView *self) {
+  g_return_if_fail(SGF_IS_VIEW(self));
+
+  if (!self->tree_box || !self->overlay || !self->lines_area) {
+    return;
+  }
+
+  int min_width = 0;
+  int nat_width = 0;
+  int min_height = 0;
+  int nat_height = 0;
+
+  gtk_widget_measure(self->tree_box, GTK_ORIENTATION_HORIZONTAL, -1, &min_width, &nat_width, NULL, NULL);
+  gtk_widget_measure(self->tree_box,
+                     GTK_ORIENTATION_VERTICAL,
+                     nat_width,
+                     &min_height,
+                     &nat_height,
+                     NULL,
+                     NULL);
+
+  gtk_widget_set_size_request(self->overlay, nat_width, nat_height);
+  gtk_widget_set_size_request(self->lines_area, nat_width, nat_height);
+}
+
+static const SgfNode *sgf_view_get_first_child(const SgfNode *node) {
+  const GPtrArray *children = sgf_node_get_children(node);
+  if (!children || children->len == 0) {
+    return NULL;
+  }
+  return g_ptr_array_index(children, 0);
+}
+
+static const SgfNode *sgf_view_get_sibling(const SgfNode *node, int offset) {
+  const SgfNode *parent = sgf_node_get_parent(node);
+  if (!parent) {
+    return NULL;
+  }
+
+  const GPtrArray *children = sgf_node_get_children(parent);
+  if (!children || children->len == 0) {
+    return NULL;
+  }
+
+  for (guint i = 0; i < children->len; ++i) {
+    if (g_ptr_array_index(children, i) == node) {
+      int target = (int)i + offset;
+      if (target < 0 || target >= (int)children->len) {
+        return NULL;
+      }
+      return g_ptr_array_index(children, (guint)target);
+    }
+  }
+
+  return NULL;
+}
+
+static const SgfNode *sgf_view_next_selection(const SgfNode *current, SgfViewNavigation navigation) {
+  if (!current) {
+    return NULL;
+  }
+
+  if (navigation == SGF_VIEW_NAVIGATE_PARENT) {
+    return sgf_node_get_parent(current);
+  }
+
+  if (navigation == SGF_VIEW_NAVIGATE_CHILD) {
+    return sgf_view_get_first_child(current);
+  }
+
+  if (navigation == SGF_VIEW_NAVIGATE_PREVIOUS_SIBLING) {
+    return sgf_view_get_sibling(current, -1);
+  }
+
+  if (navigation == SGF_VIEW_NAVIGATE_NEXT_SIBLING) {
+    return sgf_view_get_sibling(current, 1);
+  }
+
+  return NULL;
+}
+
+static void sgf_view_select_node(SgfView *self, const SgfNode *node, gboolean emit_signal) {
+  g_return_if_fail(SGF_IS_VIEW(self));
+
+  self->selected = node;
+  sgf_view_rebuild(self);
+  sgf_view_queue_scroll_to_selected(self);
+
+  if (emit_signal && node) {
+    g_signal_emit(self, sgf_view_signals[SIGNAL_NODE_SELECTED], 0, node);
+  }
+}
+
+static gboolean sgf_view_scroll_to_selected_cb(gpointer user_data) {
+  SgfView *self = SGF_VIEW(user_data);
+
+  if (!self->selected || !self->node_widgets || !self->root || !self->overlay) {
+    return G_SOURCE_REMOVE;
+  }
+
+  GtkWidget *widget = g_hash_table_lookup(self->node_widgets, (gpointer)self->selected);
+  if (!widget) {
+    return G_SOURCE_REMOVE;
+  }
+
+  graphene_rect_t bounds;
+  if (!gtk_widget_compute_bounds(widget, self->overlay, &bounds)) {
+    return G_SOURCE_REMOVE;
+  }
+
+  GtkAdjustment *hadjustment = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(self->root));
+  GtkAdjustment *vadjustment = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(self->root));
+
+  if (hadjustment) {
+    gtk_adjustment_clamp_page(hadjustment,
+                              bounds.origin.x,
+                              bounds.origin.x + bounds.size.width);
+  }
+
+  if (vadjustment) {
+    gtk_adjustment_clamp_page(vadjustment,
+                              bounds.origin.y,
+                              bounds.origin.y + bounds.size.height);
+  }
+
+  return G_SOURCE_REMOVE;
+}
+
+static void sgf_view_queue_scroll_to_selected(SgfView *self) {
+  g_return_if_fail(SGF_IS_VIEW(self));
+
+  g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,
+                  sgf_view_scroll_to_selected_cb,
+                  g_object_ref(self),
+                  g_object_unref);
+}
+
+static gboolean sgf_view_on_key_pressed(GtkEventControllerKey * /*controller*/,
+                                        guint keyval,
+                                        guint /*keycode*/,
+                                        GdkModifierType /*state*/,
+                                        gpointer user_data) {
+  SgfView *self = SGF_VIEW(user_data);
+
+  g_return_val_if_fail(SGF_IS_VIEW(self), GDK_EVENT_PROPAGATE);
+
+  if (!self->selected) {
+    return GDK_EVENT_PROPAGATE;
+  }
+
+  SgfViewNavigation navigation;
+  if (keyval == GDK_KEY_Left) {
+    navigation = SGF_VIEW_NAVIGATE_PARENT;
+  } else if (keyval == GDK_KEY_Right) {
+    navigation = SGF_VIEW_NAVIGATE_CHILD;
+  } else if (keyval == GDK_KEY_Up) {
+    navigation = SGF_VIEW_NAVIGATE_PREVIOUS_SIBLING;
+  } else if (keyval == GDK_KEY_Down) {
+    navigation = SGF_VIEW_NAVIGATE_NEXT_SIBLING;
+  } else {
+    return GDK_EVENT_PROPAGATE;
+  }
+
+  const SgfNode *target = sgf_view_next_selection(self->selected, navigation);
+  if (!target) {
+    return GDK_EVENT_PROPAGATE;
+  }
+
+  sgf_view_select_node(self, target, TRUE);
+  return GDK_EVENT_STOP;
 }
 
 static GtkWidget *sgf_view_build_disc(SgfView *self, const SgfNode *node) {
@@ -215,17 +375,20 @@ static void sgf_view_rebuild(SgfView *self) {
   self->node_widgets = g_hash_table_new(g_direct_hash, g_direct_equal);
 
   if (!self->tree) {
+    sgf_view_update_content_size(self);
     gtk_widget_queue_draw(self->lines_area);
     return;
   }
 
   const SgfNode *root = sgf_tree_get_root(self->tree);
   if (!root) {
+    sgf_view_update_content_size(self);
     gtk_widget_queue_draw(self->lines_area);
     return;
   }
 
   sgf_view_append_branch(self, root, 0, 0);
+  sgf_view_update_content_size(self);
   gtk_widget_queue_draw(self->lines_area);
 }
 
@@ -268,8 +431,10 @@ static void sgf_view_init(SgfView *self) {
                                  GTK_POLICY_AUTOMATIC);
   gtk_widget_set_hexpand(self->root, TRUE);
   gtk_widget_set_vexpand(self->root, TRUE);
+  gtk_widget_set_focusable(self->root, TRUE);
 
   self->overlay = gtk_overlay_new();
+  gtk_widget_set_focusable(self->overlay, TRUE);
   gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(self->root), self->overlay);
 
   self->lines_area = gtk_drawing_area_new();
@@ -288,10 +453,15 @@ static void sgf_view_init(SgfView *self) {
   gtk_widget_set_margin_end(self->tree_box, 8);
   gtk_widget_set_hexpand(self->tree_box, FALSE);
   gtk_widget_set_vexpand(self->tree_box, FALSE);
+  gtk_widget_set_focusable(self->tree_box, TRUE);
   gtk_widget_set_halign(self->tree_box, GTK_ALIGN_START);
   gtk_widget_set_valign(self->tree_box, GTK_ALIGN_START);
   gtk_overlay_add_overlay(GTK_OVERLAY(self->overlay), self->tree_box);
-  g_signal_connect(self->tree_box, "size-allocate", G_CALLBACK(sgf_view_on_tree_size_allocate), self);
+
+  GtkEventController *key_controller = gtk_event_controller_key_new();
+  gtk_event_controller_set_propagation_phase(key_controller, GTK_PHASE_CAPTURE);
+  g_signal_connect(key_controller, "key-pressed", G_CALLBACK(sgf_view_on_key_pressed), self);
+  gtk_widget_add_controller(self->root, key_controller);
 }
 
 SgfView *sgf_view_new(void) {
@@ -320,17 +490,36 @@ void sgf_view_set_tree(SgfView *self, SgfTree *tree) {
   self->selected = tree ? sgf_tree_get_current(tree) : NULL;
 
   sgf_view_rebuild(self);
+  sgf_view_queue_scroll_to_selected(self);
 }
 
 void sgf_view_set_selected(SgfView *self, const SgfNode *node) {
   g_return_if_fail(SGF_IS_VIEW(self));
 
-  self->selected = node;
-  sgf_view_rebuild(self);
+  sgf_view_select_node(self, node, FALSE);
+}
+
+const SgfNode *sgf_view_get_selected(SgfView *self) {
+  g_return_val_if_fail(SGF_IS_VIEW(self), NULL);
+
+  return self->selected;
+}
+
+gboolean sgf_view_navigate(SgfView *self, SgfViewNavigation navigation) {
+  g_return_val_if_fail(SGF_IS_VIEW(self), FALSE);
+
+  const SgfNode *target = sgf_view_next_selection(self->selected, navigation);
+  if (!target) {
+    return FALSE;
+  }
+
+  sgf_view_select_node(self, target, TRUE);
+  return TRUE;
 }
 
 void sgf_view_refresh(SgfView *self) {
   g_return_if_fail(SGF_IS_VIEW(self));
 
   sgf_view_rebuild(self);
+  sgf_view_queue_scroll_to_selected(self);
 }
