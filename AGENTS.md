@@ -30,26 +30,4 @@ implementation.
 
 # Repository overview
 
-This overview lists each non-trivial file so you can quickly find where functionality and documentation live.
-
-- README.md: high-level project description, dependencies, and basic build/run steps.
-- Makefile: build targets for the library, CLI, GTK app, tests, coverage, and screenshots.
-- src/board.h: board data structures and public helpers for coordinates, pieces, and playable squares.
-- src/board.c: board storage logic, reset/init, coordinate conversion, and piece helpers.
-- src/checkers_constants.h: shared size limits for boards, moves, and byte storage.
-- src/game.h: core game types, rules, state, and public API for move listing and application.
-- src/game.c: game lifecycle, move application, history, promotion, and winner updates.
-- src/game_print.c: terminal formatting for the board and move notation.
-- src/move_gen.c: move generation for simple moves, jumps, and rules like forced captures.
-- src/checkers_model.h: GObject model API that wraps the game engine for GTK use.
-- src/checkers_model.c: model implementation, move validation, random AI moves, and state-change signals.
-- src/checkers_cli.c: CLI entry point with a prompt-driven loop for human vs. AI play.
-- src/gcheckers.c: GTK application entry point that launches the GApplication.
-- src/gcheckers_application.h: GTK application type declaration.
-- src/gcheckers_application.c: GTK application activation that creates the main window and model.
-- src/gcheckers_window.h: GTK window type declaration.
-- src/gcheckers_window.c: GTK UI, board rendering, move selection, and styling logic.
-- tests: directory for all unit tests
-- tools/coverage_report.py: generates HTML coverage reports from gcov output.
-- tools/setup.sh: installs dependencies (GTK/Xvfb/ImageMagick) on Debian-based systems.
-- tools/screenshot_gcheckers.sh: runs the GTK app under Xvfb and captures a screenshot.
+See REPOSITORY_OVERVIEW.md for the repository overview.
