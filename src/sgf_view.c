@@ -313,10 +313,6 @@ static gboolean sgf_view_on_key_pressed(GtkEventControllerKey * /*controller*/,
 
   g_return_val_if_fail(SGF_IS_VIEW(self), GDK_EVENT_PROPAGATE);
 
-  if (!self->selected) {
-    return GDK_EVENT_PROPAGATE;
-  }
-
   SgfViewNavigation navigation;
   if (keyval == GDK_KEY_Left) {
     navigation = SGF_VIEW_NAVIGATE_PARENT;
@@ -330,9 +326,13 @@ static gboolean sgf_view_on_key_pressed(GtkEventControllerKey * /*controller*/,
     return GDK_EVENT_PROPAGATE;
   }
 
+  if (!self->selected) {
+    return GDK_EVENT_STOP;
+  }
+
   const SgfNode *target = sgf_view_next_selection(self->selected, navigation);
   if (!target) {
-    return GDK_EVENT_PROPAGATE;
+    return GDK_EVENT_STOP;
   }
 
   sgf_view_select_node(self, target, TRUE);
