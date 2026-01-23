@@ -24,6 +24,49 @@ static GtkWidget *sgf_view_find_grid(GtkWidget *overlay) {
   return NULL;
 }
 
+static GtkWidget *sgf_view_get_overlay(GtkWidget *root) {
+  GtkWidget *child = gtk_scrolled_window_get_child(GTK_SCROLLED_WINDOW(root));
+  if (GTK_IS_VIEWPORT(child)) {
+    child = gtk_viewport_get_child(GTK_VIEWPORT(child));
+  }
+  return child;
+}
+
+static GtkWidget *sgf_view_wrap_in_window(GtkWidget *root) {
+  GtkWidget *window = gtk_window_new();
+  gtk_window_set_default_size(GTK_WINDOW(window), 400, 300);
+  gtk_window_set_child(GTK_WINDOW(window), root);
+  gtk_window_present(GTK_WINDOW(window));
+  while (g_main_context_iteration(NULL, FALSE)) {
+  }
+  return window;
+}
+
+static void sgf_view_get_grid_position(GtkWidget *grid,
+                                       GtkWidget *child,
+                                       int *column,
+                                       int *row,
+                                       int *width,
+                                       int *height) {
+  GtkLayoutManager *layout = gtk_widget_get_layout_manager(grid);
+  GtkLayoutChild *layout_child = gtk_layout_manager_get_layout_child(layout, child);
+  g_assert_nonnull(layout_child);
+
+  GtkGridLayoutChild *grid_child = GTK_GRID_LAYOUT_CHILD(layout_child);
+  if (column) {
+    *column = gtk_grid_layout_child_get_column(grid_child);
+  }
+  if (row) {
+    *row = gtk_grid_layout_child_get_row(grid_child);
+  }
+  if (width) {
+    *width = gtk_grid_layout_child_get_column_span(grid_child);
+  }
+  if (height) {
+    *height = gtk_grid_layout_child_get_row_span(grid_child);
+  }
+}
+
 static GtkWidget *sgf_view_find_disc_for_node(GtkWidget *grid, const SgfNode *node) {
   GtkWidget *child = gtk_widget_get_first_child(grid);
   while (child) {
@@ -45,7 +88,8 @@ static void test_sgf_view_connectors(void) {
   sgf_view_set_tree(view, tree);
 
   GtkWidget *root = sgf_view_get_widget(view);
-  GtkWidget *overlay = gtk_scrolled_window_get_child(GTK_SCROLLED_WINDOW(root));
+  GtkWidget *window = sgf_view_wrap_in_window(root);
+  GtkWidget *overlay = sgf_view_get_overlay(root);
   g_assert_true(GTK_IS_OVERLAY(overlay));
 
   GtkWidget *lines_area = gtk_overlay_get_child(GTK_OVERLAY(overlay));
@@ -63,6 +107,7 @@ static void test_sgf_view_connectors(void) {
   child = gtk_widget_get_next_sibling(child);
   g_assert_true(GTK_IS_BUTTON(child));
 
+  gtk_window_destroy(GTK_WINDOW(window));
   g_clear_object(&view);
   g_clear_object(&tree);
 }
@@ -73,13 +118,15 @@ static void test_sgf_view_branch_columns(void) {
   const SgfNode *move_2 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, NULL);
   sgf_tree_append_move(tree, SGF_COLOR_BLACK, NULL);
   g_assert_true(sgf_tree_set_current(tree, move_1));
-  const SgfNode *branch_2 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, NULL);
+  GBytes *branch_payload = g_bytes_new_static("branch", 6);
+  const SgfNode *branch_2 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, branch_payload);
 
   SgfView *view = sgf_view_new();
   sgf_view_set_tree(view, tree);
 
   GtkWidget *root = sgf_view_get_widget(view);
-  GtkWidget *overlay = gtk_scrolled_window_get_child(GTK_SCROLLED_WINDOW(root));
+  GtkWidget *window = sgf_view_wrap_in_window(root);
+  GtkWidget *overlay = sgf_view_get_overlay(root);
   GtkWidget *tree_grid = sgf_view_find_grid(overlay);
   g_assert_nonnull(tree_grid);
 
@@ -93,18 +140,25 @@ static void test_sgf_view_branch_columns(void) {
   int main_row = -1;
   int main_width = 0;
   int main_height = 0;
-  gtk_grid_query_child(GTK_GRID(tree_grid), main_disc, &main_column, &main_row, &main_width, &main_height);
+  sgf_view_get_grid_position(tree_grid, main_disc, &main_column, &main_row, &main_width, &main_height);
 
   int branch_column = -1;
   int branch_row = -1;
   int branch_width = 0;
   int branch_height = 0;
-  gtk_grid_query_child(GTK_GRID(tree_grid), branch_disc, &branch_column, &branch_row, &branch_width, &branch_height);
+  sgf_view_get_grid_position(tree_grid,
+                             branch_disc,
+                             &branch_column,
+                             &branch_row,
+                             &branch_width,
+                             &branch_height);
 
   g_assert_cmpint(main_column, ==, 1);
   g_assert_cmpint(branch_column, ==, 1);
   g_assert_cmpint(branch_row, >, main_row);
 
+  gtk_window_destroy(GTK_WINDOW(window));
+  g_bytes_unref(branch_payload);
   g_clear_object(&view);
   g_clear_object(&tree);
 }
@@ -119,11 +173,15 @@ static void test_sgf_view_navigation(void) {
   const SgfNode *move_2 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, NULL);
   sgf_tree_append_move(tree, SGF_COLOR_BLACK, NULL);
   g_assert_true(sgf_tree_set_current(tree, move_1));
-  const SgfNode *branch_2 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, NULL);
+  GBytes *branch_payload = g_bytes_new_static("branch", 6);
+  const SgfNode *branch_2 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, branch_payload);
 
   SgfView *view = sgf_view_new();
   sgf_view_set_tree(view, tree);
   sgf_view_set_selected(view, move_1);
+
+  GtkWidget *root = sgf_view_get_widget(view);
+  GtkWidget *window = sgf_view_wrap_in_window(root);
 
   g_assert_true(sgf_view_navigate(view, SGF_VIEW_NAVIGATE_CHILD));
   g_assert_true(sgf_view_get_selected(view) == move_2);
@@ -137,6 +195,8 @@ static void test_sgf_view_navigation(void) {
   g_assert_true(sgf_view_navigate(view, SGF_VIEW_NAVIGATE_PARENT));
   g_assert_true(sgf_view_get_selected(view) == move_1);
 
+  gtk_window_destroy(GTK_WINDOW(window));
+  g_bytes_unref(branch_payload);
   g_clear_object(&view);
   g_clear_object(&tree);
 }

@@ -29,6 +29,7 @@ BROADWAY_PORT ?= 8085
 SCREEN_SIZE ?= 1280x720
 BROADWAYD_BIN ?= gtk4-broadwayd
 CHROMIUM_BIN ?= chromium-browser
+DISPLAY_TEST_RUNNER ?= tools/run_display_test.sh
 
 .PHONY: all clean test coverage screenshot test_screenshot
 
@@ -48,7 +49,7 @@ test: test_game test_game_print test_board test_move_gen test_checkers_model tes
 	./test_move_gen
 	./test_checkers_model
 	./test_sgf_tree
-	./test_sgf_view
+	$(DISPLAY_TEST_RUNNER) ./test_sgf_view
 
 test_game: tests/test_game.c $(SRCS) src/game.h
 	$(CC) $(CFLAGS) -o $@ tests/test_game.c $(SRCS) $(LDLIBS)
