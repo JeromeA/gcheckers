@@ -44,6 +44,17 @@ trees and the selected node could move off screen with no scroll adjustment.
 The fix measures the tree grid to size the overlay for scrolling, scrolls to the selected node after rebuilds, and
 adds keyboard navigation that moves between parent/child and sibling nodes while keeping focus in view.
 
+## SGF navigation keys moved focus and scrolled to move 1
+
+Navigation keys should keep focus in the SGF panel and leave the selected node unchanged when there is no valid sibling
+or child.
+
+The key handler propagated arrow events when it could not find a target node, letting GTK move focus to the first disc
+and scroll the panel back to move 1.
+
+The fix consumes navigation key presses even when no target node exists so focus stays in the SGF panel and the view
+does not scroll unexpectedly.
+
 ## Split panes shrank below their content sizes on launch
 
 The goal was for the left board pane and right controls pane to respect their natural minimum sizes when the window
