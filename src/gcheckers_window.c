@@ -1,5 +1,5 @@
 #include "gcheckers_window.h"
-#include "gcheckers_board_view.h"
+#include "board_view.h"
 #include "sgf_tree.h"
 #include "sgf_view.h"
 
@@ -10,7 +10,7 @@ struct _GCheckersWindow {
   GCheckersModel *model;
   GtkWidget *status_label;
   GtkWidget *reset_button;
-  GCheckersBoardView *board_view;
+  BoardView *board_view;
   SgfTree *sgf_tree;
   SgfView *sgf_view;
   GtkDropDown *white_control;
@@ -73,7 +73,7 @@ static void gcheckers_window_update_control_state(GCheckersWindow *self) {
 
   gboolean input_enabled = state->winner == CHECKERS_WINNER_NONE &&
                            gcheckers_window_is_user_control(self, state->turn);
-  gcheckers_board_view_set_input_enabled(self->board_view, input_enabled);
+  board_view_set_input_enabled(self->board_view, input_enabled);
 
   if (self->force_move_button) {
     gtk_widget_set_sensitive(self->force_move_button, state->winner == CHECKERS_WINNER_NONE);
@@ -145,7 +145,7 @@ static void gcheckers_window_replay_to_node(GCheckersWindow *self, const SgfNode
 
   self->is_replaying = TRUE;
   gcheckers_model_reset(self->model);
-  gcheckers_board_view_clear_selection(self->board_view);
+  board_view_clear_selection(self->board_view);
 
   GPtrArray *path = gcheckers_window_build_node_path(node);
   if (!path) {
@@ -197,7 +197,7 @@ static void gcheckers_window_update_status(GCheckersWindow *self) {
   }
   gtk_label_set_text(GTK_LABEL(self->status_label), status);
 
-  gcheckers_board_view_update(self->board_view);
+  board_view_update(self->board_view);
 }
 
 static void gcheckers_window_on_state_changed(GCheckersModel *model, gpointer user_data) {
@@ -218,7 +218,7 @@ static void gcheckers_window_on_reset_clicked(GtkButton * /*button*/, gpointer u
   g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
 
   gcheckers_model_reset(self->model);
-  gcheckers_board_view_clear_selection(self->board_view);
+  board_view_clear_selection(self->board_view);
   sgf_tree_reset(self->sgf_tree);
   sgf_view_set_tree(self->sgf_view, self->sgf_tree);
   self->last_history_size = 0;
@@ -294,7 +294,7 @@ static void gcheckers_window_set_model(GCheckersWindow *self, GCheckersModel *mo
                                             "state-changed",
                                             G_CALLBACK(gcheckers_window_on_state_changed),
                                             self);
-  gcheckers_board_view_set_model(self->board_view, self->model);
+  board_view_set_model(self->board_view, self->model);
   sgf_tree_reset(self->sgf_tree);
   sgf_view_set_tree(self->sgf_view, self->sgf_tree);
   self->last_history_size = 0;
@@ -431,8 +431,8 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_label_set_wrap(GTK_LABEL(self->status_label), TRUE);
   gtk_box_append(GTK_BOX(left_panel), self->status_label);
 
-  self->board_view = gcheckers_board_view_new();
-  gtk_box_append(GTK_BOX(left_panel), gcheckers_board_view_get_widget(self->board_view));
+  self->board_view = board_view_new();
+  gtk_box_append(GTK_BOX(left_panel), board_view_get_widget(self->board_view));
 
   GtkWidget *button_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
   gtk_box_append(GTK_BOX(left_panel), button_row);

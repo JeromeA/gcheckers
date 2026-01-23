@@ -1,4 +1,4 @@
-# Refactor SGF view into composable components
+# Refactor board view into composable components
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
@@ -7,91 +7,92 @@ This plan is maintained according to PLANS.md at the repository root (`PLANS.md`
 
 ## Purpose / Big Picture
 
-After this change, the SGF view code is split into small, composable GObject helpers for disc creation, tree layout,
-link rendering, selection/navigation, and scroll-to-selection. The SGF view behavior is unchanged for users, but the
-code becomes easier to maintain and extend. You can see it working by running the GTK app and verifying the SGF tree
-panel still renders discs, draws links, scrolls to selection, and responds to keyboard navigation.
+After this change, the checkers board UI is decomposed into smaller GObject helpers so each responsibility (grid
+layout, square content, move selection, piece palette, and last-move overlay rendering) is isolated and reusable. The
+GTK app should behave the same, but the board view logic is now easier to test and maintain. You can see it working by
+building the GTK app, running it, and confirming the board renders, selection highlights work, and last-move arrows are
+still drawn.
 
 ## Progress
 
-- [x] (2025-02-14 00:10Z) Capture current SGF view responsibilities and define new helper components with clear
-  interfaces.
-- [x] (2025-02-14 00:25Z) Implement new helper objects in `src/sgf_view_*.{c,h}` and wire them into `src/sgf_view.c`.
-- [x] (2025-02-14 00:30Z) Update build/test wiring for new sources and verify compilation.
-- [x] (2025-02-14 00:40Z) Run `make all` and `make test`, update this plan, and commit.
+- [x] (2025-02-14 14:15Z) Capture current board view responsibilities and define new helper components without the
+  GCheckers prefix.
+- [x] (2025-02-14 15:55Z) Implement new helper objects, rename the board view type/files, and wire helpers into the
+  window.
+- [x] (2025-02-14 15:58Z) Update build wiring, run `make all` and `make test`, and finalize documentation/commit.
 
 ## Surprises & Discoveries
 
-- Observation: The GTK test suite still skips SGF view tests when no display is available, so refactors remain safe but
-  cannot validate the UI in headless runs.
-  Evidence: `test_sgf_view` reports SKIP for GTK display availability during `make test`.
+- Observation: The screenshot test invoked by `make test` emits D-Bus connection errors in this environment, but the
+  test still completes and the overall command succeeds.
+  Evidence: `make test` logs `Failed to connect to the bus` while still completing all test binaries and SKIPing GTK
+  UI tests when no display is available.
 
 ## Decision Log
 
-- Decision: Split SGF view functionality into five helper types (disc factory, layout builder, link renderer,
-  selection controller, and scroller).
-  Rationale: Each responsibility is already present in sgf_view.c and has a clear, testable boundary.
-  Date/Author: 2025-02-14 / Codex
-- Decision: Add a selection controller method to set the selected node without requiring node-widget mappings.
-  Rationale: Tree changes can update selection before widgets exist; a raw setter prevents noisy debug logs.
+- Decision: Rename the board view type/files to `BoardView`/`board_view.{c,h}` and extract helper GObjects named
+  `BoardGrid`, `BoardSquare`, `BoardSelectionController`, `BoardMoveOverlay`, and `PiecePalette`.
+  Rationale: The user asked to remove the `GCheckers` prefix for class and file names while keeping responsibilities
+  separated along natural UI boundaries.
   Date/Author: 2025-02-14 / Codex
 
 ## Outcomes & Retrospective
 
-- Outcome: SGF view responsibilities are split into dedicated helper objects with the same user-facing behavior. Builds
-  and tests succeed with the new source layout, though UI tests remain skipped in headless environments.
+- Outcome: The board view was decomposed into helper GObjects with non-GCheckers names, and the GTK build/test suite
+  completed successfully.
 
 ## Context and Orientation
 
-The SGF view is implemented in `src/sgf_view.c` and exposed via `src/sgf_view.h`. It builds a GTK scrolled window with
-an overlay containing a drawing area for link lines and a grid of move discs. The file also handles selection state,
-keyboard navigation, and scroll-to-selection. The build uses Makefile variables that list SGF view sources, so any new
-source files must be added there.
+The existing board view is implemented in `src/gcheckers_board_view.c` and exposed in
+`src/gcheckers_board_view.h`. It owns GTK widget construction, input handling, and last-move drawing in a single file.
+The GTK window in `src/gcheckers_window.c` creates the board view and calls its update/selection APIs. The build for the
+GTK app is defined in `Makefile` under the `gcheckers` target, so any new sources must be listed there.
 
 ## Plan of Work
 
-First, extract disc creation and click handling into a small GObject helper that emits a node-clicked signal when a
-user activates a disc. Next, move the tree layout traversal and grid attachment logic into a layout helper that knows
-how to clear the grid, append branches, and populate the node-to-widget hash table using the disc factory. Then,
-extract the link drawing (including coordinate translation) into a renderer helper used by the drawing area callback.
-After that, move selection/navigation logic into a selection controller that manages the selected node and updates CSS
-classes based on the node-widget map. Finally, extract scroll-to-selection into a scroller helper that queues the
-adjustment updates. Update `src/sgf_view.c` to own and coordinate these helpers, and update the Makefile to compile the
-new source files.
+Start by renaming the board view type and file names to drop the `GCheckers` prefix. Then introduce new helper
+GObject types under `src/` for the board grid, square content, piece palette, move selection controller, and last-move
+overlay. Move existing logic into those helpers while keeping behavior intact. Update the board view implementation to
+own these helpers and delegate responsibilities. Update `src/gcheckers_window.c` to use the renamed board view type.
+Finally, update the Makefile sources to include the new files and remove the old names.
 
 ## Concrete Steps
 
-1) Add new helper headers and sources under `src/` and move the corresponding logic from `src/sgf_view.c`.
-2) Update `src/sgf_view.c` to hold the new helpers, delegate responsibilities, and keep behavior the same.
-3) Update the Makefile source lists to include the new SGF view helper sources.
-4) From the repository root, run:
+1) Replace `src/gcheckers_board_view.{c,h}` with `src/board_view.{c,h}` and rename the type and APIs accordingly.
+2) Add helper sources/headers under `src/` for `board_grid`, `board_square`, `board_selection_controller`,
+   `board_move_overlay`, and `piece_palette` and migrate logic from the old board view implementation.
+3) Update `src/gcheckers_window.c` to include the renamed board view header and use the new type names.
+4) Update the `gcheckers` target in `Makefile` to compile the new source files and remove the old ones.
+5) From the repository root, run:
 
    make all
    make test
 
-5) Update this plan with progress, discoveries, and decisions, then commit.
+6) Update this plan with progress, discoveries, and decisions, then commit.
 
 ## Validation and Acceptance
 
-The GTK app should still render the SGF disc tree with link lines, selected-disc styling, keyboard navigation, and
-scroll-to-selection. `make all` should build without warnings and `make test` should pass, including `test_sgf_view`.
+The GTK app should still render the checkers board, allow square selection with correct highlight styling, and draw the
+last move arrow overlay. `make all` should build all binaries without warnings, and `make test` should pass, with UI
+tests still behaving as before.
 
 ## Idempotence and Recovery
 
-The refactor is additive and safe to repeat. If compilation fails, re-run `make all` after adjusting the helper APIs
-until it links cleanly. If runtime behavior regresses, compare the SGF panel behavior before and after to identify the
-helper that needs adjustment.
+The refactor is additive and safe to repeat. If compilation fails, re-run `make all` after adjusting helper APIs and
+include paths. If behavior regresses, compare the old board view logic to the helper implementations and fix the
+delegate responsible for the regression.
 
 ## Artifacts and Notes
 
-None.
+None yet.
 
 ## Interfaces and Dependencies
 
-The helper types should be plain GObject final types placed under `src/sgf_view_*.{c,h}`. They should accept existing
-GTK widgets, the SGF tree, and the node-widget hash table as inputs rather than owning the SGF tree themselves. Signals
-should use `G_TYPE_POINTER` for SGF node pointers, matching existing `node-selected` conventions.
+The new helper types should be GObject final types in `src/board_*.{c,h}` and `src/piece_palette.{c,h}`. The board view
+should own each helper and expose the same public API as before (renamed to `board_view_*`). The helpers should accept
+existing GTK widgets, `GCheckersModel` pointers, and board sizing inputs rather than owning the model logic directly,
+except where model access is required for move selection or last-move rendering.
 
 Plan updates:
-- 2025-02-14: Created plan for SGF view refactor into helper objects.
-- 2025-02-14: Updated progress, decisions, and outcomes after completing the refactor and validation.
+- 2025-02-14: Created plan for board view refactor into helper objects with non-GCheckers names.
+- 2025-02-14: Marked implementation and validation steps complete after running build and tests.
