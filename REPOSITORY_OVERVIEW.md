@@ -1,7 +1,13 @@
 This overview lists each non-trivial file so you can quickly find where functionality and documentation live.
 
+- AGENTS.md: repository-specific agent instructions, including coding conventions and workflow expectations.
+- BUGS.md: log of prior bugs with symptoms and fixes to prevent regressions.
+- EXECPLAN.md: ExecPlan documenting the SGF view refactor into helper components, with progress and decisions.
+- PLANS.md: specification for writing and maintaining ExecPlans.
 - README.md: high-level project description, dependencies, and basic build/run steps.
 - Makefile: build targets for the library, CLI, GTK app, tests, coverage, and screenshots.
+- REPOSITORY_OVERVIEW.md: this repository map of non-trivial files and their roles.
+- google-chrome-stable_current_amd64.deb: Debian package artifact for Google Chrome, used by screenshot tooling.
 - src/board.h: board data structures and public helpers for coordinates, pieces, and playable squares.
 - src/board.c: board storage logic, reset/init, coordinate conversion, and piece helpers.
 - src/checkers_constants.h: shared size limits for boards, moves, and byte storage.
@@ -15,8 +21,26 @@ This overview lists each non-trivial file so you can quickly find where function
 - src/gcheckers.c: GTK application entry point that launches the GApplication.
 - src/gcheckers_application.h: GTK application type declaration.
 - src/gcheckers_application.c: GTK application activation that creates the main window and model.
+- src/gcheckers_board_view.h: board view widget API.
+- src/gcheckers_board_view.c: board view rendering and input handling.
+- src/gcheckers_man_paintable.h: GdkPaintable factory for board pieces.
+- src/gcheckers_man_paintable.c: paintable implementation for checker men and kings.
 - src/gcheckers_window.h: GTK window type declaration.
 - src/gcheckers_window.c: GTK UI, board rendering, move selection, and styling logic.
+- src/sgf_tree.h: SGF tree API for move nodes, parent/child links, and payload access.
+- src/sgf_tree.c: SGF tree storage, node allocation, and traversal helpers.
+- src/sgf_view.h: SGF view API for the move tree UI; game agnostic and should not mention checkers.
+- src/sgf_view.c: SGF view widget wiring, input handling, and helper coordination.
+- src/sgf_view_disc_factory.h: disc factory API for SGF move buttons.
+- src/sgf_view_disc_factory.c: disc widget creation and node-clicked signal wiring.
+- src/sgf_view_layout.h: layout helper API for positioning discs in the SGF tree grid.
+- src/sgf_view_layout.c: grid layout implementation for the SGF tree.
+- src/sgf_view_link_renderer.h: link renderer API for drawing connector lines between SGF nodes.
+- src/sgf_view_link_renderer.c: connector renderer that computes disc centers and draws node links.
+- src/sgf_view_scroller.h: scroller API for keeping selected SGF nodes in view.
+- src/sgf_view_scroller.c: scroll helper that clamps scrolled window adjustments to selected nodes.
+- src/sgf_view_selection_controller.h: selection controller API for tracking SGF selection and navigation.
+- src/sgf_view_selection_controller.c: selection logic that updates CSS classes and navigates siblings/parents.
 - tests: directory for all unit tests.
 - tools/coverage_report.py: generates HTML coverage reports from gcov output.
 - tools/setup.sh: installs dependencies (GTK/Xvfb/ImageMagick) on Debian-based systems.
