@@ -22,6 +22,17 @@ rows or styling could shift branch rows just enough that variation discs drifted
 The fix switches the move tree layout to a GtkGrid with homogeneous columns and attaches each disc to an explicit row
 and column, keeping branches aligned regardless of depth or styling.
 
+## SGF move tree navigation lost off-screen nodes
+
+The SGF move tree should allow scrolling when the layout grows beyond the available panel size, and keyboard
+navigation should keep the selected node visible.
+
+The overlay that held the tree kept its size tied to the visible viewport, so scrollbars never appeared for wide
+trees and the selected node could move off screen with no scroll adjustment.
+
+The fix measures the tree grid to size the overlay for scrolling, scrolls to the selected node after rebuilds, and
+adds keyboard navigation that moves between parent/child and sibling nodes while keeping focus in view.
+
 ## Split panes shrank below their content sizes on launch
 
 The goal was for the left board pane and right controls pane to respect their natural minimum sizes when the window
