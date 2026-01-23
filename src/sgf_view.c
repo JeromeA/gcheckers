@@ -282,13 +282,14 @@ static void sgf_view_init(SgfView *self) {
   self->tree_box = gtk_grid_new();
   gtk_grid_set_row_spacing(GTK_GRID(self->tree_box), sgf_view_disc_spacing);
   gtk_grid_set_column_spacing(GTK_GRID(self->tree_box), sgf_view_disc_spacing);
-  gtk_grid_set_column_homogeneous(GTK_GRID(self->tree_box), TRUE);
   gtk_widget_set_margin_top(self->tree_box, 8);
   gtk_widget_set_margin_bottom(self->tree_box, 8);
   gtk_widget_set_margin_start(self->tree_box, 8);
   gtk_widget_set_margin_end(self->tree_box, 8);
-  gtk_widget_set_hexpand(self->tree_box, TRUE);
-  gtk_widget_set_vexpand(self->tree_box, TRUE);
+  gtk_widget_set_hexpand(self->tree_box, FALSE);
+  gtk_widget_set_vexpand(self->tree_box, FALSE);
+  gtk_widget_set_halign(self->tree_box, GTK_ALIGN_START);
+  gtk_widget_set_valign(self->tree_box, GTK_ALIGN_START);
   gtk_overlay_add_overlay(GTK_OVERLAY(self->overlay), self->tree_box);
   g_signal_connect(self->tree_box, "size-allocate", G_CALLBACK(sgf_view_on_tree_size_allocate), self);
 }
