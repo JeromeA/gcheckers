@@ -7,7 +7,7 @@ broadway_port="${BROADWAY_PORT:-8085}"
 screen_size="${SCREEN_SIZE:-1280x720}"
 gsk_renderer="${GSK_RENDERER:-cairo}"
 gdk_backend="${GDK_BACKEND:-broadway}"
-chromium_bin="${CHROMIUM_BIN:-chromium-browser}"
+chromium_bin="${CHROMIUM_BIN:-google-chrome}"
 
 if ! command -v gtk4-broadwayd >/dev/null 2>&1; then
   echo "gtk4-broadwayd is required to capture screenshots." >&2
@@ -15,7 +15,7 @@ if ! command -v gtk4-broadwayd >/dev/null 2>&1; then
 fi
 
 if ! command -v "$chromium_bin" >/dev/null 2>&1; then
-  echo "Chromium is required to capture screenshots." >&2
+  echo "Chrome is required to capture screenshots." >&2
   exit 1
 fi
 
