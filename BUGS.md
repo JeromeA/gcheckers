@@ -136,3 +136,13 @@ The detection logic only looked for a `chromium` binary, but Debian-style instal
 
 The fix switches the check to `chromium-browser` and threads it through the screenshot script using a Makefile
 variable.
+
+## Screenshot tooling assumed chromium-browser when Chrome is installed
+
+The screenshot tooling should launch the installed Chrome binary without requiring Chromium-specific names.
+
+The scripts and Makefile defaulted to `chromium-browser`, so environments that only provide `google-chrome` skipped
+screenshots even though Chrome was installed.
+
+The fix updates the default binary name to `google-chrome` and keeps the presence check so screenshot capture still
+fails fast when Chrome is missing.

@@ -28,7 +28,7 @@ BROADWAY_DISPLAY_NUM ?= 5
 BROADWAY_PORT ?= 8085
 SCREEN_SIZE ?= 1280x720
 BROADWAYD_BIN ?= gtk4-broadwayd
-CHROMIUM_BIN ?= chromium-browser
+CHROMIUM_BIN ?= google-chrome
 
 .PHONY: all clean test coverage screenshot test_screenshot
 
@@ -81,7 +81,7 @@ test_screenshot: gcheckers tools/screenshot_gcheckers.sh
 		exit 0; \
 	fi; \
 	if ! command -v $(CHROMIUM_BIN) >/dev/null 2>&1; then \
-		echo "Skipping screenshot test: Chromium not available."; \
+		echo "Skipping screenshot test: Chrome not available."; \
 		exit 0; \
 	fi; \
 	tmp_file=$$(mktemp -t gcheckers_screenshot.XXXXXX.png); \
