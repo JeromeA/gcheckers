@@ -11,6 +11,17 @@ mistakes in the future. The first entry below shows a template.
 
 [How it was fixed]
 
+## SGF tree selection scrolled back to the first node
+
+The SGF move tree should keep the current scroll position stable and only nudge the view if a newly selected disc is
+partially off screen.
+
+Selecting a disc rebuilt the entire tree widget, which reset the scrolled window back to the first node before the
+selection scroll adjustment ran.
+
+The fix updates the selected disc styling in place when possible and only rebuilds the tree when the cached widget map
+is unavailable, keeping the scroll position stable while still ensuring the selected disc is visible.
+
 ## SGF branch discs were not aligned with main line columns
 
 The SGF move tree should keep discs aligned in strict columns so that main line moves and variations share the same

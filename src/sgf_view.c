@@ -213,11 +213,46 @@ static const SgfNode *sgf_view_next_selection(const SgfNode *current, SgfViewNav
   return NULL;
 }
 
+static gboolean sgf_view_update_selection_style(SgfView *self,
+                                                const SgfNode *previous,
+                                                const SgfNode *current) {
+  g_return_val_if_fail(SGF_IS_VIEW(self), FALSE);
+
+  if (!self->node_widgets) {
+    return FALSE;
+  }
+
+  gboolean handled = TRUE;
+
+  if (previous) {
+    GtkWidget *widget = g_hash_table_lookup(self->node_widgets, (gpointer)previous);
+    if (widget) {
+      gtk_widget_remove_css_class(widget, "sgf-disc-selected");
+    } else {
+      handled = FALSE;
+    }
+  }
+
+  if (current) {
+    GtkWidget *widget = g_hash_table_lookup(self->node_widgets, (gpointer)current);
+    if (widget) {
+      gtk_widget_add_css_class(widget, "sgf-disc-selected");
+    } else {
+      handled = FALSE;
+    }
+  }
+
+  return handled;
+}
+
 static void sgf_view_select_node(SgfView *self, const SgfNode *node, gboolean emit_signal) {
   g_return_if_fail(SGF_IS_VIEW(self));
 
+  const SgfNode *previous = self->selected;
   self->selected = node;
-  sgf_view_rebuild(self);
+  if (!sgf_view_update_selection_style(self, previous, node)) {
+    sgf_view_rebuild(self);
+  }
   sgf_view_queue_scroll_to_selected(self);
 
   if (emit_signal && node) {
