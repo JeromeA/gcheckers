@@ -2,12 +2,11 @@ This overview lists each non-trivial file so you can quickly find where function
 
 - AGENTS.md: repository-specific agent instructions, including coding conventions and workflow expectations.
 - BUGS.md: log of prior bugs with symptoms and fixes to prevent regressions.
-- EXECPLAN.md: ExecPlan documenting the SGF view refactor into helper components, with progress and decisions.
+- EXECPLAN.md: used for planning and tracking larger features and changes.
 - PLANS.md: specification for writing and maintaining ExecPlans.
 - README.md: high-level project description, dependencies, and basic build/run steps.
 - Makefile: build targets for the library, CLI, GTK app, tests, coverage, and screenshots.
 - REPOSITORY_OVERVIEW.md: this repository map of non-trivial files and their roles.
-- google-chrome-stable_current_amd64.deb: Debian package artifact for Google Chrome, used by screenshot tooling.
 - src/board.h: board data structures and public helpers for coordinates, pieces, and playable squares.
 - src/board.c: board storage logic, reset/init, coordinate conversion, and piece helpers.
 - src/checkers_constants.h: shared size limits for boards, moves, and byte storage.
