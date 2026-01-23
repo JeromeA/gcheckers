@@ -1,4 +1,4 @@
-# Add SGF move tree and navigation panel
+# Refactor SGF view into composable components
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
@@ -7,152 +7,91 @@ This plan is maintained according to PLANS.md at the repository root (`PLANS.md`
 
 ## Purpose / Big Picture
 
-After this change, the GTK app shows a split window with the checkers board on the left and an SGF move tree panel on
-the right. Each move played adds a numbered black or white disc to the SGF panel, selects it, and lets the user click
-any prior move to restore the game state by replaying moves from the beginning. The SGF data model and view are generic
-and reusable for other games. The UI also exposes per-color dropdowns to choose between human and computer control and a
-"Force move" button that triggers an AI move for the current player without auto-playing when navigating the SGF.
-You can see it working by running `./gcheckers`, making a few moves, and clicking earlier discs to jump the board state
-back; the SGF panel should reflect the current selection, and the Force move button should cause the AI to play a move
-when clicked.
+After this change, the SGF view code is split into small, composable GObject helpers for disc creation, tree layout,
+link rendering, selection/navigation, and scroll-to-selection. The SGF view behavior is unchanged for users, but the
+code becomes easier to maintain and extend. You can see it working by running the GTK app and verifying the SGF tree
+panel still renders discs, draws links, scrolls to selection, and responds to keyboard navigation.
 
 ## Progress
 
-- [x] (2026-01-18 20:05Z) Review existing GTK layout, model APIs, and tests to determine integration points for an SGF
-  model/view and AI control widgets.
-- [x] (2026-01-18 20:20Z) Define a generic SGF tree object with nodes, colors, payload storage, and selection APIs, plus
-  unit tests.
-- [x] (2026-01-18 20:30Z) Add a generic SGF view widget that renders numbered discs with selection handling and emits
-  node-selection signals.
-- [x] (2026-01-18 20:40Z) Integrate SGF tree and view into the GTK window with a split layout, AI control dropdowns, and
-  Force move button.
-- [x] (2026-01-18 20:50Z) Wire the checkers model to append moves to SGF, replay moves on selection, and ensure AI only
-  moves when forced.
-- [x] (2026-01-18 20:55Z) Run `make all`, `make test`, and `make screenshot`, then update the plan and commit.
+- [x] (2025-02-14 00:10Z) Capture current SGF view responsibilities and define new helper components with clear
+  interfaces.
+- [x] (2025-02-14 00:25Z) Implement new helper objects in `src/sgf_view_*.{c,h}` and wire them into `src/sgf_view.c`.
+- [x] (2025-02-14 00:30Z) Update build/test wiring for new sources and verify compilation.
+- [x] (2025-02-14 00:40Z) Run `make all` and `make test`, update this plan, and commit.
 
 ## Surprises & Discoveries
 
-- Observation: The board view previously hard-coded white as the only human-controlled side, so it needed explicit input
-  gating to support user/computer control per color.
-  Evidence: The pre-change board view only enabled clicks when `state->turn == CHECKERS_COLOR_WHITE`.
+- Observation: The GTK test suite still skips SGF view tests when no display is available, so refactors remain safe but
+  cannot validate the UI in headless runs.
+  Evidence: `test_sgf_view` reports SKIP for GTK display availability during `make test`.
 
 ## Decision Log
 
-- Decision: Store SGF node payloads as `GBytes` to keep the SGF tree generic and decoupled from game-specific structs.
-  Rationale: `GBytes` gives copyable, ref-counted storage that callers can interpret without the SGF tree knowing the
-  payload type.
-  Date/Author: 2026-01-18 / Codex
-- Decision: Use the model's history size to detect newly applied moves for SGF updates instead of comparing move
-  contents.
-  Rationale: Move content can repeat, while the history counter accurately signals when a new move has been applied.
-  Date/Author: 2026-01-18 / Codex
-- Decision: Remove automatic AI turns in favor of the explicit Force move button.
-  Rationale: The requirement states navigation should never auto-trigger AI and introduces Force move for manual control.
-  Date/Author: 2026-01-18 / Codex
+- Decision: Split SGF view functionality into five helper types (disc factory, layout builder, link renderer,
+  selection controller, and scroller).
+  Rationale: Each responsibility is already present in sgf_view.c and has a clear, testable boundary.
+  Date/Author: 2025-02-14 / Codex
+- Decision: Add a selection controller method to set the selected node without requiring node-widget mappings.
+  Rationale: Tree changes can update selection before widgets exist; a raw setter prevents noisy debug logs.
+  Date/Author: 2025-02-14 / Codex
 
 ## Outcomes & Retrospective
 
-- Outcome: The GTK UI now includes a split SGF panel with selectable move discs, generic SGF tree/view components, and
-  explicit player-control widgets plus a Force move action. SGF navigation replays moves without triggering AI. Tests,
-  builds, and UI screenshot checks were run.
+- Outcome: SGF view responsibilities are split into dedicated helper objects with the same user-facing behavior. Builds
+  and tests succeed with the new source layout, though UI tests remain skipped in headless environments.
 
 ## Context and Orientation
 
-The checkers engine is wrapped by `src/checkers_model.c`, which exposes move listing, application, and random AI
-selection; the GTK window in `src/gcheckers_window.c` builds the UI and responds to state changes. The board itself is
-rendered via `src/gcheckers_board_view.c`. The new SGF model and SGF view must be generic and not depend on checkers
-code, so they should live in new `src/sgf_*.{c,h}` files with GLib/GObject patterns. The SGF view will be a GObject
-wrapper around GTK widgets, similar to `GCheckersBoardView`, and will emit signals for selection changes so the window
-can replay moves via the checkers model. Unit tests live under `tests/` and are run by `make test`.
+The SGF view is implemented in `src/sgf_view.c` and exposed via `src/sgf_view.h`. It builds a GTK scrolled window with
+an overlay containing a drawing area for link lines and a grid of move discs. The file also handles selection state,
+keyboard navigation, and scroll-to-selection. The build uses Makefile variables that list SGF view sources, so any new
+source files must be added there.
 
 ## Plan of Work
 
-First, inspect the existing GTK window layout, model API, and tests to choose integration points for new objects. Next,
-add a generic SGF tree implementation with nodes that store color, move numbers, and arbitrary payload bytes. Provide
-functions to append moves, retrieve the root and current nodes, change the current node, and traverse the main line for
-rendering; add unit tests in `tests/test_sgf_tree.c` that cover append, selection, and payload access. Then implement a
-generic SGF view object that owns a GTK container, renders a chain of numbered black/white discs with selection
-highlighting, and emits a signal when a node is selected by clicking. After that, update the GTK window to use a split
-pane with the board on the left and a sidebar containing the SGF view plus AI control widgets (dropdowns for human vs.
-computer for each color, and a Force move button). Finally, wire the checkers model to append each applied move to the
-SGF tree, to replay moves from the SGF when a node is selected, and to only let the AI move when the Force move button
-is pressed.
+First, extract disc creation and click handling into a small GObject helper that emits a node-clicked signal when a
+user activates a disc. Next, move the tree layout traversal and grid attachment logic into a layout helper that knows
+how to clear the grid, append branches, and populate the node-to-widget hash table using the disc factory. Then,
+extract the link drawing (including coordinate translation) into a renderer helper used by the drawing area callback.
+After that, move selection/navigation logic into a selection controller that manages the selected node and updates CSS
+classes based on the node-widget map. Finally, extract scroll-to-selection into a scroller helper that queues the
+adjustment updates. Update `src/sgf_view.c` to own and coordinate these helpers, and update the Makefile to compile the
+new source files.
 
 ## Concrete Steps
 
-1) Review `src/gcheckers_window.c`, `src/checkers_model.c`, and the current tests in `tests/` to plan integration.
-2) Add `src/sgf_tree.h` and `src/sgf_tree.c` defining the SGF tree API and implement unit tests in
-   `tests/test_sgf_tree.c`.
-3) Add `src/sgf_view.h` and `src/sgf_view.c` to render a chain/tree of numbered discs with selection and signals.
-4) Update `src/gcheckers_window.c` to build the split UI, add AI controls, and integrate SGF view events.
-5) Update `src/checkers_model.c` or window logic to append moves to the SGF tree and replay moves from selection.
-6) From the repository root, run:
+1) Add new helper headers and sources under `src/` and move the corresponding logic from `src/sgf_view.c`.
+2) Update `src/sgf_view.c` to hold the new helpers, delegate responsibilities, and keep behavior the same.
+3) Update the Makefile source lists to include the new SGF view helper sources.
+4) From the repository root, run:
 
    make all
    make test
-   make screenshot
 
-7) Update this plan with progress, surprises, and decisions, then commit.
+5) Update this plan with progress, discoveries, and decisions, then commit.
 
 ## Validation and Acceptance
 
-The GTK window should show a split layout with the board on the left and an SGF panel on the right. As the user plays
-moves, the SGF panel should show new numbered discs with the correct color, and the newest disc should be selected.
-Clicking an earlier disc should restore the board to that position by replaying moves from the start, without triggering
-an automatic AI move. The Force move button should apply one AI move for the current player, regardless of the dropdown
-settings. `make all` should build all binaries without warnings, `make test` should pass including the new SGF unit
-tests, and `make screenshot` should produce a UI screenshot without committing it.
+The GTK app should still render the SGF disc tree with link lines, selected-disc styling, keyboard navigation, and
+scroll-to-selection. `make all` should build without warnings and `make test` should pass, including `test_sgf_view`.
 
 ## Idempotence and Recovery
 
-All steps are additive and can be repeated safely. If build tools or GTK dependencies are missing, install them using the
-existing tooling described in README.md or tools/setup.sh, then rerun the build and tests. If the SGF view layout needs
-adjustment, modify the GTK widgets and rerun `make screenshot` without committing the generated images.
+The refactor is additive and safe to repeat. If compilation fails, re-run `make all` after adjusting the helper APIs
+until it links cleanly. If runtime behavior regresses, compare the SGF panel behavior before and after to identify the
+helper that needs adjustment.
 
 ## Artifacts and Notes
 
-Expected SGF unit test output excerpt:
-
-  PASS: sgf tree append and selection
+None.
 
 ## Interfaces and Dependencies
 
-`src/sgf_tree.h` should define:
-
-  typedef enum {
-    SGF_COLOR_NONE = 0,
-    SGF_COLOR_BLACK,
-    SGF_COLOR_WHITE
-  } SgfColor;
-
-  typedef struct _SgfNode SgfNode;
-  G_DECLARE_FINAL_TYPE(SgfTree, sgf_tree, SGF, TREE, GObject)
-
-  SgfTree *sgf_tree_new(void);
-  void sgf_tree_reset(SgfTree *self);
-  const SgfNode *sgf_tree_get_root(SgfTree *self);
-  const SgfNode *sgf_tree_get_current(SgfTree *self);
-  const SgfNode *sgf_tree_append_move(SgfTree *self, SgfColor color, GBytes *payload);
-  gboolean sgf_tree_set_current(SgfTree *self, const SgfNode *node);
-  GPtrArray *sgf_tree_build_main_line(SgfTree *self);
-  SgfColor sgf_node_get_color(const SgfNode *node);
-  guint sgf_node_get_move_number(const SgfNode *node);
-  const SgfNode *sgf_node_get_parent(const SgfNode *node);
-  const GPtrArray *sgf_node_get_children(const SgfNode *node);
-  GBytes *sgf_node_get_payload(const SgfNode *node);
-
-`src/sgf_view.h` should define:
-
-  G_DECLARE_FINAL_TYPE(SgfView, sgf_view, SGF, VIEW, GObject)
-
-  SgfView *sgf_view_new(void);
-  GtkWidget *sgf_view_get_widget(SgfView *self);
-  void sgf_view_set_tree(SgfView *self, SgfTree *tree);
-  void sgf_view_set_selected(SgfView *self, const SgfNode *node);
-  void sgf_view_refresh(SgfView *self);
-
-The SGF view should emit a `node-selected` signal with the selected node pointer when the user clicks a disc.
+The helper types should be plain GObject final types placed under `src/sgf_view_*.{c,h}`. They should accept existing
+GTK widgets, the SGF tree, and the node-widget hash table as inputs rather than owning the SGF tree themselves. Signals
+should use `G_TYPE_POINTER` for SGF node pointers, matching existing `node-selected` conventions.
 
 Plan updates:
-- 2026-01-18: Plan created for SGF move tree, view, and UI integration.
-- 2026-01-18: Updated interfaces to include sgf tree reset, node child access, and SGF view refresh.
+- 2025-02-14: Created plan for SGF view refactor into helper objects.
+- 2025-02-14: Updated progress, decisions, and outcomes after completing the refactor and validation.
