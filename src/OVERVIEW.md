@@ -26,7 +26,7 @@ Collaborates with: `GCheckersWindow` (signal handlers and `player_controls_panel
 
 ## `gcheckers_style_init()` (`src/gcheckers_style.c`)
 Module: `gcheckers_style_init()` (style helper, not a class).
-Role: installs application CSS once per process using `g_once_init_enter/leave`.
+Role: installs application CSS once per process using `g_once_init_enter/leave`, including SGF disc colors.
 Owns: CSS string and `GtkCssProvider` setup.
 Collaborates with: `GdkDisplay`/`GtkStyleContext` and is invoked by `GCheckersWindow`.
 

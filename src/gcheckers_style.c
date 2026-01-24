@@ -68,7 +68,7 @@ static const char *gcheckers_style_css =
     "  min-height: 34px;"
     "}"
     ".sgf-disc-black { background-color: #222; color: #fff; }"
-    ".sgf-disc-white { background-color: #eee; color: #111; border: 1px solid #222; }"
+    ".sgf-disc-white { background-color: #fff; color: #111; border: 1px solid #222; }"
     ".sgf-disc-selected { box-shadow: 0 0 0 3px #5cc7ff; }";
 
 void gcheckers_style_init(void) {
