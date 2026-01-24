@@ -38,14 +38,28 @@ static void sgf_view_layout_attach_disc(SgfViewLayout *self,
                                         GHashTable *node_widgets,
                                         guint row,
                                         guint column,
-                                        int disc_stride) {
+                                        int disc_stride,
+                                        guint *max_row,
+                                        guint *max_column) {
   g_return_if_fail(SGF_IS_VIEW_LAYOUT(self));
   g_return_if_fail(SGF_IS_VIEW_DISC_FACTORY(disc_factory));
   g_return_if_fail(GTK_IS_GRID(grid));
   g_return_if_fail(node != NULL);
 
-  GtkWidget *disc = sgf_view_layout_build_disc(self, disc_factory, node, selected, node_widgets, disc_stride);
+  GtkWidget *disc = sgf_view_layout_build_disc(self,
+                                               disc_factory,
+                                               node,
+                                               selected,
+                                               node_widgets,
+                                               disc_stride);
   gtk_grid_attach(grid, disc, (int)column, (int)row, 1, 1);
+
+  if (max_row) {
+    *max_row = MAX(*max_row, row);
+  }
+  if (max_column) {
+    *max_column = MAX(*max_column, column);
+  }
 }
 
 static guint sgf_view_layout_append_branch(SgfViewLayout *self,
@@ -56,7 +70,9 @@ static guint sgf_view_layout_append_branch(SgfViewLayout *self,
                                            GHashTable *node_widgets,
                                            guint row,
                                            guint depth,
-                                           int disc_stride) {
+                                           int disc_stride,
+                                           guint *max_row,
+                                           guint *max_column) {
   const GPtrArray *children = sgf_node_get_children(parent);
   if (!children || children->len == 0) {
     return row;
@@ -74,7 +90,9 @@ static guint sgf_view_layout_append_branch(SgfViewLayout *self,
                                   node_widgets,
                                   row,
                                   depth,
-                                  disc_stride);
+                                  disc_stride,
+                                  max_row,
+                                  max_column);
       current_row = sgf_view_layout_append_branch(self,
                                                   disc_factory,
                                                   grid,
@@ -83,7 +101,9 @@ static guint sgf_view_layout_append_branch(SgfViewLayout *self,
                                                   node_widgets,
                                                   row,
                                                   depth + 1,
-                                                  disc_stride);
+                                                  disc_stride,
+                                                  max_row,
+                                                  max_column);
     } else {
       guint branch_row = current_row + 1;
       sgf_view_layout_attach_disc(self,
@@ -94,7 +114,9 @@ static guint sgf_view_layout_append_branch(SgfViewLayout *self,
                                   node_widgets,
                                   branch_row,
                                   depth,
-                                  disc_stride);
+                                  disc_stride,
+                                  max_row,
+                                  max_column);
       current_row = sgf_view_layout_append_branch(self,
                                                   disc_factory,
                                                   grid,
@@ -103,7 +125,9 @@ static guint sgf_view_layout_append_branch(SgfViewLayout *self,
                                                   node_widgets,
                                                   branch_row,
                                                   depth + 1,
-                                                  disc_stride);
+                                                  disc_stride,
+                                                  max_row,
+                                                  max_column);
     }
   }
   return current_row;
@@ -127,10 +151,19 @@ void sgf_view_layout_build(SgfViewLayout *self,
                            GHashTable *node_widgets,
                            SgfViewDiscFactory *disc_factory,
                            const SgfNode *selected,
-                           int disc_stride) {
+                           int disc_stride,
+                           guint *out_max_row,
+                           guint *out_max_column) {
   g_return_if_fail(SGF_IS_VIEW_LAYOUT(self));
   g_return_if_fail(GTK_IS_GRID(grid));
   g_return_if_fail(SGF_IS_VIEW_DISC_FACTORY(disc_factory));
+
+  if (out_max_row) {
+    *out_max_row = 0;
+  }
+  if (out_max_column) {
+    *out_max_column = 0;
+  }
 
   sgf_view_layout_clear_container(GTK_WIDGET(grid));
 
@@ -143,5 +176,29 @@ void sgf_view_layout_build(SgfViewLayout *self,
     return;
   }
 
-  sgf_view_layout_append_branch(self, disc_factory, grid, root, selected, node_widgets, 0, 0, disc_stride);
+  const GPtrArray *children = sgf_node_get_children(root);
+  if (!children || children->len == 0) {
+    return;
+  }
+
+  guint max_row = 0;
+  guint max_column = 0;
+  sgf_view_layout_append_branch(self,
+                                disc_factory,
+                                grid,
+                                root,
+                                selected,
+                                node_widgets,
+                                0,
+                                0,
+                                disc_stride,
+                                &max_row,
+                                &max_column);
+
+  if (out_max_row) {
+    *out_max_row = max_row;
+  }
+  if (out_max_column) {
+    *out_max_column = max_column;
+  }
 }

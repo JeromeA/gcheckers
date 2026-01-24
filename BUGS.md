@@ -245,3 +245,16 @@ dropped.
 
 The fix queues the scroll work on a tick callback so it runs after layout, retries for a few frames while widgets
 settle, and adds a regression test that appends moves after the view is mapped and verifies the adjustment changes.
+
+## SGF view snapped back to the first node after appending moves
+
+While playing, the SGF panel could jump back to node one instead of keeping the newly appended node visible.
+
+Even after moving the scroll work onto a tick callback, the `GtkScrolledWindow` adjustments could lag behind the SGF
+content size, especially when the child was wrapped in a `GtkViewport`. The scroll callback would run before the
+adjustments caught up and clamp the view against stale bounds near the origin.
+
+The fix computes layout extents during rebuild, sets both the overlay and viewport size requests to the expected
+content size, and updates the scroller to derive bounds from grid coordinates while ensuring the adjustments' upper
+bounds are at least the expected size. The regression test now waits for scrolling to occur within a timeout and
+asserts that all nodes are present.

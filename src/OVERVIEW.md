@@ -122,7 +122,7 @@ Collaborates with: SGF view and controller modules.
 
 ### SGF view (`src/sgf_view.c`, `src/sgf_view.h`)
 Class: `SgfView` (`GtkWidget`).
-Role: game-agnostic move tree UI that wires together layout, rendering, and selection helpers.
+Role: game-agnostic move tree UI that wires together layout, rendering, selection helpers, and scrolled content sizing.
 Collaborates with: SGF layout, selection, scroller, and disc factory helpers.
 
 ### SGF disc factory (`src/sgf_view_disc_factory.c`, `src/sgf_view_disc_factory.h`)
@@ -132,7 +132,7 @@ Collaborates with: `SgfView` and the SGF tree.
 
 ### SGF layout (`src/sgf_view_layout.c`, `src/sgf_view_layout.h`)
 Module: layout helpers.
-Role: position discs in a grid-based SGF tree layout.
+Role: position discs in a grid-based SGF tree layout and report the maximum row/column extents for sizing.
 Collaborates with: `SgfView` and link rendering.
 
 ### SGF link renderer (`src/sgf_view_link_renderer.c`, `src/sgf_view_link_renderer.h`)
@@ -142,8 +142,8 @@ Collaborates with: SGF layout data and view sizing.
 
 ### SGF scroller (`src/sgf_view_scroller.c`, `src/sgf_view_scroller.h`)
 Module: selection scroll helper.
-Role: clamp scrolled window adjustments and keep selected nodes in view, queueing scrolls on tick callbacks so layout
-has settled.
+Role: clamp scrolled window adjustments and keep selected nodes in view by queueing tick callbacks, computing bounds
+from grid coordinates, and nudging adjustment upper bounds to the expected content size while updates run.
 Collaborates with: `SgfView` and selection controller updates.
 
 ### SGF selection controller (`src/sgf_view_selection_controller.c`, `src/sgf_view_selection_controller.h`)

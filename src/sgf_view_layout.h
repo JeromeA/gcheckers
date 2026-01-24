@@ -19,7 +19,9 @@ void sgf_view_layout_build(SgfViewLayout *self,
                            GHashTable *node_widgets,
                            SgfViewDiscFactory *disc_factory,
                            const SgfNode *selected,
-                           int disc_stride);
+                           int disc_stride,
+                           guint *out_max_row,
+                           guint *out_max_column);
 
 G_END_DECLS
 
