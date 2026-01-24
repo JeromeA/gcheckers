@@ -34,7 +34,7 @@ static void board_view_update_board(BoardView *self, const GameState *state) {
   gboolean highlight_moves = FALSE;
   bool playable_starts[CHECKERS_MAX_SQUARES] = {false};
   bool possible_destinations[CHECKERS_MAX_SQUARES] = {false};
-  if (state->winner == CHECKERS_WINNER_NONE && state->turn == CHECKERS_COLOR_WHITE) {
+  if (state->winner == CHECKERS_WINNER_NONE) {
     moves = gcheckers_model_list_moves(self->model);
     moves_loaded = TRUE;
     highlight_moves = moves.count > 0;
