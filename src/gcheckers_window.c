@@ -172,8 +172,8 @@ static void gcheckers_window_unparent_controls_panel(GCheckersWindow *self) {
     return;
   }
 
-  if (self->controls_row && parent == self->controls_row) {
-    gtk_box_remove(GTK_BOX(self->controls_row), panel_widget);
+  if (GTK_IS_BOX(parent)) {
+    gtk_box_remove(GTK_BOX(parent), panel_widget);
     return;
   }
 
@@ -188,9 +188,6 @@ static void gcheckers_window_dispose(GObject *object) {
     self->state_handler_id = 0;
   }
 
-  if (self->controls_panel) {
-    g_object_ref(self->controls_panel);
-  }
   gcheckers_window_unparent_controls_panel(self);
 
   g_clear_object(&self->sgf_controller);
@@ -256,7 +253,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   self->controls_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
   gtk_box_append(GTK_BOX(right_panel), self->controls_row);
 
-  self->controls_panel = player_controls_panel_new();
+  self->controls_panel = g_object_ref_sink(player_controls_panel_new());
   gtk_box_append(GTK_BOX(self->controls_row), GTK_WIDGET(self->controls_panel));
   g_signal_connect(self->controls_panel,
                    "control-changed",
