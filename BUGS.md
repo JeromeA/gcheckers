@@ -160,3 +160,12 @@ shutdown.
 
 The fix removes the controls panel from its containing row during `GCheckersWindow::dispose` and adds a GTK test that
 keeps the panel alive across `g_object_run_dispose()` to assert that it has been unparented.
+## src/OVERVIEW.md mixed section styles and became hard to scan
+
+The overview should use a consistent section format so contributors can quickly find module responsibilities.
+
+The second half of the document used a flat bullet list while the first half used structured headings, which made the
+file inconsistent and harder to navigate.
+
+The fix rewrites the remainder of the document into the same heading-based format, grouping related modules under
+subsystem sections.
