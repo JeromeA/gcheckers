@@ -47,14 +47,29 @@ static void test_gcheckers_window_unparents_controls_panel_on_dispose(void) {
   g_clear_object(&app);
 }
 
+static void test_gcheckers_window_dispose_without_external_panel_ref(void) {
+  GtkApplication *app = gtk_application_new("org.example.gcheckers.tests", G_APPLICATION_DEFAULT_FLAGS);
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersWindow *window = gcheckers_window_new(app, model);
+
+  g_object_run_dispose(G_OBJECT(window));
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   if (!gtk_init_check()) {
     g_test_add_func("/gcheckers-window/dispose-unparents-controls", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/dispose-without-panel-ref", test_gcheckers_window_skip);
     return g_test_run();
   }
 
   g_test_add_func("/gcheckers-window/dispose-unparents-controls",
                   test_gcheckers_window_unparents_controls_panel_on_dispose);
+  g_test_add_func("/gcheckers-window/dispose-without-panel-ref",
+                  test_gcheckers_window_dispose_without_external_panel_ref);
   return g_test_run();
 }

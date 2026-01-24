@@ -160,6 +160,7 @@ shutdown.
 
 The fix removes the controls panel from its containing row during `GCheckersWindow::dispose` and adds a GTK test that
 keeps the panel alive across `g_object_run_dispose()` to assert that it has been unparented.
+
 ## src/OVERVIEW.md mixed section styles and became hard to scan
 
 The overview should use a consistent section format so contributors can quickly find module responsibilities.
@@ -169,3 +170,17 @@ file inconsistent and harder to navigate.
 
 The fix rewrites the remainder of the document into the same heading-based format, grouping related modules under
 subsystem sections.
+
+## `GCheckersWindow::dispose` unparented the controls panel without holding a reference
+
+The window should be able to unparent the `PlayerControlsPanel` during dispose without requiring external references.
+
+`GCheckersWindow` called `gtk_box_remove()`/`gtk_widget_unparent()` and then `g_clear_object()` while it only held a
+non-owning pointer to the controls panel.
+
+Unparenting dropped the container's last reference and finalized the widget, so the subsequent `g_clear_object()` hit
+`g_object_unref()` with a non-`GObject` pointer and raised a GLib-GObject critical.
+
+The fix temporarily acquires a reference to the controls panel before unparenting so the final `g_clear_object()` runs
+on a still-valid object, and adds a regression test that disposes the window without taking an external panel
+reference.

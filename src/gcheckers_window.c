@@ -188,6 +188,9 @@ static void gcheckers_window_dispose(GObject *object) {
     self->state_handler_id = 0;
   }
 
+  if (self->controls_panel) {
+    g_object_ref(self->controls_panel);
+  }
   gcheckers_window_unparent_controls_panel(self);
 
   g_clear_object(&self->sgf_controller);
