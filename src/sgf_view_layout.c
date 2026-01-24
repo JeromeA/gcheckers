@@ -17,6 +17,21 @@ static void sgf_view_layout_clear_container(GtkWidget *container) {
   }
 }
 
+static void sgf_view_layout_update_extent(GArray *extents, guint index, int value) {
+  if (!extents) {
+    return;
+  }
+
+  if (extents->len <= index) {
+    g_array_set_size(extents, index + 1);
+  }
+
+  int current = g_array_index(extents, int, index);
+  if (value > current) {
+    g_array_index(extents, int, index) = value;
+  }
+}
+
 static GtkWidget *sgf_view_layout_build_disc(SgfViewLayout *self,
                                              SgfViewDiscFactory *disc_factory,
                                              const SgfNode *node,
@@ -39,6 +54,8 @@ static void sgf_view_layout_attach_disc(SgfViewLayout *self,
                                         guint row,
                                         guint column,
                                         int disc_stride,
+                                        GArray *column_widths,
+                                        GArray *row_heights,
                                         guint *max_row,
                                         guint *max_column) {
   g_return_if_fail(SGF_IS_VIEW_LAYOUT(self));
@@ -52,6 +69,32 @@ static void sgf_view_layout_attach_disc(SgfViewLayout *self,
                                                selected,
                                                node_widgets,
                                                disc_stride);
+
+  int min_width = 0;
+  int natural_width = 0;
+  int min_height = 0;
+  int natural_height = 0;
+  gtk_widget_measure(disc,
+                     GTK_ORIENTATION_HORIZONTAL,
+                     -1,
+                     &min_width,
+                     &natural_width,
+                     NULL,
+                     NULL);
+  gtk_widget_measure(disc,
+                     GTK_ORIENTATION_VERTICAL,
+                     -1,
+                     &min_height,
+                     &natural_height,
+                     NULL,
+                     NULL);
+  int measured_width = MAX(natural_width, min_width);
+  int measured_height = MAX(natural_height, min_height);
+  measured_width = MAX(measured_width, disc_stride);
+  measured_height = MAX(measured_height, disc_stride);
+  sgf_view_layout_update_extent(column_widths, column, measured_width);
+  sgf_view_layout_update_extent(row_heights, row, measured_height);
+
   gtk_grid_attach(grid, disc, (int)column, (int)row, 1, 1);
 
   if (max_row) {
@@ -71,6 +114,8 @@ static guint sgf_view_layout_append_branch(SgfViewLayout *self,
                                            guint row,
                                            guint depth,
                                            int disc_stride,
+                                           GArray *column_widths,
+                                           GArray *row_heights,
                                            guint *max_row,
                                            guint *max_column) {
   const GPtrArray *children = sgf_node_get_children(parent);
@@ -91,6 +136,8 @@ static guint sgf_view_layout_append_branch(SgfViewLayout *self,
                                   row,
                                   depth,
                                   disc_stride,
+                                  column_widths,
+                                  row_heights,
                                   max_row,
                                   max_column);
       current_row = sgf_view_layout_append_branch(self,
@@ -102,6 +149,8 @@ static guint sgf_view_layout_append_branch(SgfViewLayout *self,
                                                   row,
                                                   depth + 1,
                                                   disc_stride,
+                                                  column_widths,
+                                                  row_heights,
                                                   max_row,
                                                   max_column);
     } else {
@@ -115,6 +164,8 @@ static guint sgf_view_layout_append_branch(SgfViewLayout *self,
                                   branch_row,
                                   depth,
                                   disc_stride,
+                                  column_widths,
+                                  row_heights,
                                   max_row,
                                   max_column);
       current_row = sgf_view_layout_append_branch(self,
@@ -126,6 +177,8 @@ static guint sgf_view_layout_append_branch(SgfViewLayout *self,
                                                   branch_row,
                                                   depth + 1,
                                                   disc_stride,
+                                                  column_widths,
+                                                  row_heights,
                                                   max_row,
                                                   max_column);
     }
@@ -152,6 +205,8 @@ void sgf_view_layout_build(SgfViewLayout *self,
                            SgfViewDiscFactory *disc_factory,
                            const SgfNode *selected,
                            int disc_stride,
+                           GArray *column_widths,
+                           GArray *row_heights,
                            guint *out_max_row,
                            guint *out_max_column) {
   g_return_if_fail(SGF_IS_VIEW_LAYOUT(self));
@@ -163,6 +218,13 @@ void sgf_view_layout_build(SgfViewLayout *self,
   }
   if (out_max_column) {
     *out_max_column = 0;
+  }
+
+  if (column_widths) {
+    g_array_set_size(column_widths, 0);
+  }
+  if (row_heights) {
+    g_array_set_size(row_heights, 0);
   }
 
   sgf_view_layout_clear_container(GTK_WIDGET(grid));
@@ -192,6 +254,8 @@ void sgf_view_layout_build(SgfViewLayout *self,
                                 0,
                                 0,
                                 disc_stride,
+                                column_widths,
+                                row_heights,
                                 &max_row,
                                 &max_column);
 

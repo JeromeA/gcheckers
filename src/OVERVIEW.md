@@ -132,7 +132,8 @@ Collaborates with: `SgfView` and the SGF tree.
 
 ### SGF layout (`src/sgf_view_layout.c`, `src/sgf_view_layout.h`)
 Module: layout helpers.
-Role: position discs in a grid-based SGF tree layout and report the maximum row/column extents for sizing.
+Role: position discs in a grid-based SGF tree layout, measure natural disc sizes, and report both maximum row/column
+extents and per-column/per-row sizes for accurate sizing and scrolling.
 Collaborates with: `SgfView` and link rendering.
 
 ### SGF link renderer (`src/sgf_view_link_renderer.c`, `src/sgf_view_link_renderer.h`)
@@ -143,7 +144,8 @@ Collaborates with: SGF layout data and view sizing.
 ### SGF scroller (`src/sgf_view_scroller.c`, `src/sgf_view_scroller.h`)
 Module: selection scroll helper.
 Role: clamp scrolled window adjustments and keep selected nodes in view by queueing tick callbacks, computing bounds
-from grid coordinates, and nudging adjustment upper bounds to the expected content size while updates run.
+from measured per-column/per-row extents, applying a small visibility padding, and nudging adjustment upper bounds to
+the expected content size while updates run.
 Collaborates with: `SgfView` and selection controller updates.
 
 ### SGF selection controller (`src/sgf_view_selection_controller.c`, `src/sgf_view_selection_controller.h`)

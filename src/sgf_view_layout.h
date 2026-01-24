@@ -20,6 +20,8 @@ void sgf_view_layout_build(SgfViewLayout *self,
                            SgfViewDiscFactory *disc_factory,
                            const SgfNode *selected,
                            int disc_stride,
+                           GArray *column_widths,
+                           GArray *row_heights,
                            guint *out_max_row,
                            guint *out_max_column);
 
