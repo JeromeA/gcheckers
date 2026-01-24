@@ -15,6 +15,13 @@ struct _GCheckersSgfController {
 
 G_DEFINE_TYPE(GCheckersSgfController, gcheckers_sgf_controller, G_TYPE_OBJECT)
 
+enum {
+  SIGNAL_ANALYSIS_REQUESTED,
+  SIGNAL_LAST
+};
+
+static guint controller_signals[SIGNAL_LAST] = {0};
+
 static SgfColor gcheckers_sgf_controller_color_from_turn(CheckersColor color) {
   switch (color) {
     case CHECKERS_COLOR_BLACK:
@@ -157,11 +164,13 @@ static void gcheckers_sgf_controller_on_node_selected(SgfView * /*view*/,
     return;
   }
 
+  g_signal_emit(self, controller_signals[SIGNAL_ANALYSIS_REQUESTED], 0, node);
   gcheckers_sgf_controller_replay_to_node(self, node);
   sgf_view_set_selected(self->sgf_view, node);
 }
 
-static void gcheckers_sgf_controller_on_model_state_changed(GCheckersModel *model, gpointer user_data) {
+static void gcheckers_sgf_controller_on_model_state_changed(GCheckersModel *model,
+                                                            gpointer user_data) {
   GCheckersSgfController *self = GCHECKERS_SGF_CONTROLLER(user_data);
 
   g_return_if_fail(GCHECKERS_IS_MODEL(model));
@@ -185,13 +194,27 @@ static void gcheckers_sgf_controller_class_init(GCheckersSgfControllerClass *kla
   GObjectClass *object_class = G_OBJECT_CLASS(klass);
 
   object_class->dispose = gcheckers_sgf_controller_dispose;
+
+  controller_signals[SIGNAL_ANALYSIS_REQUESTED] = g_signal_new("analysis-requested",
+                                                               G_TYPE_FROM_CLASS(klass),
+                                                               G_SIGNAL_RUN_LAST,
+                                                               0,
+                                                               NULL,
+                                                               NULL,
+                                                               NULL,
+                                                               G_TYPE_NONE,
+                                                               1,
+                                                               G_TYPE_POINTER);
 }
 
 static void gcheckers_sgf_controller_init(GCheckersSgfController *self) {
   self->sgf_tree = sgf_tree_new();
   self->sgf_view = sgf_view_new();
   sgf_view_set_tree(self->sgf_view, self->sgf_tree);
-  g_signal_connect(self->sgf_view, "node-selected", G_CALLBACK(gcheckers_sgf_controller_on_node_selected), self);
+  g_signal_connect(self->sgf_view,
+                   "node-selected",
+                   G_CALLBACK(gcheckers_sgf_controller_on_node_selected),
+                   self);
 
   self->is_replaying = FALSE;
   self->last_history_size = 0;
