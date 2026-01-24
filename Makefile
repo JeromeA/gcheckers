@@ -1,5 +1,6 @@
 CC := cc
 CFLAGS := -std=c99 -Wall -Wextra -Werror -Isrc
+CFLAGS += -g3
 COVERAGE_CFLAGS := --coverage -O0 -g
 GLIB_CFLAGS := $(shell pkg-config --cflags glib-2.0)
 GLIB_LIBS := $(shell pkg-config --libs glib-2.0)
