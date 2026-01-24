@@ -30,6 +30,5 @@ implementation.
 
 # Repository overview
 
-See REPOSITORY_OVERVIEW.md for the repository overview. It's a short document that gives a good overview of the whole
-project structure.
+Read (and update) src/OVERVIEW.md for any change in src/.
 
