@@ -185,6 +185,16 @@ The fix temporarily acquires a reference to the controls panel before unparentin
 on a still-valid object, and adds a regression test that disposes the window without taking an external panel
 reference.
 
+## Black moves were not highlighted on the board
+
+The board should highlight movable pieces for whichever color is to move so the same affordances appear for both
+players.
+
+The view only loaded available moves when the turn color was white, so `board-halo` classes were never applied when it
+was black's turn even though the move generator already filtered by the active turn.
+
+The fix removes the white-only guard in `BoardView` and adds a GTK test that advances to a black turn and verifies that
+all black starting squares receive the highlight class.
 ## `GCheckersWindow::dispose` crashed if the controls panel had already been removed
 
 The window should be able to dispose safely even when a child widget was removed from its container earlier in the

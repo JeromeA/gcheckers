@@ -70,7 +70,7 @@ Collaborates with: `GCheckersWindow` for UI wiring.
 
 ### `BoardView` (`src/board_view.c`, `src/board_view.h`)
 Class: `BoardView` (`GtkWidget`).
-Role: coordinate rendering updates and input handling for the board.
+Role: coordinate rendering updates, input handling, and active-turn move highlighting for the board.
 Collaborates with: selection, overlays, and square/grid helpers.
 
 ### `BoardGrid` (`src/board_grid.c`, `src/board_grid.h`)

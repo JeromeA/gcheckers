@@ -48,7 +48,7 @@ libgame.a: $(OBJS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 test: test_game test_game_print test_board test_move_gen test_checkers_model test_sgf_tree test_sgf_view \
-	test_player_controls_panel test_gcheckers_sgf_controller test_gcheckers_window test_screenshot
+	test_board_view test_player_controls_panel test_gcheckers_sgf_controller test_gcheckers_window test_screenshot
 	./test_game
 	./test_game_print
 	./test_board
@@ -56,6 +56,7 @@ test: test_game test_game_print test_board test_move_gen test_checkers_model tes
 	./test_checkers_model
 	./test_sgf_tree
 	./test_sgf_view
+	./test_board_view
 	./test_player_controls_panel
 	./test_gcheckers_sgf_controller
 	./test_gcheckers_window
@@ -84,6 +85,14 @@ test_sgf_tree: tests/test_sgf_tree.c $(SGF_TREE_SRCS) src/sgf_tree.h
 test_sgf_view: tests/test_sgf_view.c $(SGF_VIEW_SRCS) $(SGF_TREE_SRCS) src/sgf_view.h src/sgf_tree.h
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_sgf_view.c $(SGF_VIEW_SRCS) $(SGF_TREE_SRCS) \
 		$(LDLIBS) $(GTK_LIBS)
+
+test_board_view: tests/test_board_view.c src/board_view.c src/board_view.h src/board_grid.c src/board_grid.h \
+	src/board_square.c src/board_square.h src/board_move_overlay.c src/board_move_overlay.h \
+	src/board_selection_controller.c src/board_selection_controller.h src/piece_palette.c \
+	src/piece_palette.h src/gcheckers_man_paintable.c src/gcheckers_man_paintable.h src/checkers_model.h $(SRCS)
+	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_board_view.c src/board_view.c src/board_grid.c \
+		src/board_square.c src/board_move_overlay.c src/board_selection_controller.c src/piece_palette.c \
+		src/gcheckers_man_paintable.c $(SRCS) $(LDLIBS) $(GTK_LIBS)
 
 test_player_controls_panel: tests/test_player_controls_panel.c src/player_controls_panel.c src/player_controls_panel.h
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_player_controls_panel.c src/player_controls_panel.c \
