@@ -1,12 +1,9 @@
-This overview lists each non-trivial file so you can quickly find where functionality and documentation live.
+Overview of the main files in this repository.
 
-- AGENTS.md: repository-specific agent instructions, including coding conventions and workflow expectations.
-- BUGS.md: log of prior bugs with symptoms and fixes to prevent regressions.
-- EXECPLAN.md: used for planning and tracking larger features and changes.
-- PLANS.md: specification for writing and maintaining ExecPlans.
-- README.md: high-level project description, dependencies, and basic build/run steps.
-- Makefile: build targets for the library, CLI, GTK app, tests, coverage, and screenshots.
-- REPOSITORY_OVERVIEW.md: this repository map of non-trivial files and their roles.
+For each .c, it should mention typically describe the class or module implemented, what are its responsibilities, and
+any notable design patterns or interactions with other components. No need to mention a .h unless it contains shared
+constants or is otherwise notable.
+
 - src/board.h: board data structures and public helpers for coordinates, pieces, and playable squares.
 - src/board.c: board storage logic, reset/init, coordinate conversion, and piece helpers.
 - src/checkers_constants.h: shared size limits for boards, moves, and byte storage.
@@ -50,7 +47,3 @@ This overview lists each non-trivial file so you can quickly find where function
 - src/sgf_view_scroller.c: scroll helper that clamps scrolled window adjustments to selected nodes.
 - src/sgf_view_selection_controller.h: selection controller API for tracking SGF selection and navigation.
 - src/sgf_view_selection_controller.c: selection logic that updates CSS classes and navigates siblings/parents.
-- tests: directory for all unit tests.
-- tools/coverage_report.py: generates HTML coverage reports from gcov output.
-- tools/setup.sh: installs dependencies (GTK/Xvfb/ImageMagick) on Debian-based systems.
-- tools/screenshot_gcheckers.sh: runs the GTK app under Xvfb and captures a screenshot.
