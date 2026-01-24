@@ -195,6 +195,7 @@ was black's turn even though the move generator already filtered by the active t
 
 The fix removes the white-only guard in `BoardView` and adds a GTK test that advances to a black turn and verifies that
 all black starting squares receive the highlight class.
+
 ## `GCheckersWindow::dispose` crashed if the controls panel had already been removed
 
 The window should be able to dispose safely even when a child widget was removed from its container earlier in the
@@ -208,3 +209,13 @@ non-`GtkWidget` pointer and triggered the Gtk-critical `gtk_widget_unparent: ass
 
 The fix sinks and retains an owned reference to the controls panel at construction time, removes it via its current box
 parent during dispose, and adds a regression test that removes the panel before disposing the window.
+
+## Selecting Computer prevented the user from making a move
+
+The goal was for the player dropdowns to control auto-play, not to disable manual input.
+
+`GCheckersWindow` disabled board input whenever the active turn was set to Computer, but it did not automatically
+trigger an AI move. This left the board insensitive with no follow-up action, stalling the game.
+
+The fix keeps board input enabled whenever the game is still running, schedules a forced move on idle after a move when
+the next player is set to Computer, and resets both dropdowns to User when the SGF tree is navigated.
