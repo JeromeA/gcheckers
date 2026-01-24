@@ -1,7 +1,10 @@
 #include <gtk/gtk.h>
+#include <math.h>
 
 #include "sgf_tree.h"
 #include "sgf_view.h"
+#include "sgf_view_disc_factory.h"
+#include "sgf_view_link_renderer.h"
 #include "sgf_view_scroller.h"
 
 static gboolean sgf_view_quit_loop_cb(gpointer user_data) {
@@ -138,6 +141,91 @@ static void sgf_view_update_extent(GArray *extents, guint index, int value) {
   if (value > current) {
     g_array_index(extents, int, index) = value;
   }
+}
+
+static gboolean sgf_view_compute_widget_center(GtkWidget *lines_area, GtkWidget *widget, double *x, double *y) {
+  g_return_val_if_fail(GTK_IS_WIDGET(lines_area), FALSE);
+  g_return_val_if_fail(GTK_IS_WIDGET(widget), FALSE);
+  g_return_val_if_fail(x != NULL, FALSE);
+  g_return_val_if_fail(y != NULL, FALSE);
+
+  int width = gtk_widget_get_width(widget);
+  int height = gtk_widget_get_height(widget);
+  if (width <= 0 || height <= 0) {
+    g_debug("Unable to measure SGF widget center for link test\n");
+    return FALSE;
+  }
+
+  graphene_point_t widget_point;
+  graphene_point_t translated_point;
+  graphene_point_init(&widget_point, width / 2.0, height / 2.0);
+
+  if (!gtk_widget_compute_point(widget, lines_area, &widget_point, &translated_point)) {
+    g_debug("Unable to compute SGF widget center for link test\n");
+    return FALSE;
+  }
+
+  *x = translated_point.x;
+  *y = translated_point.y;
+  return TRUE;
+}
+
+static gboolean sgf_view_compute_row_center(GtkWidget *grid, GArray *row_heights, int row, double *out_y) {
+  g_return_val_if_fail(GTK_IS_GRID(grid), FALSE);
+  g_return_val_if_fail(row_heights != NULL, FALSE);
+  g_return_val_if_fail(out_y != NULL, FALSE);
+
+  if (row_heights->len <= (guint)row) {
+    g_debug("Row heights too short for link test\n");
+    return FALSE;
+  }
+
+  int row_height = g_array_index(row_heights, int, row);
+  if (row_height <= 0) {
+    g_debug("Row height too small for link test\n");
+    return FALSE;
+  }
+
+  int row_spacing = gtk_grid_get_row_spacing(GTK_GRID(grid));
+  int margin_top = gtk_widget_get_margin_top(grid);
+  double origin_y = margin_top + row * row_spacing;
+  for (int i = 0; i < row; ++i) {
+    origin_y += g_array_index(row_heights, int, i);
+  }
+
+  *out_y = origin_y + row_height / 2.0;
+  return TRUE;
+}
+
+static gboolean sgf_view_surface_has_ink(cairo_surface_t *surface, int x, int y, int radius) {
+  g_return_val_if_fail(surface != NULL, FALSE);
+
+  int width = cairo_image_surface_get_width(surface);
+  int height = cairo_image_surface_get_height(surface);
+  if (width <= 0 || height <= 0) {
+    g_debug("Invalid surface size for link test\n");
+    return FALSE;
+  }
+
+  int start_x = MAX(0, x - radius);
+  int end_x = MIN(width - 1, x + radius);
+  int start_y = MAX(0, y - radius);
+  int end_y = MIN(height - 1, y + radius);
+
+  cairo_surface_flush(surface);
+  unsigned char *data = cairo_image_surface_get_data(surface);
+  int stride = cairo_image_surface_get_stride(surface);
+  for (int sample_y = start_y; sample_y <= end_y; ++sample_y) {
+    for (int sample_x = start_x; sample_x <= end_x; ++sample_x) {
+      guint32 pixel = *(guint32 *)(data + sample_y * stride + sample_x * 4);
+      guint8 alpha = (pixel >> 24) & 0xff;
+      if (alpha > 0) {
+        return TRUE;
+      }
+    }
+  }
+
+  return FALSE;
 }
 
 static gboolean sgf_view_compute_disc_bounds(GtkWidget *grid,
@@ -359,6 +447,110 @@ static void test_sgf_view_branch_columns(void) {
   g_clear_object(&tree);
 }
 
+static void test_sgf_view_link_angles(void) {
+  const int disc_stride = 34;
+  const int row_spacing = 8;
+  const int window_width = 300;
+  const int window_height = 220;
+
+  struct {
+    int parent_row;
+    int child_row;
+  } cases[] = {
+    {0, 0},
+    {0, 1},
+    {0, 2},
+  };
+
+  for (guint i = 0; i < G_N_ELEMENTS(cases); ++i) {
+    SgfTree *tree = sgf_tree_new();
+    const SgfNode *move_1 = sgf_tree_append_move(tree, SGF_COLOR_BLACK, NULL);
+    const SgfNode *move_2 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, NULL);
+
+    g_autoptr(GHashTable) node_widgets = g_hash_table_new(g_direct_hash, g_direct_equal);
+    GtkWidget *overlay = gtk_overlay_new();
+    GtkWidget *lines_area = gtk_drawing_area_new();
+    GtkWidget *grid = gtk_grid_new();
+    gtk_grid_set_row_spacing(GTK_GRID(grid), row_spacing);
+    gtk_grid_set_column_spacing(GTK_GRID(grid), 8);
+
+    gtk_widget_set_size_request(lines_area, window_width, window_height);
+    gtk_overlay_set_child(GTK_OVERLAY(overlay), lines_area);
+    gtk_overlay_add_overlay(GTK_OVERLAY(overlay), grid);
+
+    SgfViewDiscFactory *factory = sgf_view_disc_factory_new();
+    GtkWidget *parent_disc =
+      sgf_view_disc_factory_build(factory, move_1, NULL, node_widgets, disc_stride);
+    GtkWidget *child_disc =
+      sgf_view_disc_factory_build(factory, move_2, NULL, node_widgets, disc_stride);
+    gtk_grid_attach(GTK_GRID(grid), parent_disc, 0, cases[i].parent_row, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), child_disc, 1, cases[i].child_row, 1, 1);
+
+    GtkWidget *window = gtk_window_new();
+    gtk_window_set_default_size(GTK_WINDOW(window), window_width, window_height);
+    gtk_window_set_child(GTK_WINDOW(window), overlay);
+    gtk_window_present(GTK_WINDOW(window));
+    sgf_view_wait(40);
+
+    double parent_x = 0.0;
+    double parent_y = 0.0;
+    double child_x = 0.0;
+    double child_y = 0.0;
+    g_assert_true(sgf_view_compute_widget_center(lines_area, parent_disc, &parent_x, &parent_y));
+    g_assert_true(sgf_view_compute_widget_center(lines_area, child_disc, &child_x, &child_y));
+
+    int surface_width = gtk_widget_get_width(lines_area);
+    int surface_height = gtk_widget_get_height(lines_area);
+    g_assert_cmpint(surface_width, >, 0);
+    g_assert_cmpint(surface_height, >, 0);
+
+    g_autoptr(GArray) row_heights = g_array_new(FALSE, TRUE, sizeof(int));
+    g_array_set_size(row_heights, (guint)cases[i].child_row + 1);
+    for (guint row = 0; row < row_heights->len; ++row) {
+      g_array_index(row_heights, int, row) = disc_stride;
+    }
+
+    SgfViewLinkRenderer *renderer = sgf_view_link_renderer_new();
+    cairo_surface_t *surface =
+      cairo_image_surface_create(CAIRO_FORMAT_ARGB32, surface_width, surface_height);
+    cairo_t *cr = cairo_create(surface);
+    cairo_set_source_rgba(cr, 0, 0, 0, 0);
+    cairo_paint(cr);
+    sgf_view_link_renderer_draw(renderer,
+                                lines_area,
+                                node_widgets,
+                                tree,
+                                row_heights,
+                                cr,
+                                surface_width,
+                                surface_height);
+    cairo_destroy(cr);
+
+    int sample_radius = 1;
+    if (cases[i].child_row == cases[i].parent_row) {
+      int mid_x = (int)round((parent_x + child_x) / 2.0);
+      int mid_y = (int)round(parent_y);
+      g_assert_true(sgf_view_surface_has_ink(surface, mid_x, mid_y, sample_radius));
+    } else if (cases[i].child_row == cases[i].parent_row + 1) {
+      int mid_x = (int)round((parent_x + child_x) / 2.0);
+      int mid_y = (int)round((parent_y + child_y) / 2.0);
+      g_assert_true(sgf_view_surface_has_ink(surface, mid_x, mid_y, sample_radius));
+    } else {
+      double row_above_y = 0.0;
+      g_assert_true(sgf_view_compute_row_center(grid, row_heights, cases[i].child_row - 1, &row_above_y));
+      int mid_x = (int)round(parent_x);
+      int mid_y = (int)round((parent_y + row_above_y) / 2.0);
+      g_assert_true(sgf_view_surface_has_ink(surface, mid_x, mid_y, sample_radius));
+    }
+
+    cairo_surface_destroy(surface);
+    g_clear_object(&renderer);
+    g_clear_object(&factory);
+    gtk_window_destroy(GTK_WINDOW(window));
+    g_clear_object(&tree);
+  }
+}
+
 static void test_sgf_view_connectors_skip(void) {
   g_test_skip("GTK display not available.");
 }
@@ -506,6 +698,7 @@ int main(int argc, char **argv) {
   if (!gtk_init_check()) {
     g_test_add_func("/sgf-view/connectors", test_sgf_view_connectors_skip);
     g_test_add_func("/sgf-view/branches", test_sgf_view_connectors_skip);
+    g_test_add_func("/sgf-view/link-angles", test_sgf_view_connectors_skip);
     g_test_add_func("/sgf-view/navigation", test_sgf_view_connectors_skip);
     g_test_add_func("/sgf-view/scrolls-to-new-node", test_sgf_view_connectors_skip);
     g_test_add_func("/sgf-view/scrolls-selected-disc-fully-into-view",
@@ -515,6 +708,7 @@ int main(int argc, char **argv) {
 
   g_test_add_func("/sgf-view/connectors", test_sgf_view_connectors);
   g_test_add_func("/sgf-view/branches", test_sgf_view_branch_columns);
+  g_test_add_func("/sgf-view/link-angles", test_sgf_view_link_angles);
   g_test_add_func("/sgf-view/navigation", test_sgf_view_navigation);
   g_test_add_func("/sgf-view/scrolls-to-new-node", test_sgf_view_scrolls_to_new_node);
   g_test_add_func("/sgf-view/scrolls-selected-disc-fully-into-view",

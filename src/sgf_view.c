@@ -160,6 +160,7 @@ static void sgf_view_draw_tree(GtkDrawingArea * /*area*/,
                               self->lines_area,
                               self->node_widgets,
                               self->tree,
+                              self->row_heights,
                               cr,
                               width,
                               height);
