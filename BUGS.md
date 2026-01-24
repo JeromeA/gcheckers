@@ -219,3 +219,15 @@ trigger an AI move. This left the board insensitive with no follow-up action, st
 
 The fix keeps board input enabled whenever the game is still running, schedules a forced move on idle after a move when
 the next player is set to Computer, and resets both dropdowns to User when the SGF tree is navigated.
+
+## SGF view did not scroll to a newly appended move
+
+The SGF panel should scroll to keep the most recently selected node visible, including when a move is appended during
+play.
+
+The scroll request ran in an idle callback. When a new node was appended, the view rebuilt but the idle callback could
+run before GTK completed the next layout pass, so `gtk_widget_compute_bounds()` failed and the scroll request was
+dropped.
+
+The fix queues the scroll work on a tick callback so it runs after layout, retries for a few frames while widgets
+settle, and adds a regression test that appends moves after the view is mapped and verifies the adjustment changes.

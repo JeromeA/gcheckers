@@ -3,6 +3,22 @@
 #include "sgf_tree.h"
 #include "sgf_view.h"
 
+static gboolean sgf_view_quit_loop_cb(gpointer user_data) {
+  GMainLoop *loop = user_data;
+
+  g_return_val_if_fail(loop != NULL, G_SOURCE_REMOVE);
+
+  g_main_loop_quit(loop);
+  return G_SOURCE_REMOVE;
+}
+
+static void sgf_view_wait(guint timeout_ms) {
+  GMainLoop *loop = g_main_loop_new(NULL, FALSE);
+  g_timeout_add(timeout_ms, sgf_view_quit_loop_cb, loop);
+  g_main_loop_run(loop);
+  g_main_loop_unref(loop);
+}
+
 static int sgf_view_count_children(GtkWidget *parent) {
   int count = 0;
   GtkWidget *child = gtk_widget_get_first_child(parent);
@@ -113,6 +129,44 @@ static void test_sgf_view_connectors_skip(void) {
   g_test_skip("GTK display not available.");
 }
 
+static void test_sgf_view_scrolls_to_new_node(void) {
+  SgfTree *tree = sgf_tree_new();
+  const SgfNode *last = NULL;
+  for (guint i = 0; i < 10; ++i) {
+    last = sgf_tree_append_move(tree, (i % 2 == 0) ? SGF_COLOR_BLACK : SGF_COLOR_WHITE, NULL);
+  }
+
+  SgfView *view = sgf_view_new();
+  sgf_view_set_tree(view, tree);
+
+  GtkWidget *root = sgf_view_get_widget(view);
+  GtkWidget *window = gtk_window_new();
+  gtk_window_set_default_size(GTK_WINDOW(window), 220, 180);
+  gtk_window_set_child(GTK_WINDOW(window), root);
+  gtk_window_present(GTK_WINDOW(window));
+  sgf_view_wait(30);
+
+  GtkAdjustment *vadjustment = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(root));
+  g_assert_nonnull(vadjustment);
+  gtk_adjustment_set_value(vadjustment, 0.0);
+  sgf_view_wait(10);
+
+  for (guint i = 0; i < 80; ++i) {
+    last = sgf_tree_append_move(tree, (i % 2 == 0) ? SGF_COLOR_BLACK : SGF_COLOR_WHITE, NULL);
+  }
+  g_assert_nonnull(last);
+
+  sgf_view_set_selected(view, last);
+  sgf_view_wait(80);
+
+  double value = gtk_adjustment_get_value(vadjustment);
+  g_assert_cmpfloat(value, >, 0.0);
+
+  gtk_window_destroy(GTK_WINDOW(window));
+  g_clear_object(&view);
+  g_clear_object(&tree);
+}
+
 static void test_sgf_view_navigation(void) {
   SgfTree *tree = sgf_tree_new();
   const SgfNode *move_1 = sgf_tree_append_move(tree, SGF_COLOR_BLACK, NULL);
@@ -147,11 +201,13 @@ int main(int argc, char **argv) {
     g_test_add_func("/sgf-view/connectors", test_sgf_view_connectors_skip);
     g_test_add_func("/sgf-view/branches", test_sgf_view_connectors_skip);
     g_test_add_func("/sgf-view/navigation", test_sgf_view_connectors_skip);
+    g_test_add_func("/sgf-view/scrolls-to-new-node", test_sgf_view_connectors_skip);
     return g_test_run();
   }
 
   g_test_add_func("/sgf-view/connectors", test_sgf_view_connectors);
   g_test_add_func("/sgf-view/branches", test_sgf_view_branch_columns);
   g_test_add_func("/sgf-view/navigation", test_sgf_view_navigation);
+  g_test_add_func("/sgf-view/scrolls-to-new-node", test_sgf_view_scrolls_to_new_node);
   return g_test_run();
 }
