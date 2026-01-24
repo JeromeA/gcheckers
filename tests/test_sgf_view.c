@@ -19,6 +19,57 @@ static void sgf_view_wait(guint timeout_ms) {
   g_main_loop_unref(loop);
 }
 
+typedef struct {
+  GtkAdjustment *hadjustment;
+  GtkAdjustment *vadjustment;
+  GMainLoop *loop;
+  gint64 deadline_us;
+  gboolean scrolled;
+} SgfViewScrollWait;
+
+static gboolean sgf_view_wait_for_scroll_cb(gpointer user_data) {
+  SgfViewScrollWait *wait = user_data;
+
+  g_return_val_if_fail(wait != NULL, G_SOURCE_REMOVE);
+
+  double h_value = gtk_adjustment_get_value(wait->hadjustment);
+  double v_value = gtk_adjustment_get_value(wait->vadjustment);
+  if (h_value > 0.0 || v_value > 0.0) {
+    wait->scrolled = TRUE;
+    g_main_loop_quit(wait->loop);
+    return G_SOURCE_REMOVE;
+  }
+
+  if (g_get_monotonic_time() >= wait->deadline_us) {
+    g_main_loop_quit(wait->loop);
+    return G_SOURCE_REMOVE;
+  }
+
+  return G_SOURCE_CONTINUE;
+}
+
+static gboolean sgf_view_wait_for_scroll(GtkAdjustment *hadjustment,
+                                         GtkAdjustment *vadjustment,
+                                         guint timeout_ms) {
+  g_return_val_if_fail(hadjustment != NULL, FALSE);
+  g_return_val_if_fail(vadjustment != NULL, FALSE);
+
+  GMainLoop *loop = g_main_loop_new(NULL, FALSE);
+  SgfViewScrollWait wait = {
+    .hadjustment = hadjustment,
+    .vadjustment = vadjustment,
+    .loop = loop,
+    .deadline_us = g_get_monotonic_time() + ((gint64)timeout_ms * 1000),
+    .scrolled = FALSE,
+  };
+
+  g_timeout_add(20, sgf_view_wait_for_scroll_cb, &wait);
+  g_main_loop_run(loop);
+  g_main_loop_unref(loop);
+
+  return wait.scrolled;
+}
+
 static int sgf_view_count_children(GtkWidget *parent) {
   int count = 0;
   GtkWidget *child = gtk_widget_get_first_child(parent);
@@ -160,9 +211,13 @@ static void test_sgf_view_connectors_skip(void) {
 
 static void test_sgf_view_scrolls_to_new_node(void) {
   SgfTree *tree = sgf_tree_new();
+  const guint initial_moves = 10;
+  const guint appended_moves = 80;
+  const guint total_moves = initial_moves + appended_moves;
   const SgfNode *last = NULL;
-  for (guint i = 0; i < 10; ++i) {
-    last = sgf_tree_append_move(tree, (i % 2 == 0) ? SGF_COLOR_BLACK : SGF_COLOR_WHITE, NULL);
+  for (guint i = 0; i < initial_moves; ++i) {
+    SgfColor color = (i % 2 == 0) ? SGF_COLOR_BLACK : SGF_COLOR_WHITE;
+    last = sgf_tree_append_move(tree, color, NULL);
   }
 
   SgfView *view = sgf_view_new();
@@ -175,21 +230,30 @@ static void test_sgf_view_scrolls_to_new_node(void) {
   gtk_window_present(GTK_WINDOW(window));
   sgf_view_wait(30);
 
+  GtkAdjustment *hadjustment = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(root));
   GtkAdjustment *vadjustment = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(root));
+  g_assert_nonnull(hadjustment);
   g_assert_nonnull(vadjustment);
+  gtk_adjustment_set_value(hadjustment, 0.0);
   gtk_adjustment_set_value(vadjustment, 0.0);
   sgf_view_wait(10);
 
-  for (guint i = 0; i < 80; ++i) {
-    last = sgf_tree_append_move(tree, (i % 2 == 0) ? SGF_COLOR_BLACK : SGF_COLOR_WHITE, NULL);
+  for (guint i = 0; i < appended_moves; ++i) {
+    SgfColor color = (i % 2 == 0) ? SGF_COLOR_BLACK : SGF_COLOR_WHITE;
+    last = sgf_tree_append_move(tree, color, NULL);
   }
   g_assert_nonnull(last);
 
   sgf_view_set_selected(view, last);
-  sgf_view_wait(80);
+  gboolean scrolled = sgf_view_wait_for_scroll(hadjustment, vadjustment, 2000);
+  g_assert_true(scrolled);
 
-  double value = gtk_adjustment_get_value(vadjustment);
-  g_assert_cmpfloat(value, >, 0.0);
+  GtkWidget *overlay = sgf_view_get_overlay(root);
+  g_assert_nonnull(overlay);
+  GtkWidget *tree_grid = sgf_view_find_grid(overlay);
+  g_assert_nonnull(tree_grid);
+  int disc_count = sgf_view_count_children(tree_grid);
+  g_assert_cmpint(disc_count, ==, (int)total_moves);
 
   gtk_window_destroy(GTK_WINDOW(window));
   g_clear_object(&view);

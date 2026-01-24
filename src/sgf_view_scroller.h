@@ -16,7 +16,9 @@ void sgf_view_scroller_queue(SgfViewScroller *self,
                              GtkScrolledWindow *root,
                              GtkWidget *overlay,
                              GHashTable *node_widgets,
-                             const SgfNode *selected);
+                             const SgfNode *selected,
+                             int expected_width,
+                             int expected_height);
 
 G_END_DECLS
 
