@@ -10,6 +10,13 @@ static void test_gcheckers_window_skip(void) {
   g_test_skip("GTK display not available.");
 }
 
+static GtkApplication *test_app = NULL;
+
+static GtkApplication *test_gcheckers_window_create_app(void) {
+  g_return_val_if_fail(GTK_IS_APPLICATION(test_app), NULL);
+  return g_object_ref(test_app);
+}
+
 static GtkWidget *test_gcheckers_window_find_by_type(GtkWidget *root, GType widget_type) {
   g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
   g_return_val_if_fail(g_type_is_a(widget_type, GTK_TYPE_WIDGET), NULL);
@@ -100,7 +107,7 @@ static const SgfNode *sgf_tree_get_first_child(SgfTree *tree) {
 }
 
 static void test_gcheckers_window_unparents_controls_panel_on_dispose(void) {
-  GtkApplication *app = gtk_application_new("org.example.gcheckers.tests", G_APPLICATION_DEFAULT_FLAGS);
+  GtkApplication *app = test_gcheckers_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
   GCheckersWindow *window = gcheckers_window_new(app, model);
 
@@ -120,7 +127,7 @@ static void test_gcheckers_window_unparents_controls_panel_on_dispose(void) {
 }
 
 static void test_gcheckers_window_dispose_without_external_panel_ref(void) {
-  GtkApplication *app = gtk_application_new("org.example.gcheckers.tests", G_APPLICATION_DEFAULT_FLAGS);
+  GtkApplication *app = test_gcheckers_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
   GCheckersWindow *window = gcheckers_window_new(app, model);
 
@@ -132,7 +139,7 @@ static void test_gcheckers_window_dispose_without_external_panel_ref(void) {
 }
 
 static void test_gcheckers_window_dispose_after_panel_removed(void) {
-  GtkApplication *app = gtk_application_new("org.example.gcheckers.tests", G_APPLICATION_DEFAULT_FLAGS);
+  GtkApplication *app = test_gcheckers_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
   GCheckersWindow *window = gcheckers_window_new(app, model);
 
@@ -236,6 +243,19 @@ int main(int argc, char **argv) {
     g_test_add_func("/gcheckers-window/computer-selection-keeps-board-enabled", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/auto-move-next-player-computer", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/sgf-navigation-resets-controls", test_gcheckers_window_skip);
+    return g_test_run();
+  }
+
+  g_autoptr(GError) error = NULL;
+  test_app = gtk_application_new("org.example.gcheckers.tests", G_APPLICATION_DEFAULT_FLAGS);
+  gboolean registered = g_application_register(G_APPLICATION(test_app), NULL, &error);
+  if (!registered || error) {
+    g_test_message("Skipping gcheckers window tests: failed to register application: %s",
+                   error ? error->message : "unknown error");
+    g_clear_object(&test_app);
+    g_test_add_func("/gcheckers-window/dispose-unparents-controls", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/dispose-without-panel-ref", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/dispose-after-panel-removed", test_gcheckers_window_skip);
     return g_test_run();
   }
 

@@ -1,6 +1,7 @@
 #include "board_grid.h"
 
 #include "board.h"
+#include "widget_utils.h"
 
 #include <string.h>
 
@@ -29,10 +30,18 @@ static void board_grid_dispose(GObject *object) {
 
   board_grid_clear(self);
   board_grid_reset_squares(self);
-  if (self->grid && gtk_widget_get_parent(self->grid)) {
-    gtk_widget_unparent(self->grid);
+  gboolean grid_removed = TRUE;
+  if (self->grid) {
+    grid_removed = gcheckers_widget_remove_from_parent(self->grid);
+    if (!grid_removed && gtk_widget_get_parent(self->grid)) {
+      g_debug("Failed to remove board grid widget from parent during dispose\n");
+    }
   }
-  g_clear_object(&self->grid);
+  if (grid_removed) {
+    g_clear_object(&self->grid);
+  } else {
+    self->grid = NULL;
+  }
 
   G_OBJECT_CLASS(board_grid_parent_class)->dispose(object);
 }

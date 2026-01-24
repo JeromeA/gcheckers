@@ -22,6 +22,8 @@ SGF_VIEW_SRCS := \
   src/sgf_view_link_renderer.c \
   src/sgf_view_scroller.c \
   src/sgf_view_selection_controller.c
+WIDGET_UTILS_SRCS := src/widget_utils.c
+WIDGET_UTILS_HDRS := src/widget_utils.h
 OBJS := $(SRCS:.c=.o)
 COV_DIR := coverage
 COV_OBJ_DIR := $(COV_DIR)/obj
@@ -82,17 +84,19 @@ test_checkers_model: tests/test_checkers_model.c $(SRCS) src/checkers_model.h
 test_sgf_tree: tests/test_sgf_tree.c $(SGF_TREE_SRCS) src/sgf_tree.h
 	$(CC) $(CFLAGS) -o $@ tests/test_sgf_tree.c $(SGF_TREE_SRCS) $(LDLIBS)
 
-test_sgf_view: tests/test_sgf_view.c $(SGF_VIEW_SRCS) $(SGF_TREE_SRCS) src/sgf_view.h src/sgf_tree.h
+test_sgf_view: tests/test_sgf_view.c $(SGF_VIEW_SRCS) $(SGF_TREE_SRCS) $(WIDGET_UTILS_SRCS) \
+	src/sgf_view.h src/sgf_tree.h $(WIDGET_UTILS_HDRS)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_sgf_view.c $(SGF_VIEW_SRCS) $(SGF_TREE_SRCS) \
-		$(LDLIBS) $(GTK_LIBS)
+		$(WIDGET_UTILS_SRCS) $(LDLIBS) $(GTK_LIBS)
 
 test_board_view: tests/test_board_view.c src/board_view.c src/board_view.h src/board_grid.c src/board_grid.h \
 	src/board_square.c src/board_square.h src/board_move_overlay.c src/board_move_overlay.h \
 	src/board_selection_controller.c src/board_selection_controller.h src/piece_palette.c \
-	src/piece_palette.h src/gcheckers_man_paintable.c src/gcheckers_man_paintable.h src/checkers_model.h $(SRCS)
+	src/piece_palette.h src/gcheckers_man_paintable.c src/gcheckers_man_paintable.h src/checkers_model.h \
+	$(SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_board_view.c src/board_view.c src/board_grid.c \
 		src/board_square.c src/board_move_overlay.c src/board_selection_controller.c src/piece_palette.c \
-		src/gcheckers_man_paintable.c $(SRCS) $(LDLIBS) $(GTK_LIBS)
+		src/gcheckers_man_paintable.c $(WIDGET_UTILS_SRCS) $(SRCS) $(LDLIBS) $(GTK_LIBS)
 
 test_player_controls_panel: tests/test_player_controls_panel.c src/player_controls_panel.c src/player_controls_panel.h
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_player_controls_panel.c src/player_controls_panel.c \
@@ -106,13 +110,14 @@ test_gcheckers_sgf_controller: tests/test_gcheckers_sgf_controller.c src/gchecke
 	src/checkers_model.h src/sgf_tree.c src/sgf_tree.h src/sgf_view.c src/sgf_view.h \
 	src/sgf_view_disc_factory.c src/sgf_view_disc_factory.h src/sgf_view_layout.c src/sgf_view_layout.h \
 	src/sgf_view_link_renderer.c src/sgf_view_link_renderer.h src/sgf_view_scroller.c \
-	src/sgf_view_scroller.h src/sgf_view_selection_controller.c src/sgf_view_selection_controller.h $(SRCS)
+	src/sgf_view_scroller.h src/sgf_view_selection_controller.c src/sgf_view_selection_controller.h \
+	$(SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_gcheckers_sgf_controller.c \
 		src/gcheckers_sgf_controller.c src/board_view.c src/board_grid.c src/board_square.c \
 		src/board_move_overlay.c src/board_selection_controller.c src/piece_palette.c \
 		src/gcheckers_man_paintable.c src/sgf_tree.c src/sgf_view.c src/sgf_view_disc_factory.c \
 		src/sgf_view_layout.c src/sgf_view_link_renderer.c src/sgf_view_scroller.c \
-		src/sgf_view_selection_controller.c $(SRCS) $(LDLIBS) $(GTK_LIBS)
+		src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(SRCS) $(LDLIBS) $(GTK_LIBS)
 
 test_gcheckers_window: tests/test_gcheckers_window.c src/gcheckers_window.c src/gcheckers_window.h \
 	src/gcheckers_style.c src/gcheckers_style.h src/player_controls_panel.c src/player_controls_panel.h \
@@ -123,14 +128,15 @@ test_gcheckers_window: tests/test_gcheckers_window.c src/gcheckers_window.c src/
 	src/checkers_model.c src/checkers_model.h src/sgf_tree.c src/sgf_tree.h src/sgf_view.c src/sgf_view.h \
 	src/sgf_view_disc_factory.c src/sgf_view_disc_factory.h src/sgf_view_layout.c src/sgf_view_layout.h \
 	src/sgf_view_link_renderer.c src/sgf_view_link_renderer.h src/sgf_view_scroller.c \
-	src/sgf_view_scroller.h src/sgf_view_selection_controller.c src/sgf_view_selection_controller.h $(SRCS)
+	src/sgf_view_scroller.h src/sgf_view_selection_controller.c src/sgf_view_selection_controller.h \
+	$(SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_gcheckers_window.c src/gcheckers_window.c \
 		src/gcheckers_style.c src/player_controls_panel.c src/gcheckers_sgf_controller.c \
 		src/board_view.c src/board_grid.c src/board_square.c src/board_move_overlay.c \
 		src/board_selection_controller.c src/piece_palette.c src/gcheckers_man_paintable.c \
 		src/sgf_tree.c src/sgf_view.c src/sgf_view_disc_factory.c src/sgf_view_layout.c \
 		src/sgf_view_link_renderer.c src/sgf_view_scroller.c src/sgf_view_selection_controller.c \
-		$(SRCS) $(LDLIBS) $(GTK_LIBS)
+		$(WIDGET_UTILS_SRCS) $(SRCS) $(LDLIBS) $(GTK_LIBS)
 
 test_screenshot: gcheckers tools/screenshot_gcheckers.sh
 	@if ! command -v $(BROADWAYD_BIN) >/dev/null 2>&1; then \
@@ -157,14 +163,14 @@ gcheckers: src/gcheckers.c src/gcheckers_application.c src/gcheckers_window.c sr
 	src/sgf_view.c src/sgf_view.h src/sgf_view_disc_factory.c src/sgf_view_disc_factory.h \
 	src/sgf_view_layout.c src/sgf_view_layout.h src/sgf_view_link_renderer.c src/sgf_view_link_renderer.h \
 	src/sgf_view_scroller.c src/sgf_view_scroller.h src/sgf_view_selection_controller.c \
-	src/sgf_view_selection_controller.h $(SRCS)
+	src/sgf_view_selection_controller.h $(SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/gcheckers.c src/gcheckers_application.c \
 		src/gcheckers_window.c src/gcheckers_style.c src/player_controls_panel.c \
 		src/gcheckers_sgf_controller.c src/board_view.c src/board_grid.c src/board_square.c \
 		src/board_move_overlay.c src/board_selection_controller.c src/piece_palette.c \
 		src/gcheckers_man_paintable.c src/sgf_tree.c src/sgf_view.c src/sgf_view_disc_factory.c \
 		src/sgf_view_layout.c src/sgf_view_link_renderer.c src/sgf_view_scroller.c \
-		src/sgf_view_selection_controller.c $(SRCS) $(LDLIBS) $(GTK_LIBS)
+		src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(SRCS) $(LDLIBS) $(GTK_LIBS)
 
 clean:
 	rm -f $(OBJS) libgame.a test_game test_game_print test_board test_move_gen test_checkers_model \

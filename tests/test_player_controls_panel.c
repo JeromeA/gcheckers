@@ -6,8 +6,16 @@ static void test_player_controls_panel_skip(void) {
   g_test_skip("GTK display not available.");
 }
 
-static void test_player_controls_panel_defaults(void) {
+static PlayerControlsPanel *test_player_controls_panel_new_owned(void) {
   PlayerControlsPanel *panel = player_controls_panel_new();
+  g_return_val_if_fail(PLAYER_IS_CONTROLS_PANEL(panel), NULL);
+
+  g_object_ref_sink(panel);
+  return panel;
+}
+
+static void test_player_controls_panel_defaults(void) {
+  PlayerControlsPanel *panel = test_player_controls_panel_new_owned();
 
   g_assert_cmpuint(player_controls_panel_get_selected(panel, CHECKERS_COLOR_WHITE), ==, 0);
   g_assert_cmpuint(player_controls_panel_get_selected(panel, CHECKERS_COLOR_BLACK), ==, 1);
@@ -24,7 +32,7 @@ static void on_control_changed(PlayerControlsPanel * /*panel*/, gpointer user_da
 }
 
 static void test_player_controls_panel_control_signal(void) {
-  PlayerControlsPanel *panel = player_controls_panel_new();
+  PlayerControlsPanel *panel = test_player_controls_panel_new_owned();
   guint count = 0;
 
   g_signal_connect(panel, "control-changed", G_CALLBACK(on_control_changed), &count);
@@ -42,7 +50,7 @@ static void on_force_move_requested(PlayerControlsPanel * /*panel*/, gpointer us
 }
 
 static void test_player_controls_panel_force_move_signal(void) {
-  PlayerControlsPanel *panel = player_controls_panel_new();
+  PlayerControlsPanel *panel = test_player_controls_panel_new_owned();
   guint count = 0;
 
   g_signal_connect(panel, "force-move-requested", G_CALLBACK(on_force_move_requested), &count);
@@ -57,7 +65,7 @@ static void test_player_controls_panel_force_move_signal(void) {
 }
 
 static void test_player_controls_panel_force_move_sensitive(void) {
-  PlayerControlsPanel *panel = player_controls_panel_new();
+  PlayerControlsPanel *panel = test_player_controls_panel_new_owned();
   GtkWidget *button = player_controls_panel_get_force_move_button(panel);
   g_return_if_fail(GTK_IS_WIDGET(button));
 

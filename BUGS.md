@@ -210,6 +210,20 @@ non-`GtkWidget` pointer and triggered the Gtk-critical `gtk_widget_unparent: ass
 The fix sinks and retains an owned reference to the controls panel at construction time, removes it via its current box
 parent during dispose, and adds a regression test that removes the panel before disposing the window.
 
+## Dispose-time `gtk_widget_unparent` assertions when tearing down views
+
+Widget-owning helper objects should remove their widgets from container parents using the container's public removal
+APIs before dropping their last references.
+
+Several dispose handlers called `gtk_widget_unparent()` directly on children that were owned by GTK containers such as
+`GtkOverlay` and `GtkGrid`.
+
+Those low-level unparent calls bypassed container bookkeeping, leaving stale child pointers behind so later container
+cleanup would attempt to unparent freed widgets and trigger `gtk_widget_unparent: assertion 'GTK_IS_WIDGET (widget)'
+failed`.
+
+The fix introduces `gcheckers_widget_remove_from_parent()` to detach widgets via container-specific removal APIs and
+updates the relevant dispose handlers and GTK tests to run under a real display backend.
 ## Selecting Computer prevented the user from making a move
 
 The goal was for the player dropdowns to control auto-play, not to disable manual input.

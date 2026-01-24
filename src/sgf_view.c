@@ -5,6 +5,7 @@
 #include "sgf_view_link_renderer.h"
 #include "sgf_view_scroller.h"
 #include "sgf_view_selection_controller.h"
+#include "widget_utils.h"
 
 #include <gdk/gdkkeysyms.h>
 
@@ -164,12 +165,20 @@ static void sgf_view_rebuild(SgfView *self) {
 static void sgf_view_dispose(GObject *object) {
   SgfView *self = SGF_VIEW(object);
 
-  if (self->root && gtk_widget_get_parent(self->root)) {
-    gtk_widget_unparent(self->root);
+  gboolean root_removed = TRUE;
+  if (self->root) {
+    root_removed = gcheckers_widget_remove_from_parent(self->root);
+    if (!root_removed && gtk_widget_get_parent(self->root)) {
+      g_debug("Failed to remove SGF view root from parent during dispose\n");
+    }
   }
 
   g_clear_object(&self->tree);
-  g_clear_object(&self->root);
+  if (root_removed) {
+    g_clear_object(&self->root);
+  } else {
+    self->root = NULL;
+  }
   g_clear_pointer(&self->node_widgets, g_hash_table_unref);
   g_clear_object(&self->disc_factory);
   g_clear_object(&self->layout);

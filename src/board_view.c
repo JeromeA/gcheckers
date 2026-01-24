@@ -4,6 +4,7 @@
 #include "board_move_overlay.h"
 #include "board_selection_controller.h"
 #include "piece_palette.h"
+#include "widget_utils.h"
 
 #include "board.h"
 
@@ -212,8 +213,12 @@ void board_view_set_input_enabled(BoardView *self, gboolean enabled) {
 static void board_view_dispose(GObject *object) {
   BoardView *self = BOARD_VIEW(object);
 
-  if (self->root && gtk_widget_get_parent(self->root)) {
-    gtk_widget_unparent(self->root);
+  gboolean root_removed = TRUE;
+  if (self->root) {
+    root_removed = gcheckers_widget_remove_from_parent(self->root);
+    if (!root_removed && gtk_widget_get_parent(self->root)) {
+      g_debug("Failed to remove board view root from parent during dispose\n");
+    }
   }
 
   g_clear_object(&self->model);
@@ -221,7 +226,11 @@ static void board_view_dispose(GObject *object) {
   g_clear_object(&self->selection_controller);
   g_clear_object(&self->board_overlay);
   g_clear_object(&self->board_grid);
-  g_clear_object(&self->root);
+  if (root_removed) {
+    g_clear_object(&self->root);
+  } else {
+    self->root = NULL;
+  }
 
   G_OBJECT_CLASS(board_view_parent_class)->dispose(object);
 }
