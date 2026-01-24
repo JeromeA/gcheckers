@@ -35,11 +35,16 @@ COV_BOARD_OBJS := $(BOARD_SRCS:%.c=$(COV_OBJ_DIR)/%.o)
 SCREENSHOT ?= gcheckers.png
 BROADWAY_DISPLAY_NUM ?= 5
 BROADWAY_PORT ?= 8085
+BROADWAY_TEST_DISPLAY ?= 40
+BROADWAY_TEST_PORT ?= 8120
+BROADWAY_STARTUP_DELAY ?= 0.3
 SCREEN_SIZE ?= 1280x720
 BROADWAYD_BIN ?= gtk4-broadwayd
 CHROMIUM_BIN ?= google-chrome
+XDG_RUNTIME_DIR ?= /tmp/xdg-runtime
+BROADWAY_TEST_LOG ?= /tmp/broadwayd-$(BROADWAY_TEST_PORT).log
 
-.PHONY: all clean test coverage screenshot test_screenshot
+.PHONY: all clean test coverage screenshot test_screenshot test_sgf_view_broadway
 
 all: libgame.a checkers gcheckers
 
@@ -57,7 +62,7 @@ test: test_game test_game_print test_board test_move_gen test_checkers_model tes
 	./test_move_gen
 	./test_checkers_model
 	./test_sgf_tree
-	./test_sgf_view
+	$(MAKE) test_sgf_view_broadway
 	./test_board_view
 	./test_player_controls_panel
 	./test_gcheckers_sgf_controller
@@ -88,6 +93,28 @@ test_sgf_view: tests/test_sgf_view.c $(SGF_VIEW_SRCS) $(SGF_TREE_SRCS) $(WIDGET_
 	src/sgf_view.h src/sgf_tree.h $(WIDGET_UTILS_HDRS)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_sgf_view.c $(SGF_VIEW_SRCS) $(SGF_TREE_SRCS) \
 		$(WIDGET_UTILS_SRCS) $(LDLIBS) $(GTK_LIBS)
+
+test_sgf_view_broadway: test_sgf_view
+	@if ! command -v $(BROADWAYD_BIN) >/dev/null 2>&1; then \
+		echo "Skipping Broadway SGF view test: $(BROADWAYD_BIN) not available."; \
+		exit 0; \
+	fi; \
+	mkdir -p "$(XDG_RUNTIME_DIR)"; \
+	chmod 700 "$(XDG_RUNTIME_DIR)"; \
+	broadway_pid=""; \
+	cleanup() { \
+		if [ -n "$$broadway_pid" ]; then \
+			kill "$$broadway_pid" >/dev/null 2>&1 || true; \
+			wait "$$broadway_pid" >/dev/null 2>&1 || true; \
+		fi; \
+	}; \
+	trap cleanup EXIT INT TERM; \
+	XDG_RUNTIME_DIR="$(XDG_RUNTIME_DIR)" $(BROADWAYD_BIN) --port "$(BROADWAY_TEST_PORT)" \
+		":$(BROADWAY_TEST_DISPLAY)" >"$(BROADWAY_TEST_LOG)" 2>&1 & \
+	broadway_pid=$$!; \
+	sleep "$(BROADWAY_STARTUP_DELAY)"; \
+	XDG_RUNTIME_DIR="$(XDG_RUNTIME_DIR)" GDK_BACKEND=broadway \
+		BROADWAY_DISPLAY=":$(BROADWAY_TEST_DISPLAY)" ./test_sgf_view
 
 test_board_view: tests/test_board_view.c src/board_view.c src/board_view.h src/board_grid.c src/board_grid.h \
 	src/board_square.c src/board_square.h src/board_move_overlay.c src/board_move_overlay.h \
@@ -174,7 +201,7 @@ gcheckers: src/gcheckers.c src/gcheckers_application.c src/gcheckers_window.c sr
 
 clean:
 	rm -f $(OBJS) libgame.a test_game test_game_print test_board test_move_gen test_checkers_model \
-		test_sgf_tree test_sgf_view test_player_controls_panel test_gcheckers_sgf_controller \
+		test_sgf_tree test_sgf_view test_board_view test_player_controls_panel test_gcheckers_sgf_controller \
 		test_gcheckers_window test_screenshot checkers gcheckers
 	rm -rf $(COV_DIR)
 
