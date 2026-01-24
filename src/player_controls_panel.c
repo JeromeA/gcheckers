@@ -153,6 +153,13 @@ void player_controls_panel_set_selected(PlayerControlsPanel *self, CheckersColor
   gtk_drop_down_set_selected(control, selected);
 }
 
+void player_controls_panel_set_all_user(PlayerControlsPanel *self) {
+  g_return_if_fail(PLAYER_IS_CONTROLS_PANEL(self));
+
+  player_controls_panel_set_selected(self, CHECKERS_COLOR_WHITE, 0);
+  player_controls_panel_set_selected(self, CHECKERS_COLOR_BLACK, 0);
+}
+
 guint player_controls_panel_get_selected(PlayerControlsPanel *self, CheckersColor color) {
   GtkDropDown *control = player_controls_panel_get_control(self, color);
   g_return_val_if_fail(control != NULL, 0);

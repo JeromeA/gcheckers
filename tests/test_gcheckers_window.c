@@ -1,8 +1,10 @@
 #include <gtk/gtk.h>
 
 #include "checkers_model.h"
+#include "gcheckers_sgf_controller.h"
 #include "gcheckers_window.h"
 #include "player_controls_panel.h"
+#include "sgf_tree.h"
 
 static void test_gcheckers_window_skip(void) {
   g_test_skip("GTK display not available.");
@@ -34,13 +36,82 @@ static GtkWidget *test_gcheckers_window_find_by_type(GtkWidget *root, GType widg
   return NULL;
 }
 
+static GtkWidget *test_gcheckers_window_find_board_square(GtkWidget *root) {
+  g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
+
+  if (GTK_IS_BUTTON(root)) {
+    gpointer data = g_object_get_data(G_OBJECT(root), "board-index");
+    if (data != NULL) {
+      return root;
+    }
+  }
+
+  for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
+       child = gtk_widget_get_next_sibling(child)) {
+    GtkWidget *match = test_gcheckers_window_find_board_square(child);
+    if (match != NULL) {
+      return match;
+    }
+  }
+
+  return NULL;
+}
+
+static void test_gcheckers_window_drain_main_context(guint max_iterations) {
+  g_return_if_fail(max_iterations > 0);
+
+  for (guint i = 0; i < max_iterations; ++i) {
+    if (!g_main_context_iteration(NULL, FALSE)) {
+      return;
+    }
+  }
+
+  g_debug("Main context still busy after %u iterations\n", max_iterations);
+}
+
+static gboolean apply_first_move(GCheckersModel *model, CheckersMove *out_move) {
+  g_return_val_if_fail(GCHECKERS_IS_MODEL(model), FALSE);
+  g_return_val_if_fail(out_move != NULL, FALSE);
+
+  MoveList moves = gcheckers_model_list_moves(model);
+  if (moves.count == 0) {
+    g_debug("No available moves for gcheckers window test\n");
+    movelist_free(&moves);
+    return FALSE;
+  }
+
+  *out_move = moves.moves[0];
+  gboolean applied = gcheckers_model_apply_move(model, out_move);
+  movelist_free(&moves);
+  if (!applied) {
+    g_debug("Failed to apply test move for gcheckers window\n");
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
+static const SgfNode *sgf_tree_get_first_child(SgfTree *tree) {
+  g_return_val_if_fail(SGF_IS_TREE(tree), NULL);
+
+  const SgfNode *root = sgf_tree_get_root(tree);
+  g_return_val_if_fail(root != NULL, NULL);
+
+  const GPtrArray *children = sgf_node_get_children(root);
+  if (children == NULL || children->len == 0) {
+    g_debug("SGF tree root has no children\n");
+    return NULL;
+  }
+
+  return g_ptr_array_index(children, 0);
+}
+
 static void test_gcheckers_window_unparents_controls_panel_on_dispose(void) {
   GtkApplication *app = test_gcheckers_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
   GCheckersWindow *window = gcheckers_window_new(app, model);
 
-  GtkWidget *panel_widget =
-      test_gcheckers_window_find_by_type(GTK_WIDGET(window), PLAYER_TYPE_CONTROLS_PANEL);
+  GtkWidget *panel_widget = test_gcheckers_window_find_by_type(GTK_WIDGET(window), PLAYER_TYPE_CONTROLS_PANEL);
   g_assert_nonnull(panel_widget);
   g_assert_true(PLAYER_IS_CONTROLS_PANEL(panel_widget));
 
@@ -72,8 +143,7 @@ static void test_gcheckers_window_dispose_after_panel_removed(void) {
   GCheckersModel *model = gcheckers_model_new();
   GCheckersWindow *window = gcheckers_window_new(app, model);
 
-  GtkWidget *panel_widget =
-      test_gcheckers_window_find_by_type(GTK_WIDGET(window), PLAYER_TYPE_CONTROLS_PANEL);
+  GtkWidget *panel_widget = test_gcheckers_window_find_by_type(GTK_WIDGET(window), PLAYER_TYPE_CONTROLS_PANEL);
   g_assert_nonnull(panel_widget);
 
   GtkWidget *parent = gtk_widget_get_parent(panel_widget);
@@ -87,12 +157,92 @@ static void test_gcheckers_window_dispose_after_panel_removed(void) {
   g_clear_object(&app);
 }
 
+static void test_gcheckers_window_computer_selection_keeps_board_enabled(void) {
+  GtkApplication *app = gtk_application_new("org.example.gcheckers.tests", G_APPLICATION_DEFAULT_FLAGS);
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersWindow *window = gcheckers_window_new(app, model);
+
+  PlayerControlsPanel *panel = gcheckers_window_get_controls_panel(window);
+  g_assert_nonnull(panel);
+
+  player_controls_panel_set_selected(panel, CHECKERS_COLOR_WHITE, 1);
+  test_gcheckers_window_drain_main_context(8);
+
+  GtkWidget *square = test_gcheckers_window_find_board_square(GTK_WIDGET(window));
+  g_assert_nonnull(square);
+  g_assert_true(gtk_widget_get_sensitive(square));
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
+static void test_gcheckers_window_auto_moves_when_next_player_is_computer(void) {
+  GtkApplication *app = gtk_application_new("org.example.gcheckers.tests", G_APPLICATION_DEFAULT_FLAGS);
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersWindow *window = gcheckers_window_new(app, model);
+
+  PlayerControlsPanel *panel = gcheckers_window_get_controls_panel(window);
+  g_assert_nonnull(panel);
+
+  player_controls_panel_set_selected(panel, CHECKERS_COLOR_WHITE, 0);
+  player_controls_panel_set_selected(panel, CHECKERS_COLOR_BLACK, 1);
+
+  CheckersMove move;
+  g_assert_true(apply_first_move(model, &move));
+  test_gcheckers_window_drain_main_context(16);
+
+  guint history_size = gcheckers_model_get_history_size(model);
+  g_assert_cmpuint(history_size, >=, 2);
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
+static void test_gcheckers_window_sgf_navigation_resets_controls_to_user(void) {
+  GtkApplication *app = gtk_application_new("org.example.gcheckers.tests", G_APPLICATION_DEFAULT_FLAGS);
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersWindow *window = gcheckers_window_new(app, model);
+
+  PlayerControlsPanel *panel = gcheckers_window_get_controls_panel(window);
+  g_assert_nonnull(panel);
+
+  player_controls_panel_set_selected(panel, CHECKERS_COLOR_WHITE, 0);
+  player_controls_panel_set_selected(panel, CHECKERS_COLOR_BLACK, 1);
+
+  CheckersMove move;
+  g_assert_true(apply_first_move(model, &move));
+  test_gcheckers_window_drain_main_context(16);
+
+  GCheckersSgfController *controller = gcheckers_window_get_sgf_controller(window);
+  g_assert_nonnull(controller);
+
+  SgfTree *tree = gcheckers_sgf_controller_get_tree(controller);
+  const SgfNode *node = sgf_tree_get_first_child(tree);
+  g_assert_nonnull(node);
+
+  SgfView *view = gcheckers_sgf_controller_get_view(controller);
+  g_signal_emit_by_name(view, "node-selected", node);
+  test_gcheckers_window_drain_main_context(16);
+
+  g_assert_true(player_controls_panel_is_user_control(panel, CHECKERS_COLOR_WHITE));
+  g_assert_true(player_controls_panel_is_user_control(panel, CHECKERS_COLOR_BLACK));
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   if (!gtk_init_check()) {
     g_test_add_func("/gcheckers-window/dispose-unparents-controls", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/dispose-without-panel-ref", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/dispose-after-panel-removed", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/computer-selection-keeps-board-enabled", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/auto-move-next-player-computer", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/sgf-navigation-resets-controls", test_gcheckers_window_skip);
     return g_test_run();
   }
 
@@ -115,7 +265,11 @@ int main(int argc, char **argv) {
                   test_gcheckers_window_dispose_without_external_panel_ref);
   g_test_add_func("/gcheckers-window/dispose-after-panel-removed",
                   test_gcheckers_window_dispose_after_panel_removed);
-  int result = g_test_run();
-  g_clear_object(&test_app);
-  return result;
+  g_test_add_func("/gcheckers-window/computer-selection-keeps-board-enabled",
+                  test_gcheckers_window_computer_selection_keeps_board_enabled);
+  g_test_add_func("/gcheckers-window/auto-move-next-player-computer",
+                  test_gcheckers_window_auto_moves_when_next_player_is_computer);
+  g_test_add_func("/gcheckers-window/sgf-navigation-resets-controls",
+                  test_gcheckers_window_sgf_navigation_resets_controls_to_user);
+  return g_test_run();
 }

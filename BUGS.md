@@ -224,3 +224,12 @@ failed`.
 
 The fix introduces `gcheckers_widget_remove_from_parent()` to detach widgets via container-specific removal APIs and
 updates the relevant dispose handlers and GTK tests to run under a real display backend.
+## Selecting Computer prevented the user from making a move
+
+The goal was for the player dropdowns to control auto-play, not to disable manual input.
+
+`GCheckersWindow` disabled board input whenever the active turn was set to Computer, but it did not automatically
+trigger an AI move. This left the board insensitive with no follow-up action, stalling the game.
+
+The fix keeps board input enabled whenever the game is still running, schedules a forced move on idle after a move when
+the next player is set to Computer, and resets both dropdowns to User when the SGF tree is navigated.

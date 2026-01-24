@@ -2,23 +2,27 @@
 
 ## `GCheckersWindow` (`src/gcheckers_window.c`)
 Class: `GCheckersWindow` (`GtkApplicationWindow`).
-Role: composition root that binds model state to UI updates and high-level actions.
+Role: composition root that binds model state to UI updates, keeps board input available, and coordinates auto-play.
 Owns: `GCheckersModel`, `BoardView`, `PlayerControlsPanel`, and `GCheckersSgfController`.
-Collaborates with: `gcheckers_style_init()` for CSS and model signals for refresh.
+Collaborates with: `gcheckers_style_init()` for CSS, model signals for refresh, and SGF analysis signals to reset
+player dropdowns.
 Lifecycle: sinks and retains an owned `PlayerControlsPanel` reference, removes it from its current `GtkBox` parent
 during dispose via `gcheckers_widget_remove_from_parent()`, and then clears its references.
+during dispose, cancels any pending auto-move idle source, and then clears its references.
 
 ## `GCheckersSgfController` (`src/gcheckers_sgf_controller.c`)
 Class: `GCheckersSgfController` (`GObject`).
-Role: SGF history synchronization, node selection handling, and replay orchestration.
+Role: SGF history synchronization, node selection handling, replay orchestration, and analysis signaling.
 Owns: `SgfTree` and `SgfView`, plus replay guards (`is_replaying`, `last_history_size`).
-Collaborates with: `GCheckersModel` for history and `BoardView` to clear selection on replay.
+Collaborates with: `GCheckersModel` for history, `BoardView` to clear selection on replay, and `GCheckersWindow` via
+the `analysis-requested` signal.
 
 ## `PlayerControlsPanel` (`src/player_controls_panel.c`)
 Class: `PlayerControlsPanel` (`GtkBox`).
 Role: encapsulates player mode dropdowns and force-move UI.
 Signals: `control-changed` and `force-move-requested` for window-level coordination.
-Collaborates with: `GCheckersWindow` (signal handlers) and GTK widgets (`GtkDropDown`, `GtkButton`).
+Collaborates with: `GCheckersWindow` (signal handlers and `player_controls_panel_set_all_user()`) and GTK widgets
+(`GtkDropDown`, `GtkButton`).
 
 ## `gcheckers_style_init()` (`src/gcheckers_style.c`)
 Module: `gcheckers_style_init()` (style helper, not a class).
