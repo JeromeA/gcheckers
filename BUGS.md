@@ -184,3 +184,17 @@ Unparenting dropped the container's last reference and finalized the widget, so 
 The fix temporarily acquires a reference to the controls panel before unparenting so the final `g_clear_object()` runs
 on a still-valid object, and adds a regression test that disposes the window without taking an external panel
 reference.
+
+## `GCheckersWindow::dispose` crashed if the controls panel had already been removed
+
+The window should be able to dispose safely even when a child widget was removed from its container earlier in the
+session.
+
+`GCheckersWindow` kept only a non-owning pointer to the `PlayerControlsPanel`, so removing the panel from its `GtkBox`
+could finalize it immediately while the window still held the stale pointer.
+
+During shutdown, `gcheckers_window_unparent_controls_panel()` then called `gtk_widget_get_parent()` with a
+non-`GtkWidget` pointer and triggered the Gtk-critical `gtk_widget_unparent: assertion 'GTK_IS_WIDGET (widget)' failed`.
+
+The fix sinks and retains an owned reference to the controls panel at construction time, removes it via its current box
+parent during dispose, and adds a regression test that removes the panel before disposing the window.

@@ -28,11 +28,13 @@ static GtkWidget *test_gcheckers_window_find_by_type(GtkWidget *root, GType widg
 }
 
 static void test_gcheckers_window_unparents_controls_panel_on_dispose(void) {
-  GtkApplication *app = gtk_application_new("org.example.gcheckers.tests", G_APPLICATION_DEFAULT_FLAGS);
+  GtkApplication *app =
+      gtk_application_new("org.example.gcheckers.tests", G_APPLICATION_DEFAULT_FLAGS);
   GCheckersModel *model = gcheckers_model_new();
   GCheckersWindow *window = gcheckers_window_new(app, model);
 
-  GtkWidget *panel_widget = test_gcheckers_window_find_by_type(GTK_WIDGET(window), PLAYER_TYPE_CONTROLS_PANEL);
+  GtkWidget *panel_widget =
+      test_gcheckers_window_find_by_type(GTK_WIDGET(window), PLAYER_TYPE_CONTROLS_PANEL);
   g_assert_nonnull(panel_widget);
   g_assert_true(PLAYER_IS_CONTROLS_PANEL(panel_widget));
 
@@ -48,9 +50,31 @@ static void test_gcheckers_window_unparents_controls_panel_on_dispose(void) {
 }
 
 static void test_gcheckers_window_dispose_without_external_panel_ref(void) {
-  GtkApplication *app = gtk_application_new("org.example.gcheckers.tests", G_APPLICATION_DEFAULT_FLAGS);
+  GtkApplication *app =
+      gtk_application_new("org.example.gcheckers.tests", G_APPLICATION_DEFAULT_FLAGS);
   GCheckersModel *model = gcheckers_model_new();
   GCheckersWindow *window = gcheckers_window_new(app, model);
+
+  g_object_run_dispose(G_OBJECT(window));
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
+static void test_gcheckers_window_dispose_after_panel_removed(void) {
+  GtkApplication *app =
+      gtk_application_new("org.example.gcheckers.tests", G_APPLICATION_DEFAULT_FLAGS);
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersWindow *window = gcheckers_window_new(app, model);
+
+  GtkWidget *panel_widget =
+      test_gcheckers_window_find_by_type(GTK_WIDGET(window), PLAYER_TYPE_CONTROLS_PANEL);
+  g_assert_nonnull(panel_widget);
+
+  GtkWidget *parent = gtk_widget_get_parent(panel_widget);
+  g_assert_true(GTK_IS_BOX(parent));
+  gtk_box_remove(GTK_BOX(parent), panel_widget);
 
   g_object_run_dispose(G_OBJECT(window));
 
@@ -64,6 +88,7 @@ int main(int argc, char **argv) {
   if (!gtk_init_check()) {
     g_test_add_func("/gcheckers-window/dispose-unparents-controls", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/dispose-without-panel-ref", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/dispose-after-panel-removed", test_gcheckers_window_skip);
     return g_test_run();
   }
 
@@ -71,5 +96,7 @@ int main(int argc, char **argv) {
                   test_gcheckers_window_unparents_controls_panel_on_dispose);
   g_test_add_func("/gcheckers-window/dispose-without-panel-ref",
                   test_gcheckers_window_dispose_without_external_panel_ref);
+  g_test_add_func("/gcheckers-window/dispose-after-panel-removed",
+                  test_gcheckers_window_dispose_after_panel_removed);
   return g_test_run();
 }
