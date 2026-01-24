@@ -142,7 +142,8 @@ Collaborates with: SGF layout data and view sizing.
 
 ### SGF scroller (`src/sgf_view_scroller.c`, `src/sgf_view_scroller.h`)
 Module: selection scroll helper.
-Role: clamp scrolled window adjustments and keep selected nodes in view.
+Role: clamp scrolled window adjustments and keep selected nodes in view, queueing scrolls on tick callbacks so layout
+has settled.
 Collaborates with: `SgfView` and selection controller updates.
 
 ### SGF selection controller (`src/sgf_view_selection_controller.c`, `src/sgf_view_selection_controller.h`)
