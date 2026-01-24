@@ -272,3 +272,11 @@ The fix measures each disc's natural size while building the grid, records per-c
 those extents for both content sizing and scroll-to-selected bounds (with a small visibility padding). A regression
 test now builds a long main line, selects the last node, and asserts the padded bounds fit within the visible
 adjustment page.
+
+## SGF move tree white discs blended into the background
+
+White SGF move discs should be visibly white, distinct from the light gray SGF panel background.
+
+The SGF CSS used a light gray fill for white discs, which matched the panel background and made them look invisible.
+
+The fix updates the white disc CSS color to pure white so the discs remain distinct while retaining the dark border.
