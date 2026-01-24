@@ -10,6 +10,7 @@ struct _GCheckersWindow {
   GCheckersModel *model;
   GtkWidget *status_label;
   GtkWidget *reset_button;
+  GtkWidget *controls_row;
   BoardView *board_view;
   PlayerControlsPanel *controls_panel;
   GCheckersSgfController *sgf_controller;
@@ -158,6 +159,27 @@ static void gcheckers_window_set_model(GCheckersWindow *self, GCheckersModel *mo
   gcheckers_window_update_control_state(self);
 }
 
+static void gcheckers_window_unparent_controls_panel(GCheckersWindow *self) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+
+  if (!self->controls_panel) {
+    return;
+  }
+
+  GtkWidget *panel_widget = GTK_WIDGET(self->controls_panel);
+  GtkWidget *parent = gtk_widget_get_parent(panel_widget);
+  if (!parent) {
+    return;
+  }
+
+  if (self->controls_row && parent == self->controls_row) {
+    gtk_box_remove(GTK_BOX(self->controls_row), panel_widget);
+    return;
+  }
+
+  gtk_widget_unparent(panel_widget);
+}
+
 static void gcheckers_window_dispose(GObject *object) {
   GCheckersWindow *self = GCHECKERS_WINDOW(object);
 
@@ -166,10 +188,13 @@ static void gcheckers_window_dispose(GObject *object) {
     self->state_handler_id = 0;
   }
 
+  gcheckers_window_unparent_controls_panel(self);
+
   g_clear_object(&self->sgf_controller);
   g_clear_object(&self->controls_panel);
   g_clear_object(&self->board_view);
   g_clear_object(&self->model);
+  self->controls_row = NULL;
 
   G_OBJECT_CLASS(gcheckers_window_parent_class)->dispose(object);
 }
@@ -225,11 +250,11 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_paned_set_end_child(GTK_PANED(paned), right_panel);
   gtk_paned_set_shrink_end_child(GTK_PANED(paned), FALSE);
 
-  GtkWidget *controls_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
-  gtk_box_append(GTK_BOX(right_panel), controls_row);
+  self->controls_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+  gtk_box_append(GTK_BOX(right_panel), self->controls_row);
 
   self->controls_panel = player_controls_panel_new();
-  gtk_box_append(GTK_BOX(controls_row), GTK_WIDGET(self->controls_panel));
+  gtk_box_append(GTK_BOX(self->controls_row), GTK_WIDGET(self->controls_panel));
   g_signal_connect(self->controls_panel,
                    "control-changed",
                    G_CALLBACK(gcheckers_window_on_control_changed),

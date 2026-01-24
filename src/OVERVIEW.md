@@ -5,6 +5,7 @@ Class: `GCheckersWindow` (`GtkApplicationWindow`).
 Role: composition root that binds model state to UI updates and high-level actions.
 Owns: `GCheckersModel`, `BoardView`, `PlayerControlsPanel`, and `GCheckersSgfController`.
 Collaborates with: `gcheckers_style_init()` for CSS and model signals for refresh.
+Lifecycle: explicitly removes the `PlayerControlsPanel` from its `GtkBox` during dispose before clearing references.
 
 ## `GCheckersSgfController` (`src/gcheckers_sgf_controller.c`)
 Class: `GCheckersSgfController` (`GObject`).

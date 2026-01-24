@@ -147,6 +147,19 @@ screenshots even though Chrome was installed.
 The fix updates the default binary name to `google-chrome` and keeps the presence check so screenshot capture still
 fails fast when Chrome is missing.
 
+## PlayerControlsPanel disposed while still parented
+
+The window should release child widgets by removing them from their containers before dropping the last object
+reference.
+
+`GCheckersWindow` cleared its `PlayerControlsPanel` with `g_clear_object()` while the panel was still appended to a
+`GtkBox`.
+
+GTK containers hold references to their children, so disposing a still-parented widget triggered a Gtk-critical during
+shutdown.
+
+The fix removes the controls panel from its containing row during `GCheckersWindow::dispose` and adds a GTK test that
+keeps the panel alive across `g_object_run_dispose()` to assert that it has been unparented.
 ## src/OVERVIEW.md mixed section styles and became hard to scan
 
 The overview should use a consistent section format so contributors can quickly find module responsibilities.
