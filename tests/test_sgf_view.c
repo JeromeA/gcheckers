@@ -2,6 +2,7 @@
 
 #include "sgf_tree.h"
 #include "sgf_view.h"
+#include "sgf_view_scroller.h"
 
 static gboolean sgf_view_quit_loop_cb(gpointer user_data) {
   GMainLoop *loop = user_data;
@@ -124,6 +125,159 @@ static GtkWidget *sgf_view_get_overlay(GtkWidget *root) {
 
   g_debug("Unexpected SGF view child type %s\n", G_OBJECT_TYPE_NAME(child));
   return NULL;
+}
+
+static void sgf_view_update_extent(GArray *extents, guint index, int value) {
+  g_return_if_fail(extents != NULL);
+
+  if (extents->len <= index) {
+    g_array_set_size(extents, index + 1);
+  }
+
+  int current = g_array_index(extents, int, index);
+  if (value > current) {
+    g_array_index(extents, int, index) = value;
+  }
+}
+
+static gboolean sgf_view_compute_disc_bounds(GtkWidget *grid,
+                                             GtkWidget *disc,
+                                             graphene_rect_t *bounds) {
+  g_return_val_if_fail(GTK_IS_GRID(grid), FALSE);
+  g_return_val_if_fail(GTK_IS_WIDGET(disc), FALSE);
+  g_return_val_if_fail(bounds != NULL, FALSE);
+
+  int column = -1;
+  int row = -1;
+  gtk_grid_query_child(GTK_GRID(grid), disc, &column, &row, NULL, NULL);
+  if (column < 0 || row < 0) {
+    g_debug("Unable to query SGF grid position for disc bounds\n");
+    return FALSE;
+  }
+
+  GArray *column_widths = g_array_new(FALSE, TRUE, sizeof(int));
+  GArray *row_heights = g_array_new(FALSE, TRUE, sizeof(int));
+  if (!column_widths || !row_heights) {
+    g_debug("Unable to allocate SGF extent arrays for visibility test\n");
+    if (column_widths) {
+      g_array_unref(column_widths);
+    }
+    if (row_heights) {
+      g_array_unref(row_heights);
+    }
+    return FALSE;
+  }
+
+  GtkWidget *child = gtk_widget_get_first_child(grid);
+  while (child) {
+    int child_column = -1;
+    int child_row = -1;
+    gtk_grid_query_child(GTK_GRID(grid), child, &child_column, &child_row, NULL, NULL);
+    if (child_column < 0 || child_row < 0) {
+      g_debug("Unable to query SGF grid position for extent calculation\n");
+      g_array_unref(column_widths);
+      g_array_unref(row_heights);
+      return FALSE;
+    }
+
+    int min_width = 0;
+    int natural_width = 0;
+    int min_height = 0;
+    int natural_height = 0;
+    gtk_widget_measure(child,
+                       GTK_ORIENTATION_HORIZONTAL,
+                       -1,
+                       &min_width,
+                       &natural_width,
+                       NULL,
+                       NULL);
+    gtk_widget_measure(child,
+                       GTK_ORIENTATION_VERTICAL,
+                       -1,
+                       &min_height,
+                       &natural_height,
+                       NULL,
+                       NULL);
+
+    int measured_width = MAX(natural_width, min_width);
+    int measured_height = MAX(natural_height, min_height);
+    int request_width = -1;
+    int request_height = -1;
+    gtk_widget_get_size_request(child, &request_width, &request_height);
+    if (request_width > 0) {
+      measured_width = MAX(measured_width, request_width);
+    }
+    if (request_height > 0) {
+      measured_height = MAX(measured_height, request_height);
+    }
+    if (measured_width <= 0 || measured_height <= 0) {
+      g_debug("Unable to determine SGF disc extent for visibility test\n");
+      g_array_unref(column_widths);
+      g_array_unref(row_heights);
+      return FALSE;
+    }
+
+    sgf_view_update_extent(column_widths, (guint)child_column, measured_width);
+    sgf_view_update_extent(row_heights, (guint)child_row, measured_height);
+    child = gtk_widget_get_next_sibling(child);
+  }
+
+  if (column_widths->len <= (guint)column || row_heights->len <= (guint)row) {
+    g_debug("SGF extent arrays shorter than expected for visibility test\n");
+    g_array_unref(column_widths);
+    g_array_unref(row_heights);
+    return FALSE;
+  }
+
+  int column_spacing = gtk_grid_get_column_spacing(GTK_GRID(grid));
+  int row_spacing = gtk_grid_get_row_spacing(GTK_GRID(grid));
+  int margin_start = gtk_widget_get_margin_start(grid);
+  int margin_top = gtk_widget_get_margin_top(grid);
+
+  double origin_x = margin_start + column * column_spacing;
+  for (int i = 0; i < column; ++i) {
+    origin_x += g_array_index(column_widths, int, i);
+  }
+
+  double origin_y = margin_top + row * row_spacing;
+  for (int i = 0; i < row; ++i) {
+    origin_y += g_array_index(row_heights, int, i);
+  }
+
+  bounds->origin.x = origin_x;
+  bounds->origin.y = origin_y;
+  bounds->size.width = g_array_index(column_widths, int, column);
+  bounds->size.height = g_array_index(row_heights, int, row);
+  g_array_unref(column_widths);
+  g_array_unref(row_heights);
+  return TRUE;
+}
+
+static void sgf_view_assert_disc_visible(GtkAdjustment *hadjustment,
+                                         GtkAdjustment *vadjustment,
+                                         const graphene_rect_t *bounds) {
+  g_return_if_fail(hadjustment != NULL);
+  g_return_if_fail(vadjustment != NULL);
+  g_return_if_fail(bounds != NULL);
+
+  const double padding = (double)SGF_VIEW_SCROLLER_VISIBILITY_PADDING;
+  const double visible_start_x = gtk_adjustment_get_value(hadjustment);
+  const double visible_end_x = visible_start_x + gtk_adjustment_get_page_size(hadjustment);
+  const double visible_start_y = gtk_adjustment_get_value(vadjustment);
+  const double visible_end_y = visible_start_y + gtk_adjustment_get_page_size(vadjustment);
+  const double padded_start_x = MAX(0.0, bounds->origin.x - padding);
+  const double padded_end_x = bounds->origin.x + bounds->size.width + padding;
+  const double padded_start_y = MAX(0.0, bounds->origin.y - padding);
+  const double padded_end_y = bounds->origin.y + bounds->size.height + padding;
+  const double epsilon = 1.0;
+
+  gboolean h_visible = visible_start_x <= padded_start_x + epsilon &&
+                       visible_end_x + epsilon >= padded_end_x;
+  gboolean v_visible = visible_start_y <= padded_start_y + epsilon &&
+                       visible_end_y + epsilon >= padded_end_y;
+
+  g_assert_true(h_visible);
+  g_assert_true(v_visible);
 }
 
 static void test_sgf_view_connectors(void) {
@@ -260,6 +414,61 @@ static void test_sgf_view_scrolls_to_new_node(void) {
   g_clear_object(&tree);
 }
 
+static void test_sgf_view_scrolls_selected_disc_fully_into_view(void) {
+  SgfTree *tree = sgf_tree_new();
+  const guint total_moves = 120;
+  const SgfNode *last = NULL;
+  for (guint i = 0; i < total_moves; ++i) {
+    SgfColor color = (i % 2 == 0) ? SGF_COLOR_BLACK : SGF_COLOR_WHITE;
+    last = sgf_tree_append_move(tree, color, NULL);
+  }
+  g_assert_nonnull(last);
+
+  const SgfNode *root = sgf_tree_get_root(tree);
+  g_assert_nonnull(root);
+  g_assert_true(sgf_tree_set_current(tree, root));
+
+  SgfView *view = sgf_view_new();
+  sgf_view_set_tree(view, tree);
+
+  GtkWidget *root_widget = sgf_view_get_widget(view);
+  GtkWidget *window = gtk_window_new();
+  gtk_window_set_default_size(GTK_WINDOW(window), 220, 180);
+  gtk_window_set_child(GTK_WINDOW(window), root_widget);
+  gtk_window_present(GTK_WINDOW(window));
+  sgf_view_wait(40);
+
+  GtkAdjustment *hadjustment = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(root_widget));
+  GtkAdjustment *vadjustment = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(root_widget));
+  g_assert_nonnull(hadjustment);
+  g_assert_nonnull(vadjustment);
+
+  gtk_adjustment_set_value(hadjustment, 0.0);
+  gtk_adjustment_set_value(vadjustment, 0.0);
+  sgf_view_wait(20);
+
+  sgf_view_set_selected(view, last);
+  gboolean scrolled = sgf_view_wait_for_scroll(hadjustment, vadjustment, 2000);
+  g_assert_true(scrolled);
+  sgf_view_wait(200);
+
+  GtkWidget *overlay = sgf_view_get_overlay(root_widget);
+  g_assert_nonnull(overlay);
+  GtkWidget *tree_grid = sgf_view_find_grid(overlay);
+  g_assert_nonnull(tree_grid);
+  GtkWidget *disc = sgf_view_find_disc_for_node(tree_grid, last);
+  g_assert_nonnull(disc);
+
+  graphene_rect_t bounds;
+  gboolean has_bounds = sgf_view_compute_disc_bounds(tree_grid, disc, &bounds);
+  g_assert_true(has_bounds);
+  sgf_view_assert_disc_visible(hadjustment, vadjustment, &bounds);
+
+  gtk_window_destroy(GTK_WINDOW(window));
+  g_clear_object(&view);
+  g_clear_object(&tree);
+}
+
 static void test_sgf_view_navigation(void) {
   SgfTree *tree = sgf_tree_new();
   g_autoptr(GBytes) move_1_payload = g_bytes_new_static("n1", sizeof("n1") - 1);
@@ -299,6 +508,8 @@ int main(int argc, char **argv) {
     g_test_add_func("/sgf-view/branches", test_sgf_view_connectors_skip);
     g_test_add_func("/sgf-view/navigation", test_sgf_view_connectors_skip);
     g_test_add_func("/sgf-view/scrolls-to-new-node", test_sgf_view_connectors_skip);
+    g_test_add_func("/sgf-view/scrolls-selected-disc-fully-into-view",
+                    test_sgf_view_connectors_skip);
     return g_test_run();
   }
 
@@ -306,5 +517,7 @@ int main(int argc, char **argv) {
   g_test_add_func("/sgf-view/branches", test_sgf_view_branch_columns);
   g_test_add_func("/sgf-view/navigation", test_sgf_view_navigation);
   g_test_add_func("/sgf-view/scrolls-to-new-node", test_sgf_view_scrolls_to_new_node);
+  g_test_add_func("/sgf-view/scrolls-selected-disc-fully-into-view",
+                  test_sgf_view_scrolls_selected_disc_fully_into_view);
   return g_test_run();
 }

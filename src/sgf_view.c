@@ -22,6 +22,8 @@ struct _SgfView {
   SgfViewLinkRenderer *link_renderer;
   SgfViewSelectionController *selection;
   SgfViewScroller *scroller;
+  GArray *column_widths;
+  GArray *row_heights;
   int content_width;
   int content_height;
 };
@@ -38,6 +40,23 @@ static const int sgf_view_disc_spacing = 8;
 static const int sgf_view_disc_stride = sgf_view_disc_size + (sgf_view_disc_border * 2);
 
 static void sgf_view_rebuild(SgfView *self);
+
+static int sgf_view_sum_extents(GArray *extents, guint count, int fallback) {
+  g_return_val_if_fail(fallback > 0, 0);
+
+  if (!extents || extents->len < count) {
+    if (extents && extents->len < count) {
+      g_debug("SGF extents array shorter than expected\n");
+    }
+    return (int)count * fallback;
+  }
+
+  int total = 0;
+  for (guint i = 0; i < count; ++i) {
+    total += g_array_index(extents, int, i);
+  }
+  return total;
+}
 
 static void sgf_view_update_content_size(SgfView *self,
                                          gboolean has_nodes,
@@ -81,15 +100,37 @@ static void sgf_view_update_content_size(SgfView *self,
   int margin_top = gtk_widget_get_margin_top(self->tree_box);
   int margin_bottom = gtk_widget_get_margin_bottom(self->tree_box);
 
-  int width = margin_start + margin_end + (int)columns * sgf_view_disc_stride;
+  int columns_width = sgf_view_sum_extents(self->column_widths, columns, sgf_view_disc_stride);
+  int width = margin_start + margin_end + columns_width;
   if (columns > 1) {
     width += (int)(columns - 1) * sgf_view_disc_spacing;
   }
 
-  int height = margin_top + margin_bottom + (int)rows * sgf_view_disc_stride;
+  int rows_height = sgf_view_sum_extents(self->row_heights, rows, sgf_view_disc_stride);
+  int height = margin_top + margin_bottom + rows_height;
   if (rows > 1) {
     height += (int)(rows - 1) * sgf_view_disc_spacing;
   }
+
+  int measured_width = 0;
+  int measured_height = 0;
+  gtk_widget_measure(self->tree_box,
+                     GTK_ORIENTATION_HORIZONTAL,
+                     -1,
+                     &measured_width,
+                     NULL,
+                     NULL,
+                     NULL);
+  gtk_widget_measure(self->tree_box,
+                     GTK_ORIENTATION_VERTICAL,
+                     -1,
+                     &measured_height,
+                     NULL,
+                     NULL,
+                     NULL);
+
+  width = MAX(width, measured_width);
+  height = MAX(height, measured_height);
 
   self->content_width = width;
   self->content_height = height;
@@ -134,7 +175,9 @@ static void sgf_view_queue_scroll_to_selected(SgfView *self) {
                           self->node_widgets,
                           selected,
                           self->content_width,
-                          self->content_height);
+                          self->content_height,
+                          self->column_widths,
+                          self->row_heights);
 }
 
 static void sgf_view_select_node(SgfView *self, const SgfNode *node, gboolean emit_signal) {
@@ -198,6 +241,10 @@ static void sgf_view_rebuild(SgfView *self) {
 
   g_clear_pointer(&self->node_widgets, g_hash_table_unref);
   self->node_widgets = g_hash_table_new(g_direct_hash, g_direct_equal);
+  g_clear_pointer(&self->column_widths, g_array_unref);
+  g_clear_pointer(&self->row_heights, g_array_unref);
+  self->column_widths = g_array_new(FALSE, TRUE, sizeof(int));
+  self->row_heights = g_array_new(FALSE, TRUE, sizeof(int));
 
   const SgfNode *selected = sgf_view_selection_controller_get_selected(self->selection);
   gboolean has_nodes = FALSE;
@@ -218,6 +265,8 @@ static void sgf_view_rebuild(SgfView *self) {
                         self->disc_factory,
                         selected,
                         sgf_view_disc_stride,
+                        self->column_widths,
+                        self->row_heights,
                         &max_row,
                         &max_column);
   sgf_view_update_content_size(self, has_nodes, max_row, max_column);
@@ -242,6 +291,8 @@ static void sgf_view_dispose(GObject *object) {
     self->root = NULL;
   }
   g_clear_pointer(&self->node_widgets, g_hash_table_unref);
+  g_clear_pointer(&self->column_widths, g_array_unref);
+  g_clear_pointer(&self->row_heights, g_array_unref);
   g_clear_object(&self->disc_factory);
   g_clear_object(&self->layout);
   g_clear_object(&self->link_renderer);

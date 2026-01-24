@@ -258,3 +258,17 @@ The fix computes layout extents during rebuild, sets both the overlay and viewpo
 content size, and updates the scroller to derive bounds from grid coordinates while ensuring the adjustments' upper
 bounds are at least the expected size. The regression test now waits for scrolling to occur within a timeout and
 asserts that all nodes are present.
+
+## SGF scroll-to-selected clipped discs on the right edge
+
+Selecting a node near the right edge of the SGF panel should scroll far enough that the entire disc remains visible.
+
+The scroller computed disc bounds from the size request first, even after the widget had a larger allocated width. On
+rightward navigation it also assumed every column used the same disc width. Once move numbers reached three digits, the
+natural disc width grew and later columns landed much farther to the right than the scroller expected, so
+`gtk_adjustment_clamp_page()` stopped early and left the disc partially clipped.
+
+The fix measures each disc's natural size while building the grid, records per-column and per-row extents, and uses
+those extents for both content sizing and scroll-to-selected bounds (with a small visibility padding). A regression
+test now builds a long main line, selects the last node, and asserts the padded bounds fit within the visible
+adjustment page.
