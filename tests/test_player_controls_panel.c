@@ -1,0 +1,88 @@
+#include <gtk/gtk.h>
+
+#include "player_controls_panel.h"
+
+static void test_player_controls_panel_skip(void) {
+  g_test_skip("GTK display not available.");
+}
+
+static void test_player_controls_panel_defaults(void) {
+  PlayerControlsPanel *panel = player_controls_panel_new();
+
+  g_assert_cmpuint(player_controls_panel_get_selected(panel, CHECKERS_COLOR_WHITE), ==, 0);
+  g_assert_cmpuint(player_controls_panel_get_selected(panel, CHECKERS_COLOR_BLACK), ==, 1);
+  g_assert_true(player_controls_panel_is_user_control(panel, CHECKERS_COLOR_WHITE));
+  g_assert_false(player_controls_panel_is_user_control(panel, CHECKERS_COLOR_BLACK));
+
+  g_clear_object(&panel);
+}
+
+static void on_control_changed(PlayerControlsPanel * /*panel*/, gpointer user_data) {
+  guint *count = user_data;
+  g_return_if_fail(count != NULL);
+  (*count)++;
+}
+
+static void test_player_controls_panel_control_signal(void) {
+  PlayerControlsPanel *panel = player_controls_panel_new();
+  guint count = 0;
+
+  g_signal_connect(panel, "control-changed", G_CALLBACK(on_control_changed), &count);
+  player_controls_panel_set_selected(panel, CHECKERS_COLOR_BLACK, 0);
+
+  g_assert_cmpuint(count, >, 0);
+
+  g_clear_object(&panel);
+}
+
+static void on_force_move_requested(PlayerControlsPanel * /*panel*/, gpointer user_data) {
+  guint *count = user_data;
+  g_return_if_fail(count != NULL);
+  (*count)++;
+}
+
+static void test_player_controls_panel_force_move_signal(void) {
+  PlayerControlsPanel *panel = player_controls_panel_new();
+  guint count = 0;
+
+  g_signal_connect(panel, "force-move-requested", G_CALLBACK(on_force_move_requested), &count);
+
+  GtkWidget *button = player_controls_panel_get_force_move_button(panel);
+  g_return_if_fail(GTK_IS_BUTTON(button));
+  g_signal_emit_by_name(button, "clicked");
+
+  g_assert_cmpuint(count, ==, 1);
+
+  g_clear_object(&panel);
+}
+
+static void test_player_controls_panel_force_move_sensitive(void) {
+  PlayerControlsPanel *panel = player_controls_panel_new();
+  GtkWidget *button = player_controls_panel_get_force_move_button(panel);
+  g_return_if_fail(GTK_IS_WIDGET(button));
+
+  player_controls_panel_set_force_move_sensitive(panel, FALSE);
+  g_assert_false(gtk_widget_get_sensitive(button));
+
+  player_controls_panel_set_force_move_sensitive(panel, TRUE);
+  g_assert_true(gtk_widget_get_sensitive(button));
+
+  g_clear_object(&panel);
+}
+
+int main(int argc, char **argv) {
+  g_test_init(&argc, &argv, NULL);
+  if (!gtk_init_check()) {
+    g_test_add_func("/player-controls/defaults", test_player_controls_panel_skip);
+    g_test_add_func("/player-controls/control-signal", test_player_controls_panel_skip);
+    g_test_add_func("/player-controls/force-signal", test_player_controls_panel_skip);
+    g_test_add_func("/player-controls/force-sensitive", test_player_controls_panel_skip);
+    return g_test_run();
+  }
+
+  g_test_add_func("/player-controls/defaults", test_player_controls_panel_defaults);
+  g_test_add_func("/player-controls/control-signal", test_player_controls_panel_control_signal);
+  g_test_add_func("/player-controls/force-signal", test_player_controls_panel_force_move_signal);
+  g_test_add_func("/player-controls/force-sensitive", test_player_controls_panel_force_move_sensitive);
+  return g_test_run();
+}
