@@ -32,6 +32,46 @@ static gboolean apply_first_move(GCheckersModel *model, CheckersMove *out_move) 
   return TRUE;
 }
 
+static gboolean apply_first_distinct_move(GCheckersModel *model,
+                                          const CheckersMove *exclude,
+                                          CheckersMove *out_move) {
+  g_return_val_if_fail(GCHECKERS_IS_MODEL(model), FALSE);
+  g_return_val_if_fail(out_move != NULL, FALSE);
+
+  MoveList moves = gcheckers_model_list_moves(model);
+  if (moves.count == 0) {
+    g_debug("No available moves for distinct SGF controller test\n");
+    movelist_free(&moves);
+    return FALSE;
+  }
+
+  gboolean found = FALSE;
+  for (guint i = 0; i < moves.count; ++i) {
+    const CheckersMove *candidate = &moves.moves[i];
+    if (exclude && memcmp(candidate, exclude, sizeof(*candidate)) == 0) {
+      continue;
+    }
+    *out_move = *candidate;
+    found = TRUE;
+    break;
+  }
+
+  if (!found) {
+    g_debug("No distinct move available for SGF controller branching test\n");
+    movelist_free(&moves);
+    return FALSE;
+  }
+
+  gboolean applied = gcheckers_model_apply_move(model, out_move);
+  movelist_free(&moves);
+  if (!applied) {
+    g_debug("Failed to apply distinct test move for SGF controller\n");
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
 static const SgfNode *sgf_tree_get_first_child(SgfTree *tree) {
   g_return_val_if_fail(SGF_IS_TREE(tree), NULL);
 
@@ -100,7 +140,13 @@ static void test_gcheckers_sgf_controller_replay_branching(void) {
   g_assert_cmpuint(gcheckers_model_get_history_size(model), ==, 1);
 
   CheckersMove branch_move;
-  g_assert_true(apply_first_move(model, &branch_move));
+  if (!apply_first_distinct_move(model, &move_2, &branch_move)) {
+    g_test_skip("No alternative branch move available.");
+    g_clear_object(&controller);
+    g_clear_object(&model);
+    g_clear_object(&board_view);
+    return;
+  }
 
   children = sgf_node_get_children(node_1);
   g_assert_nonnull(children);

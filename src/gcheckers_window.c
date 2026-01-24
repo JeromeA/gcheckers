@@ -4,6 +4,7 @@
 #include "gcheckers_sgf_controller.h"
 #include "gcheckers_style.h"
 #include "player_controls_panel.h"
+#include "widget_utils.h"
 
 struct _GCheckersWindow {
   GtkApplicationWindow parent_instance;
@@ -159,25 +160,21 @@ static void gcheckers_window_set_model(GCheckersWindow *self, GCheckersModel *mo
   gcheckers_window_update_control_state(self);
 }
 
-static void gcheckers_window_unparent_controls_panel(GCheckersWindow *self) {
-  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+static gboolean gcheckers_window_unparent_controls_panel(GCheckersWindow *self) {
+  g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), FALSE);
 
   if (!self->controls_panel) {
-    return;
+    return TRUE;
   }
 
   GtkWidget *panel_widget = GTK_WIDGET(self->controls_panel);
-  GtkWidget *parent = gtk_widget_get_parent(panel_widget);
-  if (!parent) {
-    return;
+  gboolean removed = gcheckers_widget_remove_from_parent(panel_widget);
+  if (!removed && gtk_widget_get_parent(panel_widget)) {
+    g_debug("Failed to remove controls panel from parent during dispose\n");
+    return FALSE;
   }
 
-  if (GTK_IS_BOX(parent)) {
-    gtk_box_remove(GTK_BOX(parent), panel_widget);
-    return;
-  }
-
-  gtk_widget_unparent(panel_widget);
+  return TRUE;
 }
 
 static void gcheckers_window_dispose(GObject *object) {
@@ -188,10 +185,14 @@ static void gcheckers_window_dispose(GObject *object) {
     self->state_handler_id = 0;
   }
 
-  gcheckers_window_unparent_controls_panel(self);
+  gboolean panel_removed = gcheckers_window_unparent_controls_panel(self);
 
   g_clear_object(&self->sgf_controller);
-  g_clear_object(&self->controls_panel);
+  if (panel_removed) {
+    g_clear_object(&self->controls_panel);
+  } else {
+    self->controls_panel = NULL;
+  }
   g_clear_object(&self->board_view);
   g_clear_object(&self->model);
   self->controls_row = NULL;

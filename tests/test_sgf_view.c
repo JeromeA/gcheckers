@@ -35,6 +35,30 @@ static GtkWidget *sgf_view_find_disc_for_node(GtkWidget *grid, const SgfNode *no
   return NULL;
 }
 
+static GtkWidget *sgf_view_get_overlay(GtkWidget *root) {
+  g_return_val_if_fail(GTK_IS_SCROLLED_WINDOW(root), NULL);
+
+  GtkWidget *child = gtk_scrolled_window_get_child(GTK_SCROLLED_WINDOW(root));
+  if (!child) {
+    g_debug("SGF view scrolled window had no child\n");
+    return NULL;
+  }
+
+  if (GTK_IS_OVERLAY(child)) {
+    return child;
+  }
+
+  if (GTK_IS_VIEWPORT(child)) {
+    GtkWidget *viewport_child = gtk_viewport_get_child(GTK_VIEWPORT(child));
+    if (GTK_IS_OVERLAY(viewport_child)) {
+      return viewport_child;
+    }
+  }
+
+  g_debug("Unexpected SGF view child type %s\n", G_OBJECT_TYPE_NAME(child));
+  return NULL;
+}
+
 static void test_sgf_view_connectors(void) {
   SgfTree *tree = sgf_tree_new();
   sgf_tree_append_move(tree, SGF_COLOR_BLACK, NULL);
@@ -45,8 +69,8 @@ static void test_sgf_view_connectors(void) {
   sgf_view_set_tree(view, tree);
 
   GtkWidget *root = sgf_view_get_widget(view);
-  GtkWidget *overlay = gtk_scrolled_window_get_child(GTK_SCROLLED_WINDOW(root));
-  g_assert_true(GTK_IS_OVERLAY(overlay));
+  GtkWidget *overlay = sgf_view_get_overlay(root);
+  g_assert_nonnull(overlay);
 
   GtkWidget *lines_area = gtk_overlay_get_child(GTK_OVERLAY(overlay));
   g_assert_true(GTK_IS_DRAWING_AREA(lines_area));
@@ -69,17 +93,22 @@ static void test_sgf_view_connectors(void) {
 
 static void test_sgf_view_branch_columns(void) {
   SgfTree *tree = sgf_tree_new();
-  const SgfNode *move_1 = sgf_tree_append_move(tree, SGF_COLOR_BLACK, NULL);
-  const SgfNode *move_2 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, NULL);
-  sgf_tree_append_move(tree, SGF_COLOR_BLACK, NULL);
+  g_autoptr(GBytes) move_1_payload = g_bytes_new_static("m1", sizeof("m1") - 1);
+  const SgfNode *move_1 = sgf_tree_append_move(tree, SGF_COLOR_BLACK, move_1_payload);
+  g_autoptr(GBytes) move_2_payload = g_bytes_new_static("m2a", sizeof("m2a") - 1);
+  const SgfNode *move_2 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, move_2_payload);
+  g_autoptr(GBytes) move_3_payload = g_bytes_new_static("m3", sizeof("m3") - 1);
+  sgf_tree_append_move(tree, SGF_COLOR_BLACK, move_3_payload);
   g_assert_true(sgf_tree_set_current(tree, move_1));
-  const SgfNode *branch_2 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, NULL);
+  g_autoptr(GBytes) branch_2_payload = g_bytes_new_static("m2b", sizeof("m2b") - 1);
+  const SgfNode *branch_2 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, branch_2_payload);
 
   SgfView *view = sgf_view_new();
   sgf_view_set_tree(view, tree);
 
   GtkWidget *root = sgf_view_get_widget(view);
-  GtkWidget *overlay = gtk_scrolled_window_get_child(GTK_SCROLLED_WINDOW(root));
+  GtkWidget *overlay = sgf_view_get_overlay(root);
+  g_assert_nonnull(overlay);
   GtkWidget *tree_grid = sgf_view_find_grid(overlay);
   g_assert_nonnull(tree_grid);
 
@@ -115,11 +144,15 @@ static void test_sgf_view_connectors_skip(void) {
 
 static void test_sgf_view_navigation(void) {
   SgfTree *tree = sgf_tree_new();
-  const SgfNode *move_1 = sgf_tree_append_move(tree, SGF_COLOR_BLACK, NULL);
-  const SgfNode *move_2 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, NULL);
-  sgf_tree_append_move(tree, SGF_COLOR_BLACK, NULL);
+  g_autoptr(GBytes) move_1_payload = g_bytes_new_static("n1", sizeof("n1") - 1);
+  const SgfNode *move_1 = sgf_tree_append_move(tree, SGF_COLOR_BLACK, move_1_payload);
+  g_autoptr(GBytes) move_2_payload = g_bytes_new_static("n2a", sizeof("n2a") - 1);
+  const SgfNode *move_2 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, move_2_payload);
+  g_autoptr(GBytes) move_3_payload = g_bytes_new_static("n3", sizeof("n3") - 1);
+  sgf_tree_append_move(tree, SGF_COLOR_BLACK, move_3_payload);
   g_assert_true(sgf_tree_set_current(tree, move_1));
-  const SgfNode *branch_2 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, NULL);
+  g_autoptr(GBytes) branch_2_payload = g_bytes_new_static("n2b", sizeof("n2b") - 1);
+  const SgfNode *branch_2 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, branch_2_payload);
 
   SgfView *view = sgf_view_new();
   sgf_view_set_tree(view, tree);

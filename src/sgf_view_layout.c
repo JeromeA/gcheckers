@@ -7,10 +7,12 @@ struct _SgfViewLayout {
 G_DEFINE_TYPE(SgfViewLayout, sgf_view_layout, G_TYPE_OBJECT)
 
 static void sgf_view_layout_clear_container(GtkWidget *container) {
+  g_return_if_fail(GTK_IS_GRID(container));
+
   GtkWidget *child = gtk_widget_get_first_child(container);
   while (child) {
     GtkWidget *next = gtk_widget_get_next_sibling(child);
-    gtk_widget_unparent(child);
+    gtk_grid_remove(GTK_GRID(container), child);
     child = next;
   }
 }

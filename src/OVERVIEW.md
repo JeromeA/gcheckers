@@ -6,7 +6,7 @@ Role: composition root that binds model state to UI updates and high-level actio
 Owns: `GCheckersModel`, `BoardView`, `PlayerControlsPanel`, and `GCheckersSgfController`.
 Collaborates with: `gcheckers_style_init()` for CSS and model signals for refresh.
 Lifecycle: sinks and retains an owned `PlayerControlsPanel` reference, removes it from its current `GtkBox` parent
-during dispose, and then clears its references.
+during dispose via `gcheckers_widget_remove_from_parent()`, and then clears its references.
 
 ## `GCheckersSgfController` (`src/gcheckers_sgf_controller.c`)
 Class: `GCheckersSgfController` (`GObject`).
@@ -25,6 +25,12 @@ Module: `gcheckers_style_init()` (style helper, not a class).
 Role: installs application CSS once per process using `g_once_init_enter/leave`.
 Owns: CSS string and `GtkCssProvider` setup.
 Collaborates with: `GdkDisplay`/`GtkStyleContext` and is invoked by `GCheckersWindow`.
+
+## Widget utilities (`src/widget_utils.c`, `src/widget_utils.h`)
+Module: parent-removal helpers.
+Role: safely detach widgets from common GTK containers (box, grid, overlay, paned, stack) before dropping the last
+reference to avoid GTK4 dispose-time criticals.
+Collaborates with: `GCheckersWindow`, `BoardView`, and SGF view helpers during disposal.
 
 ## Board primitives (`src/board.c`, `src/board.h`)
 Module: board storage and helpers.

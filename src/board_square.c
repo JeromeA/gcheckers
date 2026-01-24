@@ -1,5 +1,7 @@
 #include "board_square.h"
 
+#include "widget_utils.h"
+
 struct _BoardSquare {
   GObject parent_instance;
   GtkWidget *button;
@@ -62,11 +64,19 @@ static void board_square_build(BoardSquare *self) {
 static void board_square_dispose(GObject *object) {
   BoardSquare *self = BOARD_SQUARE(object);
 
-  if (self->button && gtk_widget_get_parent(self->button)) {
-    gtk_widget_unparent(self->button);
+  gboolean button_removed = TRUE;
+  if (self->button) {
+    button_removed = gcheckers_widget_remove_from_parent(self->button);
+    if (!button_removed && gtk_widget_get_parent(self->button)) {
+      g_debug("Failed to remove board square button from parent during dispose\n");
+    }
   }
 
-  g_clear_object(&self->button);
+  if (button_removed) {
+    g_clear_object(&self->button);
+  } else {
+    self->button = NULL;
+  }
   self->piece_stack = NULL;
   self->piece_picture = NULL;
   self->piece_label = NULL;
