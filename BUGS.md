@@ -146,3 +146,13 @@ screenshots even though Chrome was installed.
 
 The fix updates the default binary name to `google-chrome` and keeps the presence check so screenshot capture still
 fails fast when Chrome is missing.
+
+## src/OVERVIEW.md mixed section styles and became hard to scan
+
+The overview should use a consistent section format so contributors can quickly find module responsibilities.
+
+The second half of the document used a flat bullet list while the first half used structured headings, which made the
+file inconsistent and harder to navigate.
+
+The fix rewrites the remainder of the document into the same heading-based format, grouping related modules under
+subsystem sections.
