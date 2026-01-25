@@ -251,10 +251,7 @@ static void sgf_view_rebuild(SgfView *self) {
   gboolean has_nodes = FALSE;
   if (self->tree) {
     const SgfNode *root = sgf_tree_get_root(self->tree);
-    if (root) {
-      const GPtrArray *children = sgf_node_get_children(root);
-      has_nodes = children && children->len > 0;
-    }
+    has_nodes = root != NULL;
   }
 
   guint max_row = 0;

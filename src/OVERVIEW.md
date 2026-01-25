@@ -127,13 +127,13 @@ Collaborates with: SGF layout, selection, scroller, and disc factory helpers.
 
 ### SGF disc factory (`src/sgf_view_disc_factory.c`, `src/sgf_view_disc_factory.h`)
 Module: disc widget creation.
-Role: build SGF move buttons and wire the `node-clicked` signal.
+Role: build SGF move buttons (including the virtual move zero dot) and wire the `node-clicked` signal.
 Collaborates with: `SgfView` and the SGF tree.
 
 ### SGF layout (`src/sgf_view_layout.c`, `src/sgf_view_layout.h`)
 Module: layout helpers.
-Role: position discs in a grid-based SGF tree layout, measure natural disc sizes, and report both maximum row/column
-extents and per-column/per-row sizes for accurate sizing and scrolling.
+Role: position discs in a grid-based SGF tree layout (anchoring the virtual root in column zero), measure natural disc
+sizes, and report both maximum row/column extents and per-column/per-row sizes for accurate sizing and scrolling.
 Collaborates with: `SgfView` and link rendering.
 
 ### SGF link renderer (`src/sgf_view_link_renderer.c`, `src/sgf_view_link_renderer.h`)

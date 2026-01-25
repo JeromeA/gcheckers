@@ -69,6 +69,12 @@ static const char *gcheckers_style_css =
     "}"
     ".sgf-disc-black { background-color: #222; color: #fff; }"
     ".sgf-disc-white { background-color: #fff; color: #111; border: 1px solid #222; }"
+    ".sgf-disc-root {"
+    "  background-color: transparent;"
+    "  border: none;"
+    "  color: #666;"
+    "  font-size: 18px;"
+    "}"
     ".sgf-disc-selected { box-shadow: 0 0 0 3px #5cc7ff; }";
 
 void gcheckers_style_init(void) {
