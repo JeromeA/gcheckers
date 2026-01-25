@@ -55,7 +55,12 @@ GtkWidget *sgf_view_disc_factory_build(SgfViewDiscFactory *self,
   g_return_val_if_fail(node != NULL, NULL);
 
   char label[16];
-  g_snprintf(label, sizeof(label), "%u", sgf_node_get_move_number(node));
+  guint move_number = sgf_node_get_move_number(node);
+  if (move_number == 0) {
+    g_snprintf(label, sizeof(label), "\u2022");
+  } else {
+    g_snprintf(label, sizeof(label), "%u", move_number);
+  }
 
   GtkWidget *button = gtk_button_new_with_label(label);
   gtk_widget_add_css_class(button, "sgf-disc");
@@ -64,7 +69,9 @@ GtkWidget *sgf_view_disc_factory_build(SgfViewDiscFactory *self,
   gtk_widget_set_valign(button, GTK_ALIGN_CENTER);
 
   SgfColor color = sgf_node_get_color(node);
-  if (color == SGF_COLOR_BLACK) {
+  if (move_number == 0) {
+    gtk_widget_add_css_class(button, "sgf-disc-root");
+  } else if (color == SGF_COLOR_BLACK) {
     gtk_widget_add_css_class(button, "sgf-disc-black");
   } else if (color == SGF_COLOR_WHITE) {
     gtk_widget_add_css_class(button, "sgf-disc-white");

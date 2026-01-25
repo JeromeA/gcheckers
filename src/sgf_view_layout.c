@@ -238,13 +238,33 @@ void sgf_view_layout_build(SgfViewLayout *self,
     return;
   }
 
+  guint max_row = 0;
+  guint max_column = 0;
+  sgf_view_layout_attach_disc(self,
+                              disc_factory,
+                              grid,
+                              root,
+                              selected,
+                              node_widgets,
+                              0,
+                              0,
+                              disc_stride,
+                              column_widths,
+                              row_heights,
+                              &max_row,
+                              &max_column);
+
   const GPtrArray *children = sgf_node_get_children(root);
   if (!children || children->len == 0) {
+    if (out_max_row) {
+      *out_max_row = max_row;
+    }
+    if (out_max_column) {
+      *out_max_column = max_column;
+    }
     return;
   }
 
-  guint max_row = 0;
-  guint max_column = 0;
   sgf_view_layout_append_branch(self,
                                 disc_factory,
                                 grid,
@@ -252,7 +272,7 @@ void sgf_view_layout_build(SgfViewLayout *self,
                                 selected,
                                 node_widgets,
                                 0,
-                                0,
+                                1,
                                 disc_stride,
                                 column_widths,
                                 row_heights,

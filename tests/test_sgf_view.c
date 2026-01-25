@@ -387,7 +387,7 @@ static void test_sgf_view_connectors(void) {
   GtkWidget *tree_grid = sgf_view_find_grid(overlay);
   g_assert_nonnull(tree_grid);
 
-  g_assert_cmpint(sgf_view_count_children(tree_grid), ==, 3);
+  g_assert_cmpint(sgf_view_count_children(tree_grid), ==, 4);
 
   GtkWidget *child = gtk_widget_get_first_child(tree_grid);
   g_assert_true(GTK_IS_BUTTON(child));
@@ -395,6 +395,43 @@ static void test_sgf_view_connectors(void) {
   g_assert_true(GTK_IS_BUTTON(child));
   child = gtk_widget_get_next_sibling(child);
   g_assert_true(GTK_IS_BUTTON(child));
+
+  g_clear_object(&view);
+  g_clear_object(&tree);
+}
+
+static void test_sgf_view_root_disc(void) {
+  SgfTree *tree = sgf_tree_new();
+  const SgfNode *move_1 = sgf_tree_append_move(tree, SGF_COLOR_BLACK, NULL);
+
+  SgfView *view = sgf_view_new();
+  sgf_view_set_tree(view, tree);
+
+  GtkWidget *root = sgf_view_get_widget(view);
+  GtkWidget *overlay = sgf_view_get_overlay(root);
+  g_assert_nonnull(overlay);
+  GtkWidget *tree_grid = sgf_view_find_grid(overlay);
+  g_assert_nonnull(tree_grid);
+
+  const SgfNode *root_node = sgf_tree_get_root(tree);
+  g_assert_nonnull(root_node);
+  GtkWidget *root_disc = sgf_view_find_disc_for_node(tree_grid, root_node);
+  g_assert_nonnull(root_disc);
+  g_assert_cmpstr(gtk_button_get_label(GTK_BUTTON(root_disc)), ==, "\u2022");
+
+  int root_column = -1;
+  int root_row = -1;
+  gtk_grid_query_child(GTK_GRID(tree_grid), root_disc, &root_column, &root_row, NULL, NULL);
+  g_assert_cmpint(root_column, ==, 0);
+  g_assert_cmpint(root_row, ==, 0);
+
+  GtkWidget *move_disc = sgf_view_find_disc_for_node(tree_grid, move_1);
+  g_assert_nonnull(move_disc);
+  int move_column = -1;
+  int move_row = -1;
+  gtk_grid_query_child(GTK_GRID(tree_grid), move_disc, &move_column, &move_row, NULL, NULL);
+  g_assert_cmpint(move_column, ==, 1);
+  g_assert_cmpint(move_row, ==, 0);
 
   g_clear_object(&view);
   g_clear_object(&tree);
@@ -439,8 +476,8 @@ static void test_sgf_view_branch_columns(void) {
   int branch_height = 0;
   gtk_grid_query_child(GTK_GRID(tree_grid), branch_disc, &branch_column, &branch_row, &branch_width, &branch_height);
 
-  g_assert_cmpint(main_column, ==, 1);
-  g_assert_cmpint(branch_column, ==, 1);
+  g_assert_cmpint(main_column, ==, 2);
+  g_assert_cmpint(branch_column, ==, 2);
   g_assert_cmpint(branch_row, >, main_row);
 
   g_clear_object(&view);
@@ -599,7 +636,7 @@ static void test_sgf_view_scrolls_to_new_node(void) {
   GtkWidget *tree_grid = sgf_view_find_grid(overlay);
   g_assert_nonnull(tree_grid);
   int disc_count = sgf_view_count_children(tree_grid);
-  g_assert_cmpint(disc_count, ==, (int)total_moves);
+  g_assert_cmpint(disc_count, ==, (int)total_moves + 1);
 
   gtk_window_destroy(GTK_WINDOW(window));
   g_clear_object(&view);
@@ -697,6 +734,7 @@ int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   if (!gtk_init_check()) {
     g_test_add_func("/sgf-view/connectors", test_sgf_view_connectors_skip);
+    g_test_add_func("/sgf-view/root-disc", test_sgf_view_connectors_skip);
     g_test_add_func("/sgf-view/branches", test_sgf_view_connectors_skip);
     g_test_add_func("/sgf-view/link-angles", test_sgf_view_connectors_skip);
     g_test_add_func("/sgf-view/navigation", test_sgf_view_connectors_skip);
@@ -707,6 +745,7 @@ int main(int argc, char **argv) {
   }
 
   g_test_add_func("/sgf-view/connectors", test_sgf_view_connectors);
+  g_test_add_func("/sgf-view/root-disc", test_sgf_view_root_disc);
   g_test_add_func("/sgf-view/branches", test_sgf_view_branch_columns);
   g_test_add_func("/sgf-view/link-angles", test_sgf_view_link_angles);
   g_test_add_func("/sgf-view/navigation", test_sgf_view_navigation);
