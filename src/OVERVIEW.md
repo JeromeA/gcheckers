@@ -144,9 +144,8 @@ Collaborates with: SGF layout data and view sizing.
 
 ### SGF scroller (`src/sgf_view_scroller.c`, `src/sgf_view_scroller.h`)
 Module: selection scroll helper.
-Role: clamp scrolled window adjustments and keep selected nodes in view by queueing tick callbacks, computing bounds
-from measured per-column/per-row extents, applying a small visibility padding, and nudging adjustment upper bounds to
-the expected content size while updates run.
+Role: clamp scrolled window adjustments and keep selected nodes in view by queueing a tick callback, computing bounds
+from measured per-column/per-row extents, and applying a small visibility padding.
 Collaborates with: `SgfView` and selection controller updates.
 
 ### SGF selection controller (`src/sgf_view_selection_controller.c`, `src/sgf_view_selection_controller.h`)

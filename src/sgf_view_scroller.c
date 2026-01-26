@@ -1,7 +1,5 @@
 #include "sgf_view_scroller.h"
 
-#include <math.h>
-
 typedef struct {
   GtkScrolledWindow *root;
   GtkWidget *overlay;
@@ -12,13 +10,6 @@ typedef struct {
   SgfViewScroller *scroller;
   int expected_width;
   int expected_height;
-  GdkFrameClock *frame_clock;
-  gboolean frame_clock_updating;
-  guint attempts;
-  graphene_rect_t last_bounds;
-  gboolean have_last_bounds;
-  guint stable_frames;
-  guint ticks;
 } SgfViewScrollRequest;
 
 struct _SgfViewScroller {
@@ -29,20 +20,12 @@ struct _SgfViewScroller {
 
 G_DEFINE_TYPE(SgfViewScroller, sgf_view_scroller, G_TYPE_OBJECT)
 
-static const guint sgf_view_scroller_max_attempts = 120;
-static const guint sgf_view_scroller_stable_frames_required = 1;
-static const guint sgf_view_scroller_min_ticks = 1;
-
 static gboolean sgf_view_scroller_compute_bounds(GtkWidget *widget,
                                                  GArray *column_widths,
                                                  GArray *row_heights,
-                                                 graphene_rect_t *out_bounds,
-                                                 gboolean *out_valid) {
+                                                 graphene_rect_t *out_bounds) {
   g_return_val_if_fail(GTK_IS_WIDGET(widget), FALSE);
   g_return_val_if_fail(out_bounds != NULL, FALSE);
-  g_return_val_if_fail(out_valid != NULL, FALSE);
-
-  *out_valid = FALSE;
 
   GtkWidget *parent = gtk_widget_get_parent(widget);
   if (!parent || !GTK_IS_GRID(parent)) {
@@ -83,7 +66,6 @@ static gboolean sgf_view_scroller_compute_bounds(GtkWidget *widget,
       out_bounds->origin.y = origin_y;
       out_bounds->size.width = column_width;
       out_bounds->size.height = row_height;
-      *out_valid = TRUE;
       return TRUE;
     }
   }
@@ -124,7 +106,6 @@ static gboolean sgf_view_scroller_compute_bounds(GtkWidget *widget,
                             computed_bounds.origin.y + epsilon >= min_origin_y;
     if (origin_valid) {
       *out_bounds = computed_bounds;
-      *out_valid = TRUE;
       return TRUE;
     }
   }
@@ -174,13 +155,6 @@ static void sgf_view_scroller_request_free(gpointer data) {
   if (!request) {
     return;
   }
-
-  if (request->frame_clock_updating && request->frame_clock) {
-    gdk_frame_clock_end_updating(request->frame_clock);
-    request->frame_clock_updating = FALSE;
-  }
-
-  g_clear_object(&request->frame_clock);
   g_clear_object(&request->root);
   g_clear_object(&request->overlay);
   g_clear_pointer(&request->node_widgets, g_hash_table_unref);
@@ -223,128 +197,31 @@ static void sgf_view_scroller_cancel_pending(SgfViewScroller *self) {
   g_clear_pointer(&self->pending_request, sgf_view_scroller_request_complete);
 }
 
-static gboolean sgf_view_scroller_axis_visible(GtkAdjustment *adjustment,
-                                               double start,
-                                               double end) {
-  if (!adjustment) {
-    return TRUE;
-  }
-
-  double value = gtk_adjustment_get_value(adjustment);
-  double visible_end = value + gtk_adjustment_get_page_size(adjustment);
-  const double epsilon = 1.0;
-
-  return value <= start + epsilon && visible_end + epsilon >= end;
-}
-
-static gboolean sgf_view_scroller_bounds_equal(const graphene_rect_t *a,
-                                               const graphene_rect_t *b) {
-  g_return_val_if_fail(a != NULL, FALSE);
-  g_return_val_if_fail(b != NULL, FALSE);
-
-  const double epsilon = 0.5;
-
-  return fabs(a->origin.x - b->origin.x) <= epsilon &&
-         fabs(a->origin.y - b->origin.y) <= epsilon &&
-         fabs(a->size.width - b->size.width) <= epsilon &&
-         fabs(a->size.height - b->size.height) <= epsilon;
-}
-
 static gboolean sgf_view_scroller_scroll_cb(GtkWidget * /*widget*/,
                                             GdkFrameClock * /*frame_clock*/,
                                             gpointer user_data) {
   SgfViewScrollRequest *request = user_data;
 
   g_return_val_if_fail(request != NULL, G_SOURCE_REMOVE);
-
-  request->ticks++;
-
-  if (!request->selected || !request->node_widgets || !request->root || !request->overlay) {
-    g_debug("Incomplete SGF scroll request");
-    return G_SOURCE_REMOVE;
-  }
+  g_return_val_if_fail(request->selected != NULL, G_SOURCE_REMOVE);
+  g_return_val_if_fail(request->node_widgets != NULL, G_SOURCE_REMOVE);
+  g_return_val_if_fail(request->root != NULL, G_SOURCE_REMOVE);
+  g_return_val_if_fail(request->overlay != NULL, G_SOURCE_REMOVE);
 
   GtkWidget *widget = g_hash_table_lookup(request->node_widgets, (gpointer)request->selected);
   if (!widget) {
-    request->attempts++;
-    if (request->attempts < sgf_view_scroller_max_attempts) {
-      return G_SOURCE_CONTINUE;
-    }
     g_debug("Unable to find SGF widget for selected node");
     return G_SOURCE_REMOVE;
   }
 
   graphene_rect_t bounds;
-  gboolean bounds_valid = FALSE;
-  if (!sgf_view_scroller_compute_bounds(widget,
-                                        request->column_widths,
-                                        request->row_heights,
-                                        &bounds,
-                                        &bounds_valid)) {
-    request->attempts++;
-    if (request->attempts < sgf_view_scroller_max_attempts) {
-      return G_SOURCE_CONTINUE;
-    }
+  if (!sgf_view_scroller_compute_bounds(widget, request->column_widths, request->row_heights, &bounds)) {
     g_debug("Unable to compute SGF bounds for selected node");
     return G_SOURCE_REMOVE;
   }
 
-  if (!bounds_valid) {
-    request->have_last_bounds = FALSE;
-    request->stable_frames = 0;
-  } else if (request->have_last_bounds &&
-             sgf_view_scroller_bounds_equal(&request->last_bounds, &bounds)) {
-    request->stable_frames++;
-  } else {
-    request->last_bounds = bounds;
-    request->have_last_bounds = TRUE;
-    request->stable_frames = 0;
-  }
-
   GtkAdjustment *hadjustment = gtk_scrolled_window_get_hadjustment(request->root);
   GtkAdjustment *vadjustment = gtk_scrolled_window_get_vadjustment(request->root);
-
-  if (vadjustment) {
-    double v_upper = gtk_adjustment_get_upper(vadjustment);
-    double v_expected = (double)request->expected_height;
-    if (request->expected_height > 0 && v_upper + 1.0 < v_expected) {
-      gtk_adjustment_set_upper(vadjustment, v_expected);
-      v_upper = v_expected;
-    }
-
-    double v_page_size = gtk_adjustment_get_page_size(vadjustment);
-    double v_scrollable = v_upper - v_page_size;
-    gboolean v_expect_scrollable = request->expected_height > 0 &&
-                                   v_expected > v_page_size + 1.0;
-    gboolean v_wait_for_scrollable = v_expect_scrollable && bounds.origin.y > 0.0 &&
-                                     v_scrollable <= 0.0 &&
-                                     request->attempts < sgf_view_scroller_max_attempts;
-    if (v_wait_for_scrollable) {
-      request->attempts++;
-      return G_SOURCE_CONTINUE;
-    }
-  }
-
-  if (hadjustment) {
-    double h_upper = gtk_adjustment_get_upper(hadjustment);
-    double h_expected = (double)request->expected_width;
-    if (request->expected_width > 0 && h_upper + 1.0 < h_expected) {
-      gtk_adjustment_set_upper(hadjustment, h_expected);
-      h_upper = h_expected;
-    }
-
-    double h_page_size = gtk_adjustment_get_page_size(hadjustment);
-    double h_scrollable = h_upper - h_page_size;
-    gboolean h_expect_scrollable = request->expected_width > 0 &&
-                                   h_expected > h_page_size + 1.0;
-    gboolean h_wait_for_scrollable = h_expect_scrollable && bounds.origin.x > 0.0 &&
-                                     h_scrollable <= 0.0 &&
-                                     request->attempts < sgf_view_scroller_max_attempts;
-    if (h_wait_for_scrollable) {
-      request->attempts++;
-      return G_SOURCE_CONTINUE;
-    }
-  }
 
   const double padding = (double)SGF_VIEW_SCROLLER_VISIBILITY_PADDING;
   const double h_start = MAX(0.0, bounds.origin.x - padding);
@@ -360,23 +237,7 @@ static gboolean sgf_view_scroller_scroll_cb(GtkWidget * /*widget*/,
     gtk_adjustment_clamp_page(vadjustment, v_start, v_end);
   }
 
-  gboolean fully_visible = sgf_view_scroller_axis_visible(hadjustment, h_start, h_end) &&
-                           sgf_view_scroller_axis_visible(vadjustment, v_start, v_end);
-  gboolean bounds_stable = bounds_valid &&
-                           request->have_last_bounds &&
-                           request->stable_frames >= sgf_view_scroller_stable_frames_required;
-  gboolean min_ticks_elapsed = request->ticks >= sgf_view_scroller_min_ticks;
-  if (fully_visible && bounds_stable && min_ticks_elapsed) {
-    return G_SOURCE_REMOVE;
-  }
-
-  if (request->attempts + 1 >= sgf_view_scroller_max_attempts) {
-    g_debug("SGF scroll request did not converge within the attempt limit");
-    return G_SOURCE_REMOVE;
-  }
-
-  request->attempts++;
-  return G_SOURCE_CONTINUE;
+  return G_SOURCE_REMOVE;
 }
 
 static void sgf_view_scroller_dispose(GObject *object) {
@@ -431,7 +292,6 @@ void sgf_view_scroller_queue(SgfViewScroller *self,
   request->scroller = g_object_ref(self);
   request->expected_width = expected_width;
   request->expected_height = expected_height;
-  request->attempts = 0;
 
   self->pending_request = request;
   self->pending_tick_id = gtk_widget_add_tick_callback(request->overlay,
@@ -446,19 +306,4 @@ void sgf_view_scroller_queue(SgfViewScroller *self,
   }
 
   gtk_widget_queue_draw(request->overlay);
-
-  GdkFrameClock *frame_clock = gtk_widget_get_frame_clock(request->overlay);
-  if (!frame_clock) {
-    if (gtk_widget_get_mapped(request->overlay)) {
-      g_debug("Missing frame clock for SGF scroll");
-    }
-    return;
-  }
-
-  request->frame_clock = g_object_ref(frame_clock);
-  gdk_frame_clock_begin_updating(frame_clock);
-  request->frame_clock_updating = TRUE;
-
-  gdk_frame_clock_request_phase(frame_clock, GDK_FRAME_CLOCK_PHASE_UPDATE);
-  gdk_frame_clock_request_phase(frame_clock, GDK_FRAME_CLOCK_PHASE_LAYOUT);
 }
