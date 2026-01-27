@@ -135,12 +135,22 @@ static void sgf_view_update_content_size(SgfView *self,
   self->content_width = width;
   self->content_height = height;
 
+  g_debug("SGF view content sizing: expected=%dx%d measured=%dx%d rows=%u columns=%u",
+          width,
+          height,
+          measured_width,
+          measured_height,
+          rows,
+          columns);
+
   gtk_widget_set_size_request(self->overlay, width, height);
   gtk_widget_set_size_request(self->lines_area, width, height);
   if (viewport) {
     gtk_widget_set_size_request(viewport, width, height);
     gtk_widget_queue_resize(viewport);
+    g_debug("SGF view viewport size request: %dx%d", width, height);
   }
+  g_debug("SGF view overlay size request: %dx%d", width, height);
   gtk_widget_queue_resize(self->overlay);
   gtk_widget_queue_resize(self->lines_area);
   gtk_widget_queue_resize(self->root);

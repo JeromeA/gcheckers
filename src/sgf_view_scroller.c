@@ -220,8 +220,17 @@ static gboolean sgf_view_scroller_scroll_cb(GtkWidget * /*widget*/,
     return G_SOURCE_REMOVE;
   }
 
-  GtkAdjustment *hadjustment = gtk_scrolled_window_get_hadjustment(request->root);
-  GtkAdjustment *vadjustment = gtk_scrolled_window_get_vadjustment(request->root);
+  // DEBUG. Remove this block.
+  int overlay_alloc_width = gtk_widget_get_width(request->overlay);
+  int overlay_alloc_height = gtk_widget_get_height(request->overlay);
+  int overlay_req_width = -1;
+  int overlay_req_height = -1;
+  gtk_widget_get_size_request(request->overlay, &overlay_req_width, &overlay_req_height);
+  int root_alloc_width = gtk_widget_get_width(GTK_WIDGET(request->root));
+  int root_alloc_height = gtk_widget_get_height(GTK_WIDGET(request->root));
+  GtkWidget *scrolled_child =
+    gtk_scrolled_window_get_child(GTK_SCROLLED_WINDOW(request->root));
+  const char *scrolled_child_type = scrolled_child ? G_OBJECT_TYPE_NAME(scrolled_child) : "none";
 
   const double padding = (double)SGF_VIEW_SCROLLER_VISIBILITY_PADDING;
   const double h_start = MAX(0.0, bounds.origin.x - padding);
@@ -229,12 +238,72 @@ static gboolean sgf_view_scroller_scroll_cb(GtkWidget * /*widget*/,
   const double v_start = MAX(0.0, bounds.origin.y - padding);
   const double v_end = bounds.origin.y + bounds.size.height + padding;
 
+  GtkAdjustment *hadjustment = gtk_scrolled_window_get_hadjustment(request->root);
+  GtkAdjustment *vadjustment = gtk_scrolled_window_get_vadjustment(request->root);
+
   if (hadjustment) {
     gtk_adjustment_clamp_page(hadjustment, h_start, h_end);
   }
 
   if (vadjustment) {
     gtk_adjustment_clamp_page(vadjustment, v_start, v_end);
+  }
+
+  // DEBUG. Remove until the return.
+  if (hadjustment || vadjustment) {
+    g_debug("SGF scroller adjustment sizing: expected=%dx%d overlay_alloc=%dx%d "
+            "hadj_upper=%.1f hadj_page=%.1f vadj_upper=%.1f vadj_page=%.1f",
+            request->expected_width,
+            request->expected_height,
+            overlay_alloc_width,
+            overlay_alloc_height,
+            hadjustment ? gtk_adjustment_get_upper(hadjustment) : -1.0,
+            hadjustment ? gtk_adjustment_get_page_size(hadjustment) : -1.0,
+            vadjustment ? gtk_adjustment_get_upper(vadjustment) : -1.0,
+            vadjustment ? gtk_adjustment_get_page_size(vadjustment) : -1.0);
+  }
+
+  if (overlay_alloc_width < request->expected_width || overlay_alloc_width < overlay_req_width) {
+    g_debug("SGF scroller overlay allocation constrained: expected=%d requested=%d allocated=%d",
+            request->expected_width,
+            overlay_req_width,
+            overlay_alloc_width);
+  }
+
+  if (overlay_alloc_height < request->expected_height || overlay_alloc_height < overlay_req_height) {
+    g_debug("SGF scroller overlay allocation constrained (height): expected=%d requested=%d allocated=%d",
+            request->expected_height,
+            overlay_req_height,
+            overlay_alloc_height);
+  }
+
+  g_debug("SGF scroller root allocation: %dx%d scrolled_child=%s",
+          root_alloc_width,
+          root_alloc_height,
+          scrolled_child_type);
+  GtkPolicyType hpolicy = GTK_POLICY_AUTOMATIC;
+  GtkPolicyType vpolicy = GTK_POLICY_AUTOMATIC;
+  gtk_scrolled_window_get_policy(request->root, &hpolicy, &vpolicy);
+  g_debug("SGF scroller policies: h=%d v=%d propagate_natural=%d/%d",
+          hpolicy,
+          vpolicy,
+          gtk_scrolled_window_get_propagate_natural_width(request->root),
+          gtk_scrolled_window_get_propagate_natural_height(request->root));
+  GtkWidget *viewport = GTK_IS_VIEWPORT(scrolled_child) ? scrolled_child : NULL;
+  if (viewport) {
+    int viewport_alloc_width = gtk_widget_get_width(viewport);
+    int viewport_alloc_height = gtk_widget_get_height(viewport);
+    g_debug("SGF scroller viewport allocation: %dx%d", viewport_alloc_width, viewport_alloc_height);
+    if (viewport_alloc_width == root_alloc_width && viewport_alloc_height == root_alloc_height) {
+      g_debug("SGF scroller viewport matches root allocation; content may be clamped to visible size");
+    }
+  }
+
+  if (hadjustment) {
+    double hadj_upper = gtk_adjustment_get_upper(hadjustment);
+    if (hadj_upper == (double)overlay_alloc_width) {
+      g_debug("SGF scroller hadjustment upper equals overlay allocation; scroll range tracks allocation");
+    }
   }
 
   return G_SOURCE_REMOVE;
