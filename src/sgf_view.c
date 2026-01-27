@@ -191,11 +191,40 @@ static void sgf_view_queue_scroll_to_selected(SgfView *self) {
                           self->row_heights);
 }
 
+static void sgf_view_sync_selection_from_model(SgfView *self) {
+  g_return_if_fail(SGF_IS_VIEW(self));
+
+  if (!self->tree) {
+    sgf_view_selection_controller_set_selected_raw(self->selection, NULL);
+    return;
+  }
+
+  const SgfNode *selected = sgf_tree_get_current(self->tree);
+  if (!selected) {
+    sgf_view_selection_controller_set_selected_raw(self->selection, NULL);
+    return;
+  }
+
+  if (!sgf_view_selection_controller_set_selected(self->selection, selected, self->node_widgets)) {
+    g_return_if_fail(FALSE);
+  }
+}
+
+static void sgf_view_on_layout_updated(SgfViewLayout *layout, gpointer user_data) {
+  SgfView *self = SGF_VIEW(user_data);
+
+  g_return_if_fail(SGF_IS_VIEW(self));
+  g_return_if_fail(SGF_IS_VIEW_LAYOUT(layout));
+
+  sgf_view_sync_selection_from_model(self);
+  sgf_view_queue_scroll_to_selected(self);
+}
+
 static void sgf_view_select_node(SgfView *self, const SgfNode *node, gboolean emit_signal) {
   g_return_if_fail(SGF_IS_VIEW(self));
 
   if (!sgf_view_selection_controller_set_selected(self->selection, node, self->node_widgets)) {
-    sgf_view_rebuild(self);
+    g_return_if_fail(FALSE);
   }
   sgf_view_queue_scroll_to_selected(self);
 
@@ -257,7 +286,7 @@ static void sgf_view_rebuild(SgfView *self) {
   self->column_widths = g_array_new(FALSE, TRUE, sizeof(int));
   self->row_heights = g_array_new(FALSE, TRUE, sizeof(int));
 
-  const SgfNode *selected = sgf_view_selection_controller_get_selected(self->selection);
+  const SgfNode *selected = self->tree ? sgf_tree_get_current(self->tree) : NULL;
   gboolean has_nodes = FALSE;
   if (self->tree) {
     const SgfNode *root = sgf_tree_get_root(self->tree);
@@ -374,6 +403,7 @@ static void sgf_view_init(SgfView *self) {
                    "node-clicked",
                    G_CALLBACK(sgf_view_on_disc_node_clicked),
                    self);
+  g_signal_connect(self->layout, "layout-updated", G_CALLBACK(sgf_view_on_layout_updated), self);
 
   GtkEventController *key_controller = gtk_event_controller_key_new();
   gtk_event_controller_set_propagation_phase(key_controller, GTK_PHASE_CAPTURE);
@@ -406,7 +436,6 @@ void sgf_view_set_tree(SgfView *self, SgfTree *tree) {
                                                  tree ? sgf_tree_get_current(tree) : NULL);
 
   sgf_view_rebuild(self);
-  sgf_view_queue_scroll_to_selected(self);
 }
 
 void sgf_view_set_selected(SgfView *self, const SgfNode *node) {
@@ -437,5 +466,4 @@ void sgf_view_refresh(SgfView *self) {
   g_return_if_fail(SGF_IS_VIEW(self));
 
   sgf_view_rebuild(self);
-  sgf_view_queue_scroll_to_selected(self);
 }
