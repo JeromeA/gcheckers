@@ -76,9 +76,13 @@ static void gcheckers_sgf_controller_append_move(GCheckersSgfController *self) {
   const SgfNode *node = sgf_tree_append_move(self->sgf_tree, sgf_color, payload);
   g_bytes_unref(payload);
 
-  if (node) {
-    sgf_view_set_selected(self->sgf_view, node);
+  if (!node) {
+    g_debug("Failed to append SGF move\n");
+    self->last_history_size = history_size;
+    return;
   }
+
+  sgf_view_refresh(self->sgf_view);
   self->last_history_size = history_size;
 }
 
@@ -166,7 +170,6 @@ static void gcheckers_sgf_controller_on_node_selected(SgfView * /*view*/,
 
   g_signal_emit(self, controller_signals[SIGNAL_ANALYSIS_REQUESTED], 0, node);
   gcheckers_sgf_controller_replay_to_node(self, node);
-  sgf_view_set_selected(self->sgf_view, node);
 }
 
 static void gcheckers_sgf_controller_on_model_state_changed(GCheckersModel *model,

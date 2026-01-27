@@ -627,7 +627,7 @@ static void test_sgf_view_scrolls_to_new_node(void) {
   }
   g_assert_nonnull(last);
 
-  sgf_view_set_selected(view, last);
+  sgf_view_refresh(view);
   gboolean scrolled = sgf_view_wait_for_scroll(hadjustment, vadjustment, 2000);
   g_assert_true(scrolled);
 
@@ -730,6 +730,26 @@ static void test_sgf_view_navigation(void) {
   g_clear_object(&tree);
 }
 
+static void test_sgf_view_layout_syncs_selection(void) {
+  SgfTree *tree = sgf_tree_new();
+  const SgfNode *move_1 = sgf_tree_append_move(tree, SGF_COLOR_BLACK, NULL);
+  const SgfNode *move_2 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, NULL);
+
+  g_assert_nonnull(move_2);
+  g_assert_true(sgf_tree_set_current(tree, move_1));
+
+  SgfView *view = sgf_view_new();
+  sgf_view_set_tree(view, tree);
+  g_assert_true(sgf_view_get_selected(view) == move_1);
+
+  g_assert_true(sgf_tree_set_current(tree, move_2));
+  sgf_view_refresh(view);
+  g_assert_true(sgf_view_get_selected(view) == move_2);
+
+  g_clear_object(&view);
+  g_clear_object(&tree);
+}
+
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   if (!gtk_init_check()) {
@@ -741,6 +761,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/sgf-view/scrolls-to-new-node", test_sgf_view_connectors_skip);
     g_test_add_func("/sgf-view/scrolls-selected-disc-fully-into-view",
                     test_sgf_view_connectors_skip);
+    g_test_add_func("/sgf-view/layout-syncs-selection", test_sgf_view_connectors_skip);
     return g_test_run();
   }
 
@@ -752,5 +773,6 @@ int main(int argc, char **argv) {
   g_test_add_func("/sgf-view/scrolls-to-new-node", test_sgf_view_scrolls_to_new_node);
   g_test_add_func("/sgf-view/scrolls-selected-disc-fully-into-view",
                   test_sgf_view_scrolls_selected_disc_fully_into_view);
+  g_test_add_func("/sgf-view/layout-syncs-selection", test_sgf_view_layout_syncs_selection);
   return g_test_run();
 }

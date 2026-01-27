@@ -6,6 +6,10 @@ struct _SgfViewLayout {
 
 G_DEFINE_TYPE(SgfViewLayout, sgf_view_layout, G_TYPE_OBJECT)
 
+enum { SIGNAL_LAYOUT_UPDATED, SIGNAL_LAST };
+
+static guint sgf_view_layout_signals[SIGNAL_LAST] = {0};
+
 static void sgf_view_layout_clear_container(GtkWidget *container) {
   g_return_if_fail(GTK_IS_GRID(container));
 
@@ -187,7 +191,15 @@ static guint sgf_view_layout_append_branch(SgfViewLayout *self,
 }
 
 static void sgf_view_layout_class_init(SgfViewLayoutClass *klass) {
-  (void)klass;
+  sgf_view_layout_signals[SIGNAL_LAYOUT_UPDATED] = g_signal_new("layout-updated",
+                                                                G_TYPE_FROM_CLASS(klass),
+                                                                G_SIGNAL_RUN_LAST,
+                                                                0,
+                                                                NULL,
+                                                                NULL,
+                                                                NULL,
+                                                                G_TYPE_NONE,
+                                                                0);
 }
 
 static void sgf_view_layout_init(SgfViewLayout *self) {
@@ -213,6 +225,8 @@ void sgf_view_layout_build(SgfViewLayout *self,
   g_return_if_fail(GTK_IS_GRID(grid));
   g_return_if_fail(SGF_IS_VIEW_DISC_FACTORY(disc_factory));
 
+  gboolean layout_valid = FALSE;
+
   if (out_max_row) {
     *out_max_row = 0;
   }
@@ -230,12 +244,12 @@ void sgf_view_layout_build(SgfViewLayout *self,
   sgf_view_layout_clear_container(GTK_WIDGET(grid));
 
   if (!tree) {
-    return;
+    goto emit_update;
   }
 
   const SgfNode *root = sgf_tree_get_root(tree);
   if (!root) {
-    return;
+    goto emit_update;
   }
 
   guint max_row = 0;
@@ -262,7 +276,8 @@ void sgf_view_layout_build(SgfViewLayout *self,
     if (out_max_column) {
       *out_max_column = max_column;
     }
-    return;
+    layout_valid = TRUE;
+    goto emit_update;
   }
 
   sgf_view_layout_append_branch(self,
@@ -285,4 +300,12 @@ void sgf_view_layout_build(SgfViewLayout *self,
   if (out_max_column) {
     *out_max_column = max_column;
   }
+
+  layout_valid = TRUE;
+
+emit_update:
+  if (!layout_valid) {
+    g_debug("SGF view layout updated without a root node");
+  }
+  g_signal_emit(self, sgf_view_layout_signals[SIGNAL_LAYOUT_UPDATED], 0);
 }
