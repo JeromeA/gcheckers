@@ -180,6 +180,10 @@ static void sgf_view_queue_scroll_to_selected(SgfView *self) {
   g_return_if_fail(SGF_IS_VIEW(self));
 
   const SgfNode *selected = sgf_view_selection_controller_get_selected(self->selection);
+  if (!selected) {
+    g_debug("SGF view has no selection to scroll");
+    return;
+  }
   sgf_view_scroller_queue(self->scroller,
                           GTK_SCROLLED_WINDOW(self->root),
                           self->overlay,

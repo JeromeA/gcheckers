@@ -15,7 +15,7 @@ G_DECLARE_FINAL_TYPE(SgfViewScroller, sgf_view_scroller, SGF, VIEW_SCROLLER, GOb
 SgfViewScroller *sgf_view_scroller_new(void);
 void sgf_view_scroller_queue(SgfViewScroller *self,
                              GtkScrolledWindow *root,
-                             GtkWidget *overlay,
+                             GtkWidget *layout_widget,
                              GHashTable *node_widgets,
                              const SgfNode *selected,
                              int expected_width,
