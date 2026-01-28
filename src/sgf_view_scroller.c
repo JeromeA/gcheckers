@@ -8,8 +8,6 @@ typedef struct {
   GArray *row_heights;
   const SgfNode *selected;
   SgfViewScroller *scroller;
-  int expected_width;
-  int expected_height;
   gulong width_request_id;
   gulong height_request_id;
 } SgfViewScrollRequest;
@@ -71,91 +69,71 @@ static gboolean sgf_view_scroller_compute_bounds(GtkWidget *widget,
     }
   }
 
-  int request_width = -1;
-  int request_height = -1;
-  gtk_widget_get_size_request(widget, &request_width, &request_height);
-  if (request_width <= 0 || request_height <= 0) {
-    gtk_widget_measure(widget,
-                       GTK_ORIENTATION_HORIZONTAL,
-                       -1,
-                       &request_width,
-                       NULL,
-                       NULL,
-                       NULL);
-    gtk_widget_measure(widget,
-                       GTK_ORIENTATION_VERTICAL,
-                       -1,
-                       &request_height,
-                       NULL,
-                       NULL,
-                       NULL);
-  }
-  if (request_width <= 0 || request_height <= 0) {
-    g_debug("Unable to determine SGF disc request size for scrolling");
-    return FALSE;
-  }
-
   graphene_rect_t computed_bounds;
-  gboolean have_computed_bounds = gtk_widget_compute_bounds(widget, parent, &computed_bounds);
-  if (have_computed_bounds &&
+  if (gtk_widget_compute_bounds(widget, parent, &computed_bounds) &&
       computed_bounds.size.width > 0.0f &&
       computed_bounds.size.height > 0.0f) {
-    const double min_origin_x = margin_start + column * (request_width + column_spacing);
-    const double min_origin_y = margin_top + row * (request_height + row_spacing);
-    const double epsilon = 1.0;
-    gboolean origin_valid = computed_bounds.origin.x + epsilon >= min_origin_x &&
-                            computed_bounds.origin.y + epsilon >= min_origin_y;
-    if (origin_valid) {
-      *out_bounds = computed_bounds;
-      return TRUE;
-    }
+    *out_bounds = computed_bounds;
+    return TRUE;
   }
 
-  int disc_width = -1;
-  int disc_height = -1;
-  disc_width = gtk_widget_get_width(widget);
-  disc_height = gtk_widget_get_height(widget);
-  if (disc_width <= 0 || disc_height <= 0) {
-    gtk_widget_get_size_request(widget, &disc_width, &disc_height);
-  }
-  if (disc_width <= 0 || disc_height <= 0) {
-    gtk_widget_measure(widget,
-                       GTK_ORIENTATION_HORIZONTAL,
-                       -1,
-                       &disc_width,
-                       NULL,
-                       NULL,
-                       NULL);
-    gtk_widget_measure(widget,
-                       GTK_ORIENTATION_VERTICAL,
-                       -1,
-                       &disc_height,
-                       NULL,
-                       NULL,
-                       NULL);
-  }
-  if (disc_width <= 0 || disc_height <= 0) {
-    g_debug("Unable to determine SGF disc size for scrolling");
+  g_debug("Unable to compute SGF bounds for selected node");
+  return FALSE;
+}
+
+static gboolean sgf_view_scroller_try_scroll(GtkScrolledWindow *root,
+                                             GtkWidget *layout_widget,
+                                             GHashTable *node_widgets,
+                                             GArray *column_widths,
+                                             GArray *row_heights,
+                                             const SgfNode *selected) {
+  g_return_val_if_fail(GTK_IS_SCROLLED_WINDOW(root), FALSE);
+  g_return_val_if_fail(GTK_IS_WIDGET(layout_widget), FALSE);
+  g_return_val_if_fail(node_widgets != NULL, FALSE);
+  g_return_val_if_fail(column_widths != NULL, FALSE);
+  g_return_val_if_fail(row_heights != NULL, FALSE);
+  g_return_val_if_fail(selected != NULL, FALSE);
+
+  GtkWidget *widget = g_hash_table_lookup(node_widgets, (gpointer)selected);
+  if (!widget) {
+    g_debug("Unable to find SGF widget for selected node");
     return FALSE;
   }
 
-  disc_width = MAX(disc_width, request_width);
-  disc_height = MAX(disc_height, request_height);
+  graphene_rect_t bounds;
+  if (!sgf_view_scroller_compute_bounds(widget, column_widths, row_heights, &bounds)) {
+    return FALSE;
+  }
 
-  out_bounds->origin.x = margin_start + column * (disc_width + column_spacing);
-  out_bounds->origin.y = margin_top + row * (disc_height + row_spacing);
-  out_bounds->size.width = disc_width;
-  out_bounds->size.height = disc_height;
+  const double padding = (double)SGF_VIEW_SCROLLER_VISIBILITY_PADDING;
+  const double h_start = MAX(0.0, bounds.origin.x - padding);
+  const double h_end = bounds.origin.x + bounds.size.width + padding;
+  const double v_start = MAX(0.0, bounds.origin.y - padding);
+  const double v_end = bounds.origin.y + bounds.size.height + padding;
+
+  GtkAdjustment *hadjustment = gtk_scrolled_window_get_hadjustment(root);
+  GtkAdjustment *vadjustment = gtk_scrolled_window_get_vadjustment(root);
+
+  if (hadjustment) {
+    gtk_adjustment_clamp_page(hadjustment, h_start, h_end);
+  }
+
+  if (vadjustment) {
+    gtk_adjustment_clamp_page(vadjustment, v_start, v_end);
+  }
+
+  if (!hadjustment && !vadjustment) {
+    g_debug("SGF scroll has no adjustments to clamp");
+  }
 
   return TRUE;
 }
 
-static void sgf_view_scroller_request_free(gpointer data) {
-  SgfViewScrollRequest *request = data;
-
+static void sgf_view_scroller_request_free(SgfViewScrollRequest *request) {
   if (!request) {
     return;
   }
+
   g_clear_object(&request->root);
   g_clear_object(&request->layout_widget);
   g_clear_pointer(&request->node_widgets, g_hash_table_unref);
@@ -164,9 +142,7 @@ static void sgf_view_scroller_request_free(gpointer data) {
   g_free(request);
 }
 
-static void sgf_view_scroller_request_complete(gpointer data) {
-  SgfViewScrollRequest *request = data;
-
+static void sgf_view_scroller_request_complete(SgfViewScrollRequest *request) {
   g_return_if_fail(request != NULL);
 
   if (request->scroller) {
@@ -202,59 +178,6 @@ static void sgf_view_scroller_cancel_pending(SgfViewScroller *self) {
   g_clear_pointer(&self->pending_request, sgf_view_scroller_request_complete);
 }
 
-static gboolean sgf_view_scroller_try_scroll(SgfViewScrollRequest *request) {
-  g_return_val_if_fail(request != NULL, FALSE);
-  g_return_val_if_fail(request->selected != NULL, FALSE);
-  g_return_val_if_fail(request->node_widgets != NULL, FALSE);
-  g_return_val_if_fail(request->root != NULL, FALSE);
-
-  if (request->layout_widget && (request->expected_width > 0 || request->expected_height > 0)) {
-    int request_width = -1;
-    int request_height = -1;
-    gtk_widget_get_size_request(request->layout_widget, &request_width, &request_height);
-    if ((request->expected_width > 0 && request_width <= 0) ||
-        (request->expected_height > 0 && request_height <= 0)) {
-      g_debug("SGF scroll layout widget size request not available yet");
-      return FALSE;
-    }
-  }
-
-  GtkWidget *widget = g_hash_table_lookup(request->node_widgets, (gpointer)request->selected);
-  if (!widget) {
-    g_debug("Unable to find SGF widget for selected node");
-    return FALSE;
-  }
-
-  graphene_rect_t bounds;
-  if (!sgf_view_scroller_compute_bounds(widget, request->column_widths, request->row_heights, &bounds)) {
-    g_debug("Unable to compute SGF bounds for selected node");
-    return FALSE;
-  }
-
-  const double padding = (double)SGF_VIEW_SCROLLER_VISIBILITY_PADDING;
-  const double h_start = MAX(0.0, bounds.origin.x - padding);
-  const double h_end = bounds.origin.x + bounds.size.width + padding;
-  const double v_start = MAX(0.0, bounds.origin.y - padding);
-  const double v_end = bounds.origin.y + bounds.size.height + padding;
-
-  GtkAdjustment *hadjustment = gtk_scrolled_window_get_hadjustment(request->root);
-  GtkAdjustment *vadjustment = gtk_scrolled_window_get_vadjustment(request->root);
-
-  if (hadjustment) {
-    gtk_adjustment_clamp_page(hadjustment, h_start, h_end);
-  }
-
-  if (vadjustment) {
-    gtk_adjustment_clamp_page(vadjustment, v_start, v_end);
-  }
-
-  if (!hadjustment && !vadjustment) {
-    g_debug("SGF scroll has no adjustments to clamp");
-  }
-
-  return TRUE;
-}
-
 static void sgf_view_scroller_on_size_request_notify(GObject * /*object*/,
                                                      GParamSpec * /*pspec*/,
                                                      gpointer user_data) {
@@ -262,7 +185,12 @@ static void sgf_view_scroller_on_size_request_notify(GObject * /*object*/,
 
   g_return_if_fail(request != NULL);
 
-  if (!sgf_view_scroller_try_scroll(request)) {
+  if (!sgf_view_scroller_try_scroll(request->root,
+                                    request->layout_widget,
+                                    request->node_widgets,
+                                    request->column_widths,
+                                    request->row_heights,
+                                    request->selected)) {
     return;
   }
 
@@ -305,62 +233,57 @@ void sgf_view_scroller_queue(SgfViewScroller *self,
                              GtkScrolledWindow *root,
                              GtkWidget *layout_widget,
                              GHashTable *node_widgets,
-                             const SgfNode *selected,
-                             int expected_width,
-                             int expected_height,
                              GArray *column_widths,
-                             GArray *row_heights) {
+                             GArray *row_heights,
+                             const SgfNode *selected) {
   g_return_if_fail(SGF_IS_VIEW_SCROLLER(self));
   g_return_if_fail(GTK_IS_SCROLLED_WINDOW(root));
   g_return_if_fail(GTK_IS_WIDGET(layout_widget));
-  g_return_if_fail(expected_width >= 0);
-  g_return_if_fail(expected_height >= 0);
+  g_return_if_fail(node_widgets != NULL);
   g_return_if_fail(column_widths != NULL);
   g_return_if_fail(row_heights != NULL);
+  g_return_if_fail(selected != NULL);
 
   sgf_view_scroller_cancel_pending(self);
 
-  SgfViewScrollRequest *request = g_new0(SgfViewScrollRequest, 1);
-  request->root = g_object_ref(root);
-  request->layout_widget = g_object_ref(layout_widget);
-  request->node_widgets = node_widgets ? g_hash_table_ref(node_widgets) : NULL;
-  request->column_widths = g_array_ref(column_widths);
-  request->row_heights = g_array_ref(row_heights);
-  request->selected = selected;
-  request->scroller = g_object_ref(self);
-  request->expected_width = expected_width;
-  request->expected_height = expected_height;
-  request->width_request_id = 0;
-  request->height_request_id = 0;
+  if (!sgf_view_scroller_try_scroll(root,
+                                    layout_widget,
+                                    node_widgets,
+                                    column_widths,
+                                    row_heights,
+                                    selected)) {
+    SgfViewScrollRequest *request = g_new0(SgfViewScrollRequest, 1);
+    request->root = g_object_ref(root);
+    request->layout_widget = g_object_ref(layout_widget);
+    request->node_widgets = g_hash_table_ref(node_widgets);
+    request->column_widths = g_array_ref(column_widths);
+    request->row_heights = g_array_ref(row_heights);
+    request->selected = selected;
+    request->scroller = g_object_ref(self);
+    request->width_request_id = 0;
+    request->height_request_id = 0;
 
-  if (sgf_view_scroller_try_scroll(request)) {
-    sgf_view_scroller_request_complete(request);
-    return;
-  }
-
-  self->pending_request = request;
-  request->width_request_id = g_signal_connect(request->layout_widget,
-                                               "notify::width-request",
-                                               G_CALLBACK(sgf_view_scroller_on_size_request_notify),
-                                               request);
-  request->height_request_id = g_signal_connect(request->layout_widget,
-                                                "notify::height-request",
-                                                G_CALLBACK(sgf_view_scroller_on_size_request_notify),
-                                                request);
-  if (request->width_request_id == 0 || request->height_request_id == 0) {
-    g_debug("Failed to connect SGF scroll size request callbacks");
-    if (request->width_request_id != 0) {
-      g_signal_handler_disconnect(request->layout_widget, request->width_request_id);
-      request->width_request_id = 0;
+    self->pending_request = request;
+    request->width_request_id = g_signal_connect(request->layout_widget,
+                                                 "notify::width-request",
+                                                 G_CALLBACK(sgf_view_scroller_on_size_request_notify),
+                                                 request);
+    request->height_request_id = g_signal_connect(request->layout_widget,
+                                                  "notify::height-request",
+                                                  G_CALLBACK(sgf_view_scroller_on_size_request_notify),
+                                                  request);
+    if (request->width_request_id == 0 || request->height_request_id == 0) {
+      g_debug("Failed to connect SGF scroll size request callbacks");
+      if (request->width_request_id != 0) {
+        g_signal_handler_disconnect(request->layout_widget, request->width_request_id);
+        request->width_request_id = 0;
+      }
+      if (request->height_request_id != 0) {
+        g_signal_handler_disconnect(request->layout_widget, request->height_request_id);
+        request->height_request_id = 0;
+      }
+      self->pending_request = NULL;
+      sgf_view_scroller_request_complete(request);
     }
-    if (request->height_request_id != 0) {
-      g_signal_handler_disconnect(request->layout_widget, request->height_request_id);
-      request->height_request_id = 0;
-    }
-    self->pending_request = NULL;
-    sgf_view_scroller_request_complete(request);
-    return;
   }
-
-  gtk_widget_queue_resize(request->layout_widget);
 }

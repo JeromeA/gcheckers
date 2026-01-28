@@ -188,11 +188,9 @@ static void sgf_view_queue_scroll_to_selected(SgfView *self) {
                           GTK_SCROLLED_WINDOW(self->root),
                           self->overlay,
                           self->node_widgets,
-                          selected,
-                          self->content_width,
-                          self->content_height,
                           self->column_widths,
-                          self->row_heights);
+                          self->row_heights,
+                          selected);
 }
 
 static void sgf_view_sync_selection_from_model(SgfView *self) {
@@ -221,7 +219,6 @@ static void sgf_view_on_layout_updated(SgfViewLayout *layout, gpointer user_data
   g_return_if_fail(SGF_IS_VIEW_LAYOUT(layout));
 
   sgf_view_sync_selection_from_model(self);
-  sgf_view_queue_scroll_to_selected(self);
 }
 
 static void sgf_view_select_node(SgfView *self, const SgfNode *node, gboolean emit_signal) {
@@ -312,6 +309,7 @@ static void sgf_view_rebuild(SgfView *self) {
                         &max_column);
   sgf_view_update_content_size(self, has_nodes, max_row, max_column);
   gtk_widget_queue_draw(self->lines_area);
+  sgf_view_queue_scroll_to_selected(self);
 }
 
 static void sgf_view_dispose(GObject *object) {
