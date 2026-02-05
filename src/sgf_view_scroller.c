@@ -1,20 +1,8 @@
 #include "sgf_view_scroller.h"
 
-typedef struct {
-  GtkScrolledWindow *root;
-  GtkWidget *layout_widget;
-  GHashTable *node_widgets;
-  GArray *column_widths;
-  GArray *row_heights;
-  const SgfNode *selected;
-  SgfViewScroller *scroller;
-  gulong width_request_id;
-  gulong height_request_id;
-} SgfViewScrollRequest;
-
 struct _SgfViewScroller {
   GObject parent_instance;
-  SgfViewScrollRequest *pending_request;
+  const SgfNode *remembered_selected;
 };
 
 G_DEFINE_TYPE(SgfViewScroller, sgf_view_scroller, G_TYPE_OBJECT)
@@ -40,14 +28,14 @@ static gboolean sgf_view_scroller_compute_bounds(GtkWidget *widget,
     return FALSE;
   }
 
-  int column_spacing = gtk_grid_get_column_spacing(GTK_GRID(parent));
-  int row_spacing = gtk_grid_get_row_spacing(GTK_GRID(parent));
-  int margin_start = gtk_widget_get_margin_start(parent);
-  int margin_top = gtk_widget_get_margin_top(parent);
-
   gboolean have_column_extents = column_widths && column_widths->len > (guint)column;
   gboolean have_row_extents = row_heights && row_heights->len > (guint)row;
   if (have_column_extents && have_row_extents) {
+    int column_spacing = gtk_grid_get_column_spacing(GTK_GRID(parent));
+    int row_spacing = gtk_grid_get_row_spacing(GTK_GRID(parent));
+    int margin_start = gtk_widget_get_margin_start(parent);
+    int margin_top = gtk_widget_get_margin_top(parent);
+
     double origin_x = margin_start + column * column_spacing;
     for (int i = 0; i < column; ++i) {
       origin_x += g_array_index(column_widths, int, i);
@@ -81,14 +69,12 @@ static gboolean sgf_view_scroller_compute_bounds(GtkWidget *widget,
   return FALSE;
 }
 
-static gboolean sgf_view_scroller_try_scroll(GtkScrolledWindow *root,
-                                             GtkWidget *layout_widget,
-                                             GHashTable *node_widgets,
-                                             GArray *column_widths,
-                                             GArray *row_heights,
-                                             const SgfNode *selected) {
+static gboolean sgf_view_scroller_scroll_to_node(GtkScrolledWindow *root,
+                                                 GHashTable *node_widgets,
+                                                 GArray *column_widths,
+                                                 GArray *row_heights,
+                                                 const SgfNode *selected) {
   g_return_val_if_fail(GTK_IS_SCROLLED_WINDOW(root), FALSE);
-  g_return_val_if_fail(GTK_IS_WIDGET(layout_widget), FALSE);
   g_return_val_if_fail(node_widgets != NULL, FALSE);
   g_return_val_if_fail(column_widths != NULL, FALSE);
   g_return_val_if_fail(row_heights != NULL, FALSE);
@@ -129,161 +115,55 @@ static gboolean sgf_view_scroller_try_scroll(GtkScrolledWindow *root,
   return TRUE;
 }
 
-static void sgf_view_scroller_request_free(SgfViewScrollRequest *request) {
-  if (!request) {
-    return;
-  }
-
-  g_clear_object(&request->root);
-  g_clear_object(&request->layout_widget);
-  g_clear_pointer(&request->node_widgets, g_hash_table_unref);
-  g_clear_pointer(&request->column_widths, g_array_unref);
-  g_clear_pointer(&request->row_heights, g_array_unref);
-  g_free(request);
-}
-
-static void sgf_view_scroller_request_complete(SgfViewScrollRequest *request) {
-  g_return_if_fail(request != NULL);
-
-  if (request->scroller) {
-    if (request->scroller->pending_request == request) {
-      request->scroller->pending_request = NULL;
-    }
-    g_object_unref(request->scroller);
-    request->scroller = NULL;
-  }
-
-  sgf_view_scroller_request_free(request);
-}
-
-static void sgf_view_scroller_cancel_pending(SgfViewScroller *self) {
-  g_return_if_fail(SGF_IS_VIEW_SCROLLER(self));
-
-  if (!self->pending_request) {
-    return;
-  }
-
-  if (self->pending_request->layout_widget && self->pending_request->width_request_id != 0) {
-    g_signal_handler_disconnect(self->pending_request->layout_widget,
-                                self->pending_request->width_request_id);
-    self->pending_request->width_request_id = 0;
-  }
-
-  if (self->pending_request->layout_widget && self->pending_request->height_request_id != 0) {
-    g_signal_handler_disconnect(self->pending_request->layout_widget,
-                                self->pending_request->height_request_id);
-    self->pending_request->height_request_id = 0;
-  }
-
-  g_clear_pointer(&self->pending_request, sgf_view_scroller_request_complete);
-}
-
-static void sgf_view_scroller_on_size_request_notify(GObject * /*object*/,
-                                                     GParamSpec * /*pspec*/,
-                                                     gpointer user_data) {
-  SgfViewScrollRequest *request = user_data;
-
-  g_return_if_fail(request != NULL);
-
-  if (!sgf_view_scroller_try_scroll(request->root,
-                                    request->layout_widget,
-                                    request->node_widgets,
-                                    request->column_widths,
-                                    request->row_heights,
-                                    request->selected)) {
-    return;
-  }
-
-  if (request->layout_widget && request->width_request_id != 0) {
-    g_signal_handler_disconnect(request->layout_widget, request->width_request_id);
-    request->width_request_id = 0;
-  }
-
-  if (request->layout_widget && request->height_request_id != 0) {
-    g_signal_handler_disconnect(request->layout_widget, request->height_request_id);
-    request->height_request_id = 0;
-  }
-
-  sgf_view_scroller_request_complete(request);
-}
-
-static void sgf_view_scroller_dispose(GObject *object) {
-  SgfViewScroller *self = SGF_VIEW_SCROLLER(object);
-
-  sgf_view_scroller_cancel_pending(self);
-
-  G_OBJECT_CLASS(sgf_view_scroller_parent_class)->dispose(object);
-}
-
 static void sgf_view_scroller_class_init(SgfViewScrollerClass *klass) {
   GObjectClass *object_class = G_OBJECT_CLASS(klass);
 
-  object_class->dispose = sgf_view_scroller_dispose;
+  g_return_if_fail(object_class != NULL);
 }
 
 static void sgf_view_scroller_init(SgfViewScroller *self) {
-  self->pending_request = NULL;
+  self->remembered_selected = NULL;
 }
 
 SgfViewScroller *sgf_view_scroller_new(void) {
   return g_object_new(SGF_TYPE_VIEW_SCROLLER, NULL);
 }
 
-void sgf_view_scroller_queue(SgfViewScroller *self,
-                             GtkScrolledWindow *root,
-                             GtkWidget *layout_widget,
-                             GHashTable *node_widgets,
-                             GArray *column_widths,
-                             GArray *row_heights,
-                             const SgfNode *selected) {
+void sgf_view_scroller_request_scroll(SgfViewScroller *self,
+                                      GtkScrolledWindow *root,
+                                      GHashTable *node_widgets,
+                                      GArray *column_widths,
+                                      GArray *row_heights,
+                                      const SgfNode *selected) {
   g_return_if_fail(SGF_IS_VIEW_SCROLLER(self));
   g_return_if_fail(GTK_IS_SCROLLED_WINDOW(root));
-  g_return_if_fail(GTK_IS_WIDGET(layout_widget));
   g_return_if_fail(node_widgets != NULL);
   g_return_if_fail(column_widths != NULL);
   g_return_if_fail(row_heights != NULL);
   g_return_if_fail(selected != NULL);
 
-  sgf_view_scroller_cancel_pending(self);
+  self->remembered_selected = selected;
+  (void)sgf_view_scroller_scroll_to_node(root, node_widgets, column_widths, row_heights, selected);
+}
 
-  if (!sgf_view_scroller_try_scroll(root,
-                                    layout_widget,
-                                    node_widgets,
-                                    column_widths,
-                                    row_heights,
-                                    selected)) {
-    SgfViewScrollRequest *request = g_new0(SgfViewScrollRequest, 1);
-    request->root = g_object_ref(root);
-    request->layout_widget = g_object_ref(layout_widget);
-    request->node_widgets = g_hash_table_ref(node_widgets);
-    request->column_widths = g_array_ref(column_widths);
-    request->row_heights = g_array_ref(row_heights);
-    request->selected = selected;
-    request->scroller = g_object_ref(self);
-    request->width_request_id = 0;
-    request->height_request_id = 0;
+void sgf_view_scroller_on_layout_changed(SgfViewScroller *self,
+                                         GtkScrolledWindow *root,
+                                         GHashTable *node_widgets,
+                                         GArray *column_widths,
+                                         GArray *row_heights) {
+  g_return_if_fail(SGF_IS_VIEW_SCROLLER(self));
+  g_return_if_fail(GTK_IS_SCROLLED_WINDOW(root));
+  g_return_if_fail(node_widgets != NULL);
+  g_return_if_fail(column_widths != NULL);
+  g_return_if_fail(row_heights != NULL);
 
-    self->pending_request = request;
-    request->width_request_id = g_signal_connect(request->layout_widget,
-                                                 "notify::width-request",
-                                                 G_CALLBACK(sgf_view_scroller_on_size_request_notify),
-                                                 request);
-    request->height_request_id = g_signal_connect(request->layout_widget,
-                                                  "notify::height-request",
-                                                  G_CALLBACK(sgf_view_scroller_on_size_request_notify),
-                                                  request);
-    if (request->width_request_id == 0 || request->height_request_id == 0) {
-      g_debug("Failed to connect SGF scroll size request callbacks");
-      if (request->width_request_id != 0) {
-        g_signal_handler_disconnect(request->layout_widget, request->width_request_id);
-        request->width_request_id = 0;
-      }
-      if (request->height_request_id != 0) {
-        g_signal_handler_disconnect(request->layout_widget, request->height_request_id);
-        request->height_request_id = 0;
-      }
-      self->pending_request = NULL;
-      sgf_view_scroller_request_complete(request);
-    }
+  if (!self->remembered_selected) {
+    return;
   }
+
+  (void)sgf_view_scroller_scroll_to_node(root,
+                                         node_widgets,
+                                         column_widths,
+                                         row_heights,
+                                         self->remembered_selected);
 }

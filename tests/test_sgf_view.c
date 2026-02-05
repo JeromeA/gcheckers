@@ -750,6 +750,80 @@ static void test_sgf_view_layout_syncs_selection(void) {
   g_clear_object(&tree);
 }
 
+static void test_sgf_view_scroller_remembers_missing_node(void) {
+  SgfViewScroller *scroller = sgf_view_scroller_new();
+  g_assert_nonnull(scroller);
+
+  GtkWidget *window = gtk_window_new();
+  gtk_window_set_default_size(GTK_WINDOW(window), 120, 100);
+
+  GtkWidget *root = gtk_scrolled_window_new();
+  GtkWidget *overlay = gtk_overlay_new();
+  GtkWidget *grid = gtk_grid_new();
+  gtk_widget_set_size_request(overlay, 640, 320);
+  gtk_widget_set_size_request(grid, 640, 320);
+  gtk_overlay_set_child(GTK_OVERLAY(overlay), grid);
+  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(root), overlay);
+  gtk_window_set_child(GTK_WINDOW(window), root);
+  gtk_window_present(GTK_WINDOW(window));
+  sgf_view_wait(40);
+
+  GHashTable *node_widgets = g_hash_table_new(g_direct_hash, g_direct_equal);
+  GArray *column_widths = g_array_sized_new(FALSE, TRUE, sizeof(int), 8);
+  GArray *row_heights = g_array_sized_new(FALSE, TRUE, sizeof(int), 2);
+  g_assert_nonnull(node_widgets);
+  g_assert_nonnull(column_widths);
+  g_assert_nonnull(row_heights);
+
+  g_array_set_size(column_widths, 8);
+  g_array_set_size(row_heights, 2);
+  for (guint i = 0; i < column_widths->len; ++i) {
+    g_array_index(column_widths, int, i) = 80;
+  }
+  for (guint i = 0; i < row_heights->len; ++i) {
+    g_array_index(row_heights, int, i) = 80;
+  }
+
+  const SgfNode *selected = (const SgfNode *)0x1234;
+  sgf_view_scroller_request_scroll(scroller,
+                                   GTK_SCROLLED_WINDOW(root),
+                                   node_widgets,
+                                   column_widths,
+                                   row_heights,
+                                   selected);
+
+  GtkAdjustment *hadjustment = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(root));
+  GtkAdjustment *vadjustment = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(root));
+  g_assert_nonnull(hadjustment);
+  g_assert_nonnull(vadjustment);
+  g_assert_cmpfloat(gtk_adjustment_get_value(hadjustment), ==, 0.0);
+  g_assert_cmpfloat(gtk_adjustment_get_value(vadjustment), ==, 0.0);
+
+  GtkWidget *disc = gtk_button_new();
+  gtk_widget_set_size_request(disc, 80, 80);
+  gtk_grid_attach(GTK_GRID(grid), disc, 7, 1, 1, 1);
+  g_hash_table_insert(node_widgets, (gpointer)selected, disc);
+  gtk_widget_queue_resize(grid);
+  gtk_widget_queue_resize(overlay);
+  sgf_view_wait(40);
+
+  sgf_view_scroller_on_layout_changed(scroller,
+                                      GTK_SCROLLED_WINDOW(root),
+                                      node_widgets,
+                                      column_widths,
+                                      row_heights);
+  sgf_view_wait(80);
+
+  g_assert_cmpfloat(gtk_adjustment_get_value(hadjustment), >, 0.0);
+  g_assert_cmpfloat(gtk_adjustment_get_value(vadjustment), >, 0.0);
+
+  g_array_unref(column_widths);
+  g_array_unref(row_heights);
+  g_hash_table_unref(node_widgets);
+  gtk_window_destroy(GTK_WINDOW(window));
+  g_clear_object(&scroller);
+}
+
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   if (!gtk_init_check()) {
@@ -762,6 +836,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/sgf-view/scrolls-selected-disc-fully-into-view",
                     test_sgf_view_connectors_skip);
     g_test_add_func("/sgf-view/layout-syncs-selection", test_sgf_view_connectors_skip);
+    g_test_add_func("/sgf-view/scroller-remembers-missing-node", test_sgf_view_connectors_skip);
     return g_test_run();
   }
 
@@ -774,5 +849,6 @@ int main(int argc, char **argv) {
   g_test_add_func("/sgf-view/scrolls-selected-disc-fully-into-view",
                   test_sgf_view_scrolls_selected_disc_fully_into_view);
   g_test_add_func("/sgf-view/layout-syncs-selection", test_sgf_view_layout_syncs_selection);
+  g_test_add_func("/sgf-view/scroller-remembers-missing-node", test_sgf_view_scroller_remembers_missing_node);
   return g_test_run();
 }
