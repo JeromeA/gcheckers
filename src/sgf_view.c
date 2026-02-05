@@ -184,13 +184,12 @@ static void sgf_view_queue_scroll_to_selected(SgfView *self) {
     g_debug("SGF view has no selection to scroll");
     return;
   }
-  sgf_view_scroller_queue(self->scroller,
-                          GTK_SCROLLED_WINDOW(self->root),
-                          self->overlay,
-                          self->node_widgets,
-                          self->column_widths,
-                          self->row_heights,
-                          selected);
+  sgf_view_scroller_request_scroll(self->scroller,
+                                   GTK_SCROLLED_WINDOW(self->root),
+                                   self->node_widgets,
+                                   self->column_widths,
+                                   self->row_heights,
+                                   selected);
 }
 
 static void sgf_view_sync_selection_from_model(SgfView *self) {
@@ -219,6 +218,11 @@ static void sgf_view_on_layout_updated(SgfViewLayout *layout, gpointer user_data
   g_return_if_fail(SGF_IS_VIEW_LAYOUT(layout));
 
   sgf_view_sync_selection_from_model(self);
+  sgf_view_scroller_on_layout_changed(self->scroller,
+                                      GTK_SCROLLED_WINDOW(self->root),
+                                      self->node_widgets,
+                                      self->column_widths,
+                                      self->row_heights);
 }
 
 static void sgf_view_select_node(SgfView *self, const SgfNode *node, gboolean emit_signal) {
