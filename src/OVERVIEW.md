@@ -146,8 +146,8 @@ Collaborates with: SGF layout data and view sizing.
 
 ### SGF scroller (`src/sgf_view_scroller.c`, `src/sgf_view_scroller.h`)
 Module: selection scroll helper.
-Role: remember the latest selected node and clamp scrolled window adjustments to keep it fully visible when
-requested or when layout changes, applying a small visibility padding.
+Role: implement two paths only: on scroll requests remember the selected node and scroll if visible; on layout
+updates retry scrolling for the remembered node if visible, applying a small visibility padding.
 Collaborates with: `SgfView` and selection controller updates.
 
 ### SGF selection controller (`src/sgf_view_selection_controller.c`, `src/sgf_view_selection_controller.h`)
