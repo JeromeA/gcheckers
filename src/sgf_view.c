@@ -478,3 +478,24 @@ void sgf_view_refresh(SgfView *self) {
 
   sgf_view_rebuild(self);
 }
+
+void sgf_view_force_layout_sync(SgfView *self) {
+  g_return_if_fail(SGF_IS_VIEW(self));
+
+  if (!self->root || !self->scroller) {
+    g_debug("SGF view missing core widgets for layout sync\n");
+    return;
+  }
+
+  if (!self->node_widgets || !self->column_widths || !self->row_heights) {
+    g_debug("SGF view missing layout data for layout sync\n");
+    return;
+  }
+
+  sgf_view_sync_selection_from_model(self);
+  sgf_view_scroller_on_layout_changed(self->scroller,
+                                      GTK_SCROLLED_WINDOW(self->root),
+                                      self->node_widgets,
+                                      self->column_widths,
+                                      self->row_heights);
+}

@@ -11,6 +11,7 @@ struct _GCheckersWindow {
   GCheckersModel *model;
   GtkWidget *status_label;
   GtkWidget *reset_button;
+  GtkWidget *reselect_sgf_button;
   GtkWidget *controls_row;
   BoardView *board_view;
   PlayerControlsPanel *controls_panel;
@@ -169,6 +170,19 @@ static void gcheckers_window_on_reset_clicked(GtkButton * /*button*/, gpointer u
   gcheckers_model_reset(self->model);
   board_view_clear_selection(self->board_view);
   gcheckers_sgf_controller_reset(self->sgf_controller);
+}
+
+static void gcheckers_window_on_sgf_reselect_clicked(GtkButton * /*button*/, gpointer user_data) {
+  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
+
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+
+  if (!self->sgf_controller) {
+    g_debug("Missing SGF controller for layout resync\n");
+    return;
+  }
+
+  gcheckers_sgf_controller_force_layout_resync(self->sgf_controller);
 }
 
 static void gcheckers_window_on_control_changed(PlayerControlsPanel * /*panel*/, gpointer user_data) {
@@ -337,6 +351,13 @@ static void gcheckers_window_init(GCheckersWindow *self) {
                    G_CALLBACK(gcheckers_window_on_reset_clicked),
                    self);
   gtk_box_append(GTK_BOX(button_row), self->reset_button);
+
+  self->reselect_sgf_button = gtk_button_new_with_label("Reselect SGF");
+  g_signal_connect(self->reselect_sgf_button,
+                   "clicked",
+                   G_CALLBACK(gcheckers_window_on_sgf_reselect_clicked),
+                   self);
+  gtk_box_append(GTK_BOX(button_row), self->reselect_sgf_button);
 
   GtkWidget *right_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
   gtk_widget_set_hexpand(right_panel, TRUE);
