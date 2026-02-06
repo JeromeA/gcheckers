@@ -148,7 +148,9 @@ Collaborates with: SGF layout data and view sizing.
 Module: selection scroll helper.
 Role: implement two paths only: on scroll requests remember the selected node and attempt scrolling immediately; on
 layout updates retry scrolling for the remembered node only, applying a small visibility padding. The implementation
-uses one internal helper that treats missing or not-yet-measurable nodes as no-op outcomes.
+uses one internal helper that treats missing or not-yet-measurable nodes as no-op outcomes. The file-level contract
+comment in `src/sgf_view_scroller.c` is the canonical policy reference (including the prohibition on deferred retry
+mechanisms such as ticks/idles/timers).
 Collaborates with: `SgfView`, SGF node widget mapping, layout extents, and selection controller updates.
 
 ### SGF selection controller (`src/sgf_view_selection_controller.c`, `src/sgf_view_selection_controller.h`)

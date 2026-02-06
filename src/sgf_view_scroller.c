@@ -1,5 +1,35 @@
 #include "sgf_view_scroller.h"
 
+/*
+ * SGF scroller design contract
+ *
+ * This module intentionally implements a very small state machine so SGF scrolling remains predictable as the
+ * layout evolves.
+ *
+ * Principles:
+ * 1) Two triggers only:
+ *    - request path: remember the selected node, then try to scroll immediately;
+ *    - layout-changed path: retry only the remembered node.
+ * 2) No asynchronous retry machinery in this module:
+ *    - no tick callbacks;
+ *    - no notify callbacks;
+ *    - no timers, idles, or polling loops.
+ * 3) Missing or not-yet-measurable geometry is treated as a no-op for this attempt.
+ *
+ * Why this exists:
+ * - Tick/frame timing is not a reliable signal that GTK geometry is valid for the SGF grid.
+ * - Deferring with extra callbacks created brittle behavior and a hidden third control path.
+ * - Retrying on SGF layout's explicit layout-updated signal keeps retry timing tied to the real layout lifecycle.
+ *
+ * What should not be done in the future:
+ * - Do not reintroduce deferred retries (ticks, idles, notify hooks, timers) in scroller code.
+ * - Do not add extra trigger paths beyond request-scroll and layout-changed.
+ * - Do not split retry state across multiple fields; remembered_selected is the only intentional scroller state.
+ *
+ * If geometry cannot be measured yet, leave the attempt as a no-op and let the next layout-updated signal trigger the
+ * retry path.
+ */
+
 struct _SgfViewScroller {
   GObject parent_instance;
   const SgfNode *remembered_selected;
