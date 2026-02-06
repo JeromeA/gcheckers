@@ -208,7 +208,8 @@ static void sgf_view_sync_selection_from_model(SgfView *self) {
   }
 
   if (!sgf_view_selection_controller_set_selected(self->selection, selected, self->node_widgets)) {
-    g_return_if_fail(FALSE);
+    g_debug("SGF view selection not ready to sync from model");
+    return;
   }
 
   sgf_view_queue_scroll_to_selected(self);
@@ -232,7 +233,8 @@ static void sgf_view_select_node(SgfView *self, const SgfNode *node, gboolean em
   g_return_if_fail(SGF_IS_VIEW(self));
 
   if (!sgf_view_selection_controller_set_selected(self->selection, node, self->node_widgets)) {
-    g_return_if_fail(FALSE);
+    g_debug("SGF view selection not ready to update selection");
+    return;
   }
   sgf_view_queue_scroll_to_selected(self);
 

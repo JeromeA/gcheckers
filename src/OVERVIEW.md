@@ -123,7 +123,7 @@ Collaborates with: SGF view and controller modules.
 ### SGF view (`src/sgf_view.c`, `src/sgf_view.h`)
 Class: `SgfView` (`GtkWidget`).
 Role: game-agnostic move tree UI that wires together layout, rendering, selection helpers, scrolled content sizing, and
-diagnostic sizing logs, and syncs selection after layout updates.
+diagnostic sizing logs, and syncs selection after layout updates with debug logging when widgets are not ready.
 Collaborates with: SGF layout (layout-updated signal), selection, scroller, and disc factory helpers.
 
 ### SGF disc factory (`src/sgf_view_disc_factory.c`, `src/sgf_view_disc_factory.h`)

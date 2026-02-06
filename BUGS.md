@@ -20,3 +20,13 @@ parent and the link renderer could not draw a shared connector.
 
 The fix renders the root node as a virtual move zero dot, anchors it in column zero, and shifts the first move column
 over so every move 1 disc connects back to the shared root.
+
+## GTK tests were skipped during make test
+
+The test target should exercise all GTK widget tests in headless environments.
+
+The GTK tests called gtk_init_check without a display backend, so the test binaries skipped their assertions when
+XDG_RUNTIME_DIR or a Broadway display was not configured.
+
+The fix runs the GTK test binaries under a shared Broadway server from make test so gtk_init_check succeeds and the
+tests run instead of skipping.

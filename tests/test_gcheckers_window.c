@@ -158,7 +158,7 @@ static void test_gcheckers_window_dispose_after_panel_removed(void) {
 }
 
 static void test_gcheckers_window_computer_selection_keeps_board_enabled(void) {
-  GtkApplication *app = gtk_application_new("org.example.gcheckers.tests", G_APPLICATION_DEFAULT_FLAGS);
+  GtkApplication *app = test_gcheckers_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
   GCheckersWindow *window = gcheckers_window_new(app, model);
 
@@ -178,7 +178,7 @@ static void test_gcheckers_window_computer_selection_keeps_board_enabled(void) {
 }
 
 static void test_gcheckers_window_auto_moves_when_next_player_is_computer(void) {
-  GtkApplication *app = gtk_application_new("org.example.gcheckers.tests", G_APPLICATION_DEFAULT_FLAGS);
+  GtkApplication *app = test_gcheckers_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
   GCheckersWindow *window = gcheckers_window_new(app, model);
 
@@ -201,7 +201,7 @@ static void test_gcheckers_window_auto_moves_when_next_player_is_computer(void) 
 }
 
 static void test_gcheckers_window_sgf_navigation_resets_controls_to_user(void) {
-  GtkApplication *app = gtk_application_new("org.example.gcheckers.tests", G_APPLICATION_DEFAULT_FLAGS);
+  GtkApplication *app = test_gcheckers_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
   GCheckersWindow *window = gcheckers_window_new(app, model);
 
