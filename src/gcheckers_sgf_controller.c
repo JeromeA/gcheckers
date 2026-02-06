@@ -293,3 +293,14 @@ gboolean gcheckers_sgf_controller_is_replaying(GCheckersSgfController *self) {
 
   return self->is_replaying;
 }
+
+void gcheckers_sgf_controller_force_layout_resync(GCheckersSgfController *self) {
+  g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self));
+
+  if (!self->sgf_view) {
+    g_debug("Missing SGF view for layout resync\n");
+    return;
+  }
+
+  sgf_view_force_layout_sync(self->sgf_view);
+}

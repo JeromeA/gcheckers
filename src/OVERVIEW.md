@@ -2,7 +2,8 @@
 
 ## `GCheckersWindow` (`src/gcheckers_window.c`)
 Class: `GCheckersWindow` (`GtkApplicationWindow`).
-Role: composition root that binds model state to UI updates, keeps board input available, and coordinates auto-play.
+Role: composition root that binds model state to UI updates, keeps board input available, coordinates auto-play, and
+exposes a debug SGF reselect button to force layout resyncs.
 Owns: `GCheckersModel`, `BoardView`, `PlayerControlsPanel`, and `GCheckersSgfController`.
 Collaborates with: `gcheckers_style_init()` for CSS, model signals for refresh, and SGF analysis signals to reset
 player dropdowns.
@@ -12,7 +13,8 @@ during dispose, cancels any pending auto-move idle source, and then clears its r
 
 ## `GCheckersSgfController` (`src/gcheckers_sgf_controller.c`)
 Class: `GCheckersSgfController` (`GObject`).
-Role: SGF history synchronization, node selection handling, replay orchestration, and analysis signaling.
+Role: SGF history synchronization, node selection handling, replay orchestration, analysis signaling, and layout resync
+debug hooks.
 Owns: `SgfTree` and `SgfView`, plus replay guards (`is_replaying`, `last_history_size`).
 Collaborates with: `GCheckersModel` for history, `BoardView` to clear selection on replay, and `GCheckersWindow` via
 the `analysis-requested` signal.

@@ -25,6 +25,7 @@ void sgf_view_set_selected(SgfView *self, const SgfNode *node);
 const SgfNode *sgf_view_get_selected(SgfView *self);
 gboolean sgf_view_navigate(SgfView *self, SgfViewNavigation navigation);
 void sgf_view_refresh(SgfView *self);
+void sgf_view_force_layout_sync(SgfView *self);
 
 G_END_DECLS
 
