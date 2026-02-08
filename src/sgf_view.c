@@ -188,9 +188,12 @@ static void sgf_view_log_layout_sync_state(SgfView *self) {
   GtkWidget *top_level = GTK_WIDGET(gtk_widget_get_root(root_widget));
   int window_width = -1;
   int window_height = -1;
+  graphene_rect_t root_bounds;
+  gboolean root_bounds_valid = FALSE;
   if (top_level) {
     window_width = gtk_widget_get_width(top_level);
     window_height = gtk_widget_get_height(top_level);
+    root_bounds_valid = gtk_widget_compute_bounds(root_widget, top_level, &root_bounds);
   }
 
   int root_width = gtk_widget_get_width(root_widget);
@@ -200,6 +203,41 @@ static void sgf_view_log_layout_sync_state(SgfView *self) {
           window_height,
           root_width,
           root_height);
+
+  if (root_bounds_valid) {
+    g_debug("SGF view layout sync: scrolled bounds in window=%.1f,%.1f %.1fx%.1f",
+            root_bounds.origin.x,
+            root_bounds.origin.y,
+            root_bounds.size.width,
+            root_bounds.size.height);
+  } else {
+    g_debug("SGF view layout sync: unable to compute scrolled bounds in window");
+  }
+
+  GtkAdjustment *hadjustment = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(root_widget));
+  GtkAdjustment *vadjustment = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(root_widget));
+  if (hadjustment && vadjustment) {
+    g_debug("SGF view layout sync: hadj value=%.1f page=%.1f upper=%.1f",
+            gtk_adjustment_get_value(hadjustment),
+            gtk_adjustment_get_page_size(hadjustment),
+            gtk_adjustment_get_upper(hadjustment));
+    g_debug("SGF view layout sync: vadj value=%.1f page=%.1f upper=%.1f",
+            gtk_adjustment_get_value(vadjustment),
+            gtk_adjustment_get_page_size(vadjustment),
+            gtk_adjustment_get_upper(vadjustment));
+  } else {
+    g_debug("SGF view layout sync: missing adjustments");
+  }
+
+  if (self->overlay) {
+    int overlay_width = gtk_widget_get_width(self->overlay);
+    int overlay_height = gtk_widget_get_height(self->overlay);
+    g_debug("SGF view layout sync: overlay size=%dx%d content=%dx%d",
+            overlay_width,
+            overlay_height,
+            self->content_width,
+            self->content_height);
+  }
 
   if (!self->selection) {
     g_debug("SGF view layout sync: missing selection controller");
@@ -231,11 +269,14 @@ static void sgf_view_log_layout_sync_state(SgfView *self) {
 
   int column = -1;
   int row = -1;
+  graphene_rect_t node_bounds;
+  gboolean node_bounds_valid = FALSE;
   gtk_grid_query_child(GTK_GRID(parent), node_widget, &column, &row, NULL, NULL);
   if (column < 0 || row < 0) {
     g_debug("SGF view layout sync: unable to query selected node grid position");
     return;
   }
+  node_bounds_valid = gtk_widget_compute_bounds(node_widget, root_widget, &node_bounds);
 
   int width = gtk_widget_get_width(node_widget);
   int height = gtk_widget_get_height(node_widget);
@@ -297,6 +338,16 @@ static void sgf_view_log_layout_sync_state(SgfView *self) {
           y,
           width,
           height);
+
+  if (node_bounds_valid) {
+    g_debug("SGF view layout sync: selected bounds in scrolled=%.1f,%.1f %.1fx%.1f",
+            node_bounds.origin.x,
+            node_bounds.origin.y,
+            node_bounds.size.width,
+            node_bounds.size.height);
+  } else {
+    g_debug("SGF view layout sync: unable to compute selected bounds in scrolled");
+  }
 }
 
 static void sgf_view_queue_scroll_to_selected(SgfView *self) {
@@ -345,11 +396,42 @@ static void sgf_view_on_layout_updated(SgfViewLayout *layout, gpointer user_data
   g_return_if_fail(SGF_IS_VIEW_LAYOUT(layout));
 
   sgf_view_sync_selection_from_model(self);
+  sgf_view_log_layout_sync_state(self);
   sgf_view_scroller_on_layout_changed(self->scroller,
                                       GTK_SCROLLED_WINDOW(self->root),
                                       self->node_widgets,
                                       self->column_widths,
                                       self->row_heights);
+}
+
+static void G_GNUC_UNUSED sgf_view_on_post_size_allocate(GtkWidget * /*widget*/,
+                                                         int /*width*/,
+                                                         int /*height*/,
+                                                         int /*baseline*/,
+                                                         gpointer user_data) {
+  SgfView *self = SGF_VIEW(user_data);
+
+  g_return_if_fail(SGF_IS_VIEW(self));
+
+  sgf_view_force_layout_sync(self);
+}
+
+static void G_GNUC_UNUSED sgf_view_on_post_map(GtkWidget * /*widget*/, gpointer user_data) {
+  SgfView *self = SGF_VIEW(user_data);
+
+  g_return_if_fail(SGF_IS_VIEW(self));
+
+  sgf_view_force_layout_sync(self);
+}
+
+static void G_GNUC_UNUSED sgf_view_on_post_notify(GObject * /*object*/,
+                                                  GParamSpec * /*pspec*/,
+                                                  gpointer user_data) {
+  SgfView *self = SGF_VIEW(user_data);
+
+  g_return_if_fail(SGF_IS_VIEW(self));
+
+  sgf_view_force_layout_sync(self);
 }
 
 static void sgf_view_select_node(SgfView *self, const SgfNode *node, gboolean emit_signal) {
@@ -538,6 +620,24 @@ static void sgf_view_init(SgfView *self) {
                    G_CALLBACK(sgf_view_on_disc_node_clicked),
                    self);
   g_signal_connect(self->layout, "layout-updated", G_CALLBACK(sgf_view_on_layout_updated), self);
+  // Optional post-layout hooks for manual debugging. Uncomment exactly one at a time.
+  g_signal_connect(self->root, "size-allocate", G_CALLBACK(sgf_view_on_post_size_allocate), self);
+  g_signal_connect(self->overlay, "size-allocate", G_CALLBACK(sgf_view_on_post_size_allocate), self);
+  g_signal_connect(self->tree_box, "size-allocate", G_CALLBACK(sgf_view_on_post_size_allocate), self);
+  g_signal_connect(self->root, "map", G_CALLBACK(sgf_view_on_post_map), self);
+  g_signal_connect(self->root, "realize", G_CALLBACK(sgf_view_on_post_map), self);
+  g_signal_connect(self->root, "notify::hadjustment", G_CALLBACK(sgf_view_on_post_notify), self);
+  g_signal_connect(self->root, "notify::vadjustment", G_CALLBACK(sgf_view_on_post_notify), self);
+  g_signal_connect(gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(self->root)),
+                   "notify::upper",
+                   G_CALLBACK(sgf_view_on_post_notify),
+                   self);
+  g_signal_connect(gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(self->root)),
+                   "notify::upper",
+                   G_CALLBACK(sgf_view_on_post_notify),
+                   self);
+  g_signal_connect(self->root, "notify::width-request", G_CALLBACK(sgf_view_on_post_notify), self);
+  g_signal_connect(self->root, "notify::height-request", G_CALLBACK(sgf_view_on_post_notify), self);
 
   GtkEventController *key_controller = gtk_event_controller_key_new();
   gtk_event_controller_set_propagation_phase(key_controller, GTK_PHASE_CAPTURE);
