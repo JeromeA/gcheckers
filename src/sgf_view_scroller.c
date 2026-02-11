@@ -41,12 +41,14 @@ static void sgf_view_scroller_try_scroll_node_if_present(GtkScrolledWindow *root
                                                          GHashTable *node_widgets,
                                                          GArray *column_widths,
                                                          GArray *row_heights,
-                                                         const SgfNode *selected) {
+                                                         const SgfNode *selected,
+                                                         const char *reason) {
   g_return_if_fail(GTK_IS_SCROLLED_WINDOW(root));
   g_return_if_fail(node_widgets != NULL);
   g_return_if_fail(column_widths != NULL);
   g_return_if_fail(row_heights != NULL);
   g_return_if_fail(selected != NULL);
+  g_return_if_fail(reason != NULL);
 
   GtkWidget *widget = g_hash_table_lookup(node_widgets, (gpointer)selected);
   if (!widget) {
@@ -119,12 +121,85 @@ static void sgf_view_scroller_try_scroll_node_if_present(GtkScrolledWindow *root
   GtkAdjustment *hadjustment = gtk_scrolled_window_get_hadjustment(root);
   GtkAdjustment *vadjustment = gtk_scrolled_window_get_vadjustment(root);
 
+  g_debug("SGF scroll attempt (%s): selected=%p grid=%d,%d target h=[%.1f,%.1f] v=[%.1f,%.1f]",
+          reason,
+          selected,
+          column,
+          row,
+          h_start,
+          h_end,
+          v_start,
+          v_end);
+
+  double hadjustment_value_before = 0.0;
+  double hadjustment_page_before = 0.0;
+  double hadjustment_upper_before = 0.0;
+  double vadjustment_value_before = 0.0;
+  double vadjustment_page_before = 0.0;
+  double vadjustment_upper_before = 0.0;
+
+  if (hadjustment) {
+    hadjustment_value_before = gtk_adjustment_get_value(hadjustment);
+    hadjustment_page_before = gtk_adjustment_get_page_size(hadjustment);
+    hadjustment_upper_before = gtk_adjustment_get_upper(hadjustment);
+    g_debug("SGF scroll attempt (%s): hadj before value=%.1f page=%.1f upper=%.1f",
+            reason,
+            hadjustment_value_before,
+            hadjustment_page_before,
+            hadjustment_upper_before);
+  }
+
+  if (vadjustment) {
+    vadjustment_value_before = gtk_adjustment_get_value(vadjustment);
+    vadjustment_page_before = gtk_adjustment_get_page_size(vadjustment);
+    vadjustment_upper_before = gtk_adjustment_get_upper(vadjustment);
+    g_debug("SGF scroll attempt (%s): vadj before value=%.1f page=%.1f upper=%.1f",
+            reason,
+            vadjustment_value_before,
+            vadjustment_page_before,
+            vadjustment_upper_before);
+  }
+
   if (hadjustment) {
     gtk_adjustment_clamp_page(hadjustment, h_start, h_end);
+
+    const double hadjustment_value_after = gtk_adjustment_get_value(hadjustment);
+    const double hadjustment_page_after = gtk_adjustment_get_page_size(hadjustment);
+    const double hadjustment_upper_after = gtk_adjustment_get_upper(hadjustment);
+    const gboolean h_visible_before = (hadjustment_value_before <= h_start) &&
+                                      ((hadjustment_value_before + hadjustment_page_before) >= h_end);
+    const gboolean h_visible_after = (hadjustment_value_after <= h_start) &&
+                                     ((hadjustment_value_after + hadjustment_page_after) >= h_end);
+    g_debug("SGF scroll attempt (%s): hadj after value=%.1f page=%.1f upper=%.1f delta=%.1f visible-before=%s "
+            "visible-after=%s",
+            reason,
+            hadjustment_value_after,
+            hadjustment_page_after,
+            hadjustment_upper_after,
+            hadjustment_value_after - hadjustment_value_before,
+            h_visible_before ? "yes" : "no",
+            h_visible_after ? "yes" : "no");
   }
 
   if (vadjustment) {
     gtk_adjustment_clamp_page(vadjustment, v_start, v_end);
+
+    const double vadjustment_value_after = gtk_adjustment_get_value(vadjustment);
+    const double vadjustment_page_after = gtk_adjustment_get_page_size(vadjustment);
+    const double vadjustment_upper_after = gtk_adjustment_get_upper(vadjustment);
+    const gboolean v_visible_before = (vadjustment_value_before <= v_start) &&
+                                      ((vadjustment_value_before + vadjustment_page_before) >= v_end);
+    const gboolean v_visible_after = (vadjustment_value_after <= v_start) &&
+                                     ((vadjustment_value_after + vadjustment_page_after) >= v_end);
+    g_debug("SGF scroll attempt (%s): vadj after value=%.1f page=%.1f upper=%.1f delta=%.1f visible-before=%s "
+            "visible-after=%s",
+            reason,
+            vadjustment_value_after,
+            vadjustment_page_after,
+            vadjustment_upper_after,
+            vadjustment_value_after - vadjustment_value_before,
+            v_visible_before ? "yes" : "no",
+            v_visible_after ? "yes" : "no");
   }
 
   if (!hadjustment && !vadjustment) {
@@ -161,10 +236,11 @@ void sgf_view_scroller_request_scroll(SgfViewScroller *self,
    */
   self->remembered_selected = selected;
   sgf_view_scroller_try_scroll_node_if_present(root,
-                                                node_widgets,
-                                                column_widths,
-                                                row_heights,
-                                                selected);
+                                               node_widgets,
+                                               column_widths,
+                                               row_heights,
+                                               selected,
+                                               "request");
 }
 
 void sgf_view_scroller_on_layout_changed(SgfViewScroller *self,
@@ -183,8 +259,9 @@ void sgf_view_scroller_on_layout_changed(SgfViewScroller *self,
   }
 
   sgf_view_scroller_try_scroll_node_if_present(root,
-                                                node_widgets,
-                                                column_widths,
-                                                row_heights,
-                                                self->remembered_selected);
+                                               node_widgets,
+                                               column_widths,
+                                               row_heights,
+                                               self->remembered_selected,
+                                               "layout-changed");
 }
