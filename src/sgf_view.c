@@ -412,13 +412,16 @@ static void G_GNUC_UNUSED sgf_view_on_post_map(GtkWidget * /*widget*/, gpointer 
   sgf_view_force_layout_sync(self);
 }
 
-static void G_GNUC_UNUSED sgf_view_on_post_notify(GObject * /*object*/,
-                                                  GParamSpec * /*pspec*/,
+static void G_GNUC_UNUSED sgf_view_on_post_notify(GObject *object,
+                                                  GParamSpec *pspec,
                                                   gpointer user_data) {
   SgfView *self = SGF_VIEW(user_data);
 
   g_return_if_fail(SGF_IS_VIEW(self));
+  g_return_if_fail(G_IS_OBJECT(object));
+  g_return_if_fail(pspec != NULL);
 
+  g_debug("SGF view post-notify: source=%s property=%s", G_OBJECT_TYPE_NAME(object), pspec->name);
   sgf_view_force_layout_sync(self);
 }
 

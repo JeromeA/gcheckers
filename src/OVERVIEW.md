@@ -125,8 +125,9 @@ Collaborates with: SGF view and controller modules.
 ### SGF view (`src/sgf_view.c`, `src/sgf_view.h`)
 Class: `SgfView` (`GtkWidget`).
 Role: game-agnostic move tree UI that wires together layout, rendering, selection helpers, scrolled content sizing, and
-diagnostic sizing logs. It syncs selection after layout updates with debug logging when widgets are not ready and logs
-window/selected-node geometry during forced layout resyncs.
+diagnostic sizing logs. It syncs selection after layout updates with debug logging when widgets are not ready, logs
+window/selected-node geometry during forced layout resyncs, and annotates notify-driven sync attempts with the
+emitting object/property pair.
 Collaborates with: SGF layout (layout-updated signal), selection, scroller, and disc factory helpers.
 
 ### SGF disc factory (`src/sgf_view_disc_factory.c`, `src/sgf_view_disc_factory.h`)
@@ -151,9 +152,10 @@ Collaborates with: SGF layout data and view sizing.
 Module: selection scroll helper.
 Role: implement two paths only: on scroll requests remember the selected node and attempt scrolling immediately; on
 layout updates retry scrolling for the remembered node only, applying a small visibility padding. The implementation
-uses one internal helper that treats missing or not-yet-measurable nodes as no-op outcomes. The file-level contract
-comment in `src/sgf_view_scroller.c` is the canonical policy reference (including the prohibition on deferred retry
-mechanisms such as ticks/idles/timers).
+uses one internal helper that treats missing or not-yet-measurable nodes as no-op outcomes and emits detailed
+before/after adjustment diagnostics (target ranges, deltas, and visibility state) for each attempt. The file-level
+contract comment in `src/sgf_view_scroller.c` is the canonical policy reference (including the prohibition on deferred
+retry mechanisms such as ticks/idles/timers).
 Collaborates with: `SgfView`, SGF node widget mapping, layout extents, and selection controller updates.
 
 ### SGF selection controller (`src/sgf_view_selection_controller.c`, `src/sgf_view_selection_controller.h`)
