@@ -217,14 +217,43 @@ static void sgf_view_log_layout_sync_state(SgfView *self) {
   GtkAdjustment *hadjustment = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(root_widget));
   GtkAdjustment *vadjustment = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(root_widget));
   if (hadjustment && vadjustment) {
+    const double hadjustment_value = gtk_adjustment_get_value(hadjustment);
+    const double hadjustment_page = gtk_adjustment_get_page_size(hadjustment);
+    const double hadjustment_upper = gtk_adjustment_get_upper(hadjustment);
+    const double vadjustment_value = gtk_adjustment_get_value(vadjustment);
+    const double vadjustment_page = gtk_adjustment_get_page_size(vadjustment);
+    const double vadjustment_upper = gtk_adjustment_get_upper(vadjustment);
+
     g_debug("SGF view layout sync: hadj value=%.1f page=%.1f upper=%.1f",
-            gtk_adjustment_get_value(hadjustment),
-            gtk_adjustment_get_page_size(hadjustment),
-            gtk_adjustment_get_upper(hadjustment));
+            hadjustment_value,
+            hadjustment_page,
+            hadjustment_upper);
     g_debug("SGF view layout sync: vadj value=%.1f page=%.1f upper=%.1f",
-            gtk_adjustment_get_value(vadjustment),
-            gtk_adjustment_get_page_size(vadjustment),
-            gtk_adjustment_get_upper(vadjustment));
+            vadjustment_value,
+            vadjustment_page,
+            vadjustment_upper);
+
+    GtkWidget *scrolled_child = gtk_scrolled_window_get_child(GTK_SCROLLED_WINDOW(root_widget));
+    if (scrolled_child) {
+      graphene_rect_t child_bounds;
+      gboolean child_bounds_valid = gtk_widget_compute_bounds(scrolled_child, root_widget, &child_bounds);
+      if (child_bounds_valid) {
+        g_debug("SGF view layout sync: child bounds in scrolled=%.1f,%.1f %.1fx%.1f"
+                " expected-origin=%.1f,%.1f delta=%.1f,%.1f",
+                child_bounds.origin.x,
+                child_bounds.origin.y,
+                child_bounds.size.width,
+                child_bounds.size.height,
+                -hadjustment_value,
+                -vadjustment_value,
+                child_bounds.origin.x + hadjustment_value,
+                child_bounds.origin.y + vadjustment_value);
+      } else {
+        g_debug("SGF view layout sync: unable to compute scrolled child bounds");
+      }
+    } else {
+      g_debug("SGF view layout sync: scrolled window has no child during sync");
+    }
   } else {
     g_debug("SGF view layout sync: missing adjustments");
   }
@@ -339,12 +368,42 @@ static void sgf_view_log_layout_sync_state(SgfView *self) {
           width,
           height);
 
+  if (hadjustment && vadjustment) {
+    const double hadjustment_value = gtk_adjustment_get_value(hadjustment);
+    const double hadjustment_page = gtk_adjustment_get_page_size(hadjustment);
+    const double vadjustment_value = gtk_adjustment_get_value(vadjustment);
+    const double vadjustment_page = gtk_adjustment_get_page_size(vadjustment);
+    const double expected_x = x - hadjustment_value;
+    const double expected_y = y - vadjustment_value;
+    const gboolean expected_visible_h = (expected_x >= 0.0) && ((expected_x + width) <= hadjustment_page);
+    const gboolean expected_visible_v = (expected_y >= 0.0) && ((expected_y + height) <= vadjustment_page);
+
+    g_debug("SGF view layout sync: selected expected bounds in scrolled=%.1f,%.1f %.1fx%.1f visible-h=%s "
+            "visible-v=%s",
+            expected_x,
+            expected_y,
+            (double)width,
+            (double)height,
+            expected_visible_h ? "yes" : "no",
+            expected_visible_v ? "yes" : "no");
+  }
+
   if (node_bounds_valid) {
     g_debug("SGF view layout sync: selected bounds in scrolled=%.1f,%.1f %.1fx%.1f",
             node_bounds.origin.x,
             node_bounds.origin.y,
             node_bounds.size.width,
             node_bounds.size.height);
+    if (hadjustment && vadjustment) {
+      const double hadjustment_value = gtk_adjustment_get_value(hadjustment);
+      const double vadjustment_value = gtk_adjustment_get_value(vadjustment);
+      const double expected_x = x - hadjustment_value;
+      const double expected_y = y - vadjustment_value;
+
+      g_debug("SGF view layout sync: selected expected-vs-actual delta=%.1f,%.1f",
+              node_bounds.origin.x - expected_x,
+              node_bounds.origin.y - expected_y);
+    }
   } else {
     g_debug("SGF view layout sync: unable to compute selected bounds in scrolled");
   }
