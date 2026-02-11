@@ -404,18 +404,6 @@ static void sgf_view_on_layout_updated(SgfViewLayout *layout, gpointer user_data
                                       self->row_heights);
 }
 
-static void G_GNUC_UNUSED sgf_view_on_post_size_allocate(GtkWidget * /*widget*/,
-                                                         int /*width*/,
-                                                         int /*height*/,
-                                                         int /*baseline*/,
-                                                         gpointer user_data) {
-  SgfView *self = SGF_VIEW(user_data);
-
-  g_return_if_fail(SGF_IS_VIEW(self));
-
-  sgf_view_force_layout_sync(self);
-}
-
 static void G_GNUC_UNUSED sgf_view_on_post_map(GtkWidget * /*widget*/, gpointer user_data) {
   SgfView *self = SGF_VIEW(user_data);
 
@@ -620,14 +608,9 @@ static void sgf_view_init(SgfView *self) {
                    G_CALLBACK(sgf_view_on_disc_node_clicked),
                    self);
   g_signal_connect(self->layout, "layout-updated", G_CALLBACK(sgf_view_on_layout_updated), self);
-  // Optional post-layout hooks for manual debugging. Uncomment exactly one at a time.
-  g_signal_connect(self->root, "size-allocate", G_CALLBACK(sgf_view_on_post_size_allocate), self);
-  g_signal_connect(self->overlay, "size-allocate", G_CALLBACK(sgf_view_on_post_size_allocate), self);
-  g_signal_connect(self->tree_box, "size-allocate", G_CALLBACK(sgf_view_on_post_size_allocate), self);
-  g_signal_connect(self->root, "map", G_CALLBACK(sgf_view_on_post_map), self);
-  g_signal_connect(self->root, "realize", G_CALLBACK(sgf_view_on_post_map), self);
-  g_signal_connect(self->root, "notify::hadjustment", G_CALLBACK(sgf_view_on_post_notify), self);
-  g_signal_connect(self->root, "notify::vadjustment", G_CALLBACK(sgf_view_on_post_notify), self);
+
+  // Extra signals, hoping to catch any changes that might affect layout or selection sync after the initial map and
+  // layout-updated signals.
   g_signal_connect(gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(self->root)),
                    "notify::upper",
                    G_CALLBACK(sgf_view_on_post_notify),
