@@ -2,14 +2,16 @@
 
 ## `GCheckersWindow` (`src/gcheckers_window.c`)
 Class: `GCheckersWindow` (`GtkApplicationWindow`).
-Role: composition root that binds model state to UI updates, keeps board input available, coordinates auto-play, and
-exposes a debug SGF reselect button to force layout resyncs.
+Role: composition root that binds model state to UI updates, keeps board input available, coordinates auto-play,
+and exposes a debug SGF reselect button to force layout resyncs. It also schedules three startup forced moves so
+bug-reproduction runs do not require manual clicks.
 Owns: `GCheckersModel`, `BoardView`, `PlayerControlsPanel`, and `GCheckersSgfController`.
 Collaborates with: `gcheckers_style_init()` for CSS, model signals for refresh, and SGF analysis signals to reset
 player dropdowns.
 Lifecycle: sinks and retains an owned `PlayerControlsPanel` reference, removes it from its current `GtkBox` parent
 during dispose via `gcheckers_widget_remove_from_parent()`, and then clears its references.
-during dispose, cancels any pending auto-move idle source, and then clears its references.
+during dispose, cancels any pending auto-move idle source and startup forced-move idle source, and then clears
+its references.
 
 ## `GCheckersSgfController` (`src/gcheckers_sgf_controller.c`)
 Class: `GCheckersSgfController` (`GObject`).
@@ -75,7 +77,8 @@ Collaborates with: `game.c` and `game_print.c`.
 
 ## GTK application entry (`src/gcheckers.c`, `src/gcheckers_application.c`, `src/gcheckers_application.h`)
 Class: `GCheckersApplication` (`GtkApplication`).
-Role: define the GTK application type and activation flow that creates the main window and model.
+Role: define the GTK application type and activation flow that creates the main window and model, and schedules
+a process quit two seconds after launch for deterministic repro runs.
 Collaborates with: `GCheckersWindow` for UI wiring.
 
 ## Board view subsystem

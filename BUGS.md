@@ -30,3 +30,14 @@ XDG_RUNTIME_DIR or a Broadway display was not configured.
 
 The fix runs the GTK test binaries under a shared Broadway server from make test so gtk_init_check succeeds and the
 tests run instead of skipping.
+
+## GTK scrolled-window inconsistency only reproduced after clicking Force move
+
+The branch needs a deterministic way to trigger the GTK scrolled-window inconsistency immediately for debugging and
+reduction work.
+
+The previous reproduction required manually clicking the Force move button three times, which made scripted runs
+harder and slower and required interactive input.
+
+The reproduction path now schedules three forced moves automatically during window startup and adds a Broadway make
+target that runs `G_MESSAGES_DEBUG=all ./gcheckers` so the inconsistency appears without manual clicks.
