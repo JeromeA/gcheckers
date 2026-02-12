@@ -447,9 +447,20 @@ static void sgf_view_log_layout_sync_state(SgfView *self) {
                 actual_y - expected_y);
 
         if (expected_visible_h && expected_visible_v && (!actual_visible_h || !actual_visible_v)) {
-          g_debug("GTK SCROLLEDWINDOW INCONSISTENCY: ADJUSTMENT/SCROLL MODEL SAYS THE VIEWPORT SHOULD SHOW THIS "
-                  "CONTENT RANGE, BUT MEASURED VIEW COORDINATES REPORT A DIFFERENT LOCATION. THIS SHOULD NEVER "
-                  "HAPPEN.");
+          g_debug("GTK SCROLLEDWINDOW INCONSISTENCY: MODEL viewport=%.1fx%.1f scroll=%.1f,%.1f "
+                  "expected=%.1f,%.1f %.1fx%.1f actual=%.1f,%.1f %.1fx%.1f. THIS SHOULD NEVER HAPPEN.",
+                  hadjustment_page,
+                  vadjustment_page,
+                  hadjustment_value,
+                  vadjustment_value,
+                  expected_x,
+                  expected_y,
+                  (double)width,
+                  (double)height,
+                  actual_x,
+                  actual_y,
+                  actual_width,
+                  actual_height);
         }
       }
     } else {

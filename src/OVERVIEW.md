@@ -130,8 +130,8 @@ window/selected-node geometry during forced layout resyncs, and annotates notify
 emitting object/property pair. Layout-sync diagnostics compare adjustment-based expected positions against
 `gtk_widget_compute_bounds()` results in viewport coordinates for the overlay and selected node, while
 also logging root-relative bounds for reference. When adjustment/model expectations diverge from
-measured viewport coordinates, the view emits a capitalized log message describing a never-should-happen
-GtkScrolledWindow inconsistency.
+measured viewport coordinates, the view emits a capitalized log message with numeric model-vs-actual
+viewport values describing a never-should-happen GtkScrolledWindow inconsistency.
 Collaborates with: SGF layout (layout-updated signal), selection, scroller, and disc factory helpers.
 
 ### SGF disc factory (`src/sgf_view_disc_factory.c`, `src/sgf_view_disc_factory.h`)
