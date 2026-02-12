@@ -2,7 +2,7 @@
 # Description
 
 The purpose of this branch in not to work on the original project. Instead, it's to remove as much code as possible to
-make a minimal bug reproduction.
+make a minimal bug reproduction that is found in sgf_view.c about the scrolling window of the sgf view.
 
 # Coding Conventions
 
