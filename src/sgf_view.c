@@ -428,13 +428,28 @@ static void sgf_view_log_layout_sync_state(SgfView *self) {
 
       if (hadjustment && vadjustment) {
         const double hadjustment_value = gtk_adjustment_get_value(hadjustment);
+        const double hadjustment_page = gtk_adjustment_get_page_size(hadjustment);
         const double vadjustment_value = gtk_adjustment_get_value(vadjustment);
+        const double vadjustment_page = gtk_adjustment_get_page_size(vadjustment);
         const double expected_x = x - hadjustment_value;
         const double expected_y = y - vadjustment_value;
+        const gboolean expected_visible_h = (expected_x >= 0.0) && ((expected_x + width) <= hadjustment_page);
+        const gboolean expected_visible_v = (expected_y >= 0.0) && ((expected_y + height) <= vadjustment_page);
+        const double actual_x = node_bounds_in_viewport.origin.x;
+        const double actual_y = node_bounds_in_viewport.origin.y;
+        const double actual_width = node_bounds_in_viewport.size.width;
+        const double actual_height = node_bounds_in_viewport.size.height;
+        const gboolean actual_visible_h = (actual_x >= 0.0) && ((actual_x + actual_width) <= hadjustment_page);
+        const gboolean actual_visible_v = (actual_y >= 0.0) && ((actual_y + actual_height) <= vadjustment_page);
 
         g_debug("SGF view layout sync: selected expected-vs-actual delta in viewport=%.1f,%.1f",
-                node_bounds_in_viewport.origin.x - expected_x,
-                node_bounds_in_viewport.origin.y - expected_y);
+                actual_x - expected_x,
+                actual_y - expected_y);
+
+        if (expected_visible_h && expected_visible_v && (!actual_visible_h || !actual_visible_v)) {
+          g_debug("SGF VIEW INCONSISTENCY: EXPECTED SELECTED NODE TO BE VISIBLE IN VIEWPORT, BUT GTK REPORTS IT "
+                  "OUTSIDE THE VIEWPORT. THIS SHOULD NEVER HAPPEN.");
+        }
       }
     } else {
       g_debug("SGF view layout sync: unable to compute selected bounds in viewport");
