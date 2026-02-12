@@ -216,15 +216,26 @@ static void sgf_view_log_layout_sync_state(SgfView *self) {
 
   GtkAdjustment *hadjustment = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(root_widget));
   GtkAdjustment *vadjustment = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(root_widget));
+  GtkWidget *scrolled_child = gtk_scrolled_window_get_child(GTK_SCROLLED_WINDOW(root_widget));
+  GtkWidget *viewport = GTK_IS_VIEWPORT(scrolled_child) ? scrolled_child : NULL;
+
   if (hadjustment && vadjustment) {
+    const double hadjustment_value = gtk_adjustment_get_value(hadjustment);
+    const double hadjustment_page = gtk_adjustment_get_page_size(hadjustment);
+    const double hadjustment_upper = gtk_adjustment_get_upper(hadjustment);
+    const double vadjustment_value = gtk_adjustment_get_value(vadjustment);
+    const double vadjustment_page = gtk_adjustment_get_page_size(vadjustment);
+    const double vadjustment_upper = gtk_adjustment_get_upper(vadjustment);
+
     g_debug("SGF view layout sync: hadj value=%.1f page=%.1f upper=%.1f",
-            gtk_adjustment_get_value(hadjustment),
-            gtk_adjustment_get_page_size(hadjustment),
-            gtk_adjustment_get_upper(hadjustment));
+            hadjustment_value,
+            hadjustment_page,
+            hadjustment_upper);
     g_debug("SGF view layout sync: vadj value=%.1f page=%.1f upper=%.1f",
-            gtk_adjustment_get_value(vadjustment),
-            gtk_adjustment_get_page_size(vadjustment),
-            gtk_adjustment_get_upper(vadjustment));
+            vadjustment_value,
+            vadjustment_page,
+            vadjustment_upper);
+
   } else {
     g_debug("SGF view layout sync: missing adjustments");
   }
@@ -269,14 +280,11 @@ static void sgf_view_log_layout_sync_state(SgfView *self) {
 
   int column = -1;
   int row = -1;
-  graphene_rect_t node_bounds;
-  gboolean node_bounds_valid = FALSE;
   gtk_grid_query_child(GTK_GRID(parent), node_widget, &column, &row, NULL, NULL);
   if (column < 0 || row < 0) {
     g_debug("SGF view layout sync: unable to query selected node grid position");
     return;
   }
-  node_bounds_valid = gtk_widget_compute_bounds(node_widget, root_widget, &node_bounds);
 
   int width = gtk_widget_get_width(node_widget);
   int height = gtk_widget_get_height(node_widget);
@@ -339,14 +347,64 @@ static void sgf_view_log_layout_sync_state(SgfView *self) {
           width,
           height);
 
-  if (node_bounds_valid) {
-    g_debug("SGF view layout sync: selected bounds in scrolled=%.1f,%.1f %.1fx%.1f",
-            node_bounds.origin.x,
-            node_bounds.origin.y,
-            node_bounds.size.width,
-            node_bounds.size.height);
-  } else {
-    g_debug("SGF view layout sync: unable to compute selected bounds in scrolled");
+  if (viewport && hadjustment && vadjustment) {
+    graphene_rect_t node_bounds_in_viewport;
+    gboolean node_bounds_in_viewport_valid = gtk_widget_compute_bounds(node_widget,
+                                                                       viewport,
+                                                                       &node_bounds_in_viewport);
+    if (!node_bounds_in_viewport_valid) {
+      g_debug("SGF view layout sync: unable to compute selected bounds in viewport");
+      return;
+    }
+
+    const double hadjustment_value = gtk_adjustment_get_value(hadjustment);
+    const double hadjustment_page = gtk_adjustment_get_page_size(hadjustment);
+    const double vadjustment_value = gtk_adjustment_get_value(vadjustment);
+    const double vadjustment_page = gtk_adjustment_get_page_size(vadjustment);
+    const double expected_x = x - hadjustment_value;
+    const double expected_y = y - vadjustment_value;
+    const double actual_x = node_bounds_in_viewport.origin.x;
+    const double actual_y = node_bounds_in_viewport.origin.y;
+
+    graphene_rect_t overlay_bounds_in_viewport;
+    gboolean overlay_bounds_valid = FALSE;
+    if (self->overlay) {
+      overlay_bounds_valid = gtk_widget_compute_bounds(self->overlay,
+                                                       viewport,
+                                                       &overlay_bounds_in_viewport);
+    }
+
+    const double model_content_x = -hadjustment_value;
+    const double model_content_y = -vadjustment_value;
+    const double actual_content_x = overlay_bounds_valid ? overlay_bounds_in_viewport.origin.x : 0.0;
+    const double actual_content_y = overlay_bounds_valid ? overlay_bounds_in_viewport.origin.y : 0.0;
+    const int content_view_width = self->overlay ? gtk_widget_get_width(self->overlay) : self->content_width;
+    const int content_view_height = self->overlay ? gtk_widget_get_height(self->overlay) : self->content_height;
+    const double content_delta_x = actual_content_x - model_content_x;
+    const double content_delta_y = actual_content_y - model_content_y;
+    const gboolean has_content_inconsistency =
+      !overlay_bounds_valid || (content_delta_x > 0.5) || (content_delta_x < -0.5) ||
+      (content_delta_y > 0.5) || (content_delta_y < -0.5);
+
+    if (has_content_inconsistency) {
+      g_debug("GTK SCROLLEDWINDOW INCONSISTENCY: scrolled-window-size=%.1fx%.1f content-view-size=%dx%d "
+              "model-content-pos=%.1f,%.1f effective-content-pos=%.1f,%.1f selected-expected=%.1f,%.1f "
+              "selected-actual=%.1f,%.1f. THIS SHOULD NEVER HAPPEN.",
+              hadjustment_page,
+              vadjustment_page,
+              content_view_width,
+              content_view_height,
+              model_content_x,
+              model_content_y,
+              actual_content_x,
+              actual_content_y,
+              expected_x,
+              expected_y,
+              actual_x,
+              actual_y);
+    } else {
+      g_debug("GTK SCROLLEDWINDOW: no inconsistencies");
+    }
   }
 }
 
