@@ -9,6 +9,15 @@ struct _GCheckersApplication {
 
 G_DEFINE_TYPE(GCheckersApplication, gcheckers_application, GTK_TYPE_APPLICATION)
 
+static gboolean gcheckers_application_quit_after_delay_cb(gpointer user_data) {
+  GApplication *app = G_APPLICATION(user_data);
+
+  g_return_val_if_fail(G_IS_APPLICATION(app), G_SOURCE_REMOVE);
+
+  g_application_quit(app);
+  return G_SOURCE_REMOVE;
+}
+
 static void gcheckers_application_activate(GApplication *app) {
   GtkWindow *existing = gtk_application_get_active_window(GTK_APPLICATION(app));
   if (existing) {
@@ -21,6 +30,12 @@ static void gcheckers_application_activate(GApplication *app) {
   g_object_unref(model);
 
   gtk_window_present(window);
+
+  g_timeout_add_full(G_PRIORITY_DEFAULT,
+                     2000,
+                     gcheckers_application_quit_after_delay_cb,
+                     g_object_ref(app),
+                     (GDestroyNotify)g_object_unref);
 }
 
 static void gcheckers_application_class_init(GCheckersApplicationClass *klass) {
