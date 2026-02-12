@@ -127,9 +127,10 @@ Class: `SgfView` (`GtkWidget`).
 Role: game-agnostic move tree UI that wires together layout, rendering, selection helpers, scrolled content sizing, and
 diagnostic sizing logs. It syncs selection after layout updates with debug logging when widgets are not ready, logs
 window/selected-node geometry during forced layout resyncs, and annotates notify-driven sync attempts with the
-emitting object/property pair. Layout-sync diagnostics also compare adjustment-based expected positions against
-`gtk_widget_compute_bounds()` results for both the scrolled child and selected node, making transient
-model-versus-render mismatches visible in logs.
+emitting object/property pair. Layout-sync diagnostics compare adjustment-based expected positions against
+`gtk_widget_compute_bounds()` results in viewport coordinates for the overlay and selected node, while
+also logging root-relative bounds for reference, making transient model-versus-render mismatches visible
+in logs.
 Collaborates with: SGF layout (layout-updated signal), selection, scroller, and disc factory helpers.
 
 ### SGF disc factory (`src/sgf_view_disc_factory.c`, `src/sgf_view_disc_factory.h`)
