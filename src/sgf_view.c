@@ -236,42 +236,6 @@ static void sgf_view_log_layout_sync_state(SgfView *self) {
             vadjustment_page,
             vadjustment_upper);
 
-    if (scrolled_child) {
-      graphene_rect_t child_bounds;
-      gboolean child_bounds_valid = gtk_widget_compute_bounds(scrolled_child, root_widget, &child_bounds);
-      if (child_bounds_valid) {
-        g_debug("SGF view layout sync: scrolled child bounds in root=%.1f,%.1f %.1fx%.1f",
-                child_bounds.origin.x,
-                child_bounds.origin.y,
-                child_bounds.size.width,
-                child_bounds.size.height);
-      } else {
-        g_debug("SGF view layout sync: unable to compute scrolled child bounds in root");
-      }
-    } else {
-      g_debug("SGF view layout sync: scrolled window has no child during sync");
-    }
-
-    if (viewport && self->overlay) {
-      graphene_rect_t overlay_bounds;
-      gboolean overlay_bounds_valid = gtk_widget_compute_bounds(self->overlay, viewport, &overlay_bounds);
-      if (overlay_bounds_valid) {
-        g_debug("SGF view layout sync: overlay bounds in viewport=%.1f,%.1f %.1fx%.1f"
-                " expected-origin=%.1f,%.1f delta=%.1f,%.1f",
-                overlay_bounds.origin.x,
-                overlay_bounds.origin.y,
-                overlay_bounds.size.width,
-                overlay_bounds.size.height,
-                -hadjustment_value,
-                -vadjustment_value,
-                overlay_bounds.origin.x + hadjustment_value,
-                overlay_bounds.origin.y + vadjustment_value);
-      } else {
-        g_debug("SGF view layout sync: unable to compute overlay bounds in viewport");
-      }
-    } else if (!viewport) {
-      g_debug("SGF view layout sync: scrolled child is not a GtkViewport");
-    }
   } else {
     g_debug("SGF view layout sync: missing adjustments");
   }
@@ -316,14 +280,11 @@ static void sgf_view_log_layout_sync_state(SgfView *self) {
 
   int column = -1;
   int row = -1;
-  graphene_rect_t node_bounds;
-  gboolean node_bounds_valid = FALSE;
   gtk_grid_query_child(GTK_GRID(parent), node_widget, &column, &row, NULL, NULL);
   if (column < 0 || row < 0) {
     g_debug("SGF view layout sync: unable to query selected node grid position");
     return;
   }
-  node_bounds_valid = gtk_widget_compute_bounds(node_widget, root_widget, &node_bounds);
 
   int width = gtk_widget_get_width(node_widget);
   int height = gtk_widget_get_height(node_widget);
@@ -386,7 +347,16 @@ static void sgf_view_log_layout_sync_state(SgfView *self) {
           width,
           height);
 
-  if (hadjustment && vadjustment) {
+  if (viewport && hadjustment && vadjustment) {
+    graphene_rect_t node_bounds_in_viewport;
+    gboolean node_bounds_in_viewport_valid = gtk_widget_compute_bounds(node_widget,
+                                                                       viewport,
+                                                                       &node_bounds_in_viewport);
+    if (!node_bounds_in_viewport_valid) {
+      g_debug("SGF view layout sync: unable to compute selected bounds in viewport");
+      return;
+    }
+
     const double hadjustment_value = gtk_adjustment_get_value(hadjustment);
     const double hadjustment_page = gtk_adjustment_get_page_size(hadjustment);
     const double vadjustment_value = gtk_adjustment_get_value(vadjustment);
@@ -395,76 +365,28 @@ static void sgf_view_log_layout_sync_state(SgfView *self) {
     const double expected_y = y - vadjustment_value;
     const gboolean expected_visible_h = (expected_x >= 0.0) && ((expected_x + width) <= hadjustment_page);
     const gboolean expected_visible_v = (expected_y >= 0.0) && ((expected_y + height) <= vadjustment_page);
+    const double actual_x = node_bounds_in_viewport.origin.x;
+    const double actual_y = node_bounds_in_viewport.origin.y;
+    const double actual_width = node_bounds_in_viewport.size.width;
+    const double actual_height = node_bounds_in_viewport.size.height;
+    const gboolean actual_visible_h = (actual_x >= 0.0) && ((actual_x + actual_width) <= hadjustment_page);
+    const gboolean actual_visible_v = (actual_y >= 0.0) && ((actual_y + actual_height) <= vadjustment_page);
 
-    g_debug("SGF view layout sync: selected expected bounds in viewport=%.1f,%.1f %.1fx%.1f visible-h=%s "
-            "visible-v=%s",
-            expected_x,
-            expected_y,
-            (double)width,
-            (double)height,
-            expected_visible_h ? "yes" : "no",
-            expected_visible_v ? "yes" : "no");
-  }
-
-  if (node_bounds_valid) {
-    g_debug("SGF view layout sync: selected bounds in root=%.1f,%.1f %.1fx%.1f",
-            node_bounds.origin.x,
-            node_bounds.origin.y,
-            node_bounds.size.width,
-            node_bounds.size.height);
-  } else {
-    g_debug("SGF view layout sync: unable to compute selected bounds in root");
-  }
-
-  if (viewport) {
-    graphene_rect_t node_bounds_in_viewport;
-    gboolean node_bounds_in_viewport_valid = gtk_widget_compute_bounds(node_widget, viewport, &node_bounds_in_viewport);
-    if (node_bounds_in_viewport_valid) {
-      g_debug("SGF view layout sync: selected bounds in viewport=%.1f,%.1f %.1fx%.1f",
-              node_bounds_in_viewport.origin.x,
-              node_bounds_in_viewport.origin.y,
-              node_bounds_in_viewport.size.width,
-              node_bounds_in_viewport.size.height);
-
-      if (hadjustment && vadjustment) {
-        const double hadjustment_value = gtk_adjustment_get_value(hadjustment);
-        const double hadjustment_page = gtk_adjustment_get_page_size(hadjustment);
-        const double vadjustment_value = gtk_adjustment_get_value(vadjustment);
-        const double vadjustment_page = gtk_adjustment_get_page_size(vadjustment);
-        const double expected_x = x - hadjustment_value;
-        const double expected_y = y - vadjustment_value;
-        const gboolean expected_visible_h = (expected_x >= 0.0) && ((expected_x + width) <= hadjustment_page);
-        const gboolean expected_visible_v = (expected_y >= 0.0) && ((expected_y + height) <= vadjustment_page);
-        const double actual_x = node_bounds_in_viewport.origin.x;
-        const double actual_y = node_bounds_in_viewport.origin.y;
-        const double actual_width = node_bounds_in_viewport.size.width;
-        const double actual_height = node_bounds_in_viewport.size.height;
-        const gboolean actual_visible_h = (actual_x >= 0.0) && ((actual_x + actual_width) <= hadjustment_page);
-        const gboolean actual_visible_v = (actual_y >= 0.0) && ((actual_y + actual_height) <= vadjustment_page);
-
-        g_debug("SGF view layout sync: selected expected-vs-actual delta in viewport=%.1f,%.1f",
-                actual_x - expected_x,
-                actual_y - expected_y);
-
-        if (expected_visible_h && expected_visible_v && (!actual_visible_h || !actual_visible_v)) {
-          g_debug("GTK SCROLLEDWINDOW INCONSISTENCY: MODEL viewport=%.1fx%.1f scroll=%.1f,%.1f "
-                  "expected=%.1f,%.1f %.1fx%.1f actual=%.1f,%.1f %.1fx%.1f. THIS SHOULD NEVER HAPPEN.",
-                  hadjustment_page,
-                  vadjustment_page,
-                  hadjustment_value,
-                  vadjustment_value,
-                  expected_x,
-                  expected_y,
-                  (double)width,
-                  (double)height,
-                  actual_x,
-                  actual_y,
-                  actual_width,
-                  actual_height);
-        }
-      }
-    } else {
-      g_debug("SGF view layout sync: unable to compute selected bounds in viewport");
+    if (expected_visible_h && expected_visible_v && (!actual_visible_h || !actual_visible_v)) {
+      g_debug("GTK SCROLLEDWINDOW INCONSISTENCY: MODEL viewport=%.1fx%.1f scroll=%.1f,%.1f "
+              "expected=%.1f,%.1f %.1fx%.1f actual=%.1f,%.1f %.1fx%.1f. THIS SHOULD NEVER HAPPEN.",
+              hadjustment_page,
+              vadjustment_page,
+              hadjustment_value,
+              vadjustment_value,
+              expected_x,
+              expected_y,
+              (double)width,
+              (double)height,
+              actual_x,
+              actual_y,
+              actual_width,
+              actual_height);
     }
   }
 }
