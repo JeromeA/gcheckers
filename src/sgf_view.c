@@ -447,8 +447,9 @@ static void sgf_view_log_layout_sync_state(SgfView *self) {
                 actual_y - expected_y);
 
         if (expected_visible_h && expected_visible_v && (!actual_visible_h || !actual_visible_v)) {
-          g_debug("SGF VIEW INCONSISTENCY: EXPECTED SELECTED NODE TO BE VISIBLE IN VIEWPORT, BUT GTK REPORTS IT "
-                  "OUTSIDE THE VIEWPORT. THIS SHOULD NEVER HAPPEN.");
+          g_debug("GTK SCROLLEDWINDOW INCONSISTENCY: ADJUSTMENT/SCROLL MODEL SAYS THE VIEWPORT SHOULD SHOW THIS "
+                  "CONTENT RANGE, BUT MEASURED VIEW COORDINATES REPORT A DIFFERENT LOCATION. THIS SHOULD NEVER "
+                  "HAPPEN.");
         }
       }
     } else {
