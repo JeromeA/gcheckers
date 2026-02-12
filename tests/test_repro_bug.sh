@@ -34,7 +34,7 @@ log_file="$(mktemp)"
 XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" GDK_BACKEND=broadway BROADWAY_DISPLAY=":$BROADWAY_TEST_DISPLAY" \
   G_MESSAGES_DEBUG=all ./gcheckers >"$log_file" 2>&1
 
-line="$(rg -m1 "GTK SCROLLEDWINDOW INCONSISTENCY" "$log_file" || true)"
+line="$(grep -m1 "GTK SCROLLEDWINDOW INCONSISTENCY" "$log_file" || true)"
 if [ -z "$line" ]; then
   echo "Expected GTK SCROLLEDWINDOW INCONSISTENCY in logs but did not find it."
   exit 1
