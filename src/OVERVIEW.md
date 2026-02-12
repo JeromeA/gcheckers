@@ -128,8 +128,9 @@ Role: game-agnostic move tree UI that wires together layout, rendering, selectio
 diagnostic sizing logs. It syncs selection after layout updates with debug logging when widgets are not ready, logs
 window/selected-node geometry during forced layout resyncs, and annotates notify-driven sync attempts with the
 emitting object/property pair. Layout-sync diagnostics keep adjustment state logging and emit a
-capitalized GtkScrolledWindow inconsistency message (with numeric model-vs-actual viewport values) only
-when adjustment/model expectations diverge from measured viewport coordinates for the selected node.
+capitalized GtkScrolledWindow inconsistency message only when adjustment/model expectations diverge from
+measured viewport coordinates for the selected node; the message reports scrolled-window size, content
+view size, model content position, and measured effective content position.
 Collaborates with: SGF layout (layout-updated signal), selection, scroller, and disc factory helpers.
 
 ### SGF disc factory (`src/sgf_view_disc_factory.c`, `src/sgf_view_disc_factory.h`)

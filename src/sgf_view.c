@@ -373,20 +373,31 @@ static void sgf_view_log_layout_sync_state(SgfView *self) {
     const gboolean actual_visible_v = (actual_y >= 0.0) && ((actual_y + actual_height) <= vadjustment_page);
 
     if (expected_visible_h && expected_visible_v && (!actual_visible_h || !actual_visible_v)) {
-      g_debug("GTK SCROLLEDWINDOW INCONSISTENCY: MODEL viewport=%.1fx%.1f scroll=%.1f,%.1f "
-              "expected=%.1f,%.1f %.1fx%.1f actual=%.1f,%.1f %.1fx%.1f. THIS SHOULD NEVER HAPPEN.",
+      graphene_rect_t overlay_bounds_in_viewport;
+      gboolean overlay_bounds_valid = FALSE;
+      if (self->overlay) {
+        overlay_bounds_valid = gtk_widget_compute_bounds(self->overlay,
+                                                         viewport,
+                                                         &overlay_bounds_in_viewport);
+      }
+
+      const double model_content_x = -hadjustment_value;
+      const double model_content_y = -vadjustment_value;
+      const double actual_content_x = overlay_bounds_valid ? overlay_bounds_in_viewport.origin.x : 0.0;
+      const double actual_content_y = overlay_bounds_valid ? overlay_bounds_in_viewport.origin.y : 0.0;
+      const int content_view_width = self->overlay ? gtk_widget_get_width(self->overlay) : self->content_width;
+      const int content_view_height = self->overlay ? gtk_widget_get_height(self->overlay) : self->content_height;
+
+      g_debug("GTK SCROLLEDWINDOW INCONSISTENCY: scrolled-window-size=%.1fx%.1f content-view-size=%dx%d "
+              "model-content-pos=%.1f,%.1f effective-content-pos=%.1f,%.1f. THIS SHOULD NEVER HAPPEN.",
               hadjustment_page,
               vadjustment_page,
-              hadjustment_value,
-              vadjustment_value,
-              expected_x,
-              expected_y,
-              (double)width,
-              (double)height,
-              actual_x,
-              actual_y,
-              actual_width,
-              actual_height);
+              content_view_width,
+              content_view_height,
+              model_content_x,
+              model_content_y,
+              actual_content_x,
+              actual_content_y);
     }
   }
 }
