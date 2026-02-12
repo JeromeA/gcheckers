@@ -1,3 +1,9 @@
+
+# Description
+
+The purpose of this branch in not to work on the original project. Instead, it's to remove as much code as possible to
+make a minimal bug reproduction.
+
 # Coding Conventions
 
 - Use 2 space indentation
@@ -16,17 +22,7 @@
 
 # Before committing
 
-- Always run the tests before committing.
-- Always build all the binaries before committing.
-
-# Bugs
-
-- When fixing a bug, add an entry in BUGS.md.
-
-# ExecPlans
- 
-When writing complex features or significant refactors, use an ExecPlan (as described in PLANS.md) from design to
-implementation.
+- Always run "make test".
 
 # Repository overview
 
