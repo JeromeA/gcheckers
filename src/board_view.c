@@ -3,7 +3,6 @@
 #include "board_grid.h"
 #include "board_move_overlay.h"
 #include "board_selection_controller.h"
-#include "piece_palette.h"
 #include "widget_utils.h"
 
 #include "board.h"
@@ -17,7 +16,6 @@ struct _BoardView {
   BoardGrid *board_grid;
   BoardMoveOverlay *board_overlay;
   BoardSelectionController *selection_controller;
-  PiecePalette *piece_palette;
   gboolean input_enabled;
 };
 
@@ -59,7 +57,7 @@ static void board_view_update_board(BoardView *self, const GameState *state) {
     }
 
     CheckersPiece piece = board_get(&state->board, (uint8_t)idx);
-    board_square_set_piece(square, piece, self->piece_palette);
+    board_square_set_piece(square, piece);
 
     gboolean is_selected = board_selection_controller_contains(self->selection_controller, (uint8_t)idx);
     gboolean is_selectable = highlight_moves && playable_starts[idx];
@@ -222,7 +220,6 @@ static void board_view_dispose(GObject *object) {
   }
 
   g_clear_object(&self->model);
-  g_clear_object(&self->piece_palette);
   g_clear_object(&self->selection_controller);
   g_clear_object(&self->board_overlay);
   g_clear_object(&self->board_grid);
@@ -254,7 +251,6 @@ static void board_view_init(BoardView *self) {
   gtk_overlay_add_overlay(GTK_OVERLAY(self->root), board_move_overlay_get_widget(self->board_overlay));
 
   self->selection_controller = board_selection_controller_new();
-  self->piece_palette = piece_palette_new_default();
   self->input_enabled = TRUE;
 }
 

@@ -6,7 +6,6 @@ struct _BoardSquare {
   GObject parent_instance;
   GtkWidget *button;
   GtkWidget *piece_stack;
-  GtkWidget *piece_picture;
   GtkWidget *piece_label;
   GtkWidget *index_label;
   guint square_size;
@@ -26,12 +25,6 @@ static void board_square_build(BoardSquare *self) {
   gtk_stack_set_vhomogeneous(GTK_STACK(piece_stack), TRUE);
   gtk_widget_set_hexpand(piece_stack, TRUE);
   gtk_widget_set_vexpand(piece_stack, TRUE);
-
-  GtkWidget *piece_picture = gtk_picture_new();
-  gtk_picture_set_content_fit(GTK_PICTURE(piece_picture), GTK_CONTENT_FIT_CONTAIN);
-  gtk_widget_set_size_request(piece_picture, self->square_size, self->square_size);
-  gtk_widget_add_css_class(piece_picture, "piece-picture");
-  gtk_stack_add_named(GTK_STACK(piece_stack), piece_picture, "picture");
 
   GtkWidget *piece_label = gtk_label_new(NULL);
   gtk_label_set_xalign(GTK_LABEL(piece_label), 0.5f);
@@ -56,7 +49,6 @@ static void board_square_build(BoardSquare *self) {
   gtk_button_set_child(GTK_BUTTON(self->button), container);
 
   self->piece_stack = piece_stack;
-  self->piece_picture = piece_picture;
   self->piece_label = piece_label;
   self->index_label = index_label;
 }
@@ -78,7 +70,6 @@ static void board_square_dispose(GObject *object) {
     self->button = NULL;
   }
   self->piece_stack = NULL;
-  self->piece_picture = NULL;
   self->piece_label = NULL;
   self->index_label = NULL;
 
@@ -120,29 +111,34 @@ void board_square_set_index(BoardSquare *self, guint index) {
   g_object_set_data(G_OBJECT(self->button), "board-index", GINT_TO_POINTER(index + 1));
 }
 
-void board_square_set_piece(BoardSquare *self, CheckersPiece piece, PiecePalette *palette) {
-  g_return_if_fail(BOARD_IS_SQUARE(self));
-  g_return_if_fail(PIECE_IS_PALETTE(palette));
-
-  GdkPaintable *paintable = NULL;
-  const char *symbol = "";
-  gboolean is_empty = FALSE;
-  if (!piece_palette_lookup(palette, piece, &paintable, &symbol, &is_empty)) {
-    g_debug("Failed to lookup palette data for piece %d\n", piece);
+static const char *board_square_piece_symbol(CheckersPiece piece) {
+  switch (piece) {
+    case CHECKERS_PIECE_WHITE_MAN:
+      return "⛀";
+    case CHECKERS_PIECE_WHITE_KING:
+      return "⛁";
+    case CHECKERS_PIECE_BLACK_MAN:
+      return "⛂";
+    case CHECKERS_PIECE_BLACK_KING:
+      return "⛃";
+    case CHECKERS_PIECE_EMPTY:
+      return "·";
+    default:
+      g_debug("board_square_piece_symbol received unknown piece %d\n", piece);
+      return "?";
   }
+}
 
-  if (is_empty) {
+void board_square_set_piece(BoardSquare *self, CheckersPiece piece) {
+  g_return_if_fail(BOARD_IS_SQUARE(self));
+
+  if (piece == CHECKERS_PIECE_EMPTY) {
     gtk_widget_set_visible(self->piece_stack, FALSE);
     return;
   }
 
-  if (paintable) {
-    gtk_picture_set_paintable(GTK_PICTURE(self->piece_picture), paintable);
-    gtk_stack_set_visible_child(GTK_STACK(self->piece_stack), self->piece_picture);
-  } else {
-    gtk_label_set_text(GTK_LABEL(self->piece_label), symbol);
-    gtk_stack_set_visible_child(GTK_STACK(self->piece_stack), self->piece_label);
-  }
+  gtk_label_set_text(GTK_LABEL(self->piece_label), board_square_piece_symbol(piece));
+  gtk_stack_set_visible_child(GTK_STACK(self->piece_stack), self->piece_label);
   gtk_widget_set_visible(self->piece_stack, TRUE);
 }
 
