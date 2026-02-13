@@ -52,13 +52,11 @@ Collaborates with: all game and model modules via compile-time limits.
 
 ## Game engine (`src/game.c`, `src/game.h`)
 Module: core game rules and state.
-Role: define game types, rule enforcement, history, promotion, winner updates, and the public game API.
-Collaborates with: `move_gen.c` for move enumeration and `checkers_model.c` for GTK integration.
+Role: define game types, rule enforcement, history, promotion, winner updates, move/winner label formatting, and the
+public game API.
+Collaborates with: `move_gen.c` for move enumeration, `checkers_model.c` for GTK integration, and `checkers_cli.c`
+for terminal output.
 
-## Game printing (`src/game_print.c`)
-Module: terminal formatting helpers.
-Role: render board state and move notation for the CLI.
-Collaborates with: `checkers_cli.c` for user-visible output.
 
 ## Move generation (`src/move_gen.c`)
 Module: move generation.
@@ -73,7 +71,7 @@ Collaborates with: `GCheckersWindow` and SGF controllers via signals and high-le
 ## CLI entry point (`src/checkers_cli.c`)
 Module: CLI front end.
 Role: provide a prompt-driven loop for human vs. AI play in the terminal.
-Collaborates with: `game.c` and `game_print.c`.
+Collaborates with: `game.c`.
 
 ## GTK application entry (`src/gcheckers.c`, `src/gcheckers_application.c`, `src/gcheckers_application.h`)
 Class: `GCheckersApplication` (`GtkApplication`).

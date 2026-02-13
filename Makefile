@@ -11,7 +11,7 @@ LDLIBS := $(GLIB_LIBS) $(GOBJECT_LIBS) -lm
 
 CFLAGS += $(GLIB_CFLAGS) $(GOBJECT_CFLAGS)
 
-CORE_SRCS := src/board.c src/game.c src/game_print.c src/move_gen.c src/checkers_model.c
+CORE_SRCS := src/board.c src/game.c src/move_gen.c src/checkers_model.c
 WIDGET_UTILS_SRCS := src/widget_utils.c
 
 BROADWAY_TEST_DISPLAY ?= 40
