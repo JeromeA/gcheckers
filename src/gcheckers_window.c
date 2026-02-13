@@ -278,10 +278,6 @@ static void gcheckers_window_init(GCheckersWindow *self) {
 
   self->controls_panel = g_object_ref_sink(player_controls_panel_new());
   gtk_box_append(GTK_BOX(right_panel), GTK_WIDGET(self->controls_panel));
-  g_signal_connect(self->controls_panel,
-                   "force-move-requested",
-                   G_CALLBACK(gcheckers_window_on_force_move_requested),
-                   self);
 
   self->sgf_controller = gcheckers_sgf_controller_new(self->board_view);
   GtkWidget *sgf_widget = gcheckers_sgf_controller_get_widget(self->sgf_controller);

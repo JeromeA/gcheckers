@@ -13,7 +13,6 @@ G_DECLARE_FINAL_TYPE(BoardSquare, board_square, BOARD, SQUARE, GObject)
 
 BoardSquare *board_square_new(guint square_size);
 GtkWidget *board_square_get_widget(BoardSquare *self);
-void board_square_set_index(BoardSquare *self, guint index);
 void board_square_set_piece(BoardSquare *self, CheckersPiece piece);
 void board_square_set_highlight(BoardSquare *self,
                                 gboolean is_selected,

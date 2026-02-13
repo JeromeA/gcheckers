@@ -6,8 +6,6 @@
 
 #include "board.h"
 
-#include <stdbool.h>
-
 struct _BoardView {
   GObject parent_instance;
   GCheckersModel *model;
@@ -28,22 +26,9 @@ static void board_view_update_board(BoardView *self, const GameState *state) {
 
   MoveList moves = {0};
   gboolean moves_loaded = FALSE;
-  gboolean highlight_moves = FALSE;
-  bool playable_starts[CHECKERS_MAX_SQUARES] = {false};
-  bool possible_destinations[CHECKERS_MAX_SQUARES] = {false};
   if (state->winner == CHECKERS_WINNER_NONE) {
     moves = gcheckers_model_list_moves(self->model);
     moves_loaded = TRUE;
-    highlight_moves = moves.count > 0;
-    if (highlight_moves) {
-      game_moves_collect_starts(&moves, playable_starts);
-      uint8_t selection_length = 0;
-      const uint8_t *selection =
-          board_selection_controller_peek_path(self->selection_controller, &selection_length);
-      if (selection_length > 0) {
-        game_moves_collect_next_destinations(&moves, selection, selection_length, possible_destinations);
-      }
-    }
   }
 
   guint board_size = state->board.board_size;
@@ -58,9 +43,7 @@ static void board_view_update_board(BoardView *self, const GameState *state) {
     board_square_set_piece(square, piece);
 
     gboolean is_selected = board_selection_controller_contains(self->selection_controller, (uint8_t)idx);
-    gboolean is_selectable = highlight_moves && playable_starts[idx];
-    gboolean is_destination = highlight_moves && possible_destinations[idx];
-    board_square_set_highlight(square, is_selected, is_selectable, is_destination);
+    board_square_set_highlight(square, is_selected, FALSE, FALSE);
   }
 
   if (moves_loaded) {
@@ -174,7 +157,6 @@ void board_view_update(BoardView *self) {
 
   board_view_update_board(self, state);
   board_view_update_sensitivity(self, state);
-
 }
 
 void board_view_clear_selection(BoardView *self) {
@@ -239,7 +221,6 @@ static void board_view_init(BoardView *self) {
 
   self->board_grid = board_grid_new(board_view_square_size);
   gtk_overlay_set_child(GTK_OVERLAY(self->root), board_grid_get_widget(self->board_grid));
-
 
   self->selection_controller = board_selection_controller_new();
   self->input_enabled = TRUE;

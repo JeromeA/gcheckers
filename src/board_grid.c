@@ -125,8 +125,6 @@ void board_grid_build(BoardGrid *self, guint board_size, GCallback clicked, gpoi
         gtk_widget_add_css_class(button, "board-square");
         if (index < 0) {
           g_debug("Invalid board index while building board grid\n");
-        } else {
-          board_square_set_index(board_square, (guint)index);
         }
         if (clicked != NULL) {
           g_signal_connect(button, "clicked", clicked, user_data);
