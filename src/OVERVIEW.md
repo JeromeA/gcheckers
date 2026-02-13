@@ -40,8 +40,8 @@ Collaborates with: all game and model modules via compile-time limits.
 
 ## Game engine (`src/game.c`, `src/game.h`)
 Module: core game rules and state.
-Role: define game types, rule enforcement, history, promotion, winner updates, move/winner label formatting, and the
-public game API.
+Role: define game types, rule enforcement, history, promotion, winner updates, winner labels, and the public game
+API.
 Collaborates with: `move_gen.c` for move enumeration and `checkers_model.c` for GTK integration.
 
 
@@ -52,7 +52,8 @@ Collaborates with: `game.c` to validate and apply generated moves.
 
 ## GTK model wrapper (`src/checkers_model.c`, `src/checkers_model.h`)
 Class: `GCheckersModel` (`GObject`).
-Role: wrap the engine for GTK, including move validation, random AI moves, and state-change signals.
+Role: wrap the engine for GTK, including move validation, random AI moves, and state-change signals. Move queries
+call `game_list_available_moves()` directly.
 Collaborates with: `GCheckersWindow` and SGF controllers via signals and high-level move APIs.
 
 

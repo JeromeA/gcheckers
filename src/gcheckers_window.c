@@ -30,12 +30,7 @@ static void gcheckers_window_print_move(const char *label, const CheckersMove *m
   g_return_if_fail(label != NULL);
   g_return_if_fail(move != NULL);
 
-  char buffer[128];
-  if (!game_format_move_notation(move, buffer, sizeof(buffer))) {
-    g_debug("Failed to format move notation\n");
-    return;
-  }
-  g_print("%s plays: %s\n", label, buffer);
+  g_print("%s plays move with %u steps\n", label, (guint)move->length);
 }
 
 static void gcheckers_window_update_control_state(GCheckersWindow *self) {

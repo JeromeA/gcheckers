@@ -92,7 +92,7 @@ MoveList gcheckers_model_list_moves(GCheckersModel *self) {
 
   g_return_val_if_fail(GCHECKERS_IS_MODEL(self), empty);
 
-  return self->game.available_moves(&self->game);
+  return game_list_available_moves(&self->game);
 }
 
 static gboolean gcheckers_moves_match(const CheckersMove *left, const CheckersMove *right) {
@@ -113,7 +113,7 @@ gboolean gcheckers_model_apply_move(GCheckersModel *self, const CheckersMove *mo
   g_return_val_if_fail(move != NULL, FALSE);
   g_return_val_if_fail(move->length >= 2, FALSE);
 
-  MoveList moves = self->game.available_moves(&self->game);
+  MoveList moves = game_list_available_moves(&self->game);
   if (moves.count == 0) {
     gcheckers_model_set_winner_for_no_moves(self);
     movelist_free(&moves);
@@ -139,7 +139,7 @@ gboolean gcheckers_model_apply_move(GCheckersModel *self, const CheckersMove *mo
 gboolean gcheckers_model_step_random_move(GCheckersModel *self, CheckersMove *out_move) {
   g_return_val_if_fail(GCHECKERS_IS_MODEL(self), FALSE);
 
-  MoveList moves = self->game.available_moves(&self->game);
+  MoveList moves = game_list_available_moves(&self->game);
   if (moves.count == 0) {
     gcheckers_model_set_winner_for_no_moves(self);
     movelist_free(&moves);
