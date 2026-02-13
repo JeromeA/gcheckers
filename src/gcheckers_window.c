@@ -2,7 +2,6 @@
 
 #include "board_view.h"
 #include "gcheckers_sgf_controller.h"
-#include "gcheckers_style.h"
 #include "player_controls_panel.h"
 #include "widget_utils.h"
 
@@ -37,23 +36,6 @@ static void gcheckers_window_print_move(const char *label, const CheckersMove *m
     return;
   }
   g_print("%s plays: %s\n", label, buffer);
-}
-
-static gboolean gcheckers_window_is_user_control(GCheckersWindow *self, CheckersColor color) {
-  g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), FALSE);
-
-  if (!self->controls_panel) {
-    g_debug("Missing controls panel when checking control mode\n");
-    return TRUE;
-  }
-
-  return player_controls_panel_is_user_control(self->controls_panel, color);
-}
-
-static gboolean gcheckers_window_is_computer_control(GCheckersWindow *self, CheckersColor color) {
-  g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), FALSE);
-
-  return !gcheckers_window_is_user_control(self, color);
 }
 
 static void gcheckers_window_update_control_state(GCheckersWindow *self) {
@@ -171,10 +153,6 @@ static void gcheckers_window_maybe_trigger_auto_move(GCheckersWindow *self) {
   if (state->winner != CHECKERS_WINNER_NONE) {
     return;
   }
-  if (!gcheckers_window_is_computer_control(self, state->turn)) {
-    return;
-  }
-
   gcheckers_window_schedule_auto_force_move(self);
 }
 
@@ -198,14 +176,6 @@ static void gcheckers_window_on_reset_clicked(GtkButton * /*button*/, gpointer u
   gcheckers_model_reset(self->model);
   board_view_clear_selection(self->board_view);
   gcheckers_sgf_controller_reset(self->sgf_controller);
-}
-
-static void gcheckers_window_on_control_changed(PlayerControlsPanel * /*panel*/, gpointer user_data) {
-  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
-
-  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
-
-  gcheckers_window_update_control_state(self);
 }
 
 static void gcheckers_window_on_force_move_requested(PlayerControlsPanel * /*panel*/, gpointer user_data) {
@@ -320,8 +290,6 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_window_set_title(GTK_WINDOW(self), "gcheckers");
   gtk_window_set_default_size(GTK_WINDOW(self), 600, 700);
 
-  gcheckers_style_init();
-
   GtkWidget *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
   gtk_widget_set_margin_top(content, 16);
   gtk_widget_set_margin_bottom(content, 16);
@@ -369,10 +337,6 @@ static void gcheckers_window_init(GCheckersWindow *self) {
 
   self->controls_panel = g_object_ref_sink(player_controls_panel_new());
   gtk_box_append(GTK_BOX(self->controls_row), GTK_WIDGET(self->controls_panel));
-  g_signal_connect(self->controls_panel,
-                   "control-changed",
-                   G_CALLBACK(gcheckers_window_on_control_changed),
-                   self);
   g_signal_connect(self->controls_panel,
                    "force-move-requested",
                    G_CALLBACK(gcheckers_window_on_force_move_requested),
