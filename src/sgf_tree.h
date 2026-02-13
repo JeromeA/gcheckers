@@ -23,7 +23,6 @@ const SgfNode *sgf_tree_get_root(SgfTree *self);
 const SgfNode *sgf_tree_get_current(SgfTree *self);
 const SgfNode *sgf_tree_append_move(SgfTree *self, SgfColor color, GBytes *payload);
 gboolean sgf_tree_set_current(SgfTree *self, const SgfNode *node);
-GPtrArray *sgf_tree_build_main_line(SgfTree *self);
 
 SgfColor sgf_node_get_color(const SgfNode *node);
 guint sgf_node_get_move_number(const SgfNode *node);

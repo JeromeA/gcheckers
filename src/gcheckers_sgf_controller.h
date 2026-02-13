@@ -20,7 +20,6 @@ G_DECLARE_FINAL_TYPE(GCheckersSgfController,
 
 GCheckersSgfController *gcheckers_sgf_controller_new(BoardView *board_view);
 void gcheckers_sgf_controller_set_model(GCheckersSgfController *self, GCheckersModel *model);
-void gcheckers_sgf_controller_reset(GCheckersSgfController *self);
 GtkWidget *gcheckers_sgf_controller_get_widget(GCheckersSgfController *self);
 gboolean gcheckers_sgf_controller_is_replaying(GCheckersSgfController *self);
 

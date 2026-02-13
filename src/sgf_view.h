@@ -14,7 +14,6 @@ G_DECLARE_FINAL_TYPE(SgfView, sgf_view, SGF, VIEW, GObject)
 SgfView *sgf_view_new(void);
 GtkWidget *sgf_view_get_widget(SgfView *self);
 void sgf_view_set_tree(SgfView *self, SgfTree *tree);
-void sgf_view_set_selected(SgfView *self, const SgfNode *node);
 void sgf_view_refresh(SgfView *self);
 
 G_END_DECLS

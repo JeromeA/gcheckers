@@ -15,6 +15,8 @@ struct _GCheckersSgfController {
 
 G_DEFINE_TYPE(GCheckersSgfController, gcheckers_sgf_controller, G_TYPE_OBJECT)
 
+static void gcheckers_sgf_controller_reset(GCheckersSgfController *self);
+
 static SgfColor gcheckers_sgf_controller_color_from_turn(CheckersColor color) {
   switch (color) {
     case CHECKERS_COLOR_BLACK:
@@ -227,7 +229,7 @@ void gcheckers_sgf_controller_set_model(GCheckersSgfController *self, GCheckersM
   gcheckers_sgf_controller_reset(self);
 }
 
-void gcheckers_sgf_controller_reset(GCheckersSgfController *self) {
+static void gcheckers_sgf_controller_reset(GCheckersSgfController *self) {
   g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self));
 
   sgf_tree_reset(self->sgf_tree);

@@ -63,7 +63,6 @@ void game_moves_collect_next_destinations(const MoveList *moves,
                                           uint8_t length,
                                           bool destinations[CHECKERS_MAX_SQUARES]);
 
-const char *game_winner_label(CheckersWinner winner);
 
 int game_apply_move(Game *game, const CheckersMove *move);
 

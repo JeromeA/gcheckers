@@ -179,22 +179,6 @@ gboolean sgf_tree_set_current(SgfTree *self, const SgfNode *node) {
   return TRUE;
 }
 
-GPtrArray *sgf_tree_build_main_line(SgfTree *self) {
-  g_return_val_if_fail(SGF_IS_TREE(self), NULL);
-
-  GPtrArray *line = g_ptr_array_new();
-  const SgfNode *cursor = self->root;
-
-  while (cursor) {
-    g_ptr_array_add(line, (gpointer)cursor);
-    if (!cursor->children || cursor->children->len == 0) {
-      break;
-    }
-    cursor = g_ptr_array_index(cursor->children, 0);
-  }
-
-  return line;
-}
 
 SgfColor sgf_node_get_color(const SgfNode *node) {
   g_return_val_if_fail(node != NULL, SGF_COLOR_NONE);

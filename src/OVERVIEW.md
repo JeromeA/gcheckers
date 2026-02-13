@@ -5,24 +5,18 @@ Class: `GCheckersWindow` (`GtkApplicationWindow`).
 Role: composition root that binds model state to board/SGF updates, keeps board input available, and schedules
 forced moves (automatic follow-ups plus three startup moves) so bug-reproduction runs do not require manual clicks.
 The window intentionally omits non-essential chrome (status text and reset button) to keep the repro minimal.
-Owns: `GCheckersModel`, `BoardView`, `PlayerControlsPanel`, and `GCheckersSgfController`.
+Owns: `GCheckersModel`, `BoardView`, a dummy controls `GtkBox`, and `GCheckersSgfController`.
 Collaborates with: model signals for refresh and SGF controller updates.
-Lifecycle: sinks and retains an owned `PlayerControlsPanel` reference, removes it from its current `GtkBox` parent
-during dispose via `gcheckers_widget_remove_from_parent()`, and then clears its references. During dispose it also
-cancels pending auto-move and startup forced-move idle sources.
+Lifecycle: sinks and retains an owned dummy controls `GtkBox` reference, removes it from its current `GtkBox`
+parent during dispose via `gcheckers_widget_remove_from_parent()`, and then clears its references. During dispose it
+also cancels pending auto-move and startup forced-move idle sources.
 
 ## `GCheckersSgfController` (`src/gcheckers_sgf_controller.c`)
 Class: `GCheckersSgfController` (`GObject`).
 Role: SGF history synchronization, node selection handling, and replay orchestration. Public surface is
-limited to widget access, model wiring, reset, and replay-state querying.
+limited to widget access, model wiring, and replay-state querying.
 Owns: `SgfTree` and `SgfView`, plus replay guards (`is_replaying`, `last_history_size`).
 Collaborates with: `GCheckersModel` for history and `BoardView` to clear selection on replay.
-
-## `PlayerControlsPanel` (`src/player_controls_panel.c`)
-Class: `PlayerControlsPanel` (`GtkBox`).
-Role: placeholder panel kept only to preserve window composition shape for the repro app.
-Signals: none.
-Collaborates with: `GCheckersWindow` as a passive widget.
 
 ## Widget utilities (`src/widget_utils.c`, `src/widget_utils.h`)
 Module: parent-removal helpers.
@@ -42,8 +36,7 @@ Collaborates with: all game and model modules via compile-time limits.
 
 ## Game engine (`src/game.c`, `src/game.h`)
 Module: core game rules and state.
-Role: define game types, rule enforcement, history, promotion, winner updates, winner labels, and the public game
-API.
+Role: define game types, rule enforcement, history, promotion, winner updates, and the public game API.
 Collaborates with: `move_gen.c` for move enumeration and `checkers_model.c` for GTK integration.
 
 
