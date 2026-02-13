@@ -15,9 +15,7 @@ SgfView *sgf_view_new(void);
 GtkWidget *sgf_view_get_widget(SgfView *self);
 void sgf_view_set_tree(SgfView *self, SgfTree *tree);
 void sgf_view_set_selected(SgfView *self, const SgfNode *node);
-const SgfNode *sgf_view_get_selected(SgfView *self);
 void sgf_view_refresh(SgfView *self);
-void sgf_view_force_layout_sync(SgfView *self);
 
 G_END_DECLS
 

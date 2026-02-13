@@ -22,8 +22,6 @@ GCheckersSgfController *gcheckers_sgf_controller_new(BoardView *board_view);
 void gcheckers_sgf_controller_set_model(GCheckersSgfController *self, GCheckersModel *model);
 void gcheckers_sgf_controller_reset(GCheckersSgfController *self);
 GtkWidget *gcheckers_sgf_controller_get_widget(GCheckersSgfController *self);
-SgfTree *gcheckers_sgf_controller_get_tree(GCheckersSgfController *self);
-SgfView *gcheckers_sgf_controller_get_view(GCheckersSgfController *self);
 gboolean gcheckers_sgf_controller_is_replaying(GCheckersSgfController *self);
 
 G_END_DECLS

@@ -12,7 +12,8 @@ cancels pending auto-move and startup forced-move idle sources.
 
 ## `GCheckersSgfController` (`src/gcheckers_sgf_controller.c`)
 Class: `GCheckersSgfController` (`GObject`).
-Role: SGF history synchronization, node selection handling, and replay orchestration.
+Role: SGF history synchronization, node selection handling, and replay orchestration. Public surface is
+limited to widget access, model wiring, reset, and replay-state querying.
 Owns: `SgfTree` and `SgfView`, plus replay guards (`is_replaying`, `last_history_size`).
 Collaborates with: `GCheckersModel` for history and `BoardView` to clear selection on replay.
 
@@ -72,7 +73,7 @@ Collaborates with: selection and square/grid helpers.
 
 ### `BoardGrid` (`src/board_grid.c`, `src/board_grid.h`)
 Module: board grid helpers.
-Role: construct the square layout grid and maintain square bookkeeping.
+Role: construct the square layout grid and maintain square bookkeeping (square lookup + build/clear API only).
 Collaborates with: `BoardView` and `BoardSquare`.
 
 ### `BoardSquare` (`src/board_square.c`, `src/board_square.h`)
@@ -102,6 +103,7 @@ state logging and compare model content position against measured content positi
 they emit a capitalized GtkScrolledWindow inconsistency message with size/position numbers; otherwise they emit a
 short "no inconsistencies" debug line.
 Collaborates with: SGF layout (layout-updated signal), selection, scroller, and disc factory helpers.
+The layout-sync entrypoint is internal to `sgf_view.c` (no public force-sync/get-selected wrappers).
 
 ### SGF disc factory (`src/sgf_view_disc_factory.c`, `src/sgf_view_disc_factory.h`)
 Module: disc widget creation.
