@@ -95,8 +95,8 @@ Collaborates with: `BoardView` and `BoardSquare`.
 
 ### `BoardSquare` (`src/board_square.c`, `src/board_square.h`)
 Class: `BoardSquare` (`GtkWidget`).
-Role: represent individual squares and update piece/index rendering state.
-Collaborates with: `BoardGrid` and `PiecePalette`.
+Role: represent individual squares and update piece/index rendering state with inline unicode symbols.
+Collaborates with: `BoardGrid`.
 
 ### Last move overlay (`src/board_move_overlay.c`, `src/board_move_overlay.h`)
 Module: move overlay renderer.
@@ -107,16 +107,6 @@ Collaborates with: `BoardView` to render current move highlights.
 Module: selection path logic.
 Role: manage click-path selection and move application orchestration.
 Collaborates with: `BoardView` and `GCheckersModel` for applying moves.
-
-### Piece palette (`src/piece_palette.c`, `src/piece_palette.h`)
-Module: piece paintable palette.
-Role: provide paintables and fallback symbols for checker men and kings.
-Collaborates with: `BoardSquare` and paintable factories.
-
-### Man paintable (`src/gcheckers_man_paintable.c`, `src/gcheckers_man_paintable.h`)
-Module: `GdkPaintable` factory.
-Role: render checker men and kings as paintables for GTK widgets.
-Collaborates with: `PiecePalette` and board rendering.
 
 ## SGF subsystem
 
