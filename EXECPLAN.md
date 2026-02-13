@@ -19,6 +19,17 @@ Trim unrelated leaf UI code while keeping the SGF scrolled-window bug reproducib
 - Pass 6: Removed forced-move console logging helper from `gcheckers_window` and call site, preserving move execution.
   Difficulty: low; UI behavior and model stepping remain unchanged.
 
+- Pass 7: Removed non-essential window chrome in `gcheckers_window` (status label, reset button, and extra controls row container).
+  Difficulty: low; SGF reproduction path uses auto/forced moves and SGF panel, so these controls were leaf UI only.
+- Pass 8: Removed unused public `gcheckers_window` getters for controls panel and SGF controller.
+  Difficulty: low; no in-tree callers depended on these accessors.
+- Pass 9: Removed SGF panel CSS class attachment from window initialization.
+  Difficulty: low; style hook is cosmetic and does not affect scroll logic.
+- Pass 10: Simplified window refresh helper from status formatting + board refresh down to board refresh only.
+  Difficulty: low; status text no longer exists after UI pruning.
+- Pass 11: Removed reset-button callback path and all related wiring.
+  Difficulty: low; reset remains reachable via SGF controller codepaths but no longer exposed in the top-level window.
+
 ## Validation
 `make test` is the gate for this minimization pass and still reproduces the bug via
 `GTK SCROLLEDWINDOW INCONSISTENCY ... THIS SHOULD NEVER HAPPEN.`

@@ -2,8 +2,9 @@
 
 ## `GCheckersWindow` (`src/gcheckers_window.c`)
 Class: `GCheckersWindow` (`GtkApplicationWindow`).
-Role: composition root that binds model state to UI updates, keeps board input available, and schedules forced moves
-(automatic follow-ups plus three startup moves) so bug-reproduction runs do not require manual clicks.
+Role: composition root that binds model state to board/SGF updates, keeps board input available, and schedules
+forced moves (automatic follow-ups plus three startup moves) so bug-reproduction runs do not require manual clicks.
+The window intentionally omits non-essential chrome (status text and reset button) to keep the repro minimal.
 Owns: `GCheckersModel`, `BoardView`, `PlayerControlsPanel`, and `GCheckersSgfController`.
 Collaborates with: model signals for refresh and SGF controller updates.
 Lifecycle: sinks and retains an owned `PlayerControlsPanel` reference, removes it from its current `GtkBox` parent
