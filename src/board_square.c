@@ -90,9 +90,6 @@ GtkWidget *board_square_get_widget(BoardSquare *self) {
   return self->button;
 }
 
-void board_square_set_index(BoardSquare *self, guint /*index*/) {
-  g_return_if_fail(BOARD_IS_SQUARE(self));
-}
 
 static const char *board_square_piece_symbol(CheckersPiece piece) {
   switch (piece) {
