@@ -19,7 +19,7 @@ Collaborates with: `GCheckersModel` for history and `BoardView` to clear selecti
 ## `PlayerControlsPanel` (`src/player_controls_panel.c`)
 Class: `PlayerControlsPanel` (`GtkBox`).
 Role: reduced control strip that only exposes a force-move button for deterministic move advancement.
-Signals: keeps `control-changed` (defined but not emitted in the reduced UI) and `force-move-requested`.
+Signals: emits `force-move-requested` when the force-move button is clicked.
 Collaborates with: `GCheckersWindow` force-move handling.
 
 ## Widget utilities (`src/widget_utils.c`, `src/widget_utils.h`)
@@ -67,7 +67,7 @@ Collaborates with: `GCheckersWindow` for UI wiring.
 ### `BoardView` (`src/board_view.c`, `src/board_view.h`)
 Class: `BoardView` (`GtkWidget`).
 Role: coordinate rendering updates, input handling, and active-turn move highlighting for the board.
-Collaborates with: selection, overlays, and square/grid helpers.
+Collaborates with: selection and square/grid helpers.
 
 ### `BoardGrid` (`src/board_grid.c`, `src/board_grid.h`)
 Module: board grid helpers.
@@ -78,12 +78,6 @@ Collaborates with: `BoardView` and `BoardSquare`.
 Class: `BoardSquare` (`GtkWidget`).
 Role: represent individual squares and update piece/index rendering state with inline unicode symbols.
 Collaborates with: `BoardGrid`.
-
-### Last move overlay (`src/board_move_overlay.c`, `src/board_move_overlay.h`)
-Module: move overlay renderer.
-Role: provide a no-op overlay widget placeholder so `BoardView` wiring stays intact while arrow rendering
-logic is removed for bug-repro minimization.
-Collaborates with: `BoardView` as a passive overlay attachment only.
 
 ### Selection controller (`src/board_selection_controller.c`, `src/board_selection_controller.h`)
 Module: selection path logic.
@@ -118,13 +112,7 @@ Module: layout helpers.
 Role: position discs in a grid-based SGF tree layout (anchoring the virtual root in column zero), measure natural disc
 sizes, report both maximum row/column extents and per-column/per-row sizes for accurate sizing and scrolling, and emit
 a layout-updated signal after rebuilds.
-Collaborates with: `SgfView` and link rendering.
-
-### SGF link renderer (`src/sgf_view_link_renderer.c`, `src/sgf_view_link_renderer.h`)
-Module: connector renderer.
-Role: keep a no-op draw entry point so SGF rendering flow still calls into a renderer object while connector
-line drawing logic stays removed for minimization.
-Collaborates with: `SgfView` as a passive rendering hook.
+Collaborates with: `SgfView`.
 
 ### SGF scroller (`src/sgf_view_scroller.c`, `src/sgf_view_scroller.h`)
 Module: selection scroll helper.

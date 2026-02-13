@@ -2,7 +2,6 @@
 
 #include "sgf_view_disc_factory.h"
 #include "sgf_view_layout.h"
-#include "sgf_view_link_renderer.h"
 #include "sgf_view_scroller.h"
 #include "sgf_view_selection_controller.h"
 #include "widget_utils.h"
@@ -19,7 +18,6 @@ struct _SgfView {
   GHashTable *node_widgets;
   SgfViewDiscFactory *disc_factory;
   SgfViewLayout *layout;
-  SgfViewLinkRenderer *link_renderer;
   SgfViewSelectionController *selection;
   SgfViewScroller *scroller;
   GArray *column_widths;
@@ -166,14 +164,9 @@ static void sgf_view_draw_tree(GtkDrawingArea * /*area*/,
   g_return_if_fail(SGF_IS_VIEW(self));
   g_return_if_fail(cr != NULL);
 
-  sgf_view_link_renderer_draw(self->link_renderer,
-                              self->lines_area,
-                              self->node_widgets,
-                              self->tree,
-                              self->row_heights,
-                              cr,
-                              width,
-                              height);
+  if (!self->lines_area || !self->node_widgets || !self->tree || !self->row_heights || width <= 0 || height <= 0) {
+    return;
+  }
 }
 
 static void sgf_view_log_layout_sync_state(SgfView *self) {
@@ -597,7 +590,6 @@ static void sgf_view_dispose(GObject *object) {
   g_clear_pointer(&self->row_heights, g_array_unref);
   g_clear_object(&self->disc_factory);
   g_clear_object(&self->layout);
-  g_clear_object(&self->link_renderer);
   g_clear_object(&self->selection);
   g_clear_object(&self->scroller);
 
@@ -658,7 +650,6 @@ static void sgf_view_init(SgfView *self) {
 
   self->disc_factory = sgf_view_disc_factory_new();
   self->layout = sgf_view_layout_new();
-  self->link_renderer = sgf_view_link_renderer_new();
   self->selection = sgf_view_selection_controller_new();
   self->scroller = sgf_view_scroller_new();
   self->content_width = 0;
