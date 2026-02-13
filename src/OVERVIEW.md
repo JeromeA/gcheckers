@@ -93,12 +93,11 @@ Collaborates with: SGF view and controller modules.
 
 ### SGF view (`src/sgf_view.c`, `src/sgf_view.h`)
 Class: `SgfView` (`GtkWidget`).
-Role: game-agnostic move tree UI that wires together layout, rendering, selection helpers, scrolled content sizing, and
-diagnostic sizing logs. It syncs selection after layout updates with debug logging when widgets are not ready, logs
-window/selected-node geometry during forced layout resyncs, and annotates notify-driven sync attempts with the
-emitting object/property pair. Layout-sync diagnostics keep adjustment state logging and compare model
-content position against measured content position in viewport coordinates. On mismatch they emit a
-capitalized GtkScrolledWindow inconsistency message with size/position numbers; otherwise they emit a
+Role: game-agnostic move tree UI that wires together layout, selection helpers, scrolled content sizing, and
+diagnostic sizing logs. It syncs selection after layout updates with debug logging when widgets are not ready and
+annotates notify-driven sync attempts with the emitting object/property pair. Layout-sync diagnostics keep adjustment
+state logging and compare model content position against measured content position in viewport coordinates. On mismatch
+they emit a capitalized GtkScrolledWindow inconsistency message with size/position numbers; otherwise they emit a
 short "no inconsistencies" debug line.
 Collaborates with: SGF layout (layout-updated signal), selection, scroller, and disc factory helpers.
 
@@ -126,5 +125,5 @@ Collaborates with: `SgfView`, SGF node widget mapping, layout extents, and selec
 
 ### SGF selection controller (`src/sgf_view_selection_controller.c`, `src/sgf_view_selection_controller.h`)
 Module: SGF selection logic.
-Role: track SGF selection, update CSS classes, and navigate siblings and parents.
+Role: track SGF selection and update CSS classes.
 Collaborates with: `SgfView`, the SGF tree, and the scroller.

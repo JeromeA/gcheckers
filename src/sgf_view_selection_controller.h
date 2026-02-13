@@ -2,8 +2,6 @@
 #define SGF_VIEW_SELECTION_CONTROLLER_H
 
 #include "sgf_tree.h"
-#include "sgf_view.h"
-
 #include <gtk/gtk.h>
 
 G_BEGIN_DECLS
@@ -22,8 +20,6 @@ void sgf_view_selection_controller_set_selected_raw(SgfViewSelectionController *
 gboolean sgf_view_selection_controller_set_selected(SgfViewSelectionController *self,
                                                     const SgfNode *node,
                                                     GHashTable *node_widgets);
-const SgfNode *sgf_view_selection_controller_next(SgfViewSelectionController *self,
-                                                  SgfViewNavigation navigation);
 
 G_END_DECLS
 

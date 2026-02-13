@@ -6,7 +6,6 @@
 #include "sgf_view_selection_controller.h"
 #include "widget_utils.h"
 
-#include <gdk/gdkkeysyms.h>
 
 struct _SgfView {
   GObject parent_instance;
@@ -154,20 +153,6 @@ static void sgf_view_update_content_size(SgfView *self,
   gtk_widget_queue_resize(self->root);
 }
 
-static void sgf_view_draw_tree(GtkDrawingArea * /*area*/,
-                               cairo_t *cr,
-                               int width,
-                               int height,
-                               gpointer user_data) {
-  SgfView *self = SGF_VIEW(user_data);
-
-  g_return_if_fail(SGF_IS_VIEW(self));
-  g_return_if_fail(cr != NULL);
-
-  if (!self->lines_area || !self->node_widgets || !self->tree || !self->row_heights || width <= 0 || height <= 0) {
-    return;
-  }
-}
 
 static void sgf_view_log_layout_sync_state(SgfView *self) {
   g_return_if_fail(SGF_IS_VIEW(self));
@@ -455,13 +440,6 @@ static void sgf_view_on_layout_updated(SgfViewLayout *layout, gpointer user_data
                                       self->row_heights);
 }
 
-static void G_GNUC_UNUSED sgf_view_on_post_map(GtkWidget * /*widget*/, gpointer user_data) {
-  SgfView *self = SGF_VIEW(user_data);
-
-  g_return_if_fail(SGF_IS_VIEW(self));
-
-  sgf_view_force_layout_sync(self);
-}
 
 static void G_GNUC_UNUSED sgf_view_on_post_notify(GObject *object,
                                                   GParamSpec *pspec,
@@ -502,36 +480,6 @@ static void sgf_view_on_disc_node_clicked(SgfViewDiscFactory *factory,
   g_signal_emit(self, sgf_view_signals[SIGNAL_NODE_SELECTED], 0, node);
 }
 
-static gboolean sgf_view_on_key_pressed(GtkEventControllerKey * /*controller*/,
-                                        guint keyval,
-                                        guint /*keycode*/,
-                                        GdkModifierType /*state*/,
-                                        gpointer user_data) {
-  SgfView *self = SGF_VIEW(user_data);
-
-  g_return_val_if_fail(SGF_IS_VIEW(self), GDK_EVENT_PROPAGATE);
-
-  SgfViewNavigation navigation;
-  if (keyval == GDK_KEY_Left) {
-    navigation = SGF_VIEW_NAVIGATE_PARENT;
-  } else if (keyval == GDK_KEY_Right) {
-    navigation = SGF_VIEW_NAVIGATE_CHILD;
-  } else if (keyval == GDK_KEY_Up) {
-    navigation = SGF_VIEW_NAVIGATE_PREVIOUS_SIBLING;
-  } else if (keyval == GDK_KEY_Down) {
-    navigation = SGF_VIEW_NAVIGATE_NEXT_SIBLING;
-  } else {
-    return GDK_EVENT_PROPAGATE;
-  }
-
-  const SgfNode *target = sgf_view_selection_controller_next(self->selection, navigation);
-  if (!target) {
-    return GDK_EVENT_STOP;
-  }
-
-  sgf_view_select_node(self, target, TRUE);
-  return GDK_EVENT_STOP;
-}
 
 static void sgf_view_rebuild(SgfView *self) {
   g_return_if_fail(SGF_IS_VIEW(self));
@@ -632,7 +580,6 @@ static void sgf_view_init(SgfView *self) {
   gtk_widget_set_vexpand(self->lines_area, TRUE);
   gtk_widget_set_can_target(self->lines_area, FALSE);
   gtk_overlay_set_child(GTK_OVERLAY(self->overlay), self->lines_area);
-  gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(self->lines_area), sgf_view_draw_tree, self, NULL);
 
   self->tree_box = gtk_grid_new();
   gtk_grid_set_row_spacing(GTK_GRID(self->tree_box), sgf_view_disc_spacing);
@@ -674,10 +621,6 @@ static void sgf_view_init(SgfView *self) {
   g_signal_connect(self->root, "notify::width-request", G_CALLBACK(sgf_view_on_post_notify), self);
   g_signal_connect(self->root, "notify::height-request", G_CALLBACK(sgf_view_on_post_notify), self);
 
-  GtkEventController *key_controller = gtk_event_controller_key_new();
-  gtk_event_controller_set_propagation_phase(key_controller, GTK_PHASE_CAPTURE);
-  g_signal_connect(key_controller, "key-pressed", G_CALLBACK(sgf_view_on_key_pressed), self);
-  gtk_widget_add_controller(self->root, key_controller);
 }
 
 SgfView *sgf_view_new(void) {
@@ -719,17 +662,6 @@ const SgfNode *sgf_view_get_selected(SgfView *self) {
   return sgf_view_selection_controller_get_selected(self->selection);
 }
 
-gboolean sgf_view_navigate(SgfView *self, SgfViewNavigation navigation) {
-  g_return_val_if_fail(SGF_IS_VIEW(self), FALSE);
-
-  const SgfNode *target = sgf_view_selection_controller_next(self->selection, navigation);
-  if (!target) {
-    return FALSE;
-  }
-
-  sgf_view_select_node(self, target, TRUE);
-  return TRUE;
-}
 
 void sgf_view_refresh(SgfView *self) {
   g_return_if_fail(SGF_IS_VIEW(self));
