@@ -30,6 +30,17 @@ Trim unrelated leaf UI code while keeping the SGF scrolled-window bug reproducib
 - Pass 11: Removed reset-button callback path and all related wiring.
   Difficulty: low; reset remains reachable via SGF controller codepaths but no longer exposed in the top-level window.
 
+- Pass 12: Removed unused status-formatting API (`gcheckers_model_format_status`) and its game winner-label helper.
+  Difficulty: low; both symbols were orphaned after prior UI simplification and did not affect SGF scrolling.
+- Pass 13: Demoted `gcheckers_sgf_controller_reset()` from public API to private internal helper.
+  Difficulty: low; only in-file callers existed, so behavior remained identical with smaller public surface.
+- Pass 14: Removed unused SGF tree traversal helper `sgf_tree_build_main_line()`.
+  Difficulty: low; no call sites existed in app or tests, so this was dead-code elimination only.
+- Pass 15: Replaced `PlayerControlsPanel` custom type with a plain dummy `GtkBox` in `gcheckers_window` and dropped the module.
+  Difficulty: medium; required ownership/dispose path updates and build wiring cleanup while preserving window structure.
+- Pass 16: Removed public `sgf_view_set_selected()` export and kept selection setter internal to `sgf_view.c`.
+  Difficulty: low; all usage was already internal and selection behavior remains unchanged.
+
 ## Validation
 `make test` is the gate for this minimization pass and still reproduces the bug via
 `GTK SCROLLEDWINDOW INCONSISTENCY ... THIS SHOULD NEVER HAPPEN.`

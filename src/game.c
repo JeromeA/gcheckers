@@ -154,18 +154,3 @@ int game_apply_move(Game *game, const CheckersMove *move) {
 }
 
 
-const char *game_winner_label(CheckersWinner winner) {
-  switch (winner) {
-    case CHECKERS_WINNER_WHITE:
-      return "White";
-    case CHECKERS_WINNER_BLACK:
-      return "Black";
-    case CHECKERS_WINNER_DRAW:
-      return "Draw";
-    case CHECKERS_WINNER_NONE:
-      return "None";
-    default:
-      g_debug("game_winner_label received unknown winner %d\n", winner);
-      return "None";
-  }
-}

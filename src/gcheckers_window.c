@@ -2,14 +2,13 @@
 
 #include "board_view.h"
 #include "gcheckers_sgf_controller.h"
-#include "player_controls_panel.h"
 #include "widget_utils.h"
 
 struct _GCheckersWindow {
   GtkApplicationWindow parent_instance;
   GCheckersModel *model;
   BoardView *board_view;
-  PlayerControlsPanel *controls_panel;
+  GtkWidget *controls_panel;
   GCheckersSgfController *sgf_controller;
   gulong state_handler_id;
   guint last_history_size;
@@ -20,7 +19,7 @@ struct _GCheckersWindow {
 
 G_DEFINE_TYPE(GCheckersWindow, gcheckers_window, GTK_TYPE_APPLICATION_WINDOW)
 
-static void gcheckers_window_on_force_move_requested(PlayerControlsPanel *panel, gpointer user_data);
+static void gcheckers_window_on_force_move_requested(gpointer /*panel*/, gpointer user_data);
 static gboolean gcheckers_window_startup_force_move_cb(gpointer user_data);
 
 static void gcheckers_window_update_control_state(GCheckersWindow *self) {
@@ -141,7 +140,7 @@ static void gcheckers_window_on_state_changed(GCheckersModel *model, gpointer us
   gcheckers_window_maybe_trigger_auto_move(self);
 }
 
-static void gcheckers_window_on_force_move_requested(PlayerControlsPanel * /*panel*/, gpointer user_data) {
+static void gcheckers_window_on_force_move_requested(gpointer /*panel*/, gpointer user_data) {
   GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
 
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
@@ -197,9 +196,8 @@ static gboolean gcheckers_window_unparent_controls_panel(GCheckersWindow *self) 
     return TRUE;
   }
 
-  GtkWidget *panel_widget = GTK_WIDGET(self->controls_panel);
-  gboolean removed = gcheckers_widget_remove_from_parent(panel_widget);
-  if (!removed && gtk_widget_get_parent(panel_widget)) {
+  gboolean removed = gcheckers_widget_remove_from_parent(self->controls_panel);
+  if (!removed && gtk_widget_get_parent(self->controls_panel)) {
     g_debug("Failed to remove controls panel from parent during dispose\n");
     return FALSE;
   }
@@ -276,8 +274,8 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_paned_set_end_child(GTK_PANED(paned), right_panel);
   gtk_paned_set_shrink_end_child(GTK_PANED(paned), FALSE);
 
-  self->controls_panel = g_object_ref_sink(player_controls_panel_new());
-  gtk_box_append(GTK_BOX(right_panel), GTK_WIDGET(self->controls_panel));
+  self->controls_panel = g_object_ref_sink(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
+  gtk_box_append(GTK_BOX(right_panel), self->controls_panel);
 
   self->sgf_controller = gcheckers_sgf_controller_new(self->board_view);
   GtkWidget *sgf_widget = gcheckers_sgf_controller_get_widget(self->sgf_controller);

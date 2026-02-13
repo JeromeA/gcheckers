@@ -38,6 +38,7 @@ static const int sgf_view_disc_stride = sgf_view_disc_size + (sgf_view_disc_bord
 
 static void sgf_view_rebuild(SgfView *self);
 static void sgf_view_force_layout_sync(SgfView *self);
+static void sgf_view_set_selected(SgfView *self, const SgfNode *node);
 
 static int sgf_view_sum_extents(GArray *extents, guint count, int fallback) {
   g_return_val_if_fail(fallback > 0, 0);
@@ -651,7 +652,7 @@ void sgf_view_set_tree(SgfView *self, SgfTree *tree) {
   sgf_view_rebuild(self);
 }
 
-void sgf_view_set_selected(SgfView *self, const SgfNode *node) {
+static void sgf_view_set_selected(SgfView *self, const SgfNode *node) {
   g_return_if_fail(SGF_IS_VIEW(self));
 
   sgf_view_select_node(self, node, FALSE);

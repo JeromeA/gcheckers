@@ -156,14 +156,6 @@ gboolean gcheckers_model_step_random_move(GCheckersModel *self, CheckersMove *ou
   return applied;
 }
 
-char *gcheckers_model_format_status(GCheckersModel *self) {
-  g_return_val_if_fail(GCHECKERS_IS_MODEL(self), NULL);
-
-  const char *turn_label = self->game.state.turn == CHECKERS_COLOR_WHITE ? "White" : "Black";
-  const char *winner_label = game_winner_label(self->game.state.winner);
-
-  return g_strdup_printf("Turn: %s\nWinner: %s", turn_label, winner_label);
-}
 
 const GameState *gcheckers_model_peek_state(GCheckersModel *self) {
   g_return_val_if_fail(GCHECKERS_IS_MODEL(self), NULL);
