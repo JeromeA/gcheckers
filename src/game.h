@@ -3,7 +3,6 @@
 
 #include <stdbool.h>
 #include <stddef.h>
-#include <stdio.h>
 
 #include "board.h"
 #include "checkers_constants.h"
@@ -48,9 +47,6 @@ struct Game {
   CheckersMove *history;
   size_t history_size;
   size_t history_capacity;
-
-  void (*print_state)(const Game *game, FILE *out);
-  MoveList (*available_moves)(const Game *game);
 };
 
 void game_init(Game *game);
@@ -58,7 +54,6 @@ void game_init_with_rules(Game *game, const CheckersRules *rules);
 void game_destroy(Game *game);
 
 CheckersRules game_rules_american_checkers(void);
-CheckersRules game_rules_international_draughts(void);
 
 MoveList game_list_available_moves(const Game *game);
 void movelist_free(MoveList *list);
@@ -68,10 +63,8 @@ void game_moves_collect_next_destinations(const MoveList *moves,
                                           uint8_t length,
                                           bool destinations[CHECKERS_MAX_SQUARES]);
 
-void game_print_state(const Game *game, FILE *out);
 const char *game_winner_label(CheckersWinner winner);
 
 int game_apply_move(Game *game, const CheckersMove *move);
-bool game_format_move_notation(const CheckersMove *move, char *buffer, size_t size);
 
 #endif

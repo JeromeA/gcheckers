@@ -21,16 +21,6 @@ CheckersRules game_rules_american_checkers(void) {
   return rules;
 }
 
-CheckersRules game_rules_international_draughts(void) {
-  CheckersRules rules = {
-      .board_size = 10,
-      .men_can_jump_backwards = true,
-      .capture_mandatory = true,
-      .longest_capture_mandatory = true,
-      .kings_can_fly = true};
-  return rules;
-}
-
 static void ensure_capacity(Game *game) {
   g_return_if_fail(game != NULL);
 
@@ -62,8 +52,6 @@ void game_init_with_rules(Game *game, const CheckersRules *rules) {
   board_reset(&game->state.board, game->rules.board_size);
   game->state.turn = CHECKERS_COLOR_WHITE;
   game->state.winner = CHECKERS_WINNER_NONE;
-  game->print_state = game_print_state;
-  game->available_moves = game_list_available_moves;
 }
 
 void game_destroy(Game *game) {
@@ -165,47 +153,6 @@ int game_apply_move(Game *game, const CheckersMove *move) {
   return 0;
 }
 
-void game_print_state(const Game *game, FILE *out) {
-  g_return_if_fail(game != NULL);
-
-  FILE *target = out ? out : stdout;
-  fprintf(target,
-          "Turn: %s\nWinner: %s\n",
-          game->state.turn == CHECKERS_COLOR_WHITE ? "White" : "Black",
-          game_winner_label(game->state.winner));
-}
-
-
-bool game_format_move_notation(const CheckersMove *move, char *buffer, size_t size) {
-  g_return_val_if_fail(move != NULL, false);
-  g_return_val_if_fail(buffer != NULL, false);
-  g_return_val_if_fail(size > 0, false);
-  g_return_val_if_fail(move->length >= 2, false);
-
-  size_t offset = 0;
-  buffer[0] = '\0';
-  for (uint8_t i = 0; i < move->length; ++i) {
-    g_return_val_if_fail(move->path[i] < CHECKERS_MAX_SQUARES, false);
-
-    int written = g_snprintf(buffer + offset, size - offset, "%d", (int)move->path[i] + 1);
-    if (written < 0 || (size_t)written >= size - offset) {
-      g_debug("game_format_move_notation buffer too small\n");
-      return false;
-    }
-    offset += (size_t)written;
-
-    if (i + 1 < move->length) {
-      if (offset + 1 >= size) {
-        g_debug("game_format_move_notation buffer too small for separator\n");
-        return false;
-      }
-      buffer[offset++] = move->captures > 0 ? 'x' : '-';
-      buffer[offset] = '\0';
-    }
-  }
-
-  return true;
-}
 
 const char *game_winner_label(CheckersWinner winner) {
   switch (winner) {

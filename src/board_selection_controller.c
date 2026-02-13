@@ -17,12 +17,7 @@ static void board_selection_controller_print_move(const char *label, const Check
   g_return_if_fail(label != NULL);
   g_return_if_fail(move != NULL);
 
-  char buffer[128];
-  if (!game_format_move_notation(move, buffer, sizeof(buffer))) {
-    g_debug("Failed to format move notation\n");
-    return;
-  }
-  g_print("%s plays: %s\n", label, buffer);
+  g_print("%s plays move with %u steps\n", label, (guint)move->length);
 }
 
 static gboolean board_selection_controller_move_has_prefix(const CheckersMove *move,
