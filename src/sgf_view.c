@@ -37,6 +37,7 @@ static const int sgf_view_disc_spacing = 8;
 static const int sgf_view_disc_stride = sgf_view_disc_size + (sgf_view_disc_border * 2);
 
 static void sgf_view_rebuild(SgfView *self);
+static void sgf_view_force_layout_sync(SgfView *self);
 
 static int sgf_view_sum_extents(GArray *extents, guint count, int fallback) {
   g_return_val_if_fail(fallback > 0, 0);
@@ -656,20 +657,13 @@ void sgf_view_set_selected(SgfView *self, const SgfNode *node) {
   sgf_view_select_node(self, node, FALSE);
 }
 
-const SgfNode *sgf_view_get_selected(SgfView *self) {
-  g_return_val_if_fail(SGF_IS_VIEW(self), NULL);
-
-  return sgf_view_selection_controller_get_selected(self->selection);
-}
-
-
 void sgf_view_refresh(SgfView *self) {
   g_return_if_fail(SGF_IS_VIEW(self));
 
   sgf_view_rebuild(self);
 }
 
-void sgf_view_force_layout_sync(SgfView *self) {
+static void sgf_view_force_layout_sync(SgfView *self) {
   g_return_if_fail(SGF_IS_VIEW(self));
 
   if (!self->root || !self->scroller) {

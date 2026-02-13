@@ -26,13 +26,6 @@ G_DEFINE_TYPE(GCheckersWindow, gcheckers_window, GTK_TYPE_APPLICATION_WINDOW)
 static void gcheckers_window_on_force_move_requested(PlayerControlsPanel *panel, gpointer user_data);
 static gboolean gcheckers_window_startup_force_move_cb(gpointer user_data);
 
-static void gcheckers_window_print_move(const char *label, const CheckersMove *move) {
-  g_return_if_fail(label != NULL);
-  g_return_if_fail(move != NULL);
-
-  g_print("%s plays move with %u steps\n", label, (guint)move->length);
-}
-
 static void gcheckers_window_update_control_state(GCheckersWindow *self) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
 
@@ -190,10 +183,7 @@ static void gcheckers_window_on_force_move_requested(PlayerControlsPanel * /*pan
     return;
   }
 
-  CheckersMove move;
-  if (gcheckers_model_step_random_move(self->model, &move)) {
-    gcheckers_window_print_move("AI", &move);
-  }
+  gcheckers_model_step_random_move(self->model, NULL);
 }
 
 static void gcheckers_window_set_model(GCheckersWindow *self, GCheckersModel *model) {

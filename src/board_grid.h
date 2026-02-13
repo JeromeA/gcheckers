@@ -17,7 +17,6 @@ void board_grid_build(BoardGrid *self, guint board_size, GCallback clicked, gpoi
 BoardSquare *board_grid_get_square(BoardGrid *self, uint8_t index);
 void board_grid_clear(BoardGrid *self);
 
-guint board_grid_get_board_size(BoardGrid *self);
 
 G_END_DECLS
 

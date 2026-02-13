@@ -248,28 +248,6 @@ GtkWidget *gcheckers_sgf_controller_get_widget(GCheckersSgfController *self) {
   return widget;
 }
 
-SgfTree *gcheckers_sgf_controller_get_tree(GCheckersSgfController *self) {
-  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), NULL);
-
-  if (!self->sgf_tree) {
-    g_debug("Missing SGF tree\n");
-    return NULL;
-  }
-
-  return self->sgf_tree;
-}
-
-SgfView *gcheckers_sgf_controller_get_view(GCheckersSgfController *self) {
-  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), NULL);
-
-  if (!self->sgf_view) {
-    g_debug("Missing SGF view\n");
-    return NULL;
-  }
-
-  return self->sgf_view;
-}
-
 gboolean gcheckers_sgf_controller_is_replaying(GCheckersSgfController *self) {
   g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
 
