@@ -81,8 +81,9 @@ Collaborates with: `BoardGrid`.
 
 ### Last move overlay (`src/board_move_overlay.c`, `src/board_move_overlay.h`)
 Module: move overlay renderer.
-Role: draw last-move arrows via cairo on top of the board.
-Collaborates with: `BoardView` to render current move highlights.
+Role: provide a no-op overlay widget placeholder so `BoardView` wiring stays intact while arrow rendering
+logic is removed for bug-repro minimization.
+Collaborates with: `BoardView` as a passive overlay attachment only.
 
 ### Selection controller (`src/board_selection_controller.c`, `src/board_selection_controller.h`)
 Module: selection path logic.
@@ -121,9 +122,9 @@ Collaborates with: `SgfView` and link rendering.
 
 ### SGF link renderer (`src/sgf_view_link_renderer.c`, `src/sgf_view_link_renderer.h`)
 Module: connector renderer.
-Role: compute disc centers and draw connector lines between SGF nodes using row-aware horizontal, diagonal, or stepped
-paths to limit link angles.
-Collaborates with: SGF layout data and view sizing.
+Role: keep a no-op draw entry point so SGF rendering flow still calls into a renderer object while connector
+line drawing logic stays removed for minimization.
+Collaborates with: `SgfView` as a passive rendering hook.
 
 ### SGF scroller (`src/sgf_view_scroller.c`, `src/sgf_view_scroller.h`)
 Module: selection scroll helper.
