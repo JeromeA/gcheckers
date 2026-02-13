@@ -569,6 +569,7 @@ static void sgf_view_init(SgfView *self) {
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(self->root),
                                  GTK_POLICY_AUTOMATIC,
                                  GTK_POLICY_AUTOMATIC);
+  gtk_widget_set_size_request(self->root, 400, -1);
   gtk_widget_set_hexpand(self->root, TRUE);
   gtk_widget_set_vexpand(self->root, TRUE);
   gtk_widget_set_focusable(self->root, TRUE);

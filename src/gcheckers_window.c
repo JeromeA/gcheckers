@@ -11,8 +11,6 @@ struct _GCheckersWindow {
   GtkWidget *controls_panel;
   GCheckersSgfController *sgf_controller;
   gulong state_handler_id;
-  guint last_history_size;
-  guint auto_move_source_id;
   guint startup_force_source_id;
   guint startup_force_remaining;
 };
@@ -50,30 +48,6 @@ static void gcheckers_window_update_ui(GCheckersWindow *self) {
   board_view_update(self->board_view);
 }
 
-static gboolean gcheckers_window_auto_force_move_cb(gpointer user_data) {
-  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
-
-  g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), G_SOURCE_REMOVE);
-
-  self->auto_move_source_id = 0;
-  gcheckers_window_on_force_move_requested(NULL, self);
-  return G_SOURCE_REMOVE;
-}
-
-static void gcheckers_window_schedule_auto_force_move(GCheckersWindow *self) {
-  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
-
-  if (self->auto_move_source_id != 0) {
-    return;
-  }
-
-  self->auto_move_source_id = g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,
-                                              gcheckers_window_auto_force_move_cb,
-                                              g_object_ref(self),
-                                              (GDestroyNotify)g_object_unref);
-}
-
-
 static gboolean gcheckers_window_startup_force_move_cb(gpointer user_data) {
   GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
 
@@ -88,6 +62,7 @@ static gboolean gcheckers_window_startup_force_move_cb(gpointer user_data) {
     return G_SOURCE_CONTINUE;
   }
 
+  g_debug("Startup forced move executed; remaining-before-step=%u\n", self->startup_force_remaining);
   gcheckers_window_on_force_move_requested(NULL, self);
   self->startup_force_remaining--;
 
@@ -99,36 +74,6 @@ static gboolean gcheckers_window_startup_force_move_cb(gpointer user_data) {
   return G_SOURCE_CONTINUE;
 }
 
-static void gcheckers_window_maybe_trigger_auto_move(GCheckersWindow *self) {
-  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
-  g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
-
-  guint history_size = gcheckers_model_get_history_size(self->model);
-  if (history_size <= self->last_history_size) {
-    self->last_history_size = history_size;
-    return;
-  }
-  self->last_history_size = history_size;
-
-  if (!self->sgf_controller) {
-    g_debug("Missing SGF controller for auto move\n");
-    return;
-  }
-  if (gcheckers_sgf_controller_is_replaying(self->sgf_controller)) {
-    return;
-  }
-
-  const GameState *state = gcheckers_model_peek_state(self->model);
-  if (!state) {
-    g_debug("Failed to fetch game state for auto move\n");
-    return;
-  }
-  if (state->winner != CHECKERS_WINNER_NONE) {
-    return;
-  }
-  gcheckers_window_schedule_auto_force_move(self);
-}
-
 static void gcheckers_window_on_state_changed(GCheckersModel *model, gpointer user_data) {
   GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
 
@@ -137,7 +82,6 @@ static void gcheckers_window_on_state_changed(GCheckersModel *model, gpointer us
 
   gcheckers_window_update_ui(self);
   gcheckers_window_update_control_state(self);
-  gcheckers_window_maybe_trigger_auto_move(self);
 }
 
 static void gcheckers_window_on_force_move_requested(gpointer /*panel*/, gpointer user_data) {
@@ -167,8 +111,6 @@ static void gcheckers_window_set_model(GCheckersWindow *self, GCheckersModel *mo
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
   g_return_if_fail(GCHECKERS_IS_MODEL(model));
 
-  g_clear_handle_id(&self->auto_move_source_id, g_source_remove);
-
   if (self->model) {
     if (self->state_handler_id != 0) {
       g_signal_handler_disconnect(self->model, self->state_handler_id);
@@ -184,7 +126,6 @@ static void gcheckers_window_set_model(GCheckersWindow *self, GCheckersModel *mo
                                             self);
   board_view_set_model(self->board_view, self->model);
   gcheckers_sgf_controller_set_model(self->sgf_controller, self->model);
-  self->last_history_size = gcheckers_model_get_history_size(self->model);
   gcheckers_window_update_ui(self);
   gcheckers_window_update_control_state(self);
 }
@@ -214,7 +155,6 @@ static void gcheckers_window_dispose(GObject *object) {
   }
 
   gboolean panel_removed = gcheckers_window_unparent_controls_panel(self);
-  g_clear_handle_id(&self->auto_move_source_id, g_source_remove);
   g_clear_handle_id(&self->startup_force_source_id, g_source_remove);
 
   gcheckers_window_unparent_controls_panel(self);
@@ -227,7 +167,6 @@ static void gcheckers_window_dispose(GObject *object) {
   }
   g_clear_object(&self->board_view);
   g_clear_object(&self->model);
-  self->last_history_size = 0;
 
   G_OBJECT_CLASS(gcheckers_window_parent_class)->dispose(object);
 }
@@ -239,10 +178,8 @@ static void gcheckers_window_class_init(GCheckersWindowClass *klass) {
 }
 
 static void gcheckers_window_init(GCheckersWindow *self) {
-  self->last_history_size = 0;
-  self->auto_move_source_id = 0;
   self->startup_force_source_id = 0;
-  self->startup_force_remaining = 3;
+  self->startup_force_remaining = 10;
 
   gtk_window_set_title(GTK_WINDOW(self), "gcheckers");
   gtk_window_set_default_size(GTK_WINDOW(self), 600, 700);
