@@ -15,13 +15,6 @@ struct _GCheckersSgfController {
 
 G_DEFINE_TYPE(GCheckersSgfController, gcheckers_sgf_controller, G_TYPE_OBJECT)
 
-enum {
-  SIGNAL_ANALYSIS_REQUESTED,
-  SIGNAL_LAST
-};
-
-static guint controller_signals[SIGNAL_LAST] = {0};
-
 static SgfColor gcheckers_sgf_controller_color_from_turn(CheckersColor color) {
   switch (color) {
     case CHECKERS_COLOR_BLACK:
@@ -168,7 +161,6 @@ static void gcheckers_sgf_controller_on_node_selected(SgfView * /*view*/,
     return;
   }
 
-  g_signal_emit(self, controller_signals[SIGNAL_ANALYSIS_REQUESTED], 0, node);
   gcheckers_sgf_controller_replay_to_node(self, node);
 }
 
@@ -198,16 +190,6 @@ static void gcheckers_sgf_controller_class_init(GCheckersSgfControllerClass *kla
 
   object_class->dispose = gcheckers_sgf_controller_dispose;
 
-  controller_signals[SIGNAL_ANALYSIS_REQUESTED] = g_signal_new("analysis-requested",
-                                                               G_TYPE_FROM_CLASS(klass),
-                                                               G_SIGNAL_RUN_LAST,
-                                                               0,
-                                                               NULL,
-                                                               NULL,
-                                                               NULL,
-                                                               G_TYPE_NONE,
-                                                               1,
-                                                               G_TYPE_POINTER);
 }
 
 static void gcheckers_sgf_controller_init(GCheckersSgfController *self) {
@@ -294,13 +276,3 @@ gboolean gcheckers_sgf_controller_is_replaying(GCheckersSgfController *self) {
   return self->is_replaying;
 }
 
-void gcheckers_sgf_controller_force_layout_resync(GCheckersSgfController *self) {
-  g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self));
-
-  if (!self->sgf_view) {
-    g_debug("Missing SGF view for layout resync\n");
-    return;
-  }
-
-  sgf_view_force_layout_sync(self->sgf_view);
-}
