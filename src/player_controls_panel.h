@@ -14,7 +14,6 @@ G_DECLARE_FINAL_TYPE(PlayerControlsPanel,
                      GtkBox)
 
 PlayerControlsPanel *player_controls_panel_new(void);
-void player_controls_panel_set_force_move_sensitive(PlayerControlsPanel *self, gboolean sensitive);
 
 G_END_DECLS
 
