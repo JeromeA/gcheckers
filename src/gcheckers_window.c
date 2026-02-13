@@ -11,7 +11,6 @@ struct _GCheckersWindow {
   GCheckersModel *model;
   GtkWidget *status_label;
   GtkWidget *reset_button;
-  GtkWidget *reselect_sgf_button;
   GtkWidget *controls_row;
   BoardView *board_view;
   PlayerControlsPanel *controls_panel;
@@ -201,36 +200,11 @@ static void gcheckers_window_on_reset_clicked(GtkButton * /*button*/, gpointer u
   gcheckers_sgf_controller_reset(self->sgf_controller);
 }
 
-static void gcheckers_window_on_sgf_reselect_clicked(GtkButton * /*button*/, gpointer user_data) {
-  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
-
-  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
-
-  if (!self->sgf_controller) {
-    g_debug("Missing SGF controller for layout resync\n");
-    return;
-  }
-
-  gcheckers_sgf_controller_force_layout_resync(self->sgf_controller);
-}
-
 static void gcheckers_window_on_control_changed(PlayerControlsPanel * /*panel*/, gpointer user_data) {
   GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
 
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
 
-  gcheckers_window_update_control_state(self);
-}
-
-static void gcheckers_window_on_analysis_requested(GCheckersSgfController * /*controller*/,
-                                                   gpointer /*node*/,
-                                                   gpointer user_data) {
-  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
-
-  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
-  g_return_if_fail(self->controls_panel != NULL);
-
-  player_controls_panel_set_all_user(self->controls_panel);
   gcheckers_window_update_control_state(self);
 }
 
@@ -384,13 +358,6 @@ static void gcheckers_window_init(GCheckersWindow *self) {
                    self);
   gtk_box_append(GTK_BOX(button_row), self->reset_button);
 
-  self->reselect_sgf_button = gtk_button_new_with_label("Reselect SGF");
-  g_signal_connect(self->reselect_sgf_button,
-                   "clicked",
-                   G_CALLBACK(gcheckers_window_on_sgf_reselect_clicked),
-                   self);
-  gtk_box_append(GTK_BOX(button_row), self->reselect_sgf_button);
-
   GtkWidget *right_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
   gtk_widget_set_hexpand(right_panel, TRUE);
   gtk_widget_set_vexpand(right_panel, TRUE);
@@ -414,10 +381,6 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   self->sgf_controller = gcheckers_sgf_controller_new(self->board_view);
   GtkWidget *sgf_widget = gcheckers_sgf_controller_get_widget(self->sgf_controller);
   g_return_if_fail(sgf_widget != NULL);
-  g_signal_connect(self->sgf_controller,
-                   "analysis-requested",
-                   G_CALLBACK(gcheckers_window_on_analysis_requested),
-                   self);
   gtk_widget_add_css_class(sgf_widget, "sgf-panel");
   gtk_box_append(GTK_BOX(right_panel), sgf_widget);
 
