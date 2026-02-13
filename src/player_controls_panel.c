@@ -52,12 +52,3 @@ PlayerControlsPanel *player_controls_panel_new(void) {
   return g_object_new(PLAYER_TYPE_CONTROLS_PANEL, NULL);
 }
 
-void player_controls_panel_set_force_move_sensitive(PlayerControlsPanel *self, gboolean sensitive) {
-  g_return_if_fail(PLAYER_IS_CONTROLS_PANEL(self));
-
-  if (!self->force_move_button) {
-    g_debug("Missing force move button");
-    return;
-  }
-  gtk_widget_set_sensitive(self->force_move_button, sensitive);
-}

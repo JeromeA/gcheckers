@@ -52,10 +52,7 @@ static void gcheckers_window_update_control_state(GCheckersWindow *self) {
 
   if (!self->controls_panel) {
     g_debug("Missing controls panel while updating sensitivity\n");
-    return;
   }
-  player_controls_panel_set_force_move_sensitive(self->controls_panel,
-                                                 state->winner == CHECKERS_WINNER_NONE);
 }
 
 static void gcheckers_window_update_status(GCheckersWindow *self) {

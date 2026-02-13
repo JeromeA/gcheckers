@@ -20,12 +20,12 @@ Collaborates with: `GCheckersModel` for history and `BoardView` to clear selecti
 Class: `PlayerControlsPanel` (`GtkBox`).
 Role: reduced control strip that only exposes a force-move button for deterministic move advancement.
 Signals: emits `force-move-requested` when the force-move button is clicked.
-Collaborates with: `GCheckersWindow` force-move handling.
+Collaborates with: `GCheckersWindow` force-move handling; sensitivity toggling was removed to keep this panel minimal.
 
 ## Widget utilities (`src/widget_utils.c`, `src/widget_utils.h`)
 Module: parent-removal helpers.
-Role: safely detach widgets from common GTK containers (box, grid, overlay, paned, stack) before dropping the last
-reference to avoid GTK4 dispose-time criticals.
+Role: safely detach widgets from common GTK containers (box, grid, overlay) before dropping the last reference to
+avoid GTK4 dispose-time criticals.
 Collaborates with: `GCheckersWindow`, `BoardView`, and SGF view helpers during disposal.
 
 ## Board primitives (`src/board.c`, `src/board.h`)
@@ -77,7 +77,8 @@ Collaborates with: `BoardView` and `BoardSquare`.
 
 ### `BoardSquare` (`src/board_square.c`, `src/board_square.h`)
 Class: `BoardSquare` (`GtkWidget`).
-Role: represent individual squares and update piece/index rendering state with inline unicode symbols.
+Role: represent individual squares and update piece rendering state with inline unicode symbols (index overlay
+metadata is now a no-op API).
 Collaborates with: `BoardGrid`.
 
 ### Selection controller (`src/board_selection_controller.c`, `src/board_selection_controller.h`)

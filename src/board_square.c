@@ -7,7 +7,6 @@ struct _BoardSquare {
   GtkWidget *button;
   GtkWidget *piece_stack;
   GtkWidget *piece_label;
-  GtkWidget *index_label;
   guint square_size;
 };
 
@@ -31,15 +30,7 @@ static void board_square_build(BoardSquare *self) {
   gtk_widget_add_css_class(piece_label, "piece-label");
   gtk_stack_add_named(GTK_STACK(piece_stack), piece_label, "label");
 
-  GtkWidget *index_label = gtk_label_new(NULL);
-  gtk_label_set_xalign(GTK_LABEL(index_label), 0.5f);
-  gtk_widget_set_halign(index_label, GTK_ALIGN_CENTER);
-  gtk_widget_set_valign(index_label, GTK_ALIGN_END);
-  gtk_widget_set_margin_bottom(index_label, 2);
-  gtk_widget_add_css_class(index_label, "square-index");
-
   gtk_overlay_set_child(GTK_OVERLAY(container), piece_stack);
-  gtk_overlay_add_overlay(GTK_OVERLAY(container), index_label);
 
   self->button = gtk_button_new();
   g_object_ref_sink(self->button);
@@ -50,7 +41,6 @@ static void board_square_build(BoardSquare *self) {
 
   self->piece_stack = piece_stack;
   self->piece_label = piece_label;
-  self->index_label = index_label;
 }
 
 static void board_square_dispose(GObject *object) {
@@ -71,7 +61,6 @@ static void board_square_dispose(GObject *object) {
   }
   self->piece_stack = NULL;
   self->piece_label = NULL;
-  self->index_label = NULL;
 
   G_OBJECT_CLASS(board_square_parent_class)->dispose(object);
 }
@@ -101,14 +90,8 @@ GtkWidget *board_square_get_widget(BoardSquare *self) {
   return self->button;
 }
 
-void board_square_set_index(BoardSquare *self, guint index) {
+void board_square_set_index(BoardSquare *self, guint /*index*/) {
   g_return_if_fail(BOARD_IS_SQUARE(self));
-  g_return_if_fail(GTK_IS_LABEL(self->index_label));
-
-  char label[8];
-  g_snprintf(label, sizeof(label), "%u", index + 1);
-  gtk_label_set_text(GTK_LABEL(self->index_label), label);
-  g_object_set_data(G_OBJECT(self->button), "board-index", GINT_TO_POINTER(index + 1));
 }
 
 static const char *board_square_piece_symbol(CheckersPiece piece) {

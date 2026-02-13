@@ -37,25 +37,6 @@ gboolean gcheckers_widget_remove_from_parent(GtkWidget *widget) {
     return gcheckers_widget_remove_from_overlay(parent, widget);
   }
 
-  if (GTK_IS_PANED(parent)) {
-    GtkPaned *paned = GTK_PANED(parent);
-    if (gtk_paned_get_start_child(paned) == widget) {
-      gtk_paned_set_start_child(paned, NULL);
-      return TRUE;
-    }
-    if (gtk_paned_get_end_child(paned) == widget) {
-      gtk_paned_set_end_child(paned, NULL);
-      return TRUE;
-    }
-
-    g_debug("Widget was not a paned child during removal\n");
-    return FALSE;
-  }
-
-  if (GTK_IS_STACK(parent)) {
-    gtk_stack_remove(GTK_STACK(parent), widget);
-    return TRUE;
-  }
 
   g_debug("Unsupported parent type %s when removing widget\n", G_OBJECT_TYPE_NAME(parent));
   return FALSE;
