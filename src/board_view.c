@@ -1,7 +1,6 @@
 #include "board_view.h"
 
 #include "board_grid.h"
-#include "board_move_overlay.h"
 #include "board_selection_controller.h"
 #include "widget_utils.h"
 
@@ -14,7 +13,6 @@ struct _BoardView {
   GCheckersModel *model;
   GtkWidget *root;
   BoardGrid *board_grid;
-  BoardMoveOverlay *board_overlay;
   BoardSelectionController *selection_controller;
   gboolean input_enabled;
 };
@@ -156,7 +154,6 @@ void board_view_set_model(BoardView *self, GCheckersModel *model) {
 
   self->model = g_object_ref(model);
   board_selection_controller_set_model(self->selection_controller, self->model);
-  board_move_overlay_set_model(self->board_overlay, self->model);
   board_view_build_board(self);
   board_view_update(self);
 }
@@ -178,9 +175,6 @@ void board_view_update(BoardView *self) {
   board_view_update_board(self, state);
   board_view_update_sensitivity(self, state);
 
-  if (self->board_overlay) {
-    board_move_overlay_queue_draw(self->board_overlay);
-  }
 }
 
 void board_view_clear_selection(BoardView *self) {
@@ -221,7 +215,6 @@ static void board_view_dispose(GObject *object) {
 
   g_clear_object(&self->model);
   g_clear_object(&self->selection_controller);
-  g_clear_object(&self->board_overlay);
   g_clear_object(&self->board_grid);
   if (root_removed) {
     g_clear_object(&self->root);
@@ -247,8 +240,6 @@ static void board_view_init(BoardView *self) {
   self->board_grid = board_grid_new(board_view_square_size);
   gtk_overlay_set_child(GTK_OVERLAY(self->root), board_grid_get_widget(self->board_grid));
 
-  self->board_overlay = board_move_overlay_new();
-  gtk_overlay_add_overlay(GTK_OVERLAY(self->root), board_move_overlay_get_widget(self->board_overlay));
 
   self->selection_controller = board_selection_controller_new();
   self->input_enabled = TRUE;
