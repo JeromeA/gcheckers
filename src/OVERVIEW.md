@@ -3,13 +3,14 @@
 ## `GCheckersWindow` (`src/gcheckers_window.c`)
 Class: `GCheckersWindow` (`GtkApplicationWindow`).
 Role: composition root that binds model state to board/SGF updates, keeps board input available, and schedules
-forced moves (automatic follow-ups plus three startup moves) so bug-reproduction runs do not require manual clicks.
-The window intentionally omits non-essential chrome (status text and reset button) to keep the repro minimal.
+forced startup moves (ten moves total, equivalent to five manual force-play clicks) so bug-reproduction runs do not
+require manual clicks. The window intentionally omits non-essential chrome (status text and reset button) to keep the
+repro minimal.
 Owns: `GCheckersModel`, `BoardView`, a dummy controls `GtkBox`, and `GCheckersSgfController`.
 Collaborates with: model signals for refresh and SGF controller updates.
 Lifecycle: sinks and retains an owned dummy controls `GtkBox` reference, removes it from its current `GtkBox`
 parent during dispose via `gcheckers_widget_remove_from_parent()`, and then clears its references. During dispose it
-also cancels pending auto-move and startup forced-move idle sources.
+also cancels pending startup forced-move idle sources.
 
 ## `GCheckersSgfController` (`src/gcheckers_sgf_controller.c`)
 Class: `GCheckersSgfController` (`GObject`).
@@ -94,7 +95,8 @@ diagnostic sizing logs. It syncs selection after layout updates with debug loggi
 annotates notify-driven sync attempts with the emitting object/property pair. Layout-sync diagnostics keep adjustment
 state logging and compare model content position against measured content position in viewport coordinates. On mismatch
 they emit a capitalized GtkScrolledWindow inconsistency message with size/position numbers; otherwise they emit a
-short "no inconsistencies" debug line.
+short "no inconsistencies" debug line. The root scrolled window is forced to 400 pixels wide to keep the repro window
+geometry deterministic.
 Collaborates with: SGF layout (layout-updated signal), selection, scroller, and disc factory helpers.
 The layout-sync entrypoint is internal to `sgf_view.c` (no public force-sync/get-selected wrappers).
 
