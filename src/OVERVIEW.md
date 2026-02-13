@@ -2,14 +2,13 @@
 
 ## `GCheckersWindow` (`src/gcheckers_window.c`)
 Class: `GCheckersWindow` (`GtkApplicationWindow`).
-Role: composition root that binds model state to UI updates, keeps board input available, coordinates auto-play,
-and schedules three startup forced moves so bug-reproduction runs do not require manual clicks.
+Role: composition root that binds model state to UI updates, keeps board input available, and schedules forced moves
+(automatic follow-ups plus three startup moves) so bug-reproduction runs do not require manual clicks.
 Owns: `GCheckersModel`, `BoardView`, `PlayerControlsPanel`, and `GCheckersSgfController`.
-Collaborates with: `gcheckers_style_init()` (no-op style hook), model signals for refresh, and SGF controller updates.
+Collaborates with: model signals for refresh and SGF controller updates.
 Lifecycle: sinks and retains an owned `PlayerControlsPanel` reference, removes it from its current `GtkBox` parent
-during dispose via `gcheckers_widget_remove_from_parent()`, and then clears its references.
-during dispose, cancels any pending auto-move idle source and startup forced-move idle source, and then clears
-its references.
+during dispose via `gcheckers_widget_remove_from_parent()`, and then clears its references. During dispose it also
+cancels pending auto-move and startup forced-move idle sources.
 
 ## `GCheckersSgfController` (`src/gcheckers_sgf_controller.c`)
 Class: `GCheckersSgfController` (`GObject`).
@@ -19,14 +18,9 @@ Collaborates with: `GCheckersModel` for history and `BoardView` to clear selecti
 
 ## `PlayerControlsPanel` (`src/player_controls_panel.c`)
 Class: `PlayerControlsPanel` (`GtkBox`).
-Role: encapsulates player mode dropdowns and force-move UI.
-Signals: `control-changed` and `force-move-requested` for window-level coordination.
-Collaborates with: `GCheckersWindow` signal handlers and GTK widgets (`GtkDropDown`, `GtkButton`).
-
-## `gcheckers_style_init()` (`src/gcheckers_style.c`)
-Module: `gcheckers_style_init()` (style helper, not a class).
-Role: intentionally no-op for this reproduction branch to avoid non-essential UI styling code.
-Collaborates with: `GCheckersWindow` as an initialization hook.
+Role: reduced control strip that only exposes a force-move button for deterministic move advancement.
+Signals: keeps `control-changed` (defined but not emitted in the reduced UI) and `force-move-requested`.
+Collaborates with: `GCheckersWindow` force-move handling.
 
 ## Widget utilities (`src/widget_utils.c`, `src/widget_utils.h`)
 Module: parent-removal helpers.
