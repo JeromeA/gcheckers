@@ -341,10 +341,14 @@ static void sgf_view_log_layout_sync_state(SgfView *self) {
     const double hadjustment_page = gtk_adjustment_get_page_size(hadjustment);
     const double vadjustment_value = gtk_adjustment_get_value(vadjustment);
     const double vadjustment_page = gtk_adjustment_get_page_size(vadjustment);
-    const double expected_x = x - hadjustment_value;
-    const double expected_y = y - vadjustment_value;
-    const double actual_x = node_bounds_in_viewport.origin.x;
-    const double actual_y = node_bounds_in_viewport.origin.y;
+    const double expected_content_x = x;
+    const double expected_content_y = y;
+    const double actual_content_x = node_bounds_in_viewport.origin.x;
+    const double actual_content_y = node_bounds_in_viewport.origin.y;
+    const double expected_viewport_x = x - hadjustment_value;
+    const double expected_viewport_y = y - vadjustment_value;
+    const double actual_viewport_x = actual_content_x - hadjustment_value;
+    const double actual_viewport_y = actual_content_y - vadjustment_value;
 
     graphene_rect_t overlay_bounds_in_viewport;
     gboolean overlay_bounds_valid = FALSE;
@@ -354,34 +358,43 @@ static void sgf_view_log_layout_sync_state(SgfView *self) {
                                                        &overlay_bounds_in_viewport);
     }
 
-    const double model_content_x = -hadjustment_value;
-    const double model_content_y = -vadjustment_value;
-    const double actual_content_x = overlay_bounds_valid ? overlay_bounds_in_viewport.origin.x : 0.0;
-    const double actual_content_y = overlay_bounds_valid ? overlay_bounds_in_viewport.origin.y : 0.0;
+    const double expected_overlay_content_x = 0.0;
+    const double expected_overlay_content_y = 0.0;
+    const double actual_overlay_content_x = overlay_bounds_valid ? overlay_bounds_in_viewport.origin.x : 0.0;
+    const double actual_overlay_content_y = overlay_bounds_valid ? overlay_bounds_in_viewport.origin.y : 0.0;
     const int content_view_width = self->overlay ? gtk_widget_get_width(self->overlay) : self->content_width;
     const int content_view_height = self->overlay ? gtk_widget_get_height(self->overlay) : self->content_height;
-    const double content_delta_x = actual_content_x - model_content_x;
-    const double content_delta_y = actual_content_y - model_content_y;
+    const double selected_content_delta_x = actual_content_x - expected_content_x;
+    const double selected_content_delta_y = actual_content_y - expected_content_y;
+    const double overlay_content_delta_x = actual_overlay_content_x - expected_overlay_content_x;
+    const double overlay_content_delta_y = actual_overlay_content_y - expected_overlay_content_y;
     const gboolean has_content_inconsistency =
-      !overlay_bounds_valid || (content_delta_x > 0.5) || (content_delta_x < -0.5) ||
-      (content_delta_y > 0.5) || (content_delta_y < -0.5);
+      !overlay_bounds_valid || (selected_content_delta_x > 0.5) || (selected_content_delta_x < -0.5) ||
+      (selected_content_delta_y > 0.5) || (selected_content_delta_y < -0.5) ||
+      (overlay_content_delta_x > 0.5) || (overlay_content_delta_x < -0.5) ||
+      (overlay_content_delta_y > 0.5) || (overlay_content_delta_y < -0.5);
 
     if (has_content_inconsistency) {
       g_debug("GTK SCROLLEDWINDOW INCONSISTENCY: scrolled-window-size=%.1fx%.1f content-view-size=%dx%d "
-              "model-content-pos=%.1f,%.1f effective-content-pos=%.1f,%.1f selected-expected=%.1f,%.1f "
-              "selected-actual=%.1f,%.1f. THIS SHOULD NEVER HAPPEN.",
+              "overlay-content-expected=%.1f,%.1f overlay-content-actual=%.1f,%.1f "
+              "selected-content-expected=%.1f,%.1f selected-content-actual=%.1f,%.1f "
+              "selected-viewport-expected=%.1f,%.1f selected-viewport-actual=%.1f,%.1f.",
               hadjustment_page,
               vadjustment_page,
               content_view_width,
               content_view_height,
-              model_content_x,
-              model_content_y,
+              expected_overlay_content_x,
+              expected_overlay_content_y,
+              actual_overlay_content_x,
+              actual_overlay_content_y,
+              expected_content_x,
+              expected_content_y,
               actual_content_x,
               actual_content_y,
-              expected_x,
-              expected_y,
-              actual_x,
-              actual_y);
+              expected_viewport_x,
+              expected_viewport_y,
+              actual_viewport_x,
+              actual_viewport_y);
     } else {
       g_debug("GTK SCROLLEDWINDOW: no inconsistencies");
     }

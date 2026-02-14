@@ -43,8 +43,9 @@ Collaborates with: SGF view and controller modules.
 ### SGF view (`src/sgf_view.c`, `src/sgf_view.h`)
 Class: `SgfView` (`GtkWidget`).
 Role: game-agnostic move tree UI that wires together layout, selection helpers, scrolled content sizing, and
-diagnostic sizing logs. Layout-sync diagnostics compare model content position against measured content position in
-viewport coordinates and emit the inconsistency log used by repro tests.
+diagnostic sizing logs. Layout-sync diagnostics compare selected-node geometry in content coordinates, selected-node
+geometry in viewport coordinates, and overlay content origin in content coordinates; they emit the inconsistency log
+used by repro tests.
 Collaborates with: SGF layout (layout-updated signal), selection, scroller, and disc factory helpers.
 
 ### SGF disc factory (`src/sgf_view_disc_factory.c`, `src/sgf_view_disc_factory.h`)
