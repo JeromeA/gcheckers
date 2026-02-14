@@ -2,85 +2,36 @@
 
 ## `GCheckersWindow` (`src/gcheckers_window.c`)
 Class: `GCheckersWindow` (`GtkApplicationWindow`).
-Role: composition root that binds model state to board/SGF updates, keeps board input available, and schedules
-startup SGF-only node seeding so bug-reproduction runs do not require any board moves.
-The window intentionally omits non-essential chrome (status text and reset button) to keep the repro minimal.
-Owns: `GCheckersModel`, `BoardView`, a dummy controls `GtkBox`, and `GCheckersSgfController`.
-Collaborates with: model signals for refresh and SGF controller updates.
-Lifecycle: sinks and retains an owned dummy controls `GtkBox` reference, removes it from its current `GtkBox`
-parent during dispose via `gcheckers_widget_remove_from_parent()`, and then clears its references. During dispose it
-also cancels pending startup forced-move idle sources.
+Role: SGF-only composition root for reproducing the scrolling inconsistency. The window intentionally keeps minimal
+chrome, seeds synthetic SGF nodes at startup, and schedules extra synthetic steps on idle so reproduction does not
+depend on gameplay state.
+Owns: a dummy controls `GtkBox` and `GCheckersSgfController`.
+Collaborates with: `GCheckersSgfController` only.
+Lifecycle: sinks and retains an owned dummy controls `GtkBox` reference, removes it from its current parent during
+`dispose` via `gcheckers_widget_remove_from_parent()`, and then clears its references. During dispose it also cancels
+pending startup synthetic-node idle sources.
 
 ## `GCheckersSgfController` (`src/gcheckers_sgf_controller.c`)
 Class: `GCheckersSgfController` (`GObject`).
-Role: SGF history synchronization, node selection handling, replay orchestration, and synthetic-node
-append support for detached SGF-tree-only repro flows. Public surface is limited to widget access, model wiring,
-replay-state querying, and one synthetic append helper.
-Owns: `SgfTree` and `SgfView`, plus replay guards (`is_replaying`, `last_history_size`).
-Collaborates with: `GCheckersModel` for history when connected and `BoardView` to clear selection on replay.
-It can also operate without a model for SGF-only node seeding.
+Role: SGF tree ownership, SGF node selection handling, and synthetic-node append support for detached SGF-only repro
+flows.
+Owns: `SgfTree` and `SgfView`.
+Collaborates with: SGF tree/view modules.
 
 ## Widget utilities (`src/widget_utils.c`, `src/widget_utils.h`)
 Module: parent-removal helpers.
-Role: safely detach widgets from common GTK containers (box and grid) before dropping the last reference to avoid
-GTK4 dispose-time criticals.
-Collaborates with: `GCheckersWindow`, `BoardView`, and SGF view helpers during disposal.
-
-## Board primitives (`src/board.c`, `src/board.h`)
-Module: board storage and helpers.
-Role: define board data structures, coordinate conversion helpers, piece helpers, and reset/init logic.
-Collaborates with: `game.c` for rules and state transitions.
+Role: safely detach widgets from common GTK containers (box and grid) before dropping the last reference to avoid GTK4
+dispose-time criticals.
 
 ## Constants (`src/checkers_constants.h`)
 Module: shared constants.
-Role: centralize size limits for boards, moves, and byte storage used throughout the engine and UI.
-Collaborates with: all game and model modules via compile-time limits.
-
-## Game engine (`src/game.c`, `src/game.h`)
-Module: core game rules and state.
-Role: define game types, rule enforcement, history, promotion, winner updates, and the public game API.
-Collaborates with: `move_gen.c` for move enumeration and `checkers_model.c` for GTK integration.
-
-
-## Move generation (`src/move_gen.c`)
-Module: move generation.
-Role: enumerate simple moves, jumps, and forced-capture rules.
-Collaborates with: `game.c` to validate and apply generated moves.
-
-## GTK model wrapper (`src/checkers_model.c`, `src/checkers_model.h`)
-Class: `GCheckersModel` (`GObject`).
-Role: wrap the engine for GTK, including move validation, random AI moves, and state-change signals. Move queries
-call `game_list_available_moves()` directly.
-Collaborates with: `GCheckersWindow` and SGF controllers via signals and high-level move APIs.
-
+Role: centralize limits used by SGF modules.
 
 ## GTK application entry (`src/gcheckers.c`, `src/gcheckers_application.c`, `src/gcheckers_application.h`)
 Class: `GCheckersApplication` (`GtkApplication`).
-Role: define the GTK application type and activation flow that creates the main window and model, and schedules
-a process quit two seconds after launch for deterministic repro runs.
-Collaborates with: `GCheckersWindow` for UI wiring.
-
-## Board view subsystem
-
-### `BoardView` (`src/board_view.c`, `src/board_view.h`)
-Class: `BoardView` (`GtkWidget`).
-Role: coordinate rendering updates and input handling for the board.
-Collaborates with: selection and square/grid helpers.
-
-### `BoardGrid` (`src/board_grid.c`, `src/board_grid.h`)
-Module: board grid helpers.
-Role: construct the square layout grid and maintain square bookkeeping (square lookup + build/clear API only).
-Collaborates with: `BoardView` and `BoardSquare`.
-
-### `BoardSquare` (`src/board_square.c`, `src/board_square.h`)
-Class: `BoardSquare` (`GtkWidget`).
-Role: represent individual squares and update piece rendering state with inline unicode symbols.
-Collaborates with: `BoardGrid`.
-
-### Selection controller (`src/board_selection_controller.c`, `src/board_selection_controller.h`)
-Module: selection path logic.
-Role: manage click-path selection and move application orchestration.
-Collaborates with: `BoardView` and `GCheckersModel` for applying moves.
+Role: define activation flow that creates the SGF-only repro window and schedules process quit two seconds after launch
+for deterministic repro runs.
+Collaborates with: `GCheckersWindow`.
 
 ## SGF subsystem
 
@@ -92,14 +43,9 @@ Collaborates with: SGF view and controller modules.
 ### SGF view (`src/sgf_view.c`, `src/sgf_view.h`)
 Class: `SgfView` (`GtkWidget`).
 Role: game-agnostic move tree UI that wires together layout, selection helpers, scrolled content sizing, and
-diagnostic sizing logs. It syncs selection after layout updates with debug logging when widgets are not ready and
-annotates notify-driven sync attempts with the emitting object/property pair. Layout-sync diagnostics keep adjustment
-state logging and compare model content position against measured content position in viewport coordinates. On mismatch
-they emit a capitalized GtkScrolledWindow inconsistency message with size/position numbers; otherwise they emit a
-short "no inconsistencies" debug line. The root scrolled window is forced to 400 pixels wide to keep the repro window
-geometry deterministic.
+diagnostic sizing logs. Layout-sync diagnostics compare model content position against measured content position in
+viewport coordinates and emit the inconsistency log used by repro tests.
 Collaborates with: SGF layout (layout-updated signal), selection, scroller, and disc factory helpers.
-The layout-sync entrypoint is internal to `sgf_view.c` (no public force-sync/get-selected wrappers).
 
 ### SGF disc factory (`src/sgf_view_disc_factory.c`, `src/sgf_view_disc_factory.h`)
 Module: disc widget creation.
@@ -108,22 +54,16 @@ Collaborates with: `SgfView` and the SGF tree.
 
 ### SGF layout (`src/sgf_view_layout.c`, `src/sgf_view_layout.h`)
 Module: layout helpers.
-Role: position discs in a grid-based SGF tree layout (anchoring the virtual root in column zero), measure natural disc
-sizes, report both maximum row/column extents and per-column/per-row sizes for accurate sizing and scrolling, and emit
-a layout-updated signal after rebuilds.
+Role: position discs in a grid-based SGF tree layout, measure natural disc sizes, report extents and per-axis sizes,
+and emit a layout-updated signal after rebuilds.
 Collaborates with: `SgfView`.
 
 ### SGF scroller (`src/sgf_view_scroller.c`, `src/sgf_view_scroller.h`)
 Module: selection scroll helper.
-Role: implement two paths only: on scroll requests remember the selected node and attempt scrolling immediately; on
-layout updates retry scrolling for the remembered node only, applying a small visibility padding. The implementation
-uses one internal helper that treats missing or not-yet-measurable nodes as no-op outcomes and emits detailed
-before/after adjustment diagnostics (target ranges, deltas, and visibility state) for each attempt. The file-level
-contract comment in `src/sgf_view_scroller.c` is the canonical policy reference (including the prohibition on deferred
-retry mechanisms such as ticks/idles/timers).
+Role: remember selected node scroll requests and retry them after layout updates with detailed adjustment diagnostics.
 Collaborates with: `SgfView`, SGF node widget mapping, layout extents, and selection controller updates.
 
 ### SGF selection controller (`src/sgf_view_selection_controller.c`, `src/sgf_view_selection_controller.h`)
 Module: SGF selection logic.
 Role: track SGF selection and update CSS classes.
-Collaborates with: `SgfView`, the SGF tree, and the scroller.
+Collaborates with: `SgfView` and `SgfTree`.

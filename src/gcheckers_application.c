@@ -1,6 +1,5 @@
 #include "gcheckers_application.h"
 
-#include "checkers_model.h"
 #include "gcheckers_window.h"
 
 struct _GCheckersApplication {
@@ -25,9 +24,7 @@ static void gcheckers_application_activate(GApplication *app) {
     return;
   }
 
-  GCheckersModel *model = gcheckers_model_new();
-  GtkWindow *window = GTK_WINDOW(gcheckers_window_new(GTK_APPLICATION(app), model));
-  g_object_unref(model);
+  GtkWindow *window = GTK_WINDOW(gcheckers_window_new(GTK_APPLICATION(app)));
 
   gtk_window_present(window);
 
