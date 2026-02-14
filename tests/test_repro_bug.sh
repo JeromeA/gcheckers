@@ -34,6 +34,19 @@ log_file="$(mktemp)"
 XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" GDK_BACKEND=broadway BROADWAY_DISPLAY=":$BROADWAY_TEST_DISPLAY" \
   G_MESSAGES_DEBUG=all ./gcheckers >"$log_file" 2>&1
 
+seed_line="$(grep -m1 "Appended synthetic SGF move" "$log_file" || true)"
+if [ -z "$seed_line" ]; then
+  echo "Expected synthetic SGF seeding log but did not find it."
+  exit 1
+fi
+
+model_line="$(grep -m1 "Appending SGF move from model history" "$log_file" || true)"
+if [ -n "$model_line" ]; then
+  echo "Expected SGF repro to avoid board/model moves, but found model-backed SGF append log."
+  echo "$model_line"
+  exit 1
+fi
+
 line="$(grep -m1 "GTK SCROLLEDWINDOW INCONSISTENCY" "$log_file" || true)"
 if [ -z "$line" ]; then
   echo "Expected GTK SCROLLEDWINDOW INCONSISTENCY in logs but did not find it."
