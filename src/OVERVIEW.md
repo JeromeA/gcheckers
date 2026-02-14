@@ -3,9 +3,8 @@
 ## `GCheckersWindow` (`src/gcheckers_window.c`)
 Class: `GCheckersWindow` (`GtkApplicationWindow`).
 Role: composition root that binds model state to board/SGF updates, keeps board input available, and schedules
-forced startup moves (ten moves total, equivalent to five manual force-play clicks) so bug-reproduction runs do not
-require manual clicks. The window intentionally omits non-essential chrome (status text and reset button) to keep the
-repro minimal.
+startup SGF-only node seeding so bug-reproduction runs do not require any board moves.
+The window intentionally omits non-essential chrome (status text and reset button) to keep the repro minimal.
 Owns: `GCheckersModel`, `BoardView`, a dummy controls `GtkBox`, and `GCheckersSgfController`.
 Collaborates with: model signals for refresh and SGF controller updates.
 Lifecycle: sinks and retains an owned dummy controls `GtkBox` reference, removes it from its current `GtkBox`
@@ -14,10 +13,12 @@ also cancels pending startup forced-move idle sources.
 
 ## `GCheckersSgfController` (`src/gcheckers_sgf_controller.c`)
 Class: `GCheckersSgfController` (`GObject`).
-Role: SGF history synchronization, node selection handling, and replay orchestration. Public surface is
-limited to widget access, model wiring, and replay-state querying.
+Role: SGF history synchronization, node selection handling, replay orchestration, and synthetic-node
+append support for detached SGF-tree-only repro flows. Public surface is limited to widget access, model wiring,
+replay-state querying, and one synthetic append helper.
 Owns: `SgfTree` and `SgfView`, plus replay guards (`is_replaying`, `last_history_size`).
-Collaborates with: `GCheckersModel` for history and `BoardView` to clear selection on replay.
+Collaborates with: `GCheckersModel` for history when connected and `BoardView` to clear selection on replay.
+It can also operate without a model for SGF-only node seeding.
 
 ## Widget utilities (`src/widget_utils.c`, `src/widget_utils.h`)
 Module: parent-removal helpers.

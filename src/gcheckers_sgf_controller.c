@@ -11,6 +11,7 @@ struct _GCheckersSgfController {
   gulong state_handler_id;
   gboolean is_replaying;
   guint last_history_size;
+  gboolean allow_detached_tree_updates;
 };
 
 G_DEFINE_TYPE(GCheckersSgfController, gcheckers_sgf_controller, G_TYPE_OBJECT)
@@ -38,15 +39,28 @@ static void gcheckers_sgf_controller_disconnect_model(GCheckersSgfController *se
   g_clear_object(&self->model);
 }
 
+static gboolean gcheckers_sgf_controller_has_model(GCheckersSgfController *self) {
+  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+
+  return self->model != NULL;
+}
+
 static void gcheckers_sgf_controller_append_move(GCheckersSgfController *self) {
   g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self));
-  g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
   g_return_if_fail(self->sgf_tree != NULL);
+
+  if (!gcheckers_sgf_controller_has_model(self)) {
+    if (!self->allow_detached_tree_updates) {
+      g_debug("Skipping SGF append: no model connected\n");
+    }
+    return;
+  }
 
   if (self->is_replaying) {
     return;
   }
 
+  g_debug("Appending SGF move from model history\n");
   guint history_size = gcheckers_model_get_history_size(self->model);
   if (history_size <= self->last_history_size) {
     self->last_history_size = history_size;
@@ -102,8 +116,12 @@ static GPtrArray *gcheckers_sgf_controller_build_node_path(const SgfNode *node) 
 
 static void gcheckers_sgf_controller_replay_to_node(GCheckersSgfController *self, const SgfNode *node) {
   g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self));
-  g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
   g_return_if_fail(node != NULL);
+
+  if (!gcheckers_sgf_controller_has_model(self)) {
+    g_debug("Ignoring SGF replay request without model\n");
+    return;
+  }
 
   self->is_replaying = TRUE;
   gcheckers_model_reset(self->model);
@@ -163,7 +181,9 @@ static void gcheckers_sgf_controller_on_node_selected(SgfView * /*view*/,
     return;
   }
 
-  gcheckers_sgf_controller_replay_to_node(self, node);
+  if (gcheckers_sgf_controller_has_model(self)) {
+    gcheckers_sgf_controller_replay_to_node(self, node);
+  }
 }
 
 static void gcheckers_sgf_controller_on_model_state_changed(GCheckersModel *model,
@@ -205,6 +225,7 @@ static void gcheckers_sgf_controller_init(GCheckersSgfController *self) {
 
   self->is_replaying = FALSE;
   self->last_history_size = 0;
+  self->allow_detached_tree_updates = FALSE;
 }
 
 GCheckersSgfController *gcheckers_sgf_controller_new(BoardView *board_view) {
@@ -226,6 +247,7 @@ void gcheckers_sgf_controller_set_model(GCheckersSgfController *self, GCheckersM
                                             "state-changed",
                                             G_CALLBACK(gcheckers_sgf_controller_on_model_state_changed),
                                             self);
+  self->allow_detached_tree_updates = FALSE;
   gcheckers_sgf_controller_reset(self);
 }
 
@@ -236,6 +258,31 @@ static void gcheckers_sgf_controller_reset(GCheckersSgfController *self) {
   sgf_view_set_tree(self->sgf_view, self->sgf_tree);
   self->last_history_size = self->model ? gcheckers_model_get_history_size(self->model) : 0;
   self->is_replaying = FALSE;
+}
+
+const SgfNode *gcheckers_sgf_controller_append_synthetic_move(GCheckersSgfController *self) {
+  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), NULL);
+  g_return_val_if_fail(self->sgf_tree != NULL, NULL);
+
+  const SgfNode *current = sgf_tree_get_current(self->sgf_tree);
+  guint move_number = current ? sgf_node_get_move_number(current) + 1 : 1;
+  SgfColor color = (move_number % 2 == 1) ? SGF_COLOR_BLACK : SGF_COLOR_WHITE;
+  guint8 payload_value = (guint8)move_number;
+  GBytes *payload = g_bytes_new(&payload_value, sizeof(payload_value));
+
+  self->allow_detached_tree_updates = TRUE;
+  const SgfNode *node = sgf_tree_append_move(self->sgf_tree, color, payload);
+  self->allow_detached_tree_updates = FALSE;
+  g_bytes_unref(payload);
+
+  if (!node) {
+    g_debug("Failed to append synthetic SGF move\n");
+    return NULL;
+  }
+
+  g_debug("Appended synthetic SGF move %u\n", sgf_node_get_move_number(node));
+  sgf_view_refresh(self->sgf_view);
+  return node;
 }
 
 GtkWidget *gcheckers_sgf_controller_get_widget(GCheckersSgfController *self) {

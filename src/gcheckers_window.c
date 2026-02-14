@@ -17,7 +17,6 @@ struct _GCheckersWindow {
 
 G_DEFINE_TYPE(GCheckersWindow, gcheckers_window, GTK_TYPE_APPLICATION_WINDOW)
 
-static void gcheckers_window_on_force_move_requested(gpointer /*panel*/, gpointer user_data);
 static gboolean gcheckers_window_startup_force_move_cb(gpointer user_data);
 
 static void gcheckers_window_update_control_state(GCheckersWindow *self) {
@@ -57,13 +56,14 @@ static gboolean gcheckers_window_startup_force_move_cb(gpointer user_data) {
     self->startup_force_source_id = 0;
     return G_SOURCE_REMOVE;
   }
-  if (!self->model) {
-    g_debug("Missing model during startup forced moves\n");
-    return G_SOURCE_CONTINUE;
-  }
+  g_debug("Startup synthetic SGF-only step executed; remaining-before-step=%u\n",
+          self->startup_force_remaining);
 
-  g_debug("Startup forced move executed; remaining-before-step=%u\n", self->startup_force_remaining);
-  gcheckers_window_on_force_move_requested(NULL, self);
+  if (!gcheckers_sgf_controller_append_synthetic_move(self->sgf_controller)) {
+    g_debug("Failed startup synthetic SGF-only step\n");
+    self->startup_force_source_id = 0;
+    return G_SOURCE_REMOVE;
+  }
   self->startup_force_remaining--;
 
   if (self->startup_force_remaining == 0) {
@@ -82,29 +82,6 @@ static void gcheckers_window_on_state_changed(GCheckersModel *model, gpointer us
 
   gcheckers_window_update_ui(self);
   gcheckers_window_update_control_state(self);
-}
-
-static void gcheckers_window_on_force_move_requested(gpointer /*panel*/, gpointer user_data) {
-  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
-
-  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
-  g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
-
-  const GameState *state = gcheckers_model_peek_state(self->model);
-  if (!state) {
-    g_debug("Failed to fetch game state for forced move\n");
-    return;
-  }
-  if (state->winner != CHECKERS_WINNER_NONE) {
-    g_debug("Ignoring forced move after game end\n");
-    return;
-  }
-  if (gcheckers_sgf_controller_is_replaying(self->sgf_controller)) {
-    g_debug("Ignoring forced move while replaying SGF\n");
-    return;
-  }
-
-  gcheckers_model_step_random_move(self->model, NULL);
 }
 
 static void gcheckers_window_set_model(GCheckersWindow *self, GCheckersModel *model) {
@@ -218,6 +195,13 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   GtkWidget *sgf_widget = gcheckers_sgf_controller_get_widget(self->sgf_controller);
   g_return_if_fail(sgf_widget != NULL);
   gtk_box_append(GTK_BOX(right_panel), sgf_widget);
+
+  for (guint i = 0; i < self->startup_force_remaining; ++i) {
+    if (!gcheckers_sgf_controller_append_synthetic_move(self->sgf_controller)) {
+      g_debug("Failed to seed synthetic SGF tree for repro\n");
+      break;
+    }
+  }
 
   self->startup_force_source_id = g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,
                                                    gcheckers_window_startup_force_move_cb,
