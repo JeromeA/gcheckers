@@ -1,8 +1,6 @@
 #ifndef GCHECKERS_SGF_CONTROLLER_H
 #define GCHECKERS_SGF_CONTROLLER_H
 
-#include "board_view.h"
-#include "checkers_model.h"
 #include "sgf_tree.h"
 #include "sgf_view.h"
 
@@ -18,11 +16,9 @@ G_DECLARE_FINAL_TYPE(GCheckersSgfController,
                      SGF_CONTROLLER,
                      GObject)
 
-GCheckersSgfController *gcheckers_sgf_controller_new(BoardView *board_view);
-void gcheckers_sgf_controller_set_model(GCheckersSgfController *self, GCheckersModel *model);
+GCheckersSgfController *gcheckers_sgf_controller_new(void);
 const SgfNode *gcheckers_sgf_controller_append_synthetic_move(GCheckersSgfController *self);
 GtkWidget *gcheckers_sgf_controller_get_widget(GCheckersSgfController *self);
-gboolean gcheckers_sgf_controller_is_replaying(GCheckersSgfController *self);
 
 G_END_DECLS
 

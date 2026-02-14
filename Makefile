@@ -11,7 +11,6 @@ LDLIBS := $(GLIB_LIBS) $(GOBJECT_LIBS) -lm
 
 CFLAGS += $(GLIB_CFLAGS) $(GOBJECT_CFLAGS)
 
-CORE_SRCS := src/board.c src/game.c src/move_gen.c src/checkers_model.c
 WIDGET_UTILS_SRCS := src/widget_utils.c
 
 BROADWAY_TEST_DISPLAY ?= 40
@@ -26,21 +25,18 @@ BROADWAY_TEST_LOG ?= /tmp/broadwayd-$(BROADWAY_TEST_PORT).log
 all: gcheckers
 
 gcheckers: src/gcheckers.c src/gcheckers_application.c src/gcheckers_window.c src/gcheckers_window.h \
-	src/gcheckers_sgf_controller.c src/gcheckers_sgf_controller.h src/board_view.c src/board_view.h \
-	src/board_grid.c src/board_grid.h src/board_square.c src/board_square.h \
-	src/board_selection_controller.c src/board_selection_controller.h \
-	src/gcheckers_application.h src/checkers_model.c src/checkers_model.h src/sgf_tree.c src/sgf_tree.h \
+	src/gcheckers_sgf_controller.c src/gcheckers_sgf_controller.h \
+	src/gcheckers_application.h src/sgf_tree.c src/sgf_tree.h \
 	src/sgf_view.c src/sgf_view.h src/sgf_view_disc_factory.c src/sgf_view_disc_factory.h \
 	src/sgf_view_layout.c src/sgf_view_layout.h \
 	src/sgf_view_scroller.c src/sgf_view_scroller.h src/sgf_view_selection_controller.c \
-	src/sgf_view_selection_controller.h $(WIDGET_UTILS_SRCS) $(CORE_SRCS)
+	src/sgf_view_selection_controller.h $(WIDGET_UTILS_SRCS)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/gcheckers.c src/gcheckers_application.c \
 		src/gcheckers_window.c \
-		src/gcheckers_sgf_controller.c src/board_view.c src/board_grid.c src/board_square.c \
-		src/board_selection_controller.c src/sgf_tree.c src/sgf_view.c \
+		src/gcheckers_sgf_controller.c src/sgf_tree.c src/sgf_view.c \
 		src/sgf_view_disc_factory.c \
 		src/sgf_view_layout.c src/sgf_view_scroller.c \
-		src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(CORE_SRCS) $(LDLIBS) $(GTK_LIBS)
+		src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(LDLIBS) $(GTK_LIBS)
 
 test: gcheckers tests/test_repro_bug.sh
 	@tests/test_repro_bug.sh
