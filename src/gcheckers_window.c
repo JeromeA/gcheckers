@@ -19,11 +19,16 @@ struct _GCheckersWindow {
   gulong state_handler_id;
   guint last_history_size;
   guint auto_move_source_id;
+  guint automation_exit_after_seconds;
+  guint automation_remaining_presses;
+  guint automation_exit_source_id;
+  guint automation_press_source_id;
 };
 
 G_DEFINE_TYPE(GCheckersWindow, gcheckers_window, GTK_TYPE_APPLICATION_WINDOW)
 
 static void gcheckers_window_on_force_move_requested(PlayerControlsPanel *panel, gpointer user_data);
+static void gcheckers_window_schedule_automation(GCheckersWindow *self);
 
 static void gcheckers_window_print_move(const char *label, const CheckersMove *move) {
   g_return_if_fail(label != NULL);
@@ -91,6 +96,63 @@ static void gcheckers_window_update_status(GCheckersWindow *self) {
   gtk_label_set_text(GTK_LABEL(self->status_label), status);
 
   board_view_update(self->board_view);
+}
+
+
+static gboolean gcheckers_window_automation_exit_cb(gpointer user_data) {
+  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
+
+  g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), G_SOURCE_REMOVE);
+
+  self->automation_exit_source_id = 0;
+  GtkApplication *app = gtk_window_get_application(GTK_WINDOW(self));
+  if (!app) {
+    g_debug("Missing application while handling automation exit\n");
+    return G_SOURCE_REMOVE;
+  }
+
+  g_application_quit(G_APPLICATION(app));
+  return G_SOURCE_REMOVE;
+}
+
+static gboolean gcheckers_window_automation_press_cb(gpointer user_data) {
+  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
+
+  g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), G_SOURCE_REMOVE);
+
+  self->automation_press_source_id = 0;
+  if (self->automation_remaining_presses == 0) {
+    return G_SOURCE_REMOVE;
+  }
+
+  if (!self->controls_panel) {
+    g_debug("Missing controls panel while running automation presses\n");
+    return G_SOURCE_REMOVE;
+  }
+
+  gcheckers_window_on_force_move_requested(self->controls_panel, self);
+  self->automation_remaining_presses--;
+  gcheckers_window_schedule_automation(self);
+  return G_SOURCE_REMOVE;
+}
+
+static void gcheckers_window_schedule_automation(GCheckersWindow *self) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+
+  if (self->automation_remaining_presses > 0 && self->automation_press_source_id == 0) {
+    self->automation_press_source_id = g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,
+                                                        gcheckers_window_automation_press_cb,
+                                                        g_object_ref(self),
+                                                        (GDestroyNotify)g_object_unref);
+  }
+
+  if (self->automation_exit_after_seconds > 0 && self->automation_exit_source_id == 0) {
+    self->automation_exit_source_id = g_timeout_add_seconds_full(G_PRIORITY_DEFAULT,
+                                                                 self->automation_exit_after_seconds,
+                                                                 gcheckers_window_automation_exit_cb,
+                                                                 g_object_ref(self),
+                                                                 (GDestroyNotify)g_object_unref);
+  }
 }
 
 static gboolean gcheckers_window_auto_force_move_cb(gpointer user_data) {
@@ -284,6 +346,8 @@ static void gcheckers_window_dispose(GObject *object) {
 
   gboolean panel_removed = gcheckers_window_unparent_controls_panel(self);
   g_clear_handle_id(&self->auto_move_source_id, g_source_remove);
+  g_clear_handle_id(&self->automation_exit_source_id, g_source_remove);
+  g_clear_handle_id(&self->automation_press_source_id, g_source_remove);
 
   gcheckers_window_unparent_controls_panel(self);
 
@@ -310,6 +374,10 @@ static void gcheckers_window_class_init(GCheckersWindowClass *klass) {
 static void gcheckers_window_init(GCheckersWindow *self) {
   self->last_history_size = 0;
   self->auto_move_source_id = 0;
+  self->automation_exit_after_seconds = 0;
+  self->automation_remaining_presses = 0;
+  self->automation_exit_source_id = 0;
+  self->automation_press_source_id = 0;
 
   gtk_window_set_title(GTK_WINDOW(self), "gcheckers");
   gtk_window_set_default_size(GTK_WINDOW(self), 600, 700);
@@ -388,6 +456,16 @@ static void gcheckers_window_init(GCheckersWindow *self) {
                    self);
   gtk_widget_add_css_class(sgf_widget, "sgf-panel");
   gtk_box_append(GTK_BOX(right_panel), sgf_widget);
+}
+
+void gcheckers_window_configure_automation(GCheckersWindow *self,
+                                           guint exit_after_seconds,
+                                           guint force_move_presses) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+
+  self->automation_exit_after_seconds = exit_after_seconds;
+  self->automation_remaining_presses = force_move_presses;
+  gcheckers_window_schedule_automation(self);
 }
 
 PlayerControlsPanel *gcheckers_window_get_controls_panel(GCheckersWindow *self) {

@@ -14,6 +14,9 @@ G_BEGIN_DECLS
 G_DECLARE_FINAL_TYPE(GCheckersWindow, gcheckers_window, GCHECKERS, WINDOW, GtkApplicationWindow)
 
 GCheckersWindow *gcheckers_window_new(GtkApplication *app, GCheckersModel *model);
+void gcheckers_window_configure_automation(GCheckersWindow *self,
+                                           guint exit_after_seconds,
+                                           guint force_move_presses);
 PlayerControlsPanel *gcheckers_window_get_controls_panel(GCheckersWindow *self);
 GCheckersSgfController *gcheckers_window_get_sgf_controller(GCheckersWindow *self);
 

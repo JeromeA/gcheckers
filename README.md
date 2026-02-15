@@ -12,3 +12,16 @@ Build the library and CLI:
 Run the text-mode game:
 
   ./checkers
+
+Run the GTK app:
+
+  ./gcheckers
+
+Automation flags for the GTK app:
+
+  - `--exit-after-seconds=N` exits automatically after N seconds.
+  - `--auto-force-moves=N` presses Force move N times.
+
+Run the inconsistency automation test:
+
+  make test-inconsistency

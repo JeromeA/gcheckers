@@ -33,7 +33,7 @@ SCREEN_SIZE ?= 1280x720
 BROADWAYD_BIN ?= gtk4-broadwayd
 CHROMIUM_BIN ?= google-chrome
 
-.PHONY: all clean test coverage screenshot
+.PHONY: all clean test test-inconsistency coverage screenshot
 
 all: libgame.a checkers gcheckers
 
@@ -43,8 +43,10 @@ libgame.a: $(OBJS)
 %.o: %.c src/game.h src/board.h src/checkers_constants.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
-test:
-	@echo "No tests are currently defined."
+test: test-inconsistency
+
+test-inconsistency: gcheckers tools/test_inconsistency.sh
+	tools/test_inconsistency.sh
 
 checkers: src/checkers_cli.c $(SRCS) src/game.h
 	$(CC) $(CFLAGS) -o $@ src/checkers_cli.c $(SRCS) $(LDLIBS)
