@@ -39,6 +39,12 @@ static const int sgf_view_disc_border = 1;
 static const int sgf_view_disc_spacing = 8;
 static const int sgf_view_disc_stride = sgf_view_disc_size + (sgf_view_disc_border * 2);
 
+gboolean sgf_view_has_horizontal_position_inconsistency(double scroll_window_position,
+                                                        double content_view_effective_position) {
+  const double delta = content_view_effective_position - scroll_window_position;
+  return (delta > 0.5) || (delta < -0.5);
+}
+
 static void sgf_view_rebuild(SgfView *self);
 
 static int sgf_view_sum_extents(GArray *extents, guint count, int fallback) {
@@ -348,23 +354,7 @@ static void sgf_view_log_layout_sync_state(SgfView *self) {
           height);
 
   if (viewport && hadjustment && vadjustment) {
-    graphene_rect_t node_bounds_in_viewport;
-    gboolean node_bounds_in_viewport_valid = gtk_widget_compute_bounds(node_widget,
-                                                                       viewport,
-                                                                       &node_bounds_in_viewport);
-    if (!node_bounds_in_viewport_valid) {
-      g_debug("SGF view layout sync: unable to compute selected bounds in viewport");
-      return;
-    }
-
     const double hadjustment_value = gtk_adjustment_get_value(hadjustment);
-    const double hadjustment_page = gtk_adjustment_get_page_size(hadjustment);
-    const double vadjustment_value = gtk_adjustment_get_value(vadjustment);
-    const double vadjustment_page = gtk_adjustment_get_page_size(vadjustment);
-    const double expected_x = x - hadjustment_value;
-    const double expected_y = y - vadjustment_value;
-    const double actual_x = node_bounds_in_viewport.origin.x;
-    const double actual_y = node_bounds_in_viewport.origin.y;
 
     graphene_rect_t overlay_bounds_in_viewport;
     gboolean overlay_bounds_valid = FALSE;
@@ -374,36 +364,17 @@ static void sgf_view_log_layout_sync_state(SgfView *self) {
                                                        &overlay_bounds_in_viewport);
     }
 
-    const double model_content_x = -hadjustment_value;
-    const double model_content_y = -vadjustment_value;
-    const double actual_content_x = overlay_bounds_valid ? overlay_bounds_in_viewport.origin.x : 0.0;
-    const double actual_content_y = overlay_bounds_valid ? overlay_bounds_in_viewport.origin.y : 0.0;
-    const int content_view_width = self->overlay ? gtk_widget_get_width(self->overlay) : self->content_width;
-    const int content_view_height = self->overlay ? gtk_widget_get_height(self->overlay) : self->content_height;
-    const double content_delta_x = actual_content_x - model_content_x;
-    const double content_delta_y = actual_content_y - model_content_y;
+    const double scroll_window_position = -hadjustment_value;
+    const double content_view_effective_position =
+      overlay_bounds_valid ? overlay_bounds_in_viewport.origin.x : 0.0;
     const gboolean has_content_inconsistency =
-      !overlay_bounds_valid || (content_delta_x > 0.5) || (content_delta_x < -0.5) ||
-      (content_delta_y > 0.5) || (content_delta_y < -0.5);
+      !overlay_bounds_valid || sgf_view_has_horizontal_position_inconsistency(scroll_window_position,
+                                                                              content_view_effective_position);
 
     if (has_content_inconsistency) {
-      g_debug("GTK SCROLLEDWINDOW INCONSISTENCY: scrolled-window-size=%.1fx%.1f content-view-size=%dx%d "
-              "model-content-pos=%.1f,%.1f effective-content-pos=%.1f,%.1f selected-expected=%.1f,%.1f "
-              "selected-actual=%.1f,%.1f. THIS SHOULD NEVER HAPPEN.",
-              hadjustment_page,
-              vadjustment_page,
-              content_view_width,
-              content_view_height,
-              model_content_x,
-              model_content_y,
-              actual_content_x,
-              actual_content_y,
-              expected_x,
-              expected_y,
-              actual_x,
-              actual_y);
-    } else {
-      g_debug("GTK SCROLLEDWINDOW: no inconsistencies");
+      g_debug("GTK SCROLLEDWINDOW INCONSISTENCY: scroll-window-pos=%.1f content-view-effective-pos=%.1f",
+              scroll_window_position,
+              content_view_effective_position);
     }
   }
 }

@@ -368,6 +368,15 @@ static void sgf_view_assert_disc_visible(GtkAdjustment *hadjustment,
   g_assert_true(v_visible);
 }
 
+static void test_sgf_view_horizontal_position_inconsistency_detection(void) {
+  g_assert_false(sgf_view_has_horizontal_position_inconsistency(-20.0, -20.0));
+  g_assert_false(sgf_view_has_horizontal_position_inconsistency(-20.0, -20.4));
+  g_assert_false(sgf_view_has_horizontal_position_inconsistency(-20.0, -19.5));
+
+  g_assert_true(sgf_view_has_horizontal_position_inconsistency(-20.0, -20.6));
+  g_assert_true(sgf_view_has_horizontal_position_inconsistency(-20.0, -19.4));
+}
+
 static void test_sgf_view_connectors(void) {
   SgfTree *tree = sgf_tree_new();
   sgf_tree_append_move(tree, SGF_COLOR_BLACK, NULL);
@@ -847,6 +856,8 @@ static void test_sgf_view_scroller_remembers_missing_node(void) {
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   if (!gtk_init_check()) {
+    g_test_add_func("/sgf-view/horizontal-position-inconsistency-detection",
+                    test_sgf_view_horizontal_position_inconsistency_detection);
     g_test_add_func("/sgf-view/connectors", test_sgf_view_connectors_skip);
     g_test_add_func("/sgf-view/root-disc", test_sgf_view_connectors_skip);
     g_test_add_func("/sgf-view/branches", test_sgf_view_connectors_skip);
@@ -861,6 +872,8 @@ int main(int argc, char **argv) {
     return g_test_run();
   }
 
+  g_test_add_func("/sgf-view/horizontal-position-inconsistency-detection",
+                  test_sgf_view_horizontal_position_inconsistency_detection);
   g_test_add_func("/sgf-view/connectors", test_sgf_view_connectors);
   g_test_add_func("/sgf-view/root-disc", test_sgf_view_root_disc);
   g_test_add_func("/sgf-view/branches", test_sgf_view_branch_columns);
