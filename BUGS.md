@@ -30,3 +30,14 @@ XDG_RUNTIME_DIR or a Broadway display was not configured.
 
 The fix runs the GTK test binaries under a shared Broadway server from make test so gtk_init_check succeeds and the
 tests run instead of skipping.
+
+## SGF horizontal scrollbar position could disagree with visible content position
+
+The SGF inconsistency diagnostic should report only whether the horizontal scroll-window position matches the content
+view effective horizontal position.
+
+The old diagnostic compared and logged extra geometry (viewport sizes, vertical offsets, selected-node expected/actual
+positions), which made the bug signal noisy and not focused on the visual mismatch being investigated.
+
+The fix narrows the calculation and message to horizontal position mismatch only, and adds a test for the focused
+inconsistency predicate.
