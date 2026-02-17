@@ -129,7 +129,8 @@ diagnostic sizing logs. It syncs selection after layout updates with debug loggi
 window/selected-node geometry during forced layout resyncs, and annotates notify-driven sync attempts with the
 emitting object/property pair. Layout-sync diagnostics keep adjustment state logging and compare only the
 horizontal scroll-window position against the content view effective horizontal position. On mismatch they
-emit a capitalized GtkScrolledWindow inconsistency message that includes only those two positions.
+emit a capitalized GtkScrolledWindow BIG inconsistency message that includes only those two positions and only
+when the mismatch exceeds 30 pixels.
 Collaborates with: SGF layout (layout-updated signal), selection, scroller, and disc factory helpers.
 
 ### SGF disc factory (`src/sgf_view_disc_factory.c`, `src/sgf_view_disc_factory.h`)

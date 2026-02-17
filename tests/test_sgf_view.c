@@ -370,11 +370,11 @@ static void sgf_view_assert_disc_visible(GtkAdjustment *hadjustment,
 
 static void test_sgf_view_horizontal_position_inconsistency_detection(void) {
   g_assert_false(sgf_view_has_horizontal_position_inconsistency(-20.0, -20.0));
-  g_assert_false(sgf_view_has_horizontal_position_inconsistency(-20.0, -20.4));
-  g_assert_false(sgf_view_has_horizontal_position_inconsistency(-20.0, -19.5));
+  g_assert_false(sgf_view_has_horizontal_position_inconsistency(-20.0, -50.0));
+  g_assert_false(sgf_view_has_horizontal_position_inconsistency(-20.0, 10.0));
 
-  g_assert_true(sgf_view_has_horizontal_position_inconsistency(-20.0, -20.6));
-  g_assert_true(sgf_view_has_horizontal_position_inconsistency(-20.0, -19.4));
+  g_assert_true(sgf_view_has_horizontal_position_inconsistency(-20.0, -50.1));
+  g_assert_true(sgf_view_has_horizontal_position_inconsistency(-20.0, 10.1));
 }
 
 static void test_sgf_view_connectors(void) {

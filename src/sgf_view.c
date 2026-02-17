@@ -42,7 +42,7 @@ static const int sgf_view_disc_stride = sgf_view_disc_size + (sgf_view_disc_bord
 gboolean sgf_view_has_horizontal_position_inconsistency(double scroll_window_position,
                                                         double content_view_effective_position) {
   const double delta = content_view_effective_position - scroll_window_position;
-  return (delta > 0.5) || (delta < -0.5);
+  return (delta > 30.0) || (delta < -30.0);
 }
 
 static void sgf_view_rebuild(SgfView *self);
@@ -368,11 +368,11 @@ static void sgf_view_log_layout_sync_state(SgfView *self) {
     const double content_view_effective_position =
       overlay_bounds_valid ? overlay_bounds_in_viewport.origin.x : 0.0;
     const gboolean has_content_inconsistency =
-      !overlay_bounds_valid || sgf_view_has_horizontal_position_inconsistency(scroll_window_position,
-                                                                              content_view_effective_position);
+      overlay_bounds_valid && sgf_view_has_horizontal_position_inconsistency(scroll_window_position,
+                                                                             content_view_effective_position);
 
     if (has_content_inconsistency) {
-      g_debug("GTK SCROLLEDWINDOW INCONSISTENCY: scroll-window-pos=%.1f content-view-effective-pos=%.1f",
+      g_debug("GTK SCROLLEDWINDOW BIG INCONSISTENCY: scroll-window-pos=%.1f content-view-effective-pos=%.1f",
               scroll_window_position,
               content_view_effective_position);
     }

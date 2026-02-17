@@ -41,3 +41,14 @@ positions), which made the bug signal noisy and not focused on the visual mismat
 
 The fix narrows the calculation and message to horizontal position mismatch only, and adds a test for the focused
 inconsistency predicate.
+
+## SGF inconsistency message fired for tiny drifts instead of large mismatches
+
+The SGF inconsistency diagnostic should highlight only substantial horizontal disagreement between the scrolled-window
+position and the content view position.
+
+The prior threshold treated sub-pixel and small pixel differences as inconsistencies, so the message triggered for minor
+layout drift instead of only severe displacement.
+
+The fix raises the inconsistency threshold to differences strictly above 30 pixels and updates the emitted message to a
+BIG inconsistency diagnostic.
