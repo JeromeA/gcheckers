@@ -16,7 +16,6 @@ void sgf_view_link_renderer_draw(SgfViewLinkRenderer *self,
                                  GtkWidget *lines_area,
                                  GHashTable *node_widgets,
                                  SgfTree *tree,
-                                 GArray *row_heights,
                                  cairo_t *cr,
                                  int width,
                                  int height);

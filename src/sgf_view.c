@@ -22,8 +22,6 @@ struct _SgfView {
   SgfViewLinkRenderer *link_renderer;
   SgfViewSelectionController *selection;
   SgfViewScroller *scroller;
-  GArray *column_widths;
-  GArray *row_heights;
 };
 
 G_DEFINE_TYPE(SgfView, sgf_view, G_TYPE_OBJECT)
@@ -36,12 +34,6 @@ static const int sgf_view_disc_size = 32;
 static const int sgf_view_disc_border = 1;
 static const int sgf_view_disc_spacing = 8;
 static const int sgf_view_disc_stride = sgf_view_disc_size + (sgf_view_disc_border * 2);
-
-gboolean sgf_view_has_horizontal_position_inconsistency(double scroll_window_position,
-                                                        double content_view_effective_position) {
-  const double delta = content_view_effective_position - scroll_window_position;
-  return (delta > 30.0) || (delta < -30.0);
-}
 
 static void sgf_view_rebuild(SgfView *self);
 
@@ -59,203 +51,9 @@ static void sgf_view_draw_tree(GtkDrawingArea * /*area*/,
                               self->lines_area,
                               self->node_widgets,
                               self->tree,
-                              self->row_heights,
                               cr,
                               width,
                               height);
-}
-
-static void sgf_view_log_layout_sync_state(SgfView *self) {
-  g_return_if_fail(SGF_IS_VIEW(self));
-
-  GtkWidget *root_widget = self->root;
-  if (!root_widget) {
-    g_debug("SGF view layout sync: missing root widget");
-    return;
-  }
-
-  GtkWidget *top_level = GTK_WIDGET(gtk_widget_get_root(root_widget));
-  int window_width = -1;
-  int window_height = -1;
-  graphene_rect_t root_bounds;
-  gboolean root_bounds_valid = FALSE;
-  if (top_level) {
-    window_width = gtk_widget_get_width(top_level);
-    window_height = gtk_widget_get_height(top_level);
-    root_bounds_valid = gtk_widget_compute_bounds(root_widget, top_level, &root_bounds);
-  }
-
-  int root_width = gtk_widget_get_width(root_widget);
-  int root_height = gtk_widget_get_height(root_widget);
-  g_debug("SGF view layout sync: window=%dx%d scrolled=%dx%d",
-          window_width,
-          window_height,
-          root_width,
-          root_height);
-
-  if (root_bounds_valid) {
-    g_debug("SGF view layout sync: scrolled bounds in window=%.1f,%.1f %.1fx%.1f",
-            root_bounds.origin.x,
-            root_bounds.origin.y,
-            root_bounds.size.width,
-            root_bounds.size.height);
-  } else {
-    g_debug("SGF view layout sync: unable to compute scrolled bounds in window");
-  }
-
-  GtkAdjustment *hadjustment = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(root_widget));
-  GtkAdjustment *vadjustment = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(root_widget));
-  GtkWidget *scrolled_child = gtk_scrolled_window_get_child(GTK_SCROLLED_WINDOW(root_widget));
-  GtkWidget *viewport = GTK_IS_VIEWPORT(scrolled_child) ? scrolled_child : NULL;
-
-  if (hadjustment && vadjustment) {
-    const double hadjustment_value = gtk_adjustment_get_value(hadjustment);
-    const double hadjustment_page = gtk_adjustment_get_page_size(hadjustment);
-    const double hadjustment_upper = gtk_adjustment_get_upper(hadjustment);
-    const double vadjustment_value = gtk_adjustment_get_value(vadjustment);
-    const double vadjustment_page = gtk_adjustment_get_page_size(vadjustment);
-    const double vadjustment_upper = gtk_adjustment_get_upper(vadjustment);
-
-    g_debug("SGF view layout sync: hadj value=%.1f page=%.1f upper=%.1f",
-            hadjustment_value,
-            hadjustment_page,
-            hadjustment_upper);
-    g_debug("SGF view layout sync: vadj value=%.1f page=%.1f upper=%.1f",
-            vadjustment_value,
-            vadjustment_page,
-            vadjustment_upper);
-
-  } else {
-    g_debug("SGF view layout sync: missing adjustments");
-  }
-
-  if (self->overlay) {
-    int overlay_width = gtk_widget_get_width(self->overlay);
-    int overlay_height = gtk_widget_get_height(self->overlay);
-    g_debug("SGF view layout sync: overlay size=%dx%d", overlay_width, overlay_height);
-  }
-
-  if (!self->selection) {
-    g_debug("SGF view layout sync: missing selection controller");
-    return;
-  }
-
-  const SgfNode *selected = sgf_view_selection_controller_get_selected(self->selection);
-  if (!selected) {
-    g_debug("SGF view layout sync: no selected node");
-    return;
-  }
-
-  if (!self->node_widgets) {
-    g_debug("SGF view layout sync: missing node widgets");
-    return;
-  }
-
-  GtkWidget *node_widget = g_hash_table_lookup(self->node_widgets, (gpointer)selected);
-  if (!node_widget) {
-    g_debug("SGF view layout sync: selected node has no widget");
-    return;
-  }
-
-  GtkWidget *parent = gtk_widget_get_parent(node_widget);
-  if (!parent || !GTK_IS_GRID(parent)) {
-    g_debug("SGF view layout sync: selected node is not attached to a grid");
-    return;
-  }
-
-  int column = -1;
-  int row = -1;
-  gtk_grid_query_child(GTK_GRID(parent), node_widget, &column, &row, NULL, NULL);
-  if (column < 0 || row < 0) {
-    g_debug("SGF view layout sync: unable to query selected node grid position");
-    return;
-  }
-
-  int width = gtk_widget_get_width(node_widget);
-  int height = gtk_widget_get_height(node_widget);
-  if (width <= 0) {
-    int min_width = 0;
-    int natural_width = 0;
-    gtk_widget_measure(node_widget,
-                       GTK_ORIENTATION_HORIZONTAL,
-                       -1,
-                       &min_width,
-                       &natural_width,
-                       NULL,
-                       NULL);
-    width = MAX(min_width, natural_width);
-  }
-  if (height <= 0) {
-    int min_height = 0;
-    int natural_height = 0;
-    gtk_widget_measure(node_widget,
-                       GTK_ORIENTATION_VERTICAL,
-                       -1,
-                       &min_height,
-                       &natural_height,
-                       NULL,
-                       NULL);
-    height = MAX(min_height, natural_height);
-  }
-
-  if (!self->column_widths || !self->row_heights) {
-    g_debug("SGF view layout sync: missing layout extents for geometry");
-    return;
-  }
-
-  if (self->column_widths->len <= (guint)column ||
-      self->row_heights->len <= (guint)row) {
-    g_debug("SGF view layout sync: selected node is outside layout extents");
-    return;
-  }
-
-  int column_spacing = gtk_grid_get_column_spacing(GTK_GRID(parent));
-  int row_spacing = gtk_grid_get_row_spacing(GTK_GRID(parent));
-  int margin_start = gtk_widget_get_margin_start(parent);
-  int margin_top = gtk_widget_get_margin_top(parent);
-
-  double x = margin_start + column * column_spacing;
-  for (int i = 0; i < column; ++i) {
-    x += g_array_index(self->column_widths, int, i);
-  }
-
-  double y = margin_top + row * row_spacing;
-  for (int i = 0; i < row; ++i) {
-    y += g_array_index(self->row_heights, int, i);
-  }
-
-  g_debug("SGF view layout sync: selected grid=%d,%d geometry=%.1f,%.1f %dx%d",
-          column,
-          row,
-          x,
-          y,
-          width,
-          height);
-
-  if (viewport && hadjustment && vadjustment) {
-    const double hadjustment_value = gtk_adjustment_get_value(hadjustment);
-
-    graphene_rect_t overlay_bounds_in_viewport;
-    gboolean overlay_bounds_valid = FALSE;
-    if (self->overlay) {
-      overlay_bounds_valid = gtk_widget_compute_bounds(self->overlay,
-                                                       viewport,
-                                                       &overlay_bounds_in_viewport);
-    }
-
-    const double scroll_window_position = -hadjustment_value;
-    const double content_view_effective_position =
-      overlay_bounds_valid ? overlay_bounds_in_viewport.origin.x : 0.0;
-    const gboolean has_content_inconsistency =
-      overlay_bounds_valid && sgf_view_has_horizontal_position_inconsistency(scroll_window_position,
-                                                                             content_view_effective_position);
-
-    if (has_content_inconsistency) {
-      g_debug("GTK SCROLLEDWINDOW BIG INCONSISTENCY: scroll-window-pos=%.1f content-view-effective-pos=%.1f",
-              scroll_window_position,
-              content_view_effective_position);
-    }
-  }
 }
 
 static void sgf_view_queue_scroll_to_selected(SgfView *self) {
@@ -301,7 +99,6 @@ static void sgf_view_on_layout_updated(SgfViewLayout *layout, gpointer user_data
   g_return_if_fail(SGF_IS_VIEW_LAYOUT(layout));
 
   sgf_view_sync_selection_from_model(self);
-  sgf_view_log_layout_sync_state(self);
   sgf_view_scroller_on_layout_changed(self->scroller,
                                       GTK_SCROLLED_WINDOW(self->root),
                                       self->node_widgets);
@@ -390,10 +187,6 @@ static void sgf_view_rebuild(SgfView *self) {
 
   g_clear_pointer(&self->node_widgets, g_hash_table_unref);
   self->node_widgets = g_hash_table_new(g_direct_hash, g_direct_equal);
-  g_clear_pointer(&self->column_widths, g_array_unref);
-  g_clear_pointer(&self->row_heights, g_array_unref);
-  self->column_widths = g_array_new(FALSE, TRUE, sizeof(int));
-  self->row_heights = g_array_new(FALSE, TRUE, sizeof(int));
 
   const SgfNode *selected = self->tree ? sgf_tree_get_current(self->tree) : NULL;
   sgf_view_layout_build(self->layout,
@@ -402,11 +195,7 @@ static void sgf_view_rebuild(SgfView *self) {
                         self->node_widgets,
                         self->disc_factory,
                         selected,
-                        sgf_view_disc_stride,
-                        self->column_widths,
-                        self->row_heights,
-                        NULL,
-                        NULL);
+                        sgf_view_disc_stride);
   gtk_widget_queue_draw(self->lines_area);
   sgf_view_queue_scroll_to_selected(self);
 }
@@ -429,8 +218,6 @@ static void sgf_view_dispose(GObject *object) {
     self->root = NULL;
   }
   g_clear_pointer(&self->node_widgets, g_hash_table_unref);
-  g_clear_pointer(&self->column_widths, g_array_unref);
-  g_clear_pointer(&self->row_heights, g_array_unref);
   g_clear_object(&self->disc_factory);
   g_clear_object(&self->layout);
   g_clear_object(&self->link_renderer);
@@ -589,13 +376,12 @@ void sgf_view_force_layout_sync(SgfView *self) {
     return;
   }
 
-  if (!self->node_widgets || !self->column_widths || !self->row_heights) {
+  if (!self->node_widgets) {
     g_debug("SGF view missing layout data for layout sync\n");
     return;
   }
 
   sgf_view_sync_selection_from_model(self);
-  sgf_view_log_layout_sync_state(self);
   sgf_view_scroller_on_layout_changed(self->scroller,
                                       GTK_SCROLLED_WINDOW(self->root),
                                       self->node_widgets);

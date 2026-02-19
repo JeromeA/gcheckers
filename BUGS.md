@@ -75,3 +75,14 @@ readiness handling.
 
 The fix removes derived geometry math and clamps only to `[bounds.origin.x, bounds.origin.x + bounds.size.width]`
 from `gtk_widget_compute_bounds`; when bounds are unavailable or x is negative, it schedules an idle retry.
+
+## SGF inconsistency diagnostics remained after scrolling behavior was fixed
+
+The SGF view should keep scrolling behavior simple and avoid stale diagnostic geometry calculations once the scroller
+logic is stable.
+
+The old SGF view still carried horizontal inconsistency predicate logic and detailed layout-sync diagnostic geometry
+code that depended on derived extents and extra bounds comparisons unrelated to the active scroll path.
+
+The fix removes those diagnostic helpers and the associated test coverage, leaving link rendering and scrolling based on
+disc bounds and selected-widget bounds respectively.

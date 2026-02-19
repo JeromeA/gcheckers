@@ -130,19 +130,6 @@ static GtkWidget *sgf_view_get_overlay(GtkWidget *root) {
   return NULL;
 }
 
-static void sgf_view_update_extent(GArray *extents, guint index, int value) {
-  g_return_if_fail(extents != NULL);
-
-  if (extents->len <= index) {
-    g_array_set_size(extents, index + 1);
-  }
-
-  int current = g_array_index(extents, int, index);
-  if (value > current) {
-    g_array_index(extents, int, index) = value;
-  }
-}
-
 static gboolean sgf_view_compute_widget_center(GtkWidget *lines_area, GtkWidget *widget, double *x, double *y) {
   g_return_val_if_fail(GTK_IS_WIDGET(lines_area), FALSE);
   g_return_val_if_fail(GTK_IS_WIDGET(widget), FALSE);
@@ -167,33 +154,6 @@ static gboolean sgf_view_compute_widget_center(GtkWidget *lines_area, GtkWidget 
 
   *x = translated_point.x;
   *y = translated_point.y;
-  return TRUE;
-}
-
-static gboolean sgf_view_compute_row_center(GtkWidget *grid, GArray *row_heights, int row, double *out_y) {
-  g_return_val_if_fail(GTK_IS_GRID(grid), FALSE);
-  g_return_val_if_fail(row_heights != NULL, FALSE);
-  g_return_val_if_fail(out_y != NULL, FALSE);
-
-  if (row_heights->len <= (guint)row) {
-    g_debug("Row heights too short for link test\n");
-    return FALSE;
-  }
-
-  int row_height = g_array_index(row_heights, int, row);
-  if (row_height <= 0) {
-    g_debug("Row height too small for link test\n");
-    return FALSE;
-  }
-
-  int row_spacing = gtk_grid_get_row_spacing(GTK_GRID(grid));
-  int margin_top = gtk_widget_get_margin_top(grid);
-  double origin_y = margin_top + row * row_spacing;
-  for (int i = 0; i < row; ++i) {
-    origin_y += g_array_index(row_heights, int, i);
-  }
-
-  *out_y = origin_y + row_height / 2.0;
   return TRUE;
 }
 
@@ -235,109 +195,11 @@ static gboolean sgf_view_compute_disc_bounds(GtkWidget *grid,
   g_return_val_if_fail(GTK_IS_WIDGET(disc), FALSE);
   g_return_val_if_fail(bounds != NULL, FALSE);
 
-  int column = -1;
-  int row = -1;
-  gtk_grid_query_child(GTK_GRID(grid), disc, &column, &row, NULL, NULL);
-  if (column < 0 || row < 0) {
-    g_debug("Unable to query SGF grid position for disc bounds\n");
+  if (!gtk_widget_compute_bounds(disc, grid, bounds)) {
+    g_debug("Unable to compute SGF disc bounds for visibility test\n");
     return FALSE;
   }
 
-  GArray *column_widths = g_array_new(FALSE, TRUE, sizeof(int));
-  GArray *row_heights = g_array_new(FALSE, TRUE, sizeof(int));
-  if (!column_widths || !row_heights) {
-    g_debug("Unable to allocate SGF extent arrays for visibility test\n");
-    if (column_widths) {
-      g_array_unref(column_widths);
-    }
-    if (row_heights) {
-      g_array_unref(row_heights);
-    }
-    return FALSE;
-  }
-
-  GtkWidget *child = gtk_widget_get_first_child(grid);
-  while (child) {
-    int child_column = -1;
-    int child_row = -1;
-    gtk_grid_query_child(GTK_GRID(grid), child, &child_column, &child_row, NULL, NULL);
-    if (child_column < 0 || child_row < 0) {
-      g_debug("Unable to query SGF grid position for extent calculation\n");
-      g_array_unref(column_widths);
-      g_array_unref(row_heights);
-      return FALSE;
-    }
-
-    int min_width = 0;
-    int natural_width = 0;
-    int min_height = 0;
-    int natural_height = 0;
-    gtk_widget_measure(child,
-                       GTK_ORIENTATION_HORIZONTAL,
-                       -1,
-                       &min_width,
-                       &natural_width,
-                       NULL,
-                       NULL);
-    gtk_widget_measure(child,
-                       GTK_ORIENTATION_VERTICAL,
-                       -1,
-                       &min_height,
-                       &natural_height,
-                       NULL,
-                       NULL);
-
-    int measured_width = MAX(natural_width, min_width);
-    int measured_height = MAX(natural_height, min_height);
-    int request_width = -1;
-    int request_height = -1;
-    gtk_widget_get_size_request(child, &request_width, &request_height);
-    if (request_width > 0) {
-      measured_width = MAX(measured_width, request_width);
-    }
-    if (request_height > 0) {
-      measured_height = MAX(measured_height, request_height);
-    }
-    if (measured_width <= 0 || measured_height <= 0) {
-      g_debug("Unable to determine SGF disc extent for visibility test\n");
-      g_array_unref(column_widths);
-      g_array_unref(row_heights);
-      return FALSE;
-    }
-
-    sgf_view_update_extent(column_widths, (guint)child_column, measured_width);
-    sgf_view_update_extent(row_heights, (guint)child_row, measured_height);
-    child = gtk_widget_get_next_sibling(child);
-  }
-
-  if (column_widths->len <= (guint)column || row_heights->len <= (guint)row) {
-    g_debug("SGF extent arrays shorter than expected for visibility test\n");
-    g_array_unref(column_widths);
-    g_array_unref(row_heights);
-    return FALSE;
-  }
-
-  int column_spacing = gtk_grid_get_column_spacing(GTK_GRID(grid));
-  int row_spacing = gtk_grid_get_row_spacing(GTK_GRID(grid));
-  int margin_start = gtk_widget_get_margin_start(grid);
-  int margin_top = gtk_widget_get_margin_top(grid);
-
-  double origin_x = margin_start + column * column_spacing;
-  for (int i = 0; i < column; ++i) {
-    origin_x += g_array_index(column_widths, int, i);
-  }
-
-  double origin_y = margin_top + row * row_spacing;
-  for (int i = 0; i < row; ++i) {
-    origin_y += g_array_index(row_heights, int, i);
-  }
-
-  bounds->origin.x = origin_x;
-  bounds->origin.y = origin_y;
-  bounds->size.width = g_array_index(column_widths, int, column);
-  bounds->size.height = g_array_index(row_heights, int, row);
-  g_array_unref(column_widths);
-  g_array_unref(row_heights);
   return TRUE;
 }
 
@@ -361,15 +223,6 @@ static void sgf_view_assert_disc_visible(GtkAdjustment *hadjustment,
 
   g_assert_true(h_visible);
   g_assert_true(v_visible);
-}
-
-static void test_sgf_view_horizontal_position_inconsistency_detection(void) {
-  g_assert_false(sgf_view_has_horizontal_position_inconsistency(-20.0, -20.0));
-  g_assert_false(sgf_view_has_horizontal_position_inconsistency(-20.0, -50.0));
-  g_assert_false(sgf_view_has_horizontal_position_inconsistency(-20.0, 10.0));
-
-  g_assert_true(sgf_view_has_horizontal_position_inconsistency(-20.0, -50.1));
-  g_assert_true(sgf_view_has_horizontal_position_inconsistency(-20.0, 10.1));
 }
 
 static void test_sgf_view_connectors(void) {
@@ -558,12 +411,6 @@ static void test_sgf_view_link_angles(void) {
     g_assert_cmpint(surface_width, >, 0);
     g_assert_cmpint(surface_height, >, 0);
 
-    g_autoptr(GArray) row_heights = g_array_new(FALSE, TRUE, sizeof(int));
-    g_array_set_size(row_heights, (guint)cases[i].child_row + 1);
-    for (guint row = 0; row < row_heights->len; ++row) {
-      g_array_index(row_heights, int, row) = disc_stride;
-    }
-
     SgfViewLinkRenderer *renderer = sgf_view_link_renderer_new();
     cairo_surface_t *surface =
       cairo_image_surface_create(CAIRO_FORMAT_ARGB32, surface_width, surface_height);
@@ -574,28 +421,15 @@ static void test_sgf_view_link_angles(void) {
                                 lines_area,
                                 node_widgets,
                                 tree,
-                                row_heights,
                                 cr,
                                 surface_width,
                                 surface_height);
     cairo_destroy(cr);
 
     int sample_radius = 1;
-    if (cases[i].child_row == cases[i].parent_row) {
-      int mid_x = (int)round((parent_x + child_x) / 2.0);
-      int mid_y = (int)round(parent_y);
-      g_assert_true(sgf_view_surface_has_ink(surface, mid_x, mid_y, sample_radius));
-    } else if (cases[i].child_row == cases[i].parent_row + 1) {
-      int mid_x = (int)round((parent_x + child_x) / 2.0);
-      int mid_y = (int)round((parent_y + child_y) / 2.0);
-      g_assert_true(sgf_view_surface_has_ink(surface, mid_x, mid_y, sample_radius));
-    } else {
-      double row_above_y = 0.0;
-      g_assert_true(sgf_view_compute_row_center(grid, row_heights, cases[i].child_row - 1, &row_above_y));
-      int mid_x = (int)round(parent_x);
-      int mid_y = (int)round((parent_y + row_above_y) / 2.0);
-      g_assert_true(sgf_view_surface_has_ink(surface, mid_x, mid_y, sample_radius));
-    }
+    int mid_x = (int)round((parent_x + child_x) / 2.0);
+    int mid_y = (int)round((parent_y + child_y) / 2.0);
+    g_assert_true(sgf_view_surface_has_ink(surface, mid_x, mid_y, sample_radius));
 
     cairo_surface_destroy(surface);
     g_clear_object(&renderer);
@@ -845,8 +679,6 @@ static void test_sgf_view_scroller_remembers_missing_node(void) {
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   if (!gtk_init_check()) {
-    g_test_add_func("/sgf-view/horizontal-position-inconsistency-detection",
-                    test_sgf_view_horizontal_position_inconsistency_detection);
     g_test_add_func("/sgf-view/connectors", test_sgf_view_connectors_skip);
     g_test_add_func("/sgf-view/root-disc", test_sgf_view_connectors_skip);
     g_test_add_func("/sgf-view/tree-box-measure-overlay", test_sgf_view_connectors_skip);
@@ -862,8 +694,6 @@ int main(int argc, char **argv) {
     return g_test_run();
   }
 
-  g_test_add_func("/sgf-view/horizontal-position-inconsistency-detection",
-                  test_sgf_view_horizontal_position_inconsistency_detection);
   g_test_add_func("/sgf-view/connectors", test_sgf_view_connectors);
   g_test_add_func("/sgf-view/root-disc", test_sgf_view_root_disc);
   g_test_add_func("/sgf-view/tree-box-measure-overlay", test_sgf_view_tree_box_is_measured_overlay);
