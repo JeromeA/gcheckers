@@ -92,18 +92,6 @@ static void sgf_view_sync_selection_from_model(SgfView *self) {
   sgf_view_queue_scroll_to_selected(self);
 }
 
-static void sgf_view_on_layout_updated(SgfViewLayout *layout, gpointer user_data) {
-  SgfView *self = SGF_VIEW(user_data);
-
-  g_return_if_fail(SGF_IS_VIEW(self));
-  g_return_if_fail(SGF_IS_VIEW_LAYOUT(layout));
-
-  sgf_view_sync_selection_from_model(self);
-  sgf_view_scroller_on_layout_changed(self->scroller,
-                                      GTK_SCROLLED_WINDOW(self->root),
-                                      self->node_widgets);
-}
-
 static void G_GNUC_UNUSED sgf_view_on_post_map(GtkWidget * /*widget*/, gpointer user_data) {
   SgfView *self = SGF_VIEW(user_data);
 
@@ -290,20 +278,6 @@ static void sgf_view_init(SgfView *self) {
                    "node-clicked",
                    G_CALLBACK(sgf_view_on_disc_node_clicked),
                    self);
-  g_signal_connect(self->layout, "layout-updated", G_CALLBACK(sgf_view_on_layout_updated), self);
-
-  // Extra signals, hoping to catch any changes that might affect layout or selection sync after the initial map and
-  // layout-updated signals.
-  g_signal_connect(gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(self->root)),
-                   "notify::upper",
-                   G_CALLBACK(sgf_view_on_post_notify),
-                   self);
-  g_signal_connect(gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(self->root)),
-                   "notify::upper",
-                   G_CALLBACK(sgf_view_on_post_notify),
-                   self);
-  g_signal_connect(self->root, "notify::width-request", G_CALLBACK(sgf_view_on_post_notify), self);
-  g_signal_connect(self->root, "notify::height-request", G_CALLBACK(sgf_view_on_post_notify), self);
 
   GtkEventController *key_controller = gtk_event_controller_key_new();
   gtk_event_controller_set_propagation_phase(key_controller, GTK_PHASE_CAPTURE);

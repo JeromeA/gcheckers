@@ -22,8 +22,7 @@ typedef struct {
 
 static void sgf_view_scroller_try_scroll_widget(SgfViewScroller *self,
                                                 GtkScrolledWindow *root,
-                                                GtkWidget *widget,
-                                                const char *reason);
+                                                GtkWidget *widget);
 
 static void sgf_view_scroller_idle_retry(gpointer user_data) {
   SgfViewScrollerIdleRetry *retry = user_data;
@@ -33,7 +32,7 @@ static void sgf_view_scroller_idle_retry(gpointer user_data) {
   g_return_if_fail(GTK_IS_SCROLLED_WINDOW(retry->root));
   g_return_if_fail(GTK_IS_WIDGET(retry->widget));
 
-  sgf_view_scroller_try_scroll_widget(retry->self, retry->root, retry->widget, "idle-retry");
+  sgf_view_scroller_try_scroll_widget(retry->self, retry->root, retry->widget);
 
   g_clear_object(&retry->widget);
   g_clear_object(&retry->root);
@@ -43,12 +42,10 @@ static void sgf_view_scroller_idle_retry(gpointer user_data) {
 
 static void sgf_view_scroller_schedule_idle_retry(SgfViewScroller *self,
                                                   GtkScrolledWindow *root,
-                                                  GtkWidget *widget,
-                                                  const char *reason) {
+                                                  GtkWidget *widget) {
   g_return_if_fail(SGF_IS_VIEW_SCROLLER(self));
   g_return_if_fail(GTK_IS_SCROLLED_WINDOW(root));
   g_return_if_fail(GTK_IS_WIDGET(widget));
-  g_return_if_fail(reason != NULL);
 
   SgfViewScrollerIdleRetry *retry = g_new0(SgfViewScrollerIdleRetry, 1);
   if (!retry) {
@@ -60,47 +57,50 @@ static void sgf_view_scroller_schedule_idle_retry(SgfViewScroller *self,
   retry->root = g_object_ref(root);
   retry->widget = g_object_ref(widget);
   g_idle_add_once(sgf_view_scroller_idle_retry, retry);
-  g_debug("SGF scroll attempt (%s): scheduled idle retry", reason);
+  g_debug("SGF scroll attempt: scheduled idle retry");
 }
 
 static void sgf_view_scroller_try_scroll_widget(SgfViewScroller *self,
                                                 GtkScrolledWindow *root,
-                                                GtkWidget *widget,
-                                                const char *reason) {
+                                                GtkWidget *widget) {
   g_return_if_fail(SGF_IS_VIEW_SCROLLER(self));
   g_return_if_fail(GTK_IS_SCROLLED_WINDOW(root));
   g_return_if_fail(GTK_IS_WIDGET(widget));
-  g_return_if_fail(reason != NULL);
 
   GtkWidget *content = gtk_widget_get_ancestor(widget, GTK_TYPE_OVERLAY);
   if (!content) {
-    g_debug("SGF scroll attempt (%s): selected widget has no overlay ancestor", reason);
+    g_debug("SGF scroll attempt: selected widget has no overlay ancestor");
     return;
   }
 
   graphene_rect_t bounds;
   if (!gtk_widget_compute_bounds(widget, content, &bounds)) {
-    g_debug("SGF scroll attempt (%s): selected bounds unavailable", reason);
-    sgf_view_scroller_schedule_idle_retry(self, root, widget, reason);
+    g_debug("SGF scroll attempt: selected bounds unavailable");
+    sgf_view_scroller_schedule_idle_retry(self, root, widget);
     return;
   }
+  g_debug("SGF scroll attempt: selected bounds [x=%.1f y=%.1f w=%.1f h=%.1f]",
+          bounds.origin.x,
+          bounds.origin.y,
+          bounds.size.width,
+          bounds.size.height);
 
   if (bounds.origin.x < 0.0) {
-    g_debug("SGF scroll attempt (%s): selected bounds x %.1f is negative", reason, bounds.origin.x);
-    sgf_view_scroller_schedule_idle_retry(self, root, widget, reason);
+    g_debug("SGF scroll attempt: selected bounds x %.1f is negative", bounds.origin.x);
+    sgf_view_scroller_schedule_idle_retry(self, root, widget);
     return;
   }
 
   GtkAdjustment *hadjustment = gtk_scrolled_window_get_hadjustment(root);
   if (!hadjustment) {
-    g_debug("SGF scroll attempt (%s): horizontal adjustment unavailable", reason);
+    g_debug("SGF scroll attempt: horizontal adjustment unavailable");
     return;
   }
 
   const double h_start = bounds.origin.x;
   const double h_end = bounds.origin.x + bounds.size.width;
   gtk_adjustment_clamp_page(hadjustment, h_start, h_end);
-  g_debug("SGF scroll attempt (%s): clamped horizontal page to [%.1f, %.1f]", reason, h_start, h_end);
+  g_debug("SGF scroll attempt: clamped horizontal page to [%.1f, %.1f]", h_start, h_end);
 }
 
 static void sgf_view_scroller_class_init(SgfViewScrollerClass */*klass*/) {}
@@ -129,7 +129,7 @@ void sgf_view_scroller_request_scroll(SgfViewScroller *self,
   }
 
   self->remembered_selected = selected;
-  sgf_view_scroller_try_scroll_widget(self, root, widget, "request");
+  sgf_view_scroller_try_scroll_widget(self, root, widget);
 }
 
 void sgf_view_scroller_on_layout_changed(SgfViewScroller *self,
@@ -149,5 +149,5 @@ void sgf_view_scroller_on_layout_changed(SgfViewScroller *self,
     return;
   }
 
-  sgf_view_scroller_try_scroll_widget(self, root, widget, "layout-changed");
+  sgf_view_scroller_try_scroll_widget(self, root, widget);
 }

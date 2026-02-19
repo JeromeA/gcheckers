@@ -151,7 +151,7 @@ Module: selection scroll helper.
 Role: on scroll requests remember the selected node and attempt scrolling immediately, and on layout updates retry
 scrolling for the remembered node. Scrolling uses only selected-widget horizontal bounds
 (`[bounds.origin.x, bounds.origin.x + bounds.size.width]`); if bounds are unavailable or x is negative before layout
-settles, it schedules an idle retry.
+settles, it schedules an idle retry. Debug logs emit the selected bounds immediately once geometry is available.
 Collaborates with: `SgfView`, SGF node widget mapping, and selection controller updates.
 
 ### SGF selection controller (`src/sgf_view_selection_controller.c`, `src/sgf_view_selection_controller.h`)
