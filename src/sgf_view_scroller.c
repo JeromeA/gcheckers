@@ -14,174 +14,93 @@ struct _SgfViewScroller {
 
 G_DEFINE_TYPE(SgfViewScroller, sgf_view_scroller, G_TYPE_OBJECT)
 
-static void sgf_view_scroller_try_scroll_node_if_present(GtkScrolledWindow *root,
-                                                         GHashTable *node_widgets,
-                                                         GArray *column_widths,
-                                                         GArray *row_heights,
-                                                         const SgfNode *selected,
-                                                         const char *reason) {
+typedef struct {
+  SgfViewScroller *self;
+  GtkScrolledWindow *root;
+  GtkWidget *widget;
+} SgfViewScrollerIdleRetry;
+
+static void sgf_view_scroller_try_scroll_widget(SgfViewScroller *self,
+                                                GtkScrolledWindow *root,
+                                                GtkWidget *widget,
+                                                const char *reason);
+
+static void sgf_view_scroller_idle_retry(gpointer user_data) {
+  SgfViewScrollerIdleRetry *retry = user_data;
+
+  g_return_if_fail(retry != NULL);
+  g_return_if_fail(SGF_IS_VIEW_SCROLLER(retry->self));
+  g_return_if_fail(GTK_IS_SCROLLED_WINDOW(retry->root));
+  g_return_if_fail(GTK_IS_WIDGET(retry->widget));
+
+  sgf_view_scroller_try_scroll_widget(retry->self, retry->root, retry->widget, "idle-retry");
+
+  g_clear_object(&retry->widget);
+  g_clear_object(&retry->root);
+  g_clear_object(&retry->self);
+  g_free(retry);
+}
+
+static void sgf_view_scroller_schedule_idle_retry(SgfViewScroller *self,
+                                                  GtkScrolledWindow *root,
+                                                  GtkWidget *widget,
+                                                  const char *reason) {
+  g_return_if_fail(SGF_IS_VIEW_SCROLLER(self));
   g_return_if_fail(GTK_IS_SCROLLED_WINDOW(root));
-  g_return_if_fail(node_widgets != NULL);
-  g_return_if_fail(column_widths != NULL);
-  g_return_if_fail(row_heights != NULL);
-  g_return_if_fail(selected != NULL);
+  g_return_if_fail(GTK_IS_WIDGET(widget));
   g_return_if_fail(reason != NULL);
 
-  GtkWidget *widget = g_hash_table_lookup(node_widgets, (gpointer)selected);
-  if (!widget) {
-    g_debug("Unable to find SGF widget for selected node");
+  SgfViewScrollerIdleRetry *retry = g_new0(SgfViewScrollerIdleRetry, 1);
+  if (!retry) {
+    g_debug("Unable to allocate SGF scroller idle retry state");
     return;
   }
 
-  GtkWidget *parent = gtk_widget_get_parent(widget);
-  if (!parent || !GTK_IS_GRID(parent)) {
-    g_debug("SGF scroll widget is not attached to a grid");
+  retry->self = g_object_ref(self);
+  retry->root = g_object_ref(root);
+  retry->widget = g_object_ref(widget);
+  g_idle_add_once(sgf_view_scroller_idle_retry, retry);
+  g_debug("SGF scroll attempt (%s): scheduled idle retry", reason);
+}
+
+static void sgf_view_scroller_try_scroll_widget(SgfViewScroller *self,
+                                                GtkScrolledWindow *root,
+                                                GtkWidget *widget,
+                                                const char *reason) {
+  g_return_if_fail(SGF_IS_VIEW_SCROLLER(self));
+  g_return_if_fail(GTK_IS_SCROLLED_WINDOW(root));
+  g_return_if_fail(GTK_IS_WIDGET(widget));
+  g_return_if_fail(reason != NULL);
+
+  GtkWidget *content = gtk_widget_get_ancestor(widget, GTK_TYPE_OVERLAY);
+  if (!content) {
+    g_debug("SGF scroll attempt (%s): selected widget has no overlay ancestor", reason);
     return;
   }
 
-  int column = -1;
-  int row = -1;
-  gtk_grid_query_child(GTK_GRID(parent), widget, &column, &row, NULL, NULL);
-  if (column < 0 || row < 0) {
-    g_debug("Unable to query SGF grid position for selected node");
+  graphene_rect_t bounds;
+  if (!gtk_widget_compute_bounds(widget, content, &bounds)) {
+    g_debug("SGF scroll attempt (%s): selected bounds unavailable", reason);
+    sgf_view_scroller_schedule_idle_retry(self, root, widget, reason);
     return;
   }
 
-  int width = gtk_widget_get_width(widget);
-  int height = gtk_widget_get_height(widget);
-  if (width <= 0) {
-    int min_width = 0;
-    int natural_width = 0;
-    gtk_widget_measure(widget, GTK_ORIENTATION_HORIZONTAL, -1, &min_width, &natural_width, NULL, NULL);
-    width = MAX(min_width, natural_width);
-  }
-  if (height <= 0) {
-    int min_height = 0;
-    int natural_height = 0;
-    gtk_widget_measure(widget, GTK_ORIENTATION_VERTICAL, -1, &min_height, &natural_height, NULL, NULL);
-    height = MAX(min_height, natural_height);
-  }
-  if (width <= 0 || height <= 0) {
-    g_debug("Selected node bounds are not measurable yet");
+  if (bounds.origin.x < 0.0) {
+    g_debug("SGF scroll attempt (%s): selected bounds x %.1f is negative", reason, bounds.origin.x);
+    sgf_view_scroller_schedule_idle_retry(self, root, widget, reason);
     return;
   }
-
-  if (column_widths->len <= (guint)column || row_heights->len <= (guint)row) {
-    g_debug("Selected node is outside available SGF layout extents");
-    return;
-  }
-
-  int column_spacing = gtk_grid_get_column_spacing(GTK_GRID(parent));
-  int row_spacing = gtk_grid_get_row_spacing(GTK_GRID(parent));
-  int margin_start = gtk_widget_get_margin_start(parent);
-  int margin_top = gtk_widget_get_margin_top(parent);
-
-  double x = margin_start + column * column_spacing;
-  for (int i = 0; i < column; ++i) {
-    x += g_array_index(column_widths, int, i);
-  }
-
-  double y = margin_top + row * row_spacing;
-  for (int i = 0; i < row; ++i) {
-    y += g_array_index(row_heights, int, i);
-  }
-
-  width = g_array_index(column_widths, int, column);
-  height = g_array_index(row_heights, int, row);
-
-  const double padding = (double)SGF_VIEW_SCROLLER_VISIBILITY_PADDING;
-  const double h_start = MAX(0.0, x - padding);
-  const double h_end = x + width + padding;
-  const double v_start = MAX(0.0, y - padding);
-  const double v_end = y + height + padding;
 
   GtkAdjustment *hadjustment = gtk_scrolled_window_get_hadjustment(root);
-  GtkAdjustment *vadjustment = gtk_scrolled_window_get_vadjustment(root);
-
-  g_debug("SGF scroll attempt (%s): selected=%p grid=%d,%d target h=[%.1f,%.1f] v=[%.1f,%.1f]",
-          reason,
-          selected,
-          column,
-          row,
-          h_start,
-          h_end,
-          v_start,
-          v_end);
-
-  double hadjustment_value_before = 0.0;
-  double hadjustment_page_before = 0.0;
-  double hadjustment_upper_before = 0.0;
-  double vadjustment_value_before = 0.0;
-  double vadjustment_page_before = 0.0;
-  double vadjustment_upper_before = 0.0;
-
-  if (hadjustment) {
-    hadjustment_value_before = gtk_adjustment_get_value(hadjustment);
-    hadjustment_page_before = gtk_adjustment_get_page_size(hadjustment);
-    hadjustment_upper_before = gtk_adjustment_get_upper(hadjustment);
-    g_debug("SGF scroll attempt (%s): hadj before value=%.1f page=%.1f upper=%.1f",
-            reason,
-            hadjustment_value_before,
-            hadjustment_page_before,
-            hadjustment_upper_before);
+  if (!hadjustment) {
+    g_debug("SGF scroll attempt (%s): horizontal adjustment unavailable", reason);
+    return;
   }
 
-  if (vadjustment) {
-    vadjustment_value_before = gtk_adjustment_get_value(vadjustment);
-    vadjustment_page_before = gtk_adjustment_get_page_size(vadjustment);
-    vadjustment_upper_before = gtk_adjustment_get_upper(vadjustment);
-    g_debug("SGF scroll attempt (%s): vadj before value=%.1f page=%.1f upper=%.1f",
-            reason,
-            vadjustment_value_before,
-            vadjustment_page_before,
-            vadjustment_upper_before);
-  }
-
-  if (hadjustment) {
-    gtk_adjustment_clamp_page(hadjustment, h_start, h_end);
-
-    const double hadjustment_value_after = gtk_adjustment_get_value(hadjustment);
-    const double hadjustment_page_after = gtk_adjustment_get_page_size(hadjustment);
-    const double hadjustment_upper_after = gtk_adjustment_get_upper(hadjustment);
-    const gboolean h_visible_before = (hadjustment_value_before <= h_start) &&
-                                      ((hadjustment_value_before + hadjustment_page_before) >= h_end);
-    const gboolean h_visible_after = (hadjustment_value_after <= h_start) &&
-                                     ((hadjustment_value_after + hadjustment_page_after) >= h_end);
-    g_debug("SGF scroll attempt (%s): hadj after value=%.1f page=%.1f upper=%.1f delta=%.1f visible-before=%s "
-            "visible-after=%s",
-            reason,
-            hadjustment_value_after,
-            hadjustment_page_after,
-            hadjustment_upper_after,
-            hadjustment_value_after - hadjustment_value_before,
-            h_visible_before ? "yes" : "no",
-            h_visible_after ? "yes" : "no");
-  }
-
-  if (vadjustment) {
-    gtk_adjustment_clamp_page(vadjustment, v_start, v_end);
-
-    const double vadjustment_value_after = gtk_adjustment_get_value(vadjustment);
-    const double vadjustment_page_after = gtk_adjustment_get_page_size(vadjustment);
-    const double vadjustment_upper_after = gtk_adjustment_get_upper(vadjustment);
-    const gboolean v_visible_before = (vadjustment_value_before <= v_start) &&
-                                      ((vadjustment_value_before + vadjustment_page_before) >= v_end);
-    const gboolean v_visible_after = (vadjustment_value_after <= v_start) &&
-                                     ((vadjustment_value_after + vadjustment_page_after) >= v_end);
-    g_debug("SGF scroll attempt (%s): vadj after value=%.1f page=%.1f upper=%.1f delta=%.1f visible-before=%s "
-            "visible-after=%s",
-            reason,
-            vadjustment_value_after,
-            vadjustment_page_after,
-            vadjustment_upper_after,
-            vadjustment_value_after - vadjustment_value_before,
-            v_visible_before ? "yes" : "no",
-            v_visible_after ? "yes" : "no");
-  }
-
-  if (!hadjustment && !vadjustment) {
-    g_debug("SGF scroll has no adjustments to clamp");
-  }
+  const double h_start = bounds.origin.x;
+  const double h_end = bounds.origin.x + bounds.size.width;
+  gtk_adjustment_clamp_page(hadjustment, h_start, h_end);
+  g_debug("SGF scroll attempt (%s): clamped horizontal page to [%.1f, %.1f]", reason, h_start, h_end);
 }
 
 static void sgf_view_scroller_class_init(SgfViewScrollerClass */*klass*/) {}
@@ -197,45 +116,38 @@ SgfViewScroller *sgf_view_scroller_new(void) {
 void sgf_view_scroller_request_scroll(SgfViewScroller *self,
                                       GtkScrolledWindow *root,
                                       GHashTable *node_widgets,
-                                      GArray *column_widths,
-                                      GArray *row_heights,
                                       const SgfNode *selected) {
   g_return_if_fail(SGF_IS_VIEW_SCROLLER(self));
   g_return_if_fail(GTK_IS_SCROLLED_WINDOW(root));
   g_return_if_fail(node_widgets != NULL);
-  g_return_if_fail(column_widths != NULL);
-  g_return_if_fail(row_heights != NULL);
   g_return_if_fail(selected != NULL);
 
-  /* Remember selection and attempt an immediate scroll. */
+  GtkWidget *widget = g_hash_table_lookup(node_widgets, (gpointer)selected);
+  if (!widget) {
+    g_debug("Unable to find SGF widget for selected node");
+    return;
+  }
+
   self->remembered_selected = selected;
-  sgf_view_scroller_try_scroll_node_if_present(root,
-                                               node_widgets,
-                                               column_widths,
-                                               row_heights,
-                                               selected,
-                                               "request");
+  sgf_view_scroller_try_scroll_widget(self, root, widget, "request");
 }
 
 void sgf_view_scroller_on_layout_changed(SgfViewScroller *self,
                                          GtkScrolledWindow *root,
-                                         GHashTable *node_widgets,
-                                         GArray *column_widths,
-                                         GArray *row_heights) {
+                                         GHashTable *node_widgets) {
   g_return_if_fail(SGF_IS_VIEW_SCROLLER(self));
   g_return_if_fail(GTK_IS_SCROLLED_WINDOW(root));
   g_return_if_fail(node_widgets != NULL);
-  g_return_if_fail(column_widths != NULL);
-  g_return_if_fail(row_heights != NULL);
 
   if (!self->remembered_selected) {
     return;
   }
 
-  sgf_view_scroller_try_scroll_node_if_present(root,
-                                               node_widgets,
-                                               column_widths,
-                                               row_heights,
-                                               self->remembered_selected,
-                                               "layout-changed");
+  GtkWidget *widget = g_hash_table_lookup(node_widgets, (gpointer)self->remembered_selected);
+  if (!widget) {
+    g_debug("Unable to find SGF widget for remembered selected node");
+    return;
+  }
+
+  sgf_view_scroller_try_scroll_widget(self, root, widget, "layout-changed");
 }

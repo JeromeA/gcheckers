@@ -269,8 +269,6 @@ static void sgf_view_queue_scroll_to_selected(SgfView *self) {
   sgf_view_scroller_request_scroll(self->scroller,
                                    GTK_SCROLLED_WINDOW(self->root),
                                    self->node_widgets,
-                                   self->column_widths,
-                                   self->row_heights,
                                    selected);
 }
 
@@ -306,9 +304,7 @@ static void sgf_view_on_layout_updated(SgfViewLayout *layout, gpointer user_data
   sgf_view_log_layout_sync_state(self);
   sgf_view_scroller_on_layout_changed(self->scroller,
                                       GTK_SCROLLED_WINDOW(self->root),
-                                      self->node_widgets,
-                                      self->column_widths,
-                                      self->row_heights);
+                                      self->node_widgets);
 }
 
 static void G_GNUC_UNUSED sgf_view_on_post_map(GtkWidget * /*widget*/, gpointer user_data) {
@@ -602,7 +598,5 @@ void sgf_view_force_layout_sync(SgfView *self) {
   sgf_view_log_layout_sync_state(self);
   sgf_view_scroller_on_layout_changed(self->scroller,
                                       GTK_SCROLLED_WINDOW(self->root),
-                                      self->node_widgets,
-                                      self->column_widths,
-                                      self->row_heights);
+                                      self->node_widgets);
 }

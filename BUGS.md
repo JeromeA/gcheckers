@@ -63,3 +63,15 @@ Those explicit size requests could drift from GTK's measured layout and created 
 
 The fix removes all SGF overlay stack size-request logic and sets `gtk_overlay_set_measure_overlay(..., tree_box, TRUE)`
 so the tree grid alone drives overlay measurement.
+
+## SGF scroller geometry math made retries and clamp targets brittle
+
+The SGF scroller should clamp horizontal scrolling directly to the selected widget bounds and retry only when those
+bounds are not ready yet.
+
+The old implementation rebuilt target rectangles from grid row/column metadata, margins, spacings, and padding, and
+also clamped vertical adjustments. That extra geometry path could diverge from actual widget bounds and complicated
+readiness handling.
+
+The fix removes derived geometry math and clamps only to `[bounds.origin.x, bounds.origin.x + bounds.size.width]`
+from `gtk_widget_compute_bounds`; when bounds are unavailable or x is negative, it schedules an idle retry.

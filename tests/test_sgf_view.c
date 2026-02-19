@@ -348,21 +348,16 @@ static void sgf_view_assert_disc_visible(GtkAdjustment *hadjustment,
   g_return_if_fail(vadjustment != NULL);
   g_return_if_fail(bounds != NULL);
 
-  const double padding = (double)SGF_VIEW_SCROLLER_VISIBILITY_PADDING;
   const double visible_start_x = gtk_adjustment_get_value(hadjustment);
   const double visible_end_x = visible_start_x + gtk_adjustment_get_page_size(hadjustment);
   const double visible_start_y = gtk_adjustment_get_value(vadjustment);
   const double visible_end_y = visible_start_y + gtk_adjustment_get_page_size(vadjustment);
-  const double padded_start_x = MAX(0.0, bounds->origin.x - padding);
-  const double padded_end_x = bounds->origin.x + bounds->size.width + padding;
-  const double padded_start_y = MAX(0.0, bounds->origin.y - padding);
-  const double padded_end_y = bounds->origin.y + bounds->size.height + padding;
   const double epsilon = 1.0;
 
-  gboolean h_visible = visible_start_x <= padded_start_x + epsilon &&
-                       visible_end_x + epsilon >= padded_end_x;
-  gboolean v_visible = visible_start_y <= padded_start_y + epsilon &&
-                       visible_end_y + epsilon >= padded_end_y;
+  gboolean h_visible = visible_start_x <= bounds->origin.x + epsilon &&
+                       visible_end_x + epsilon >= (bounds->origin.x + bounds->size.width);
+  gboolean v_visible = visible_start_y <= bounds->origin.y + epsilon &&
+                       visible_end_y + epsilon >= (bounds->origin.y + bounds->size.height);
 
   g_assert_true(h_visible);
   g_assert_true(v_visible);
@@ -811,27 +806,12 @@ static void test_sgf_view_scroller_remembers_missing_node(void) {
   sgf_view_wait(40);
 
   GHashTable *node_widgets = g_hash_table_new(g_direct_hash, g_direct_equal);
-  GArray *column_widths = g_array_sized_new(FALSE, TRUE, sizeof(int), 8);
-  GArray *row_heights = g_array_sized_new(FALSE, TRUE, sizeof(int), 2);
   g_assert_nonnull(node_widgets);
-  g_assert_nonnull(column_widths);
-  g_assert_nonnull(row_heights);
-
-  g_array_set_size(column_widths, 8);
-  g_array_set_size(row_heights, 2);
-  for (guint i = 0; i < column_widths->len; ++i) {
-    g_array_index(column_widths, int, i) = 80;
-  }
-  for (guint i = 0; i < row_heights->len; ++i) {
-    g_array_index(row_heights, int, i) = 80;
-  }
 
   const SgfNode *selected = (const SgfNode *)0x1234;
   sgf_view_scroller_request_scroll(scroller,
                                    GTK_SCROLLED_WINDOW(root),
                                    node_widgets,
-                                   column_widths,
-                                   row_heights,
                                    selected);
 
   GtkAdjustment *hadjustment = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(root));
@@ -851,16 +831,12 @@ static void test_sgf_view_scroller_remembers_missing_node(void) {
 
   sgf_view_scroller_on_layout_changed(scroller,
                                       GTK_SCROLLED_WINDOW(root),
-                                      node_widgets,
-                                      column_widths,
-                                      row_heights);
+                                      node_widgets);
   sgf_view_wait(80);
 
   g_assert_cmpfloat(gtk_adjustment_get_value(hadjustment), >, 0.0);
-  g_assert_cmpfloat(gtk_adjustment_get_value(vadjustment), >, 0.0);
+  g_assert_cmpfloat(gtk_adjustment_get_value(vadjustment), ==, 0.0);
 
-  g_array_unref(column_widths);
-  g_array_unref(row_heights);
   g_hash_table_unref(node_widgets);
   gtk_window_destroy(GTK_WINDOW(window));
   g_clear_object(&scroller);
