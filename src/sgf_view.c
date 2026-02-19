@@ -266,7 +266,6 @@ static void sgf_view_queue_scroll_to_selected(SgfView *self) {
     g_debug("SGF view has no selection to scroll");
     return;
   }
-  /* SGF scroller has only two triggers: selection requests and layout-updated retries. */
   sgf_view_scroller_request_scroll(self->scroller,
                                    GTK_SCROLLED_WINDOW(self->root),
                                    self->node_widgets,

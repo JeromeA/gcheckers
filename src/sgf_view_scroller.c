@@ -1,33 +1,10 @@
 #include "sgf_view_scroller.h"
 
 /*
- * SGF scroller design contract
- *
- * This module intentionally implements a very small state machine so SGF scrolling remains predictable as the
- * layout evolves.
- *
- * Principles:
- * 1) Two triggers only:
- *    - request path: remember the selected node, then try to scroll immediately;
- *    - layout-changed path: retry only the remembered node.
- * 2) No asynchronous retry machinery in this module:
- *    - no tick callbacks;
- *    - no notify callbacks;
- *    - no timers, idles, or polling loops.
- * 3) Missing or not-yet-measurable geometry is treated as a no-op for this attempt.
- *
- * Why this exists:
- * - Tick/frame timing is not a reliable signal that GTK geometry is valid for the SGF grid.
- * - Deferring with extra callbacks created brittle behavior and a hidden third control path.
- * - Retrying on SGF layout's explicit layout-updated signal keeps retry timing tied to the real layout lifecycle.
- *
- * What should not be done in the future:
- * - Do not reintroduce deferred retries (ticks, idles, notify hooks, timers) in scroller code.
- * - Do not add extra trigger paths beyond request-scroll and layout-changed.
- * - Do not split retry state across multiple fields; remembered_selected is the only intentional scroller state.
- *
- * If geometry cannot be measured yet, leave the attempt as a no-op and let the next layout-updated signal trigger the
- * retry path.
+ * SGF scroller behavior:
+ * - A scroll request remembers the selected node and tries to scroll immediately.
+ * - A layout change retries scrolling for the remembered node.
+ * - Missing or not-yet-measurable geometry is treated as a no-op for that attempt.
  */
 
 struct _SgfViewScroller {
@@ -230,10 +207,7 @@ void sgf_view_scroller_request_scroll(SgfViewScroller *self,
   g_return_if_fail(row_heights != NULL);
   g_return_if_fail(selected != NULL);
 
-  /* Two-path scroller truth table:
-   * request remembers selection and attempts now;
-   * layout updates retry remembered only.
-   */
+  /* Remember selection and attempt an immediate scroll. */
   self->remembered_selected = selected;
   sgf_view_scroller_try_scroll_node_if_present(root,
                                                node_widgets,
