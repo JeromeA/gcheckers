@@ -446,6 +446,19 @@ static void test_sgf_view_root_disc(void) {
   g_clear_object(&tree);
 }
 
+static void test_sgf_view_tree_box_is_measured_overlay(void) {
+  SgfView *view = sgf_view_new();
+  GtkWidget *root = sgf_view_get_widget(view);
+  GtkWidget *overlay = sgf_view_get_overlay(root);
+  g_assert_nonnull(overlay);
+
+  GtkWidget *tree_grid = sgf_view_find_grid(overlay);
+  g_assert_nonnull(tree_grid);
+  g_assert_true(gtk_overlay_get_measure_overlay(GTK_OVERLAY(overlay), tree_grid));
+
+  g_clear_object(&view);
+}
+
 static void test_sgf_view_branch_columns(void) {
   SgfTree *tree = sgf_tree_new();
   g_autoptr(GBytes) move_1_payload = g_bytes_new_static("m1", sizeof("m1") - 1);
@@ -860,6 +873,7 @@ int main(int argc, char **argv) {
                     test_sgf_view_horizontal_position_inconsistency_detection);
     g_test_add_func("/sgf-view/connectors", test_sgf_view_connectors_skip);
     g_test_add_func("/sgf-view/root-disc", test_sgf_view_connectors_skip);
+    g_test_add_func("/sgf-view/tree-box-measure-overlay", test_sgf_view_connectors_skip);
     g_test_add_func("/sgf-view/branches", test_sgf_view_connectors_skip);
     g_test_add_func("/sgf-view/link-angles", test_sgf_view_connectors_skip);
     g_test_add_func("/sgf-view/navigation", test_sgf_view_connectors_skip);
@@ -876,6 +890,7 @@ int main(int argc, char **argv) {
                   test_sgf_view_horizontal_position_inconsistency_detection);
   g_test_add_func("/sgf-view/connectors", test_sgf_view_connectors);
   g_test_add_func("/sgf-view/root-disc", test_sgf_view_root_disc);
+  g_test_add_func("/sgf-view/tree-box-measure-overlay", test_sgf_view_tree_box_is_measured_overlay);
   g_test_add_func("/sgf-view/branches", test_sgf_view_branch_columns);
   g_test_add_func("/sgf-view/link-angles", test_sgf_view_link_angles);
   g_test_add_func("/sgf-view/navigation", test_sgf_view_navigation);

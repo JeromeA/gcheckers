@@ -52,3 +52,14 @@ layout drift instead of only severe displacement.
 
 The fix raises the inconsistency threshold to differences strictly above 30 pixels and updates the emitted message to a
 BIG inconsistency diagnostic.
+
+## SGF overlay sizing drifted because overlay and drawing area were manually resized
+
+The SGF view should derive overlay content size from the measured SGF node grid, with no manual size requests on the
+overlay stack.
+
+The old implementation manually set size requests on the overlay, drawing area, and viewport using computed extents.
+Those explicit size requests could drift from GTK's measured layout and created extra resize paths.
+
+The fix removes all SGF overlay stack size-request logic and sets `gtk_overlay_set_measure_overlay(..., tree_box, TRUE)`
+so the tree grid alone drives overlay measurement.

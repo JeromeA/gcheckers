@@ -24,8 +24,6 @@ struct _SgfView {
   SgfViewScroller *scroller;
   GArray *column_widths;
   GArray *row_heights;
-  int content_width;
-  int content_height;
 };
 
 G_DEFINE_TYPE(SgfView, sgf_view, G_TYPE_OBJECT)
@@ -46,121 +44,6 @@ gboolean sgf_view_has_horizontal_position_inconsistency(double scroll_window_pos
 }
 
 static void sgf_view_rebuild(SgfView *self);
-
-static int sgf_view_sum_extents(GArray *extents, guint count, int fallback) {
-  g_return_val_if_fail(fallback > 0, 0);
-
-  if (!extents || extents->len < count) {
-    if (extents && extents->len < count) {
-      g_debug("SGF extents array shorter than expected\n");
-    }
-    return (int)count * fallback;
-  }
-
-  int total = 0;
-  for (guint i = 0; i < count; ++i) {
-    total += g_array_index(extents, int, i);
-  }
-  return total;
-}
-
-static void sgf_view_update_content_size(SgfView *self,
-                                         gboolean has_nodes,
-                                         guint max_row,
-                                         guint max_column) {
-  g_return_if_fail(SGF_IS_VIEW(self));
-
-  self->content_width = 0;
-  self->content_height = 0;
-
-  if (!self->root || !self->tree_box || !self->overlay || !self->lines_area) {
-    return;
-  }
-
-  GtkWidget *scrolled_child =
-    gtk_scrolled_window_get_child(GTK_SCROLLED_WINDOW(self->root));
-  if (!scrolled_child) {
-    g_debug("SGF view scrolled window has no child for sizing");
-    return;
-  }
-  GtkWidget *viewport = GTK_IS_VIEWPORT(scrolled_child) ? scrolled_child : NULL;
-
-  if (!has_nodes) {
-    gtk_widget_set_size_request(self->overlay, 0, 0);
-    gtk_widget_set_size_request(self->lines_area, 0, 0);
-    if (viewport) {
-      gtk_widget_set_size_request(viewport, 0, 0);
-      gtk_widget_queue_resize(viewport);
-    }
-    gtk_widget_queue_resize(self->overlay);
-    gtk_widget_queue_resize(self->lines_area);
-    gtk_widget_queue_resize(self->root);
-    return;
-  }
-
-  guint rows = max_row + 1;
-  guint columns = max_column + 1;
-
-  int margin_start = gtk_widget_get_margin_start(self->tree_box);
-  int margin_end = gtk_widget_get_margin_end(self->tree_box);
-  int margin_top = gtk_widget_get_margin_top(self->tree_box);
-  int margin_bottom = gtk_widget_get_margin_bottom(self->tree_box);
-
-  int columns_width = sgf_view_sum_extents(self->column_widths, columns, sgf_view_disc_stride);
-  int width = margin_start + margin_end + columns_width;
-  if (columns > 1) {
-    width += (int)(columns - 1) * sgf_view_disc_spacing;
-  }
-
-  int rows_height = sgf_view_sum_extents(self->row_heights, rows, sgf_view_disc_stride);
-  int height = margin_top + margin_bottom + rows_height;
-  if (rows > 1) {
-    height += (int)(rows - 1) * sgf_view_disc_spacing;
-  }
-
-  int measured_width = 0;
-  int measured_height = 0;
-  gtk_widget_measure(self->tree_box,
-                     GTK_ORIENTATION_HORIZONTAL,
-                     -1,
-                     &measured_width,
-                     NULL,
-                     NULL,
-                     NULL);
-  gtk_widget_measure(self->tree_box,
-                     GTK_ORIENTATION_VERTICAL,
-                     -1,
-                     &measured_height,
-                     NULL,
-                     NULL,
-                     NULL);
-
-  width = MAX(width, measured_width);
-  height = MAX(height, measured_height);
-
-  self->content_width = width;
-  self->content_height = height;
-
-  g_debug("SGF view content sizing: expected=%dx%d measured=%dx%d rows=%u columns=%u",
-          width,
-          height,
-          measured_width,
-          measured_height,
-          rows,
-          columns);
-
-  gtk_widget_set_size_request(self->overlay, width, height);
-  gtk_widget_set_size_request(self->lines_area, width, height);
-  if (viewport) {
-    gtk_widget_set_size_request(viewport, width, height);
-    gtk_widget_queue_resize(viewport);
-    g_debug("SGF view viewport size request: %dx%d", width, height);
-  }
-  g_debug("SGF view overlay size request: %dx%d", width, height);
-  gtk_widget_queue_resize(self->overlay);
-  gtk_widget_queue_resize(self->lines_area);
-  gtk_widget_queue_resize(self->root);
-}
 
 static void sgf_view_draw_tree(GtkDrawingArea * /*area*/,
                                cairo_t *cr,
@@ -249,11 +132,7 @@ static void sgf_view_log_layout_sync_state(SgfView *self) {
   if (self->overlay) {
     int overlay_width = gtk_widget_get_width(self->overlay);
     int overlay_height = gtk_widget_get_height(self->overlay);
-    g_debug("SGF view layout sync: overlay size=%dx%d content=%dx%d",
-            overlay_width,
-            overlay_height,
-            self->content_width,
-            self->content_height);
+    g_debug("SGF view layout sync: overlay size=%dx%d", overlay_width, overlay_height);
   }
 
   if (!self->selection) {
@@ -522,14 +401,6 @@ static void sgf_view_rebuild(SgfView *self) {
   self->row_heights = g_array_new(FALSE, TRUE, sizeof(int));
 
   const SgfNode *selected = self->tree ? sgf_tree_get_current(self->tree) : NULL;
-  gboolean has_nodes = FALSE;
-  if (self->tree) {
-    const SgfNode *root = sgf_tree_get_root(self->tree);
-    has_nodes = root != NULL;
-  }
-
-  guint max_row = 0;
-  guint max_column = 0;
   sgf_view_layout_build(self->layout,
                         GTK_GRID(self->tree_box),
                         self->tree,
@@ -539,9 +410,8 @@ static void sgf_view_rebuild(SgfView *self) {
                         sgf_view_disc_stride,
                         self->column_widths,
                         self->row_heights,
-                        &max_row,
-                        &max_column);
-  sgf_view_update_content_size(self, has_nodes, max_row, max_column);
+                        NULL,
+                        NULL);
   gtk_widget_queue_draw(self->lines_area);
   sgf_view_queue_scroll_to_selected(self);
 }
@@ -626,14 +496,13 @@ static void sgf_view_init(SgfView *self) {
   gtk_widget_set_halign(self->tree_box, GTK_ALIGN_START);
   gtk_widget_set_valign(self->tree_box, GTK_ALIGN_START);
   gtk_overlay_add_overlay(GTK_OVERLAY(self->overlay), self->tree_box);
+  gtk_overlay_set_measure_overlay(GTK_OVERLAY(self->overlay), self->tree_box, TRUE);
 
   self->disc_factory = sgf_view_disc_factory_new();
   self->layout = sgf_view_layout_new();
   self->link_renderer = sgf_view_link_renderer_new();
   self->selection = sgf_view_selection_controller_new();
   self->scroller = sgf_view_scroller_new();
-  self->content_width = 0;
-  self->content_height = 0;
 
   g_signal_connect(self->disc_factory,
                    "node-clicked",
