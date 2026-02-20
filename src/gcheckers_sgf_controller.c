@@ -255,10 +255,9 @@ void gcheckers_sgf_controller_set_model(GCheckersSgfController *self, GCheckersM
 
   gcheckers_sgf_controller_disconnect_model(self);
   self->model = g_object_ref(model);
-  gcheckers_sgf_controller_reset(self);
 }
 
-void gcheckers_sgf_controller_reset(GCheckersSgfController *self) {
+void gcheckers_sgf_controller_new_game(GCheckersSgfController *self) {
   g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self));
 
   sgf_tree_reset(self->sgf_tree);

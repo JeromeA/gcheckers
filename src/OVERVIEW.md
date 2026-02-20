@@ -16,6 +16,8 @@ Class: `GCheckersSgfController` (`GObject`).
 Role: SGF timeline authority and synchronization point between SGF current-node transitions and game state updates.
 Move application is SGF-first: validate model move, append under SGF current, set SGF current, then project that
 transition to the model (`single move` if parent->child, otherwise reset+replay from root).
+`gcheckers_sgf_controller_set_model()` only binds/disconnects model references; timeline clearing is explicit via
+`gcheckers_sgf_controller_new_game()`.
 Owns: `SgfTree` and `SgfView`, plus replay guard (`is_replaying`).
 Collaborates with: `GCheckersModel` for move validation/application, `BoardView` to clear selection on replay/reset,
 and `GCheckersWindow` via the `analysis-requested` signal.

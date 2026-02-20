@@ -163,7 +163,7 @@ static void test_gcheckers_sgf_controller_replay_branching(void) {
   g_clear_object(&board_view);
 }
 
-static void test_gcheckers_sgf_controller_reset_clears_tree(void) {
+static void test_gcheckers_sgf_controller_new_game_clears_tree(void) {
   BoardView *board_view = board_view_new();
   GCheckersModel *model = gcheckers_model_new();
   GCheckersSgfController *controller = gcheckers_sgf_controller_new(board_view);
@@ -172,7 +172,7 @@ static void test_gcheckers_sgf_controller_reset_clears_tree(void) {
   CheckersMove move;
   g_assert_true(apply_first_move(controller, model, &move));
 
-  gcheckers_sgf_controller_reset(controller);
+  gcheckers_sgf_controller_new_game(controller);
 
   SgfTree *tree = gcheckers_sgf_controller_get_tree(controller);
   const SgfNode *root = sgf_tree_get_root(tree);
@@ -191,12 +191,12 @@ int main(int argc, char **argv) {
   if (!gtk_init_check()) {
     g_test_add_func("/sgf-controller/appends-payload", test_gcheckers_sgf_controller_skip);
     g_test_add_func("/sgf-controller/replay-branching", test_gcheckers_sgf_controller_skip);
-    g_test_add_func("/sgf-controller/reset", test_gcheckers_sgf_controller_skip);
+    g_test_add_func("/sgf-controller/new-game", test_gcheckers_sgf_controller_skip);
     return g_test_run();
   }
 
   g_test_add_func("/sgf-controller/appends-payload", test_gcheckers_sgf_controller_appends_payload);
   g_test_add_func("/sgf-controller/replay-branching", test_gcheckers_sgf_controller_replay_branching);
-  g_test_add_func("/sgf-controller/reset", test_gcheckers_sgf_controller_reset_clears_tree);
+  g_test_add_func("/sgf-controller/new-game", test_gcheckers_sgf_controller_new_game_clears_tree);
   return g_test_run();
 }

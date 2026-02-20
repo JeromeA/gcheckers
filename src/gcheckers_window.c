@@ -176,7 +176,7 @@ static void gcheckers_window_on_reset_clicked(GtkButton * /*button*/, gpointer u
 
   gcheckers_model_reset(self->model);
   board_view_clear_selection(self->board_view);
-  gcheckers_sgf_controller_reset(self->sgf_controller);
+  gcheckers_sgf_controller_new_game(self->sgf_controller);
 }
 
 static void gcheckers_window_on_sgf_reselect_clicked(GtkButton * /*button*/, gpointer user_data) {
