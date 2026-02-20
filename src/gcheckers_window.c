@@ -190,7 +190,7 @@ static gpointer gcheckers_window_analysis_thread(gpointer user_data) {
   GCheckersWindowAnalysisTask *task = user_data;
   g_return_val_if_fail(task != NULL, NULL);
 
-  guint depth = 1;
+  guint depth = 8;
   while (!gcheckers_window_should_cancel_analysis(task)) {
     CheckersScoredMoveList moves = {0};
     gboolean ok = checkers_ai_alpha_beta_analyze_moves_cancellable(&task->game,
@@ -412,7 +412,6 @@ static void gcheckers_window_on_analyze_toggled(GtkToggleButton *button, gpointe
   }
 
   gcheckers_window_stop_analysis(self);
-  gcheckers_window_set_analysis_text(self, "Analysis stopped.");
 }
 
 static void gcheckers_window_on_force_move_requested(PlayerControlsPanel * /*panel*/, gpointer user_data) {
