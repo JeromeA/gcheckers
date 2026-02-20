@@ -26,6 +26,11 @@ typedef enum {
   PLAYER_COMPUTER_LEVEL_3_DEPTH_8 = 2
 } PlayerComputerLevel;
 
+typedef enum {
+  PLAYER_RULESET_AMERICAN = 0,
+  PLAYER_RULESET_INTERNATIONAL = 1
+} PlayerRuleset;
+
 PlayerControlsPanel *player_controls_panel_new(void);
 GtkDropDown *player_controls_panel_get_drop_down(PlayerControlsPanel *self, CheckersColor color);
 GtkWidget *player_controls_panel_get_force_move_button(PlayerControlsPanel *self);
@@ -38,6 +43,8 @@ gboolean player_controls_panel_is_user_control(PlayerControlsPanel *self, Checke
 void player_controls_panel_set_computer_level(PlayerControlsPanel *self, PlayerComputerLevel level);
 PlayerComputerLevel player_controls_panel_get_computer_level(PlayerControlsPanel *self);
 gboolean player_controls_panel_computer_level_depth(PlayerComputerLevel level, guint *out_depth);
+void player_controls_panel_set_ruleset(PlayerControlsPanel *self, PlayerRuleset ruleset);
+PlayerRuleset player_controls_panel_get_ruleset(PlayerControlsPanel *self);
 void player_controls_panel_set_force_move_sensitive(PlayerControlsPanel *self, gboolean sensitive);
 
 G_END_DECLS

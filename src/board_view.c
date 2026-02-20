@@ -189,6 +189,11 @@ void board_view_update(BoardView *self) {
     return;
   }
 
+  if (board_grid_get_board_size(self->board_grid) != state->board.board_size) {
+    board_selection_controller_clear(self->selection_controller);
+    board_view_build_board(self);
+  }
+
   board_view_update_board(self, state);
   board_view_update_sensitivity(self, state);
 

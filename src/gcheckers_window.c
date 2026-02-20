@@ -19,6 +19,7 @@ struct _GCheckersWindow {
   BoardView *board_view;
   PlayerControlsPanel *controls_panel;
   GCheckersSgfController *sgf_controller;
+  PlayerRuleset applied_ruleset;
   gulong state_handler_id;
   guint auto_move_source_id;
   guint paned_tick_id;
@@ -122,6 +123,32 @@ static gboolean gcheckers_window_choose_computer_move(GCheckersWindow *self, Che
   }
 
   return gcheckers_sgf_controller_step_ai_move(self->sgf_controller, depth, move);
+}
+
+static CheckersRules gcheckers_window_rules_from_selection(PlayerRuleset ruleset) {
+  if (ruleset == PLAYER_RULESET_INTERNATIONAL) {
+    return game_rules_international_draughts();
+  }
+
+  return game_rules_american_checkers();
+}
+
+static void gcheckers_window_apply_ruleset_selection(GCheckersWindow *self) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
+  g_return_if_fail(self->controls_panel != NULL);
+  g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self->sgf_controller));
+
+  PlayerRuleset selected = player_controls_panel_get_ruleset(self->controls_panel);
+  if (selected == self->applied_ruleset) {
+    return;
+  }
+
+  CheckersRules rules = gcheckers_window_rules_from_selection(selected);
+  gcheckers_model_set_rules(self->model, &rules);
+  board_view_clear_selection(self->board_view);
+  gcheckers_sgf_controller_new_game(self->sgf_controller);
+  self->applied_ruleset = selected;
 }
 
 static void gcheckers_window_set_analysis_text(GCheckersWindow *self, const char *text) {
@@ -382,6 +409,7 @@ static void gcheckers_window_on_control_changed(PlayerControlsPanel * /*panel*/,
 
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
 
+  gcheckers_window_apply_ruleset_selection(self);
   gcheckers_window_update_control_state(self);
 }
 
@@ -461,6 +489,7 @@ static void gcheckers_window_set_model(GCheckersWindow *self, GCheckersModel *mo
                                             self);
   board_view_set_model(self->board_view, self->model);
   gcheckers_sgf_controller_set_model(self->sgf_controller, self->model);
+  gcheckers_window_apply_ruleset_selection(self);
   gcheckers_window_update_status(self);
   gcheckers_window_update_control_state(self);
 }
@@ -525,6 +554,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   self->auto_move_source_id = 0;
   self->paned_tick_id = 0;
   self->analysis_generation = 1;
+  self->applied_ruleset = PLAYER_RULESET_AMERICAN;
 
   gtk_window_set_title(GTK_WINDOW(self), "gcheckers");
   gtk_window_set_default_size(GTK_WINDOW(self), 600, 700);

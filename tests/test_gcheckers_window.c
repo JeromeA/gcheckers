@@ -312,6 +312,31 @@ static void test_gcheckers_window_analysis_toggle(void) {
   g_clear_object(&app);
 }
 
+static void test_gcheckers_window_ruleset_switch_resets_model(void) {
+  GtkApplication *app = test_gcheckers_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersWindow *window = gcheckers_window_new(app, model);
+
+  const GameState *state = gcheckers_model_peek_state(model);
+  g_assert_nonnull(state);
+  g_assert_cmpuint(state->board.board_size, ==, 8);
+
+  PlayerControlsPanel *panel = gcheckers_window_get_controls_panel(window);
+  g_assert_nonnull(panel);
+  player_controls_panel_set_ruleset(panel, PLAYER_RULESET_INTERNATIONAL);
+  test_gcheckers_window_drain_main_context(16);
+
+  state = gcheckers_model_peek_state(model);
+  g_assert_nonnull(state);
+  g_assert_cmpuint(state->board.board_size, ==, 10);
+  g_assert_cmpuint(state->turn, ==, CHECKERS_COLOR_WHITE);
+  g_assert_cmpuint(state->winner, ==, CHECKERS_WINNER_NONE);
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   if (!gtk_init_check()) {
@@ -323,6 +348,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/gcheckers-window/sgf-navigation-resets-controls", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/force-move-user-turn", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/analysis-toggle", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/ruleset-switch", test_gcheckers_window_skip);
     return g_test_run();
   }
 
@@ -354,5 +380,6 @@ int main(int argc, char **argv) {
   g_test_add_func("/gcheckers-window/force-move-user-turn",
                   test_gcheckers_window_force_move_works_on_user_turn);
   g_test_add_func("/gcheckers-window/analysis-toggle", test_gcheckers_window_analysis_toggle);
+  g_test_add_func("/gcheckers-window/ruleset-switch", test_gcheckers_window_ruleset_switch_resets_model);
   return g_test_run();
 }

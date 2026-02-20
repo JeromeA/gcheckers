@@ -72,6 +72,20 @@ void gcheckers_model_reset(GCheckersModel *self) {
   gcheckers_model_emit_state_changed(self);
 }
 
+void gcheckers_model_set_rules(GCheckersModel *self, const CheckersRules *rules) {
+  g_return_if_fail(GCHECKERS_IS_MODEL(self));
+  g_return_if_fail(rules != NULL);
+
+  if (memcmp(&self->game.rules, rules, sizeof(*rules)) == 0) {
+    return;
+  }
+
+  game_destroy(&self->game);
+  game_init_with_rules(&self->game, rules);
+  self->has_last_move = FALSE;
+  gcheckers_model_emit_state_changed(self);
+}
+
 static void gcheckers_model_set_winner_for_no_moves(GCheckersModel *self) {
   g_return_if_fail(GCHECKERS_IS_MODEL(self));
 

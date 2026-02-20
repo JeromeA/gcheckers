@@ -13,6 +13,7 @@ struct _PlayerControlsPanel {
   GtkDropDown *white_control;
   GtkDropDown *black_control;
   GtkDropDown *computer_level_control;
+  GtkDropDown *ruleset_control;
   GtkWidget *force_move_button;
 };
 
@@ -25,6 +26,10 @@ static gboolean player_controls_panel_mode_valid(PlayerControlMode mode) {
 static gboolean player_controls_panel_computer_level_valid(PlayerComputerLevel level) {
   return level == PLAYER_COMPUTER_LEVEL_1_RANDOM || level == PLAYER_COMPUTER_LEVEL_2_DEPTH_4
       || level == PLAYER_COMPUTER_LEVEL_3_DEPTH_8;
+}
+
+static gboolean player_controls_panel_ruleset_valid(PlayerRuleset ruleset) {
+  return ruleset == PLAYER_RULESET_AMERICAN || ruleset == PLAYER_RULESET_INTERNATIONAL;
 }
 
 static GtkDropDown *player_controls_panel_get_control(PlayerControlsPanel *self, CheckersColor color) {
@@ -64,6 +69,7 @@ static void player_controls_panel_dispose(GObject *object) {
   self->white_control = NULL;
   self->black_control = NULL;
   self->computer_level_control = NULL;
+  self->ruleset_control = NULL;
   self->force_move_button = NULL;
 
   G_OBJECT_CLASS(player_controls_panel_parent_class)->dispose(object);
@@ -117,20 +123,28 @@ static void player_controls_panel_init(PlayerControlsPanel *self) {
   gtk_widget_set_halign(computer_level_label, GTK_ALIGN_START);
   gtk_grid_attach(GTK_GRID(controls_grid), computer_level_label, 0, 2, 1, 1);
 
+  GtkWidget *ruleset_label = gtk_label_new("Ruleset");
+  gtk_widget_set_halign(ruleset_label, GTK_ALIGN_START);
+  gtk_grid_attach(GTK_GRID(controls_grid), ruleset_label, 0, 3, 1, 1);
+
   static const char *control_options[] = {"User", "Computer", NULL};
   static const char *computer_level_options[] = {"Comp Level 1 (random)",
                                                  "Comp Level 2 (depth 4)",
                                                  "Comp Level 3 (depth 8)",
                                                  NULL};
+  static const char *ruleset_options[] = {"American (8x8)", "International (10x10)", NULL};
   self->white_control = GTK_DROP_DOWN(gtk_drop_down_new_from_strings(control_options));
   self->black_control = GTK_DROP_DOWN(gtk_drop_down_new_from_strings(control_options));
   self->computer_level_control = GTK_DROP_DOWN(gtk_drop_down_new_from_strings(computer_level_options));
+  self->ruleset_control = GTK_DROP_DOWN(gtk_drop_down_new_from_strings(ruleset_options));
   player_controls_panel_set_mode(self, CHECKERS_COLOR_WHITE, PLAYER_CONTROL_MODE_USER);
   player_controls_panel_set_mode(self, CHECKERS_COLOR_BLACK, PLAYER_CONTROL_MODE_USER);
   player_controls_panel_set_computer_level(self, PLAYER_COMPUTER_LEVEL_1_RANDOM);
+  player_controls_panel_set_ruleset(self, PLAYER_RULESET_AMERICAN);
   gtk_grid_attach(GTK_GRID(controls_grid), GTK_WIDGET(self->white_control), 1, 0, 1, 1);
   gtk_grid_attach(GTK_GRID(controls_grid), GTK_WIDGET(self->black_control), 1, 1, 1, 1);
   gtk_grid_attach(GTK_GRID(controls_grid), GTK_WIDGET(self->computer_level_control), 1, 2, 1, 1);
+  gtk_grid_attach(GTK_GRID(controls_grid), GTK_WIDGET(self->ruleset_control), 1, 3, 1, 1);
 
   g_signal_connect(self->white_control,
                    "notify::selected",
@@ -141,6 +155,10 @@ static void player_controls_panel_init(PlayerControlsPanel *self) {
                    G_CALLBACK(player_controls_panel_on_selected_notify),
                    self);
   g_signal_connect(self->computer_level_control,
+                   "notify::selected",
+                   G_CALLBACK(player_controls_panel_on_selected_notify),
+                   self);
+  g_signal_connect(self->ruleset_control,
                    "notify::selected",
                    G_CALLBACK(player_controls_panel_on_selected_notify),
                    self);
@@ -246,6 +264,23 @@ gboolean player_controls_panel_computer_level_depth(PlayerComputerLevel level, g
       g_debug("Unexpected computer level value");
       return FALSE;
   }
+}
+
+void player_controls_panel_set_ruleset(PlayerControlsPanel *self, PlayerRuleset ruleset) {
+  g_return_if_fail(PLAYER_IS_CONTROLS_PANEL(self));
+  g_return_if_fail(player_controls_panel_ruleset_valid(ruleset));
+  g_return_if_fail(self->ruleset_control != NULL);
+
+  gtk_drop_down_set_selected(self->ruleset_control, (guint)ruleset);
+}
+
+PlayerRuleset player_controls_panel_get_ruleset(PlayerControlsPanel *self) {
+  g_return_val_if_fail(PLAYER_IS_CONTROLS_PANEL(self), PLAYER_RULESET_AMERICAN);
+  g_return_val_if_fail(self->ruleset_control != NULL, PLAYER_RULESET_AMERICAN);
+
+  guint selected = gtk_drop_down_get_selected(self->ruleset_control);
+  g_return_val_if_fail(selected <= PLAYER_RULESET_INTERNATIONAL, PLAYER_RULESET_AMERICAN);
+  return (PlayerRuleset)selected;
 }
 
 void player_controls_panel_set_force_move_sensitive(PlayerControlsPanel *self, gboolean sensitive) {

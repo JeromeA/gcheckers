@@ -13,6 +13,7 @@ G_DECLARE_FINAL_TYPE(GCheckersModel, gcheckers_model, GCHECKERS, MODEL, GObject)
 
 GCheckersModel *gcheckers_model_new(void);
 void gcheckers_model_reset(GCheckersModel *self);
+void gcheckers_model_set_rules(GCheckersModel *self, const CheckersRules *rules);
 MoveList gcheckers_model_list_moves(GCheckersModel *self);
 gboolean gcheckers_model_apply_move(GCheckersModel *self, const CheckersMove *move);
 gboolean gcheckers_model_step_random_move(GCheckersModel *self, CheckersMove *out_move);

@@ -135,6 +135,24 @@ static void test_model_analyze_moves_text(void) {
   g_object_unref(model);
 }
 
+static void test_model_set_rules(void) {
+  GCheckersModel *model = gcheckers_model_new();
+  const GameState *state = gcheckers_model_peek_state(model);
+  assert(state != NULL);
+  assert(state->board.board_size == 8);
+
+  CheckersRules international = game_rules_international_draughts();
+  gcheckers_model_set_rules(model, &international);
+
+  state = gcheckers_model_peek_state(model);
+  assert(state != NULL);
+  assert(state->board.board_size == 10);
+  assert(state->turn == CHECKERS_COLOR_WHITE);
+  assert(state->winner == CHECKERS_WINNER_NONE);
+
+  g_object_unref(model);
+}
+
 static void test_model_peek_last_move(void) {
   GCheckersModel *model = gcheckers_model_new();
 
@@ -190,6 +208,7 @@ int main(void) {
   test_model_choose_random_move_returns_legal_move();
   test_model_choose_best_move_returns_legal_move();
   test_model_analyze_moves_text();
+  test_model_set_rules();
   test_model_peek_last_move();
   test_model_reset_clears_last_move();
 
