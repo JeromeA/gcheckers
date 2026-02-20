@@ -2,7 +2,6 @@
 
 struct _SgfViewSelectionController {
   GObject parent_instance;
-  const SgfNode *selected;
 };
 
 G_DEFINE_TYPE(SgfViewSelectionController, sgf_view_selection_controller, G_TYPE_OBJECT)
@@ -75,41 +74,26 @@ static void sgf_view_selection_controller_class_init(SgfViewSelectionControllerC
 }
 
 static void sgf_view_selection_controller_init(SgfViewSelectionController *self) {
-  self->selected = NULL;
+  (void)self;
 }
 
 SgfViewSelectionController *sgf_view_selection_controller_new(void) {
   return g_object_new(SGF_TYPE_VIEW_SELECTION_CONTROLLER, NULL);
 }
 
-const SgfNode *sgf_view_selection_controller_get_selected(SgfViewSelectionController *self) {
-  g_return_val_if_fail(SGF_IS_VIEW_SELECTION_CONTROLLER(self), NULL);
-
-  return self->selected;
-}
-
-void sgf_view_selection_controller_set_selected_raw(SgfViewSelectionController *self, const SgfNode *node) {
-  g_return_if_fail(SGF_IS_VIEW_SELECTION_CONTROLLER(self));
-
-  self->selected = node;
-}
-
-gboolean sgf_view_selection_controller_set_selected(SgfViewSelectionController *self,
-                                                    const SgfNode *node,
-                                                    GHashTable *node_widgets) {
+gboolean sgf_view_selection_controller_apply_style(SgfViewSelectionController *self,
+                                                   const SgfNode *previous,
+                                                   const SgfNode *current,
+                                                   GHashTable *node_widgets) {
   g_return_val_if_fail(SGF_IS_VIEW_SELECTION_CONTROLLER(self), FALSE);
 
-  const SgfNode *previous = self->selected;
-  self->selected = node;
-
-  return sgf_view_selection_controller_update_style(previous, node, node_widgets);
+  return sgf_view_selection_controller_update_style(previous, current, node_widgets);
 }
 
 const SgfNode *sgf_view_selection_controller_next(SgfViewSelectionController *self,
+                                                  const SgfNode *current,
                                                   SgfViewNavigation navigation) {
   g_return_val_if_fail(SGF_IS_VIEW_SELECTION_CONTROLLER(self), NULL);
-
-  const SgfNode *current = self->selected;
   if (!current) {
     return NULL;
   }

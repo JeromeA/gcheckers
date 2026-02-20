@@ -22,6 +22,7 @@ struct _SgfView {
   SgfViewLinkRenderer *link_renderer;
   SgfViewSelectionController *selection;
   SgfViewScroller *scroller;
+  const SgfNode *styled_selected;
 };
 
 G_DEFINE_TYPE(SgfView, sgf_view, G_TYPE_OBJECT)
@@ -36,6 +37,7 @@ static const int sgf_view_disc_spacing = 8;
 static const int sgf_view_disc_stride = sgf_view_disc_size + (sgf_view_disc_border * 2);
 
 static void sgf_view_rebuild(SgfView *self);
+static gboolean sgf_view_apply_local_selection(SgfView *self, const SgfNode *node);
 
 static void sgf_view_log_node_widgets_entry(gpointer key, gpointer value, gpointer user_data) {
   const SgfNode *node = key;
@@ -94,7 +96,7 @@ static void sgf_view_draw_tree(GtkDrawingArea * /*area*/,
 static void sgf_view_queue_scroll_to_selected(SgfView *self) {
   g_return_if_fail(SGF_IS_VIEW(self));
 
-  const SgfNode *selected = sgf_view_selection_controller_get_selected(self->selection);
+  const SgfNode *selected = self->tree ? sgf_tree_get_current(self->tree) : NULL;
   if (!selected) {
     g_debug("SGF view has no selection to scroll");
     return;
@@ -109,20 +111,18 @@ static void sgf_view_sync_selection_from_model(SgfView *self) {
   g_return_if_fail(SGF_IS_VIEW(self));
 
   if (!self->tree) {
-    sgf_view_selection_controller_set_selected_raw(self->selection, NULL);
+    self->styled_selected = NULL;
     return;
   }
 
   const SgfNode *selected = sgf_tree_get_current(self->tree);
-  if (!selected) {
-    sgf_view_selection_controller_set_selected_raw(self->selection, NULL);
-    return;
-  }
-
-  if (!sgf_view_selection_controller_set_selected(self->selection, selected, self->node_widgets)) {
+  if (!sgf_view_selection_controller_apply_style(self->selection,
+                                                 self->styled_selected,
+                                                 selected,
+                                                 self->node_widgets)) {
     g_debug("SGF view selection not ready to sync from model");
-    return;
   }
+  self->styled_selected = selected;
 
   sgf_view_queue_scroll_to_selected(self);
 }
@@ -151,15 +151,44 @@ static void G_GNUC_UNUSED sgf_view_on_post_notify(GObject *object,
 static void sgf_view_select_node(SgfView *self, const SgfNode *node, gboolean emit_signal) {
   g_return_if_fail(SGF_IS_VIEW(self));
 
-  if (!sgf_view_selection_controller_set_selected(self->selection, node, self->node_widgets)) {
-    g_debug("SGF view selection not ready to update selection");
-    return;
+  gboolean has_node_selected_handler = g_signal_has_handler_pending(self,
+                                                                    sgf_view_signals[SIGNAL_NODE_SELECTED],
+                                                                    0,
+                                                                    TRUE);
+
+  if (!emit_signal || !has_node_selected_handler) {
+    if (!sgf_view_apply_local_selection(self, node)) {
+      g_debug("SGF view selection not ready to update selection");
+      return;
+    }
   }
-  sgf_view_queue_scroll_to_selected(self);
 
   if (emit_signal && node) {
     g_signal_emit(self, sgf_view_signals[SIGNAL_NODE_SELECTED], 0, node);
   }
+}
+
+static gboolean sgf_view_apply_local_selection(SgfView *self, const SgfNode *node) {
+  g_return_val_if_fail(SGF_IS_VIEW(self), FALSE);
+
+  if (!self->tree) {
+    g_debug("SGF view has no tree to update selection");
+    return FALSE;
+  }
+  if (node && !sgf_tree_set_current(self->tree, node)) {
+    g_debug("SGF view selection target is not part of the current tree");
+    return FALSE;
+  }
+
+  if (!sgf_view_selection_controller_apply_style(self->selection,
+                                                 self->styled_selected,
+                                                 node,
+                                                 self->node_widgets)) {
+    return FALSE;
+  }
+  self->styled_selected = node;
+  sgf_view_queue_scroll_to_selected(self);
+  return TRUE;
 }
 
 static void sgf_view_on_disc_node_clicked(SgfViewDiscFactory *factory,
@@ -170,8 +199,7 @@ static void sgf_view_on_disc_node_clicked(SgfViewDiscFactory *factory,
   g_return_if_fail(SGF_IS_VIEW(self));
   g_return_if_fail(SGF_IS_VIEW_DISC_FACTORY(factory));
 
-  sgf_view_set_selected(self, node);
-  g_signal_emit(self, sgf_view_signals[SIGNAL_NODE_SELECTED], 0, node);
+  sgf_view_select_node(self, node, TRUE);
 }
 
 static gboolean sgf_view_on_key_pressed(GtkEventControllerKey * /*controller*/,
@@ -196,7 +224,8 @@ static gboolean sgf_view_on_key_pressed(GtkEventControllerKey * /*controller*/,
     return GDK_EVENT_PROPAGATE;
   }
 
-  const SgfNode *target = sgf_view_selection_controller_next(self->selection, navigation);
+  const SgfNode *current = self->tree ? sgf_tree_get_current(self->tree) : NULL;
+  const SgfNode *target = sgf_view_selection_controller_next(self->selection, current, navigation);
   if (!target) {
     return GDK_EVENT_STOP;
   }
@@ -219,6 +248,7 @@ static void sgf_view_rebuild(SgfView *self) {
                         self->disc_factory,
                         selected,
                         sgf_view_disc_stride);
+  self->styled_selected = selected;
   sgf_view_log_node_widgets_snapshot(self->node_widgets);
   gtk_widget_queue_draw(self->lines_area);
   sgf_view_queue_scroll_to_selected(self);
@@ -309,6 +339,7 @@ static void sgf_view_init(SgfView *self) {
   self->link_renderer = sgf_view_link_renderer_new();
   self->selection = sgf_view_selection_controller_new();
   self->scroller = sgf_view_scroller_new();
+  self->styled_selected = NULL;
 
   g_signal_connect(self->disc_factory,
                    "node-clicked",
@@ -335,17 +366,13 @@ void sgf_view_set_tree(SgfView *self, SgfTree *tree) {
   g_return_if_fail(SGF_IS_VIEW(self));
 
   if (self->tree == tree) {
-    sgf_view_selection_controller_set_selected_raw(self->selection,
-                                                   tree ? sgf_tree_get_current(tree) : NULL);
     sgf_view_rebuild(self);
     return;
   }
 
   g_clear_object(&self->tree);
   self->tree = tree ? g_object_ref(tree) : NULL;
-
-  sgf_view_selection_controller_set_selected_raw(self->selection,
-                                                 tree ? sgf_tree_get_current(tree) : NULL);
+  self->styled_selected = tree ? sgf_tree_get_current(tree) : NULL;
 
   sgf_view_rebuild(self);
 }
@@ -359,13 +386,18 @@ void sgf_view_set_selected(SgfView *self, const SgfNode *node) {
 const SgfNode *sgf_view_get_selected(SgfView *self) {
   g_return_val_if_fail(SGF_IS_VIEW(self), NULL);
 
-  return sgf_view_selection_controller_get_selected(self->selection);
+  if (!self->tree) {
+    return NULL;
+  }
+
+  return sgf_tree_get_current(self->tree);
 }
 
 gboolean sgf_view_navigate(SgfView *self, SgfViewNavigation navigation) {
   g_return_val_if_fail(SGF_IS_VIEW(self), FALSE);
 
-  const SgfNode *target = sgf_view_selection_controller_next(self->selection, navigation);
+  const SgfNode *current = self->tree ? sgf_tree_get_current(self->tree) : NULL;
+  const SgfNode *target = sgf_view_selection_controller_next(self->selection, current, navigation);
   if (!target) {
     return FALSE;
   }

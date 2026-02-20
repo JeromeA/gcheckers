@@ -17,12 +17,12 @@ G_DECLARE_FINAL_TYPE(SgfViewSelectionController,
                      GObject)
 
 SgfViewSelectionController *sgf_view_selection_controller_new(void);
-const SgfNode *sgf_view_selection_controller_get_selected(SgfViewSelectionController *self);
-void sgf_view_selection_controller_set_selected_raw(SgfViewSelectionController *self, const SgfNode *node);
-gboolean sgf_view_selection_controller_set_selected(SgfViewSelectionController *self,
-                                                    const SgfNode *node,
-                                                    GHashTable *node_widgets);
+gboolean sgf_view_selection_controller_apply_style(SgfViewSelectionController *self,
+                                                   const SgfNode *previous,
+                                                   const SgfNode *current,
+                                                   GHashTable *node_widgets);
 const SgfNode *sgf_view_selection_controller_next(SgfViewSelectionController *self,
+                                                  const SgfNode *current,
                                                   SgfViewNavigation navigation);
 
 G_END_DECLS
