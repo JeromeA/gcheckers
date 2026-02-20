@@ -75,6 +75,7 @@ void gcheckers_window_present_new_game_dialog(GCheckersWindow *self) {
   static const char *level_options[] = {"Comp Level 1 (random)",
                                         "Comp Level 2 (depth 4)",
                                         "Comp Level 3 (depth 8)",
+                                        "Comp Level 4 (depth 12)",
                                         NULL};
 
   GtkWidget *ruleset_label = gtk_label_new("Ruleset");
@@ -91,7 +92,7 @@ void gcheckers_window_present_new_game_dialog(GCheckersWindow *self) {
   GtkDropDown *black_player = GTK_DROP_DOWN(gtk_drop_down_new_from_strings(player_options));
   GtkDropDown *computer_level = GTK_DROP_DOWN(gtk_drop_down_new_from_strings(level_options));
 
-  gtk_drop_down_set_selected(ruleset, player_controls_panel_get_ruleset(controls_panel));
+  gtk_drop_down_set_selected(ruleset, gcheckers_window_get_ruleset(self));
   gtk_drop_down_set_selected(white_player, player_controls_panel_get_mode(controls_panel, CHECKERS_COLOR_WHITE));
   gtk_drop_down_set_selected(black_player, player_controls_panel_get_mode(controls_panel, CHECKERS_COLOR_BLACK));
   gtk_drop_down_set_selected(computer_level, player_controls_panel_get_computer_level(controls_panel));

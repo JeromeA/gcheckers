@@ -5,8 +5,9 @@ Class: `GCheckersWindow` (`GtkApplicationWindow`).
 Role: composition root that binds model state to UI updates, keeps board input available, and coordinates auto-play.
 Owns: `GCheckersModel`, `BoardView`, `PlayerControlsPanel`, and `GCheckersSgfController`.
 Collaborates with: `gcheckers_style_init()` for CSS, model signals for refresh, and SGF analysis signals to reset
-player dropdowns. Computer turns are routed by control mode: random (level 1), alpha-beta depth 4 (level 2), or
-alpha-beta depth 8 (level 3). Uses a three-pane layout: board (left), move controls and SGF (middle), and analysis
+player dropdowns. Computer turns are routed by control mode: random (level 1), alpha-beta depth 4 (level 2),
+alpha-beta depth 8 (level 3), or alpha-beta depth 12 (level 4). Uses a three-pane layout: board (left), move
+controls and SGF (middle), and analysis
 (right) with an `Analyze` toggle that runs iterative deepening in a worker thread and publishes best-to-worst move
 scores after each completed depth until toggled off.
 Lifecycle: sinks and retains an owned `PlayerControlsPanel` reference, removes it from its current `GtkBox` parent
@@ -26,13 +27,13 @@ and `GCheckersWindow` via the `analysis-requested` signal.
 
 ## `PlayerControlsPanel` (`src/player_controls_panel.c`)
 Class: `PlayerControlsPanel` (`GtkBox`).
-Role: encapsulates player mode dropdowns and force-move UI.
+Role: encapsulates player mode controls.
 Modes: white/black each select `User` or `Computer`, plus a shared `Computer level` selector (`random`, `depth 4`,
-`depth 8`) and a shared `Ruleset` selector (`American`, `International`).
+`depth 8`, `depth 12`).
 Defaults: both white and black controls start as `User`.
-Signals: `control-changed` and `force-move-requested` for window-level coordination.
+Signals: `control-changed` for window-level coordination.
 Collaborates with: `GCheckersWindow` (signal handlers and `player_controls_panel_set_all_user()`) and GTK widgets
-(`GtkDropDown`, `GtkButton`).
+(`GtkDropDown`).
 
 ## `gcheckers_style_init()` (`src/gcheckers_style.c`)
 Module: `gcheckers_style_init()` (style helper, not a class).
@@ -96,8 +97,8 @@ Collaborates with: `game.c` and `game_print.c`.
 ## GTK application entry (`src/gcheckers.c`, `src/gcheckers_application.c`, `src/gcheckers_application.h`)
 Class: `GCheckersApplication` (`GtkApplication`).
 Role: define the GTK application type and activation flow that creates the main window and model, installs app actions
-(`app.new-game`, `app.quit`), and publishes a menubar model (`File` -> `New game...`, `Quit`) with keyboard
-accelerators.
+(`app.new-game`, `app.force-move`, `app.quit`), and publishes a menubar model (`File` -> `New game...`, `Quit`;
+`Game` -> `Force move`) with keyboard accelerators.
 Collaborates with: `GCheckersWindow` for UI wiring and new-game dialog presentation.
 
 ## Board view subsystem

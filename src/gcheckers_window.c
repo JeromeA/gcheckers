@@ -12,10 +12,8 @@ struct _GCheckersWindow {
   GCheckersModel *model;
   GtkWidget *main_paned;
   GtkWidget *status_label;
-  GtkWidget *new_game_button;
   GtkWidget *analyze_toggle_button;
   GtkTextBuffer *analysis_buffer;
-  GtkWidget *controls_row;
   BoardView *board_view;
   PlayerControlsPanel *controls_panel;
   GCheckersSgfController *sgf_controller;
@@ -27,8 +25,6 @@ struct _GCheckersWindow {
 };
 
 G_DEFINE_TYPE(GCheckersWindow, gcheckers_window, GTK_TYPE_APPLICATION_WINDOW)
-
-static void gcheckers_window_on_force_move_requested(PlayerControlsPanel *panel, gpointer user_data);
 
 typedef struct {
   GCheckersWindow *self;
@@ -142,22 +138,31 @@ static CheckersRules gcheckers_window_rules_from_selection(PlayerRuleset ruleset
   return game_rules_american_checkers();
 }
 
-static void gcheckers_window_apply_ruleset_selection(GCheckersWindow *self) {
+static void gcheckers_window_set_ruleset(GCheckersWindow *self, PlayerRuleset ruleset) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
   g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
-  g_return_if_fail(self->controls_panel != NULL);
   g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self->sgf_controller));
 
-  PlayerRuleset selected = player_controls_panel_get_ruleset(self->controls_panel);
-  if (selected == self->applied_ruleset) {
+  if (ruleset != PLAYER_RULESET_AMERICAN && ruleset != PLAYER_RULESET_INTERNATIONAL) {
+    g_debug("Unexpected ruleset value");
     return;
   }
 
-  CheckersRules rules = gcheckers_window_rules_from_selection(selected);
+  if (ruleset == self->applied_ruleset) {
+    const GameState *state = gcheckers_model_peek_state(self->model);
+    if (state != NULL) {
+      guint expected_board_size = ruleset == PLAYER_RULESET_INTERNATIONAL ? 10u : 8u;
+      if (state->board.board_size == expected_board_size) {
+        return;
+      }
+    }
+  }
+
+  CheckersRules rules = gcheckers_window_rules_from_selection(ruleset);
   gcheckers_model_set_rules(self->model, &rules);
   board_view_clear_selection(self->board_view);
   gcheckers_sgf_controller_new_game(self->sgf_controller);
-  self->applied_ruleset = selected;
+  self->applied_ruleset = ruleset;
 }
 
 static void gcheckers_window_set_analysis_text(GCheckersWindow *self, const char *text) {
@@ -317,13 +322,6 @@ static void gcheckers_window_update_control_state(GCheckersWindow *self) {
 
   gboolean input_enabled = state->winner == CHECKERS_WINNER_NONE;
   board_view_set_input_enabled(self->board_view, input_enabled);
-
-  if (!self->controls_panel) {
-    g_debug("Missing controls panel while updating sensitivity\n");
-    return;
-  }
-  player_controls_panel_set_force_move_sensitive(self->controls_panel,
-                                                 state->winner == CHECKERS_WINNER_NONE);
 }
 
 static void gcheckers_window_update_status(GCheckersWindow *self) {
@@ -346,7 +344,7 @@ static gboolean gcheckers_window_auto_force_move_cb(gpointer user_data) {
   g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), G_SOURCE_REMOVE);
 
   self->auto_move_source_id = 0;
-  gcheckers_window_on_force_move_requested(NULL, self);
+  gcheckers_window_force_move(self);
   return G_SOURCE_REMOVE;
 }
 
@@ -402,21 +400,11 @@ static void gcheckers_window_on_state_changed(GCheckersModel *model, gpointer us
   gcheckers_window_restart_analysis_if_active(self);
 }
 
-static void gcheckers_window_on_new_game_clicked(GtkButton * /*button*/, gpointer user_data) {
-  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
-
-  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
-  g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
-
-  gcheckers_window_start_new_game(self);
-}
-
 static void gcheckers_window_on_control_changed(PlayerControlsPanel * /*panel*/, gpointer user_data) {
   GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
 
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
 
-  gcheckers_window_apply_ruleset_selection(self);
   gcheckers_window_update_control_state(self);
 }
 
@@ -449,9 +437,7 @@ static void gcheckers_window_on_analyze_toggled(GtkToggleButton *button, gpointe
   gcheckers_window_stop_analysis(self);
 }
 
-static void gcheckers_window_on_force_move_requested(PlayerControlsPanel * /*panel*/, gpointer user_data) {
-  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
-
+void gcheckers_window_force_move(GCheckersWindow *self) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
   g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
 
@@ -475,6 +461,12 @@ static void gcheckers_window_on_force_move_requested(PlayerControlsPanel * /*pan
   }
 }
 
+PlayerRuleset gcheckers_window_get_ruleset(GCheckersWindow *self) {
+  g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), PLAYER_RULESET_INTERNATIONAL);
+
+  return self->applied_ruleset;
+}
+
 void gcheckers_window_apply_new_game_settings(GCheckersWindow *self,
                                               PlayerRuleset ruleset,
                                               PlayerControlMode white_mode,
@@ -483,12 +475,11 @@ void gcheckers_window_apply_new_game_settings(GCheckersWindow *self,
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
   g_return_if_fail(self->controls_panel != NULL);
 
-  player_controls_panel_set_ruleset(self->controls_panel, ruleset);
   player_controls_panel_set_mode(self->controls_panel, CHECKERS_COLOR_WHITE, white_mode);
   player_controls_panel_set_mode(self->controls_panel, CHECKERS_COLOR_BLACK, black_mode);
   player_controls_panel_set_computer_level(self->controls_panel, computer_level);
 
-  gcheckers_window_apply_ruleset_selection(self);
+  gcheckers_window_set_ruleset(self, ruleset);
   gcheckers_window_start_new_game(self);
 }
 
@@ -513,7 +504,7 @@ static void gcheckers_window_set_model(GCheckersWindow *self, GCheckersModel *mo
                                             self);
   board_view_set_model(self->board_view, self->model);
   gcheckers_sgf_controller_set_model(self->sgf_controller, self->model);
-  gcheckers_window_apply_ruleset_selection(self);
+  gcheckers_window_set_ruleset(self, self->applied_ruleset);
   gcheckers_window_update_status(self);
   gcheckers_window_update_control_state(self);
 }
@@ -564,7 +555,6 @@ static void gcheckers_window_dispose(GObject *object) {
   self->main_paned = NULL;
   self->analyze_toggle_button = NULL;
   self->analysis_buffer = NULL;
-  self->controls_row = NULL;
   G_OBJECT_CLASS(gcheckers_window_parent_class)->dispose(object);
 }
 
@@ -578,7 +568,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   self->auto_move_source_id = 0;
   self->paned_tick_id = 0;
   self->analysis_generation = 1;
-  self->applied_ruleset = PLAYER_RULESET_AMERICAN;
+  self->applied_ruleset = PLAYER_RULESET_INTERNATIONAL;
 
   gtk_window_set_title(GTK_WINDOW(self), "gcheckers");
   gtk_window_set_default_size(GTK_WINDOW(self), 600, 700);
@@ -644,26 +634,12 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_label_set_wrap(GTK_LABEL(self->status_label), TRUE);
   gtk_box_append(GTK_BOX(middle_panel), self->status_label);
 
-  self->controls_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
-  gtk_box_append(GTK_BOX(middle_panel), self->controls_row);
-
   self->controls_panel = g_object_ref_sink(player_controls_panel_new());
-  gtk_box_append(GTK_BOX(self->controls_row), GTK_WIDGET(self->controls_panel));
+  gtk_box_append(GTK_BOX(middle_panel), GTK_WIDGET(self->controls_panel));
   g_signal_connect(self->controls_panel,
                    "control-changed",
                    G_CALLBACK(gcheckers_window_on_control_changed),
                    self);
-  g_signal_connect(self->controls_panel,
-                   "force-move-requested",
-                   G_CALLBACK(gcheckers_window_on_force_move_requested),
-                   self);
-
-  self->new_game_button = gtk_button_new_with_label("New game");
-  g_signal_connect(self->new_game_button,
-                   "clicked",
-                   G_CALLBACK(gcheckers_window_on_new_game_clicked),
-                   self);
-  gtk_box_append(GTK_BOX(self->controls_row), self->new_game_button);
 
   self->sgf_controller = gcheckers_sgf_controller_new(self->board_view);
   board_view_set_move_handler(self->board_view, gcheckers_window_apply_player_move, self);

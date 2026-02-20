@@ -15,6 +15,8 @@ G_DECLARE_FINAL_TYPE(GCheckersWindow, gcheckers_window, GCHECKERS, WINDOW, GtkAp
 
 GCheckersWindow *gcheckers_window_new(GtkApplication *app, GCheckersModel *model);
 void gcheckers_window_present_new_game_dialog(GCheckersWindow *self);
+void gcheckers_window_force_move(GCheckersWindow *self);
+PlayerRuleset gcheckers_window_get_ruleset(GCheckersWindow *self);
 void gcheckers_window_apply_new_game_settings(GCheckersWindow *self,
                                               PlayerRuleset ruleset,
                                               PlayerControlMode white_mode,

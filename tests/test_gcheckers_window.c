@@ -275,9 +275,7 @@ static void test_gcheckers_window_force_move_works_on_user_turn(void) {
   g_assert_true(player_controls_panel_is_user_control(panel, CHECKERS_COLOR_WHITE));
   g_assert_true(player_controls_panel_is_user_control(panel, CHECKERS_COLOR_BLACK));
 
-  GtkWidget *button = player_controls_panel_get_force_move_button(panel);
-  g_assert_nonnull(button);
-  g_signal_emit_by_name(button, "clicked");
+  gcheckers_window_force_move(window);
   test_gcheckers_window_drain_main_context(16);
 
   const GameState *state = gcheckers_model_peek_state(model);
@@ -319,16 +317,20 @@ static void test_gcheckers_window_ruleset_switch_resets_model(void) {
 
   const GameState *state = gcheckers_model_peek_state(model);
   g_assert_nonnull(state);
-  g_assert_cmpuint(state->board.board_size, ==, 8);
+  g_assert_cmpuint(state->board.board_size, ==, 10);
+  g_assert_cmpuint(gcheckers_window_get_ruleset(window), ==, PLAYER_RULESET_INTERNATIONAL);
 
-  PlayerControlsPanel *panel = gcheckers_window_get_controls_panel(window);
-  g_assert_nonnull(panel);
-  player_controls_panel_set_ruleset(panel, PLAYER_RULESET_INTERNATIONAL);
+  gcheckers_window_apply_new_game_settings(window,
+                                           PLAYER_RULESET_AMERICAN,
+                                           PLAYER_CONTROL_MODE_USER,
+                                           PLAYER_CONTROL_MODE_USER,
+                                           PLAYER_COMPUTER_LEVEL_1_RANDOM);
   test_gcheckers_window_drain_main_context(16);
 
   state = gcheckers_model_peek_state(model);
   g_assert_nonnull(state);
-  g_assert_cmpuint(state->board.board_size, ==, 10);
+  g_assert_cmpuint(state->board.board_size, ==, 8);
+  g_assert_cmpuint(gcheckers_window_get_ruleset(window), ==, PLAYER_RULESET_AMERICAN);
   g_assert_cmpuint(state->turn, ==, CHECKERS_COLOR_WHITE);
   g_assert_cmpuint(state->winner, ==, CHECKERS_WINNER_NONE);
 

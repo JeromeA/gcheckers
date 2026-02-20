@@ -37,6 +37,25 @@ static void gcheckers_application_on_quit(GSimpleAction * /*action*/,
   g_application_quit(G_APPLICATION(self));
 }
 
+static void gcheckers_application_on_force_move(GSimpleAction * /*action*/,
+                                                GVariant * /*parameter*/,
+                                                gpointer user_data) {
+  GCheckersApplication *self = GCHECKERS_APPLICATION(user_data);
+  g_return_if_fail(GCHECKERS_IS_APPLICATION(self));
+
+  GtkWindow *window = gtk_application_get_active_window(GTK_APPLICATION(self));
+  if (!window) {
+    g_debug("No active window for force move action");
+    return;
+  }
+  if (!GCHECKERS_IS_WINDOW(window)) {
+    g_debug("Active window is not a gcheckers window");
+    return;
+  }
+
+  gcheckers_window_force_move(GCHECKERS_WINDOW(window));
+}
+
 static void gcheckers_application_startup(GApplication *app) {
   G_APPLICATION_CLASS(gcheckers_application_parent_class)->startup(app);
 
@@ -44,6 +63,14 @@ static void gcheckers_application_startup(GApplication *app) {
       {
           .name = "new-game",
           .activate = gcheckers_application_on_new_game,
+          .parameter_type = NULL,
+          .state = NULL,
+          .change_state = NULL,
+          .padding = {0},
+      },
+      {
+          .name = "force-move",
+          .activate = gcheckers_application_on_force_move,
           .parameter_type = NULL,
           .state = NULL,
           .change_state = NULL,
@@ -62,11 +89,15 @@ static void gcheckers_application_startup(GApplication *app) {
 
   GMenu *menubar = g_menu_new();
   GMenu *file_menu = g_menu_new();
+  GMenu *game_menu = g_menu_new();
   g_menu_append(file_menu, "New game...", "app.new-game");
   g_menu_append(file_menu, "Quit", "app.quit");
+  g_menu_append(game_menu, "Force move", "app.force-move");
   g_menu_append_submenu(menubar, "File", G_MENU_MODEL(file_menu));
+  g_menu_append_submenu(menubar, "Game", G_MENU_MODEL(game_menu));
   gtk_application_set_menubar(GTK_APPLICATION(app), G_MENU_MODEL(menubar));
 
+  g_object_unref(game_menu);
   g_object_unref(file_menu);
   g_object_unref(menubar);
 
