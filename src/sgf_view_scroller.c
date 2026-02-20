@@ -115,6 +115,8 @@ void sgf_view_scroller_scroll(SgfViewScroller *self,
   g_return_if_fail(node_widgets != NULL);
   g_return_if_fail(selected != NULL);
 
+  g_debug("SGF scroll attempt: entered scroll with selected=%p", selected);
+
   GtkScrolledWindow *root_ref = g_object_ref(root);
   GHashTable *node_widgets_ref = g_hash_table_ref(node_widgets);
 
@@ -129,6 +131,7 @@ void sgf_view_scroller_scroll(SgfViewScroller *self,
     sgf_view_scroller_log_node_widgets_snapshot(node_widgets, selected);
     return;
   }
+  g_debug("SGF scroll attempt: resolved selected widget=%p", widget);
   if (!GTK_IS_WIDGET(widget)) {
     g_debug("SGF scroll attempt: selected mapping is not a widget; not scheduling retry");
     return;
