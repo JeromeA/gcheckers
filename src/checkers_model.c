@@ -177,6 +177,39 @@ gboolean gcheckers_model_choose_best_move(GCheckersModel *self, guint max_depth,
   return checkers_ai_alpha_beta_choose_move(&self->game, max_depth, out_move);
 }
 
+char *gcheckers_model_analyze_moves_text(GCheckersModel *self, guint max_depth) {
+  g_return_val_if_fail(GCHECKERS_IS_MODEL(self), NULL);
+  g_return_val_if_fail(max_depth > 0, NULL);
+
+  CheckersScoredMoveList scored_moves = {0};
+  if (!checkers_ai_alpha_beta_analyze_moves(&self->game, max_depth, &scored_moves)) {
+    return g_strdup("No legal moves to analyze.");
+  }
+
+  GString *text = g_string_new(NULL);
+  g_string_append_printf(text, "Analysis depth: %u\n", max_depth);
+  g_string_append(text, "Best to worst:\n");
+
+  for (size_t i = 0; i < scored_moves.count; ++i) {
+    char notation[128];
+    if (!game_format_move_notation(&scored_moves.moves[i].move, notation, sizeof(notation))) {
+      g_strlcpy(notation, "?", sizeof(notation));
+    }
+    g_string_append_printf(text, "%zu. %s : %d\n", i + 1, notation, scored_moves.moves[i].score);
+  }
+
+  checkers_scored_move_list_free(&scored_moves);
+  return g_string_free(text, FALSE);
+}
+
+gboolean gcheckers_model_copy_game(GCheckersModel *self, Game *out_game) {
+  g_return_val_if_fail(GCHECKERS_IS_MODEL(self), FALSE);
+  g_return_val_if_fail(out_game != NULL, FALSE);
+
+  *out_game = self->game;
+  return TRUE;
+}
+
 char *gcheckers_model_format_status(GCheckersModel *self) {
   g_return_val_if_fail(GCHECKERS_IS_MODEL(self), NULL);
 

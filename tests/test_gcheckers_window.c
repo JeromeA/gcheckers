@@ -57,6 +57,28 @@ static GtkWidget *test_gcheckers_window_find_board_square(GtkWidget *root) {
   return NULL;
 }
 
+static GtkToggleButton *test_gcheckers_window_find_toggle_button_with_label(GtkWidget *root, const char *label) {
+  g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
+  g_return_val_if_fail(label != NULL, NULL);
+
+  if (GTK_IS_TOGGLE_BUTTON(root)) {
+    const char *button_label = gtk_button_get_label(GTK_BUTTON(root));
+    if (button_label && g_strcmp0(button_label, label) == 0) {
+      return GTK_TOGGLE_BUTTON(root);
+    }
+  }
+
+  for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
+       child = gtk_widget_get_next_sibling(child)) {
+    GtkToggleButton *match = test_gcheckers_window_find_toggle_button_with_label(child, label);
+    if (match != NULL) {
+      return match;
+    }
+  }
+
+  return NULL;
+}
+
 static void test_gcheckers_window_drain_main_context(guint max_iterations) {
   g_return_if_fail(max_iterations > 0);
 
@@ -267,6 +289,29 @@ static void test_gcheckers_window_force_move_works_on_user_turn(void) {
   g_clear_object(&app);
 }
 
+static void test_gcheckers_window_analysis_toggle(void) {
+  GtkApplication *app = test_gcheckers_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersWindow *window = gcheckers_window_new(app, model);
+
+  GtkToggleButton *analyze_toggle =
+      test_gcheckers_window_find_toggle_button_with_label(GTK_WIDGET(window), "Analyze");
+  g_assert_nonnull(analyze_toggle);
+  g_assert_false(gtk_toggle_button_get_active(analyze_toggle));
+
+  gtk_toggle_button_set_active(analyze_toggle, TRUE);
+  test_gcheckers_window_drain_main_context(8);
+  g_assert_true(gtk_toggle_button_get_active(analyze_toggle));
+
+  gtk_toggle_button_set_active(analyze_toggle, FALSE);
+  test_gcheckers_window_drain_main_context(8);
+  g_assert_false(gtk_toggle_button_get_active(analyze_toggle));
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   if (!gtk_init_check()) {
@@ -277,6 +322,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/gcheckers-window/auto-move-next-player-computer", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/sgf-navigation-resets-controls", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/force-move-user-turn", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/analysis-toggle", test_gcheckers_window_skip);
     return g_test_run();
   }
 
@@ -307,5 +353,6 @@ int main(int argc, char **argv) {
                   test_gcheckers_window_sgf_navigation_resets_controls_to_user);
   g_test_add_func("/gcheckers-window/force-move-user-turn",
                   test_gcheckers_window_force_move_works_on_user_turn);
+  g_test_add_func("/gcheckers-window/analysis-toggle", test_gcheckers_window_analysis_toggle);
   return g_test_run();
 }

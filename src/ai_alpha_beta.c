@@ -1,6 +1,7 @@
 #include "ai_alpha_beta.h"
 
 #include <limits.h>
+#include <stdlib.h>
 
 static gint checkers_ai_material_score(const Game *game, CheckersColor perspective) {
   g_return_val_if_fail(game != NULL, 0);
@@ -63,8 +64,17 @@ static gint checkers_ai_alpha_beta_search(Game *game,
                                           guint ply_depth,
                                           gint alpha,
                                           gint beta,
-                                          CheckersColor perspective) {
+                                          CheckersColor perspective,
+                                          CheckersAiCancelFunc should_cancel,
+                                          gpointer user_data,
+                                          gboolean *cancelled) {
   g_return_val_if_fail(game != NULL, 0);
+  g_return_val_if_fail(cancelled != NULL, 0);
+
+  if (should_cancel && should_cancel(user_data)) {
+    *cancelled = TRUE;
+    return 0;
+  }
 
   if (depth_remaining == 0 || game->state.winner != CHECKERS_WINNER_NONE) {
     return checkers_ai_terminal_score(game, perspective, ply_depth);
@@ -85,14 +95,30 @@ static gint checkers_ai_alpha_beta_search(Game *game,
   gint best = maximizing ? INT_MIN : INT_MAX;
 
   for (size_t i = 0; i < moves.count; ++i) {
+    if (should_cancel && should_cancel(user_data)) {
+      *cancelled = TRUE;
+      break;
+    }
+
     Game child = *game;
     if (game_apply_move(&child, &moves.moves[i]) != 0) {
       g_debug("Skipping invalid move while searching");
       continue;
     }
 
-    gint score =
-        checkers_ai_alpha_beta_search(&child, depth_remaining - 1, ply_depth + 1, alpha, beta, perspective);
+    gint score = checkers_ai_alpha_beta_search(&child,
+                                               depth_remaining - 1,
+                                               ply_depth + 1,
+                                               alpha,
+                                               beta,
+                                               perspective,
+                                               should_cancel,
+                                               user_data,
+                                               cancelled);
+    if (*cancelled) {
+      break;
+    }
+
     if (maximizing) {
       if (score > best) {
         best = score;
@@ -115,10 +141,110 @@ static gint checkers_ai_alpha_beta_search(Game *game,
   }
 
   movelist_free(&moves);
+  if (*cancelled) {
+    return 0;
+  }
+
   if (best == INT_MIN || best == INT_MAX) {
     return checkers_ai_terminal_score(game, perspective, ply_depth);
   }
   return best;
+}
+
+static int checkers_ai_scored_move_compare_desc(const void *left, const void *right) {
+  const CheckersScoredMove *a = left;
+  const CheckersScoredMove *b = right;
+  if (a->score < b->score) {
+    return 1;
+  }
+  if (a->score > b->score) {
+    return -1;
+  }
+  return 0;
+}
+
+void checkers_scored_move_list_free(CheckersScoredMoveList *list) {
+  g_return_if_fail(list != NULL);
+
+  g_free(list->moves);
+  list->moves = NULL;
+  list->count = 0;
+}
+
+gboolean checkers_ai_alpha_beta_analyze_moves_cancellable(const Game *game,
+                                                          guint max_depth,
+                                                          CheckersScoredMoveList *out_moves,
+                                                          CheckersAiCancelFunc should_cancel,
+                                                          gpointer user_data) {
+  g_return_val_if_fail(game != NULL, FALSE);
+  g_return_val_if_fail(max_depth > 0, FALSE);
+  g_return_val_if_fail(out_moves != NULL, FALSE);
+
+  out_moves->moves = NULL;
+  out_moves->count = 0;
+
+  MoveList moves = game->available_moves(game);
+  if (moves.count == 0) {
+    movelist_free(&moves);
+    g_debug("No available moves for alpha-beta analysis");
+    return FALSE;
+  }
+
+  CheckersScoredMove *scored_moves = g_new0(CheckersScoredMove, moves.count);
+  size_t write = 0;
+  CheckersColor perspective = game->state.turn;
+  gboolean cancelled = FALSE;
+
+  for (size_t i = 0; i < moves.count; ++i) {
+    if (should_cancel && should_cancel(user_data)) {
+      cancelled = TRUE;
+      break;
+    }
+
+    Game child = *game;
+    if (game_apply_move(&child, &moves.moves[i]) != 0) {
+      g_debug("Skipping invalid root move while analyzing");
+      continue;
+    }
+
+    gint score = checkers_ai_alpha_beta_search(&child,
+                                               max_depth - 1,
+                                               1,
+                                               INT_MIN,
+                                               INT_MAX,
+                                               perspective,
+                                               should_cancel,
+                                               user_data,
+                                               &cancelled);
+    if (cancelled) {
+      break;
+    }
+
+    scored_moves[write].move = moves.moves[i];
+    scored_moves[write].score = score;
+    write++;
+  }
+
+  movelist_free(&moves);
+  if (cancelled) {
+    g_free(scored_moves);
+    return FALSE;
+  }
+
+  if (write == 0) {
+    g_free(scored_moves);
+    g_debug("Alpha-beta analysis found no valid root moves");
+    return FALSE;
+  }
+
+  qsort(scored_moves, write, sizeof(scored_moves[0]), checkers_ai_scored_move_compare_desc);
+  out_moves->moves = scored_moves;
+  out_moves->count = write;
+  return TRUE;
+}
+
+gboolean checkers_ai_alpha_beta_analyze_moves(const Game *game, guint max_depth, CheckersScoredMoveList *out_moves) {
+  return checkers_ai_alpha_beta_analyze_moves_cancellable(game, max_depth, out_moves, NULL, NULL);
 }
 
 gboolean checkers_ai_alpha_beta_choose_move(const Game *game, guint max_depth, CheckersMove *out_move) {
@@ -126,40 +252,12 @@ gboolean checkers_ai_alpha_beta_choose_move(const Game *game, guint max_depth, C
   g_return_val_if_fail(out_move != NULL, FALSE);
   g_return_val_if_fail(max_depth > 0, FALSE);
 
-  MoveList moves = game->available_moves(game);
-  if (moves.count == 0) {
-    movelist_free(&moves);
-    g_debug("No available moves for alpha-beta AI");
+  CheckersScoredMoveList scored_moves = {0};
+  if (!checkers_ai_alpha_beta_analyze_moves(game, max_depth, &scored_moves)) {
     return FALSE;
   }
 
-  CheckersColor perspective = game->state.turn;
-  gint best_score = INT_MIN;
-  gboolean found = FALSE;
-  CheckersMove best_move = moves.moves[0];
-
-  for (size_t i = 0; i < moves.count; ++i) {
-    Game child = *game;
-    if (game_apply_move(&child, &moves.moves[i]) != 0) {
-      g_debug("Skipping invalid root move while searching");
-      continue;
-    }
-
-    gint score =
-        checkers_ai_alpha_beta_search(&child, max_depth - 1, 1, INT_MIN, INT_MAX, perspective);
-    if (!found || score > best_score) {
-      found = TRUE;
-      best_score = score;
-      best_move = moves.moves[i];
-    }
-  }
-
-  movelist_free(&moves);
-  if (!found) {
-    g_debug("Alpha-beta failed to find a valid move");
-    return FALSE;
-  }
-
-  *out_move = best_move;
+  *out_move = scored_moves.moves[0].move;
+  checkers_scored_move_list_free(&scored_moves);
   return TRUE;
 }

@@ -124,6 +124,17 @@ static void test_model_choose_best_move_returns_legal_move(void) {
   g_object_unref(model);
 }
 
+static void test_model_analyze_moves_text(void) {
+  GCheckersModel *model = gcheckers_model_new();
+
+  char *analysis = gcheckers_model_analyze_moves_text(model, 4);
+  assert(analysis != NULL);
+  assert(strstr(analysis, "Best to worst:") != NULL);
+  g_free(analysis);
+
+  g_object_unref(model);
+}
+
 static void test_model_peek_last_move(void) {
   GCheckersModel *model = gcheckers_model_new();
 
@@ -178,6 +189,7 @@ int main(void) {
   test_model_random_move_outputs_move();
   test_model_choose_random_move_returns_legal_move();
   test_model_choose_best_move_returns_legal_move();
+  test_model_analyze_moves_text();
   test_model_peek_last_move();
   test_model_reset_clears_last_move();
 

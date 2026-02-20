@@ -6,7 +6,9 @@ Role: composition root that binds model state to UI updates, keeps board input a
 Owns: `GCheckersModel`, `BoardView`, `PlayerControlsPanel`, and `GCheckersSgfController`.
 Collaborates with: `gcheckers_style_init()` for CSS, model signals for refresh, and SGF analysis signals to reset
 player dropdowns. Computer turns are routed by control mode: random (level 1), alpha-beta depth 4 (level 2), or
-alpha-beta depth 8 (level 3).
+alpha-beta depth 8 (level 3). Uses a three-pane layout: board (left), move controls and SGF (middle), and analysis
+(right) with an `Analyze` toggle that runs iterative deepening in a worker thread and publishes best-to-worst move
+scores after each completed depth until toggled off.
 Lifecycle: sinks and retains an owned `PlayerControlsPanel` reference, removes it from its current `GtkBox` parent
 during dispose via `gcheckers_widget_remove_from_parent()`, and then clears its references.
 during dispose, cancels any pending auto-move idle source, and then clears its references.
@@ -82,8 +84,9 @@ Collaborates with: `checkers_model.c` and `checkers_cli.c`.
 
 ## AI alpha-beta search (`src/ai_alpha_beta.c`, `src/ai_alpha_beta.h`)
 Module: alpha-beta search.
-Role: choose a move via depth-limited alpha-beta with a material heuristic and terminal-win scoring.
-Collaborates with: `checkers_model.c` for model-facing AI move selection.
+Role: choose a move and analyze all legal moves via depth-limited alpha-beta with a material heuristic and
+terminal-win scoring.
+Collaborates with: `checkers_model.c` for model-facing AI move selection and analysis text generation.
 
 ## CLI entry point (`src/checkers_cli.c`)
 Module: CLI front end.

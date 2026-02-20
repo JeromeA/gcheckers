@@ -1,3 +1,4 @@
+#include "ai_alpha_beta.h"
 #include "gcheckers_window.h"
 
 #include "board_view.h"
@@ -11,17 +12,32 @@ struct _GCheckersWindow {
   GCheckersModel *model;
   GtkWidget *status_label;
   GtkWidget *new_game_button;
+  GtkWidget *analyze_toggle_button;
+  GtkTextBuffer *analysis_buffer;
   GtkWidget *controls_row;
   BoardView *board_view;
   PlayerControlsPanel *controls_panel;
   GCheckersSgfController *sgf_controller;
   gulong state_handler_id;
   guint auto_move_source_id;
+  gint analysis_generation;
 };
 
 G_DEFINE_TYPE(GCheckersWindow, gcheckers_window, GTK_TYPE_APPLICATION_WINDOW)
 
 static void gcheckers_window_on_force_move_requested(PlayerControlsPanel *panel, gpointer user_data);
+
+typedef struct {
+  GCheckersWindow *self;
+  Game game;
+  gint generation;
+} GCheckersWindowAnalysisTask;
+
+typedef struct {
+  GCheckersWindow *self;
+  gint generation;
+  char *text;
+} GCheckersWindowAnalysisUpdate;
 
 static void gcheckers_window_print_move(const char *label, const CheckersMove *move) {
   g_return_if_fail(label != NULL);
@@ -85,6 +101,147 @@ static gboolean gcheckers_window_choose_computer_move(GCheckersWindow *self, Che
   }
 
   return gcheckers_sgf_controller_step_ai_move(self->sgf_controller, depth, move);
+}
+
+static void gcheckers_window_set_analysis_text(GCheckersWindow *self, const char *text) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(text != NULL);
+
+  if (!self->analysis_buffer) {
+    g_debug("Missing analysis buffer");
+    return;
+  }
+
+  gtk_text_buffer_set_text(self->analysis_buffer, text, -1);
+}
+
+static gboolean gcheckers_window_should_cancel_analysis(gpointer user_data) {
+  GCheckersWindowAnalysisTask *task = user_data;
+  g_return_val_if_fail(task != NULL, TRUE);
+  g_return_val_if_fail(GCHECKERS_IS_WINDOW(task->self), TRUE);
+
+  return g_atomic_int_get(&task->self->analysis_generation) != task->generation;
+}
+
+static gboolean gcheckers_window_analysis_publish_cb(gpointer user_data) {
+  GCheckersWindowAnalysisUpdate *update = user_data;
+  g_return_val_if_fail(update != NULL, G_SOURCE_REMOVE);
+
+  if (g_atomic_int_get(&update->self->analysis_generation) == update->generation) {
+    gcheckers_window_set_analysis_text(update->self, update->text);
+  }
+
+  g_free(update->text);
+  g_object_unref(update->self);
+  g_free(update);
+  return G_SOURCE_REMOVE;
+}
+
+static void gcheckers_window_analysis_publish(GCheckersWindow *self, gint generation, const char *text) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(text != NULL);
+
+  GCheckersWindowAnalysisUpdate *update = g_new0(GCheckersWindowAnalysisUpdate, 1);
+  update->self = g_object_ref(self);
+  update->generation = generation;
+  update->text = g_strdup(text);
+  g_main_context_invoke(NULL, gcheckers_window_analysis_publish_cb, update);
+}
+
+static char *gcheckers_window_analysis_format_depth(const CheckersScoredMoveList *moves, guint depth) {
+  g_return_val_if_fail(moves != NULL, NULL);
+
+  GString *text = g_string_new(NULL);
+  g_string_append_printf(text, "Analysis depth: %u\n", depth);
+  g_string_append(text, "Best to worst:\n");
+  for (size_t i = 0; i < moves->count; ++i) {
+    char notation[128];
+    if (!game_format_move_notation(&moves->moves[i].move, notation, sizeof(notation))) {
+      g_strlcpy(notation, "?", sizeof(notation));
+    }
+    g_string_append_printf(text, "%zu. %s : %d\n", i + 1, notation, moves->moves[i].score);
+  }
+
+  return g_string_free(text, FALSE);
+}
+
+static gpointer gcheckers_window_analysis_thread(gpointer user_data) {
+  GCheckersWindowAnalysisTask *task = user_data;
+  g_return_val_if_fail(task != NULL, NULL);
+
+  guint depth = 1;
+  while (!gcheckers_window_should_cancel_analysis(task)) {
+    CheckersScoredMoveList moves = {0};
+    gboolean ok = checkers_ai_alpha_beta_analyze_moves_cancellable(&task->game,
+                                                                   depth,
+                                                                   &moves,
+                                                                   gcheckers_window_should_cancel_analysis,
+                                                                   task);
+    if (!ok) {
+      if (!gcheckers_window_should_cancel_analysis(task)) {
+        gcheckers_window_analysis_publish(task->self, task->generation, "No legal moves to analyze.");
+      }
+      break;
+    }
+
+    g_autofree char *text = gcheckers_window_analysis_format_depth(&moves, depth);
+    checkers_scored_move_list_free(&moves);
+    if (!text) {
+      break;
+    }
+
+    gcheckers_window_analysis_publish(task->self, task->generation, text);
+    if (depth == G_MAXUINT) {
+      break;
+    }
+    depth++;
+  }
+
+  g_object_unref(task->self);
+  g_free(task);
+  return NULL;
+}
+
+static void gcheckers_window_stop_analysis(GCheckersWindow *self) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+
+  g_atomic_int_inc(&self->analysis_generation);
+}
+
+static void gcheckers_window_start_analysis(GCheckersWindow *self) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
+
+  Game game = {0};
+  if (!gcheckers_model_copy_game(self->model, &game)) {
+    g_debug("Failed to snapshot game for threaded analysis");
+    return;
+  }
+
+  gint generation = g_atomic_int_add(&self->analysis_generation, 1) + 1;
+  gcheckers_window_set_analysis_text(self, "Analyzing...");
+
+  GCheckersWindowAnalysisTask *task = g_new0(GCheckersWindowAnalysisTask, 1);
+  task->self = g_object_ref(self);
+  task->game = game;
+  task->generation = generation;
+  GThread *thread = g_thread_new("analysis-thread", gcheckers_window_analysis_thread, task);
+  g_thread_unref(thread);
+}
+
+static void gcheckers_window_restart_analysis_if_active(GCheckersWindow *self) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+
+  if (!self->analyze_toggle_button || !GTK_IS_TOGGLE_BUTTON(self->analyze_toggle_button)) {
+    return;
+  }
+
+  if (!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(self->analyze_toggle_button))) {
+    return;
+  }
+
+  gcheckers_window_stop_analysis(self);
+  gcheckers_window_start_analysis(self);
 }
 
 static void gcheckers_window_update_control_state(GCheckersWindow *self) {
@@ -185,6 +342,7 @@ static void gcheckers_window_on_state_changed(GCheckersModel *model, gpointer us
   gcheckers_window_update_status(self);
   gcheckers_window_update_control_state(self);
   gcheckers_window_maybe_trigger_auto_move(self);
+  gcheckers_window_restart_analysis_if_active(self);
 }
 
 static void gcheckers_window_on_new_game_clicked(GtkButton * /*button*/, gpointer user_data) {
@@ -216,6 +374,24 @@ static void gcheckers_window_on_analysis_requested(GCheckersSgfController * /*co
 
   player_controls_panel_set_all_user(self->controls_panel);
   gcheckers_window_update_control_state(self);
+  gcheckers_window_restart_analysis_if_active(self);
+}
+
+static void gcheckers_window_on_analyze_toggled(GtkToggleButton *button, gpointer user_data) {
+  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
+
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
+  g_return_if_fail(GTK_IS_TOGGLE_BUTTON(button));
+
+  gboolean active = gtk_toggle_button_get_active(button);
+  if (active) {
+    gcheckers_window_start_analysis(self);
+    return;
+  }
+
+  gcheckers_window_stop_analysis(self);
+  gcheckers_window_set_analysis_text(self, "Analysis stopped.");
 }
 
 static void gcheckers_window_on_force_move_requested(PlayerControlsPanel * /*panel*/, gpointer user_data) {
@@ -299,6 +475,7 @@ static void gcheckers_window_dispose(GObject *object) {
 
   gcheckers_window_unparent_controls_panel(self);
 
+  gcheckers_window_stop_analysis(self);
   g_clear_object(&self->sgf_controller);
   if (panel_removed) {
     g_clear_object(&self->controls_panel);
@@ -307,6 +484,8 @@ static void gcheckers_window_dispose(GObject *object) {
   }
   g_clear_object(&self->board_view);
   g_clear_object(&self->model);
+  self->analyze_toggle_button = NULL;
+  self->analysis_buffer = NULL;
   self->controls_row = NULL;
   G_OBJECT_CLASS(gcheckers_window_parent_class)->dispose(object);
 }
@@ -319,6 +498,7 @@ static void gcheckers_window_class_init(GCheckersWindowClass *klass) {
 
 static void gcheckers_window_init(GCheckersWindow *self) {
   self->auto_move_source_id = 0;
+  self->analysis_generation = 1;
 
   gtk_window_set_title(GTK_WINDOW(self), "gcheckers");
   gtk_window_set_default_size(GTK_WINDOW(self), 600, 700);
@@ -346,19 +526,31 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   self->board_view = board_view_new();
   gtk_box_append(GTK_BOX(left_panel), board_view_get_widget(self->board_view));
 
-  GtkWidget *right_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
-  gtk_widget_set_hexpand(right_panel, TRUE);
-  gtk_widget_set_vexpand(right_panel, TRUE);
-  gtk_paned_set_end_child(GTK_PANED(paned), right_panel);
+  GtkWidget *right_split = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
+  gtk_widget_set_hexpand(right_split, TRUE);
+  gtk_widget_set_vexpand(right_split, TRUE);
+  gtk_paned_set_end_child(GTK_PANED(paned), right_split);
   gtk_paned_set_shrink_end_child(GTK_PANED(paned), FALSE);
+
+  GtkWidget *middle_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
+  gtk_widget_set_hexpand(middle_panel, TRUE);
+  gtk_widget_set_vexpand(middle_panel, TRUE);
+  gtk_paned_set_start_child(GTK_PANED(right_split), middle_panel);
+  gtk_paned_set_shrink_start_child(GTK_PANED(right_split), FALSE);
+
+  GtkWidget *analysis_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
+  gtk_widget_set_hexpand(analysis_panel, TRUE);
+  gtk_widget_set_vexpand(analysis_panel, TRUE);
+  gtk_paned_set_end_child(GTK_PANED(right_split), analysis_panel);
+  gtk_paned_set_shrink_end_child(GTK_PANED(right_split), FALSE);
 
   self->status_label = gtk_label_new(NULL);
   gtk_label_set_xalign(GTK_LABEL(self->status_label), 0.0f);
   gtk_label_set_wrap(GTK_LABEL(self->status_label), TRUE);
-  gtk_box_append(GTK_BOX(right_panel), self->status_label);
+  gtk_box_append(GTK_BOX(middle_panel), self->status_label);
 
   self->controls_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
-  gtk_box_append(GTK_BOX(right_panel), self->controls_row);
+  gtk_box_append(GTK_BOX(middle_panel), self->controls_row);
 
   self->controls_panel = g_object_ref_sink(player_controls_panel_new());
   gtk_box_append(GTK_BOX(self->controls_row), GTK_WIDGET(self->controls_panel));
@@ -387,7 +579,31 @@ static void gcheckers_window_init(GCheckersWindow *self) {
                    G_CALLBACK(gcheckers_window_on_analysis_requested),
                    self);
   gtk_widget_add_css_class(sgf_widget, "sgf-panel");
-  gtk_box_append(GTK_BOX(right_panel), sgf_widget);
+  gtk_box_append(GTK_BOX(middle_panel), sgf_widget);
+
+  self->analyze_toggle_button = gtk_toggle_button_new_with_label("Analyze");
+  g_signal_connect(self->analyze_toggle_button,
+                   "toggled",
+                   G_CALLBACK(gcheckers_window_on_analyze_toggled),
+                   self);
+  gtk_box_append(GTK_BOX(analysis_panel), self->analyze_toggle_button);
+
+  GtkWidget *analysis_scroller = gtk_scrolled_window_new();
+  gtk_widget_set_hexpand(analysis_scroller, TRUE);
+  gtk_widget_set_vexpand(analysis_scroller, TRUE);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(analysis_scroller),
+                                 GTK_POLICY_AUTOMATIC,
+                                 GTK_POLICY_AUTOMATIC);
+  gtk_box_append(GTK_BOX(analysis_panel), analysis_scroller);
+
+  GtkWidget *analysis_view = gtk_text_view_new();
+  gtk_text_view_set_editable(GTK_TEXT_VIEW(analysis_view), FALSE);
+  gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(analysis_view), FALSE);
+  gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(analysis_view), GTK_WRAP_WORD_CHAR);
+  gtk_text_view_set_monospace(GTK_TEXT_VIEW(analysis_view), TRUE);
+  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(analysis_scroller), analysis_view);
+  self->analysis_buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(analysis_view));
+  gcheckers_window_set_analysis_text(self, "Toggle Analyze to start/stop iterative analysis.");
 }
 
 PlayerControlsPanel *gcheckers_window_get_controls_panel(GCheckersWindow *self) {
