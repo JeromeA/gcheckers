@@ -137,10 +137,12 @@ void sgf_view_scroller_scroll(SgfViewScroller *self,
     return;
   }
 
+  gboolean has_parent_bounds = FALSE;
+  graphene_rect_t parent_bounds;
   GtkWidget *parent = gtk_widget_get_parent(widget);
   if (parent) {
-    graphene_rect_t parent_bounds;
     if (gtk_widget_compute_bounds(widget, parent, &parent_bounds)) {
+      has_parent_bounds = TRUE;
       g_debug("SGF scroll attempt: parent bounds [x=%.1f y=%.1f w=%.1f h=%.1f]",
               parent_bounds.origin.x,
               parent_bounds.origin.y,
@@ -172,8 +174,8 @@ void sgf_view_scroller_scroll(SgfViewScroller *self,
           bounds.size.width,
           bounds.size.height);
 
-  if (bounds.origin.x < 0.0) {
-    g_debug("SGF scroll attempt: selected bounds x %.1f is negative", bounds.origin.x);
+  if (has_parent_bounds && parent_bounds.origin.x < 0.0) {
+    g_debug("SGF scroll attempt: parent bounds x %.1f is negative", parent_bounds.origin.x);
     sgf_view_scroller_schedule_retry(self);
     return;
   }
