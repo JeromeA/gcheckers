@@ -12,7 +12,8 @@ LDLIBS := $(GLIB_LIBS) $(GOBJECT_LIBS) -lm
 
 CFLAGS += $(GLIB_CFLAGS) $(GOBJECT_CFLAGS)
 
-SRCS := src/board.c src/game.c src/game_print.c src/move_gen.c src/checkers_model.c
+SRCS := src/board.c src/game.c src/game_print.c src/move_gen.c src/ai_random.c src/ai_alpha_beta.c \
+	src/checkers_model.c
 BOARD_SRCS := src/board.c
 SGF_TREE_SRCS := src/sgf_tree.c
 SGF_VIEW_SRCS := \

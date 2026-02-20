@@ -1,9 +1,9 @@
+#include "ai_random.h"
 #include "game.h"
 
 #include <glib.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include <stdlib.h>
 
 static void print_move(FILE *out, const CheckersMove *move) {
   g_return_if_fail(out != NULL);
@@ -91,31 +91,32 @@ static bool play_turn_human(Game *game) {
 static bool play_turn_ai(Game *game) {
   g_return_val_if_fail(game != NULL, false);
 
-  MoveList moves = game->available_moves(game);
-  if (moves.count == 0) {
+  static GRand *rng = NULL;
+  if (rng == NULL) {
+    rng = g_rand_new_with_seed(1);
+  }
+
+  CheckersMove move = {0};
+  if (!checkers_ai_random_choose_move(game, rng, &move)) {
     set_winner_for_no_moves(game);
     return false;
   }
 
-  size_t choice = (size_t)(rand() % (int)moves.count);
   printf("AI plays: ");
-  print_move(stdout, &moves.moves[choice]);
+  print_move(stdout, &move);
   fputc('\n', stdout);
 
-  if (game_apply_move(game, &moves.moves[choice]) != 0) {
+  if (game_apply_move(game, &move) != 0) {
     g_debug("Failed to apply AI move\n");
-    movelist_free(&moves);
     return false;
   }
 
-  movelist_free(&moves);
   return true;
 }
 
 int main(int /*argc*/, char **/*argv*/) {
   Game game;
   game_init(&game);
-  srand(1);
 
   while (game.state.winner == CHECKERS_WINNER_NONE) {
     game.print_state(&game, stdout);

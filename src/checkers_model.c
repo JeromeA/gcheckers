@@ -1,3 +1,5 @@
+#include "ai_alpha_beta.h"
+#include "ai_random.h"
 #include "checkers_model.h"
 
 #include <glib.h>
@@ -145,21 +147,34 @@ gboolean gcheckers_model_apply_move(GCheckersModel *self, const CheckersMove *mo
 gboolean gcheckers_model_step_random_move(GCheckersModel *self, CheckersMove *out_move) {
   g_return_val_if_fail(GCHECKERS_IS_MODEL(self), FALSE);
 
-  MoveList moves = self->game.available_moves(&self->game);
-  if (moves.count == 0) {
+  CheckersMove move = {0};
+  if (!gcheckers_model_choose_random_move(self, &move)) {
     gcheckers_model_set_winner_for_no_moves(self);
-    movelist_free(&moves);
     gcheckers_model_emit_state_changed(self);
     return FALSE;
   }
 
-  guint choice = g_rand_int_range(self->rng, 0, (gint)moves.count);
-  if (out_move) {
-    *out_move = moves.moves[choice];
+  gboolean applied = gcheckers_model_apply_move_internal(self, &move);
+  if (applied && out_move) {
+    *out_move = move;
   }
-  gboolean applied = gcheckers_model_apply_move_internal(self, &moves.moves[choice]);
-  movelist_free(&moves);
+
   return applied;
+}
+
+gboolean gcheckers_model_choose_random_move(GCheckersModel *self, CheckersMove *out_move) {
+  g_return_val_if_fail(GCHECKERS_IS_MODEL(self), FALSE);
+  g_return_val_if_fail(out_move != NULL, FALSE);
+
+  return checkers_ai_random_choose_move(&self->game, self->rng, out_move);
+}
+
+gboolean gcheckers_model_choose_best_move(GCheckersModel *self, guint max_depth, CheckersMove *out_move) {
+  g_return_val_if_fail(GCHECKERS_IS_MODEL(self), FALSE);
+  g_return_val_if_fail(out_move != NULL, FALSE);
+  g_return_val_if_fail(max_depth > 0, FALSE);
+
+  return checkers_ai_alpha_beta_choose_move(&self->game, max_depth, out_move);
 }
 
 char *gcheckers_model_format_status(GCheckersModel *self) {

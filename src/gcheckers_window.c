@@ -68,6 +68,26 @@ static gboolean gcheckers_window_is_computer_control(GCheckersWindow *self, Chec
   return !gcheckers_window_is_user_control(self, color);
 }
 
+static gboolean gcheckers_window_choose_computer_move(GCheckersWindow *self, CheckersColor color, CheckersMove *move) {
+  g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), FALSE);
+  g_return_val_if_fail(move != NULL, FALSE);
+  g_return_val_if_fail(self->controls_panel != NULL, FALSE);
+  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self->sgf_controller), FALSE);
+
+  PlayerControlMode mode = player_controls_panel_get_mode(self->controls_panel, color);
+  guint depth = 0;
+  if (!player_controls_panel_mode_depth(mode, &depth)) {
+    g_debug("No computer depth for current control mode");
+    return FALSE;
+  }
+
+  if (depth == 0) {
+    return gcheckers_sgf_controller_step_random_move(self->sgf_controller, move);
+  }
+
+  return gcheckers_sgf_controller_step_ai_move(self->sgf_controller, depth, move);
+}
+
 static void gcheckers_window_update_control_state(GCheckersWindow *self) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
 
@@ -233,7 +253,7 @@ static void gcheckers_window_on_force_move_requested(PlayerControlsPanel * /*pan
   }
 
   CheckersMove move;
-  if (gcheckers_sgf_controller_step_random_move(self->sgf_controller, &move)) {
+  if (gcheckers_window_choose_computer_move(self, state->turn, &move)) {
     gcheckers_window_print_move("AI", &move);
   }
 }

@@ -17,6 +17,11 @@ struct _PlayerControlsPanel {
 
 G_DEFINE_TYPE(PlayerControlsPanel, player_controls_panel, GTK_TYPE_BOX)
 
+static gboolean player_controls_panel_mode_valid(PlayerControlMode mode) {
+  return mode == PLAYER_CONTROL_MODE_USER || mode == PLAYER_CONTROL_MODE_COMP_LEVEL_1_RANDOM
+      || mode == PLAYER_CONTROL_MODE_COMP_LEVEL_2_DEPTH_4 || mode == PLAYER_CONTROL_MODE_COMP_LEVEL_3_DEPTH_8;
+}
+
 static GtkDropDown *player_controls_panel_get_control(PlayerControlsPanel *self, CheckersColor color) {
   g_return_val_if_fail(PLAYER_IS_CONTROLS_PANEL(self), NULL);
   g_return_val_if_fail(color == CHECKERS_COLOR_WHITE || color == CHECKERS_COLOR_BLACK, NULL);
@@ -102,11 +107,15 @@ static void player_controls_panel_init(PlayerControlsPanel *self) {
   gtk_widget_set_halign(black_label, GTK_ALIGN_START);
   gtk_grid_attach(GTK_GRID(controls_grid), black_label, 0, 1, 1, 1);
 
-  static const char *control_options[] = {"User", "Computer", NULL};
+  static const char *control_options[] = {"User",
+                                          "Comp Level 1 (random)",
+                                          "Comp Level 2 (depth 4)",
+                                          "Comp Level 3 (depth 8)",
+                                          NULL};
   self->white_control = GTK_DROP_DOWN(gtk_drop_down_new_from_strings(control_options));
   self->black_control = GTK_DROP_DOWN(gtk_drop_down_new_from_strings(control_options));
-  gtk_drop_down_set_selected(self->white_control, 0);
-  gtk_drop_down_set_selected(self->black_control, 0);
+  player_controls_panel_set_mode(self, CHECKERS_COLOR_WHITE, PLAYER_CONTROL_MODE_USER);
+  player_controls_panel_set_mode(self, CHECKERS_COLOR_BLACK, PLAYER_CONTROL_MODE_USER);
   gtk_grid_attach(GTK_GRID(controls_grid), GTK_WIDGET(self->white_control), 1, 0, 1, 1);
   gtk_grid_attach(GTK_GRID(controls_grid), GTK_WIDGET(self->black_control), 1, 1, 1, 1);
 
@@ -147,17 +156,25 @@ GtkWidget *player_controls_panel_get_force_move_button(PlayerControlsPanel *self
 }
 
 void player_controls_panel_set_selected(PlayerControlsPanel *self, CheckersColor color, guint selected) {
+  g_return_if_fail(selected <= PLAYER_CONTROL_MODE_COMP_LEVEL_3_DEPTH_8);
+
   GtkDropDown *control = player_controls_panel_get_control(self, color);
   g_return_if_fail(control != NULL);
 
   gtk_drop_down_set_selected(control, selected);
 }
 
+void player_controls_panel_set_mode(PlayerControlsPanel *self, CheckersColor color, PlayerControlMode mode) {
+  g_return_if_fail(player_controls_panel_mode_valid(mode));
+
+  player_controls_panel_set_selected(self, color, (guint)mode);
+}
+
 void player_controls_panel_set_all_user(PlayerControlsPanel *self) {
   g_return_if_fail(PLAYER_IS_CONTROLS_PANEL(self));
 
-  player_controls_panel_set_selected(self, CHECKERS_COLOR_WHITE, 0);
-  player_controls_panel_set_selected(self, CHECKERS_COLOR_BLACK, 0);
+  player_controls_panel_set_mode(self, CHECKERS_COLOR_WHITE, PLAYER_CONTROL_MODE_USER);
+  player_controls_panel_set_mode(self, CHECKERS_COLOR_BLACK, PLAYER_CONTROL_MODE_USER);
 }
 
 guint player_controls_panel_get_selected(PlayerControlsPanel *self, CheckersColor color) {
@@ -167,11 +184,34 @@ guint player_controls_panel_get_selected(PlayerControlsPanel *self, CheckersColo
   return gtk_drop_down_get_selected(control);
 }
 
-gboolean player_controls_panel_is_user_control(PlayerControlsPanel *self, CheckersColor color) {
-  GtkDropDown *control = player_controls_panel_get_control(self, color);
-  g_return_val_if_fail(control != NULL, TRUE);
+PlayerControlMode player_controls_panel_get_mode(PlayerControlsPanel *self, CheckersColor color) {
+  guint selected = player_controls_panel_get_selected(self, color);
+  g_return_val_if_fail(selected <= PLAYER_CONTROL_MODE_COMP_LEVEL_3_DEPTH_8, PLAYER_CONTROL_MODE_USER);
 
-  return gtk_drop_down_get_selected(control) == 0;
+  return (PlayerControlMode)selected;
+}
+
+gboolean player_controls_panel_is_user_control(PlayerControlsPanel *self, CheckersColor color) {
+  return player_controls_panel_get_mode(self, color) == PLAYER_CONTROL_MODE_USER;
+}
+
+gboolean player_controls_panel_mode_depth(PlayerControlMode mode, guint *out_depth) {
+  g_return_val_if_fail(out_depth != NULL, FALSE);
+
+  switch (mode) {
+    case PLAYER_CONTROL_MODE_COMP_LEVEL_1_RANDOM:
+      *out_depth = 0;
+      return TRUE;
+    case PLAYER_CONTROL_MODE_COMP_LEVEL_2_DEPTH_4:
+      *out_depth = 4;
+      return TRUE;
+    case PLAYER_CONTROL_MODE_COMP_LEVEL_3_DEPTH_8:
+      *out_depth = 8;
+      return TRUE;
+    case PLAYER_CONTROL_MODE_USER:
+    default:
+      return FALSE;
+  }
 }
 
 void player_controls_panel_set_force_move_sensitive(PlayerControlsPanel *self, gboolean sensitive) {

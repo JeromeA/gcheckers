@@ -168,7 +168,7 @@ static void test_gcheckers_window_computer_selection_keeps_board_enabled(void) {
   PlayerControlsPanel *panel = gcheckers_window_get_controls_panel(window);
   g_assert_nonnull(panel);
 
-  player_controls_panel_set_selected(panel, CHECKERS_COLOR_WHITE, 1);
+  player_controls_panel_set_mode(panel, CHECKERS_COLOR_WHITE, PLAYER_CONTROL_MODE_COMP_LEVEL_1_RANDOM);
   test_gcheckers_window_drain_main_context(8);
 
   GtkWidget *square = test_gcheckers_window_find_board_square(GTK_WIDGET(window));
@@ -188,8 +188,8 @@ static void test_gcheckers_window_auto_moves_when_next_player_is_computer(void) 
   PlayerControlsPanel *panel = gcheckers_window_get_controls_panel(window);
   g_assert_nonnull(panel);
 
-  player_controls_panel_set_selected(panel, CHECKERS_COLOR_WHITE, 0);
-  player_controls_panel_set_selected(panel, CHECKERS_COLOR_BLACK, 1);
+  player_controls_panel_set_mode(panel, CHECKERS_COLOR_WHITE, PLAYER_CONTROL_MODE_USER);
+  player_controls_panel_set_mode(panel, CHECKERS_COLOR_BLACK, PLAYER_CONTROL_MODE_COMP_LEVEL_2_DEPTH_4);
 
   GCheckersSgfController *controller = gcheckers_window_get_sgf_controller(window);
   g_assert_nonnull(controller);
@@ -215,8 +215,8 @@ static void test_gcheckers_window_sgf_navigation_resets_controls_to_user(void) {
   PlayerControlsPanel *panel = gcheckers_window_get_controls_panel(window);
   g_assert_nonnull(panel);
 
-  player_controls_panel_set_selected(panel, CHECKERS_COLOR_WHITE, 0);
-  player_controls_panel_set_selected(panel, CHECKERS_COLOR_BLACK, 1);
+  player_controls_panel_set_mode(panel, CHECKERS_COLOR_WHITE, PLAYER_CONTROL_MODE_USER);
+  player_controls_panel_set_mode(panel, CHECKERS_COLOR_BLACK, PLAYER_CONTROL_MODE_COMP_LEVEL_3_DEPTH_8);
 
   GCheckersSgfController *controller = gcheckers_window_get_sgf_controller(window);
   g_assert_nonnull(controller);

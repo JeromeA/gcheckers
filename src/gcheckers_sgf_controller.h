@@ -23,6 +23,7 @@ void gcheckers_sgf_controller_set_model(GCheckersSgfController *self, GCheckersM
 void gcheckers_sgf_controller_new_game(GCheckersSgfController *self);
 gboolean gcheckers_sgf_controller_apply_move(GCheckersSgfController *self, const CheckersMove *move);
 gboolean gcheckers_sgf_controller_step_random_move(GCheckersSgfController *self, CheckersMove *out_move);
+gboolean gcheckers_sgf_controller_step_ai_move(GCheckersSgfController *self, guint depth, CheckersMove *out_move);
 GtkWidget *gcheckers_sgf_controller_get_widget(GCheckersSgfController *self);
 SgfTree *gcheckers_sgf_controller_get_tree(GCheckersSgfController *self);
 SgfView *gcheckers_sgf_controller_get_view(GCheckersSgfController *self);

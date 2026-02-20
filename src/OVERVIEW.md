@@ -6,7 +6,8 @@ Role: composition root that binds model state to UI updates, keeps board input a
 exposes a debug SGF reselect button to force layout resyncs.
 Owns: `GCheckersModel`, `BoardView`, `PlayerControlsPanel`, and `GCheckersSgfController`.
 Collaborates with: `gcheckers_style_init()` for CSS, model signals for refresh, and SGF analysis signals to reset
-player dropdowns.
+player dropdowns. Computer turns are routed by control mode: random (level 1), alpha-beta depth 4 (level 2), or
+alpha-beta depth 8 (level 3).
 Lifecycle: sinks and retains an owned `PlayerControlsPanel` reference, removes it from its current `GtkBox` parent
 during dispose via `gcheckers_widget_remove_from_parent()`, and then clears its references.
 during dispose, cancels any pending auto-move idle source, and then clears its references.
@@ -25,6 +26,7 @@ and `GCheckersWindow` via the `analysis-requested` signal.
 ## `PlayerControlsPanel` (`src/player_controls_panel.c`)
 Class: `PlayerControlsPanel` (`GtkBox`).
 Role: encapsulates player mode dropdowns and force-move UI.
+Modes: `User`, `Comp Level 1 (random)`, `Comp Level 2 (depth 4)`, `Comp Level 3 (depth 8)`.
 Defaults: both white and black controls start as `User`.
 Signals: `control-changed` and `force-move-requested` for window-level coordination.
 Collaborates with: `GCheckersWindow` (signal handlers and `player_controls_panel_set_all_user()`) and GTK widgets
@@ -69,9 +71,19 @@ Collaborates with: `game.c` to validate and apply generated moves.
 
 ## GTK model wrapper (`src/checkers_model.c`, `src/checkers_model.h`)
 Class: `GCheckersModel` (`GObject`).
-Role: wrap the engine for GTK, including move validation, random AI moves, state-change signals, and last-move caching
-for board overlay rendering.
+Role: wrap the engine for GTK, including move validation, random/alpha-beta move selection, state-change signals, and
+last-move caching for board overlay rendering.
 Collaborates with: `GCheckersWindow` and SGF controllers via signals and high-level move APIs.
+
+## AI random selector (`src/ai_random.c`, `src/ai_random.h`)
+Module: random move selection.
+Role: choose a legal move uniformly from the current game state's move list.
+Collaborates with: `checkers_model.c` and `checkers_cli.c`.
+
+## AI alpha-beta search (`src/ai_alpha_beta.c`, `src/ai_alpha_beta.h`)
+Module: alpha-beta search.
+Role: choose a move via depth-limited alpha-beta with a material heuristic and terminal-win scoring.
+Collaborates with: `checkers_model.c` for model-facing AI move selection.
 
 ## CLI entry point (`src/checkers_cli.c`)
 Module: CLI front end.

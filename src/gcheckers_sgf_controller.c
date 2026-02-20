@@ -322,16 +322,30 @@ gboolean gcheckers_sgf_controller_step_random_move(GCheckersSgfController *self,
   g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(GCHECKERS_IS_MODEL(self->model), FALSE);
 
-  MoveList moves = gcheckers_model_list_moves(self->model);
-  if (moves.count == 0) {
-    movelist_free(&moves);
-    g_debug("No available moves for random SGF step");
+  CheckersMove move = {0};
+  if (!gcheckers_model_choose_random_move(self->model, &move)) {
+    g_debug("Failed to choose random SGF move from model");
     return FALSE;
   }
 
-  guint choice = g_random_int_range(0, (gint)moves.count);
-  CheckersMove move = moves.moves[choice];
-  movelist_free(&moves);
+  gboolean applied = gcheckers_sgf_controller_apply_move(self, &move);
+  if (applied && out_move) {
+    *out_move = move;
+  }
+
+  return applied;
+}
+
+gboolean gcheckers_sgf_controller_step_ai_move(GCheckersSgfController *self, guint depth, CheckersMove *out_move) {
+  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+  g_return_val_if_fail(GCHECKERS_IS_MODEL(self->model), FALSE);
+  g_return_val_if_fail(depth > 0, FALSE);
+
+  CheckersMove move = {0};
+  if (!gcheckers_model_choose_best_move(self->model, depth, &move)) {
+    g_debug("Failed to choose alpha-beta SGF move from model");
+    return FALSE;
+  }
 
   gboolean applied = gcheckers_sgf_controller_apply_move(self, &move);
   if (applied && out_move) {
