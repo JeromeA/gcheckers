@@ -318,24 +318,6 @@ gboolean gcheckers_sgf_controller_apply_move(GCheckersSgfController *self, const
   return TRUE;
 }
 
-gboolean gcheckers_sgf_controller_step_random_move(GCheckersSgfController *self, CheckersMove *out_move) {
-  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
-  g_return_val_if_fail(GCHECKERS_IS_MODEL(self->model), FALSE);
-
-  CheckersMove move = {0};
-  if (!gcheckers_model_choose_random_move(self->model, &move)) {
-    g_debug("Failed to choose random SGF move from model");
-    return FALSE;
-  }
-
-  gboolean applied = gcheckers_sgf_controller_apply_move(self, &move);
-  if (applied && out_move) {
-    *out_move = move;
-  }
-
-  return applied;
-}
-
 gboolean gcheckers_sgf_controller_step_ai_move(GCheckersSgfController *self, guint depth, CheckersMove *out_move) {
   g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(GCHECKERS_IS_MODEL(self->model), FALSE);

@@ -1,4 +1,4 @@
-#include "ai_random.h"
+#include "ai_alpha_beta.h"
 #include "game.h"
 
 #include <glib.h>
@@ -91,13 +91,8 @@ static bool play_turn_human(Game *game) {
 static bool play_turn_ai(Game *game) {
   g_return_val_if_fail(game != NULL, false);
 
-  static GRand *rng = NULL;
-  if (rng == NULL) {
-    rng = g_rand_new_with_seed(1);
-  }
-
   CheckersMove move = {0};
-  if (!checkers_ai_random_choose_move(game, rng, &move)) {
+  if (!checkers_ai_alpha_beta_choose_move(game, 4, &move)) {
     set_winner_for_no_moves(game);
     return false;
   }

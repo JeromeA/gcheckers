@@ -1,5 +1,4 @@
 #include "ai_alpha_beta.h"
-#include "ai_random.h"
 #include "checkers_model.h"
 
 #include <glib.h>
@@ -8,7 +7,6 @@
 struct _GCheckersModel {
   GObject parent_instance;
   Game game;
-  GRand *rng;
   CheckersMove last_move;
   gboolean has_last_move;
 };
@@ -29,10 +27,6 @@ static void gcheckers_model_finalize(GObject *object) {
   GCheckersModel *self = GCHECKERS_MODEL(object);
 
   game_destroy(&self->game);
-  if (self->rng) {
-    g_rand_free(self->rng);
-    self->rng = NULL;
-  }
 
   G_OBJECT_CLASS(gcheckers_model_parent_class)->finalize(object);
 }
@@ -55,7 +49,6 @@ static void gcheckers_model_class_init(GCheckersModelClass *klass) {
 
 static void gcheckers_model_init(GCheckersModel *self) {
   game_init(&self->game);
-  self->rng = g_rand_new();
   self->has_last_move = FALSE;
 }
 
@@ -157,31 +150,6 @@ gboolean gcheckers_model_apply_move(GCheckersModel *self, const CheckersMove *mo
 
   movelist_free(&moves);
   return applied;
-}
-
-gboolean gcheckers_model_step_random_move(GCheckersModel *self, CheckersMove *out_move) {
-  g_return_val_if_fail(GCHECKERS_IS_MODEL(self), FALSE);
-
-  CheckersMove move = {0};
-  if (!gcheckers_model_choose_random_move(self, &move)) {
-    gcheckers_model_set_winner_for_no_moves(self);
-    gcheckers_model_emit_state_changed(self);
-    return FALSE;
-  }
-
-  gboolean applied = gcheckers_model_apply_move_internal(self, &move);
-  if (applied && out_move) {
-    *out_move = move;
-  }
-
-  return applied;
-}
-
-gboolean gcheckers_model_choose_random_move(GCheckersModel *self, CheckersMove *out_move) {
-  g_return_val_if_fail(GCHECKERS_IS_MODEL(self), FALSE);
-  g_return_val_if_fail(out_move != NULL, FALSE);
-
-  return checkers_ai_random_choose_move(&self->game, self->rng, out_move);
 }
 
 gboolean gcheckers_model_choose_best_move(GCheckersModel *self, guint max_depth, CheckersMove *out_move) {

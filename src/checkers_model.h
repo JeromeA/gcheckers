@@ -16,8 +16,6 @@ void gcheckers_model_reset(GCheckersModel *self);
 void gcheckers_model_set_rules(GCheckersModel *self, const CheckersRules *rules);
 MoveList gcheckers_model_list_moves(GCheckersModel *self);
 gboolean gcheckers_model_apply_move(GCheckersModel *self, const CheckersMove *move);
-gboolean gcheckers_model_step_random_move(GCheckersModel *self, CheckersMove *out_move);
-gboolean gcheckers_model_choose_random_move(GCheckersModel *self, CheckersMove *out_move);
 gboolean gcheckers_model_choose_best_move(GCheckersModel *self, guint max_depth, CheckersMove *out_move);
 char *gcheckers_model_analyze_moves_text(GCheckersModel *self, guint max_depth);
 gboolean gcheckers_model_copy_game(GCheckersModel *self, Game *out_game);

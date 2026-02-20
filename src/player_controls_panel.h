@@ -20,12 +20,8 @@ typedef enum {
   PLAYER_CONTROL_MODE_COMPUTER = 1
 } PlayerControlMode;
 
-typedef enum {
-  PLAYER_COMPUTER_LEVEL_1_RANDOM = 0,
-  PLAYER_COMPUTER_LEVEL_2_DEPTH_4 = 1,
-  PLAYER_COMPUTER_LEVEL_3_DEPTH_8 = 2,
-  PLAYER_COMPUTER_LEVEL_4_DEPTH_12 = 3
-} PlayerComputerLevel;
+#define PLAYER_COMPUTER_DEPTH_MIN 0
+#define PLAYER_COMPUTER_DEPTH_MAX 16
 
 typedef enum {
   PLAYER_RULESET_AMERICAN = 0,
@@ -40,9 +36,8 @@ void player_controls_panel_set_all_user(PlayerControlsPanel *self);
 guint player_controls_panel_get_selected(PlayerControlsPanel *self, CheckersColor color);
 PlayerControlMode player_controls_panel_get_mode(PlayerControlsPanel *self, CheckersColor color);
 gboolean player_controls_panel_is_user_control(PlayerControlsPanel *self, CheckersColor color);
-void player_controls_panel_set_computer_level(PlayerControlsPanel *self, PlayerComputerLevel level);
-PlayerComputerLevel player_controls_panel_get_computer_level(PlayerControlsPanel *self);
-gboolean player_controls_panel_computer_level_depth(PlayerComputerLevel level, guint *out_depth);
+void player_controls_panel_set_computer_depth(PlayerControlsPanel *self, guint depth);
+guint player_controls_panel_get_computer_depth(PlayerControlsPanel *self);
 
 G_END_DECLS
 

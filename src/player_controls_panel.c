@@ -11,7 +11,7 @@ struct _PlayerControlsPanel {
   GtkBox parent_instance;
   GtkDropDown *white_control;
   GtkDropDown *black_control;
-  GtkDropDown *computer_level_control;
+  GtkScale *computer_depth_scale;
 };
 
 G_DEFINE_TYPE(PlayerControlsPanel, player_controls_panel, GTK_TYPE_BOX)
@@ -20,9 +20,8 @@ static gboolean player_controls_panel_mode_valid(PlayerControlMode mode) {
   return mode == PLAYER_CONTROL_MODE_USER || mode == PLAYER_CONTROL_MODE_COMPUTER;
 }
 
-static gboolean player_controls_panel_computer_level_valid(PlayerComputerLevel level) {
-  return level == PLAYER_COMPUTER_LEVEL_1_RANDOM || level == PLAYER_COMPUTER_LEVEL_2_DEPTH_4
-      || level == PLAYER_COMPUTER_LEVEL_3_DEPTH_8 || level == PLAYER_COMPUTER_LEVEL_4_DEPTH_12;
+static gboolean player_controls_panel_computer_depth_valid(guint depth) {
+  return depth <= PLAYER_COMPUTER_DEPTH_MAX;
 }
 
 static GtkDropDown *player_controls_panel_get_control(PlayerControlsPanel *self, CheckersColor color) {
@@ -48,12 +47,20 @@ static void player_controls_panel_on_selected_notify(GObject * /*object*/,
   g_signal_emit(self, player_controls_panel_signals[PLAYER_CONTROLS_PANEL_SIGNAL_CONTROL_CHANGED], 0);
 }
 
+static void player_controls_panel_on_computer_depth_value_changed(GtkRange * /*range*/, gpointer user_data) {
+  PlayerControlsPanel *self = PLAYER_CONTROLS_PANEL(user_data);
+
+  g_return_if_fail(PLAYER_IS_CONTROLS_PANEL(self));
+
+  g_signal_emit(self, player_controls_panel_signals[PLAYER_CONTROLS_PANEL_SIGNAL_CONTROL_CHANGED], 0);
+}
+
 static void player_controls_panel_dispose(GObject *object) {
   PlayerControlsPanel *self = PLAYER_CONTROLS_PANEL(object);
 
   self->white_control = NULL;
   self->black_control = NULL;
-  self->computer_level_control = NULL;
+  self->computer_depth_scale = NULL;
 
   G_OBJECT_CLASS(player_controls_panel_parent_class)->dispose(object);
 }
@@ -97,20 +104,19 @@ static void player_controls_panel_init(PlayerControlsPanel *self) {
   gtk_grid_attach(GTK_GRID(controls_grid), computer_level_label, 0, 2, 1, 1);
 
   static const char *control_options[] = {"User", "Computer", NULL};
-  static const char *computer_level_options[] = {"Comp Level 1 (random)",
-                                                 "Comp Level 2 (depth 4)",
-                                                 "Comp Level 3 (depth 8)",
-                                                 "Comp Level 4 (depth 12)",
-                                                 NULL};
   self->white_control = GTK_DROP_DOWN(gtk_drop_down_new_from_strings(control_options));
   self->black_control = GTK_DROP_DOWN(gtk_drop_down_new_from_strings(control_options));
-  self->computer_level_control = GTK_DROP_DOWN(gtk_drop_down_new_from_strings(computer_level_options));
+  self->computer_depth_scale = GTK_SCALE(
+      gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL, PLAYER_COMPUTER_DEPTH_MIN, PLAYER_COMPUTER_DEPTH_MAX, 1));
+  gtk_scale_set_digits(self->computer_depth_scale, 0);
+  gtk_scale_set_draw_value(self->computer_depth_scale, TRUE);
+  gtk_widget_set_hexpand(GTK_WIDGET(self->computer_depth_scale), TRUE);
   player_controls_panel_set_mode(self, CHECKERS_COLOR_WHITE, PLAYER_CONTROL_MODE_USER);
   player_controls_panel_set_mode(self, CHECKERS_COLOR_BLACK, PLAYER_CONTROL_MODE_USER);
-  player_controls_panel_set_computer_level(self, PLAYER_COMPUTER_LEVEL_1_RANDOM);
+  player_controls_panel_set_computer_depth(self, 8);
   gtk_grid_attach(GTK_GRID(controls_grid), GTK_WIDGET(self->white_control), 1, 0, 1, 1);
   gtk_grid_attach(GTK_GRID(controls_grid), GTK_WIDGET(self->black_control), 1, 1, 1, 1);
-  gtk_grid_attach(GTK_GRID(controls_grid), GTK_WIDGET(self->computer_level_control), 1, 2, 1, 1);
+  gtk_grid_attach(GTK_GRID(controls_grid), GTK_WIDGET(self->computer_depth_scale), 1, 2, 1, 1);
 
   g_signal_connect(self->white_control,
                    "notify::selected",
@@ -120,9 +126,9 @@ static void player_controls_panel_init(PlayerControlsPanel *self) {
                    "notify::selected",
                    G_CALLBACK(player_controls_panel_on_selected_notify),
                    self);
-  g_signal_connect(self->computer_level_control,
-                   "notify::selected",
-                   G_CALLBACK(player_controls_panel_on_selected_notify),
+  g_signal_connect(self->computer_depth_scale,
+                   "value-changed",
+                   G_CALLBACK(player_controls_panel_on_computer_depth_value_changed),
                    self);
 }
 
@@ -174,41 +180,25 @@ gboolean player_controls_panel_is_user_control(PlayerControlsPanel *self, Checke
   return player_controls_panel_get_mode(self, color) == PLAYER_CONTROL_MODE_USER;
 }
 
-void player_controls_panel_set_computer_level(PlayerControlsPanel *self, PlayerComputerLevel level) {
+void player_controls_panel_set_computer_depth(PlayerControlsPanel *self, guint depth) {
   g_return_if_fail(PLAYER_IS_CONTROLS_PANEL(self));
-  g_return_if_fail(player_controls_panel_computer_level_valid(level));
+  g_return_if_fail(player_controls_panel_computer_depth_valid(depth));
+  g_return_if_fail(self->computer_depth_scale != NULL);
 
-  g_return_if_fail(self->computer_level_control != NULL);
-  gtk_drop_down_set_selected(self->computer_level_control, (guint)level);
+  gtk_range_set_value(GTK_RANGE(self->computer_depth_scale), (gdouble)depth);
 }
 
-PlayerComputerLevel player_controls_panel_get_computer_level(PlayerControlsPanel *self) {
-  g_return_val_if_fail(PLAYER_IS_CONTROLS_PANEL(self), PLAYER_COMPUTER_LEVEL_1_RANDOM);
-  g_return_val_if_fail(self->computer_level_control != NULL, PLAYER_COMPUTER_LEVEL_1_RANDOM);
+guint player_controls_panel_get_computer_depth(PlayerControlsPanel *self) {
+  g_return_val_if_fail(PLAYER_IS_CONTROLS_PANEL(self), 8);
+  g_return_val_if_fail(self->computer_depth_scale != NULL, 8);
 
-  guint selected = gtk_drop_down_get_selected(self->computer_level_control);
-  g_return_val_if_fail(selected <= PLAYER_COMPUTER_LEVEL_4_DEPTH_12, PLAYER_COMPUTER_LEVEL_1_RANDOM);
-  return (PlayerComputerLevel)selected;
-}
+  gdouble value = gtk_range_get_value(GTK_RANGE(self->computer_depth_scale));
+  guint depth = (guint)value;
 
-gboolean player_controls_panel_computer_level_depth(PlayerComputerLevel level, guint *out_depth) {
-  g_return_val_if_fail(out_depth != NULL, FALSE);
-
-  switch (level) {
-    case PLAYER_COMPUTER_LEVEL_1_RANDOM:
-      *out_depth = 0;
-      return TRUE;
-    case PLAYER_COMPUTER_LEVEL_2_DEPTH_4:
-      *out_depth = 4;
-      return TRUE;
-    case PLAYER_COMPUTER_LEVEL_3_DEPTH_8:
-      *out_depth = 8;
-      return TRUE;
-    case PLAYER_COMPUTER_LEVEL_4_DEPTH_12:
-      *out_depth = 12;
-      return TRUE;
-    default:
-      g_debug("Unexpected computer level value");
-      return FALSE;
+  if (!player_controls_panel_computer_depth_valid(depth)) {
+    g_debug("Unexpected computer depth value");
+    return 8;
   }
+
+  return depth;
 }

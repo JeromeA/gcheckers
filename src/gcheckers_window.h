@@ -21,7 +21,7 @@ void gcheckers_window_apply_new_game_settings(GCheckersWindow *self,
                                               PlayerRuleset ruleset,
                                               PlayerControlMode white_mode,
                                               PlayerControlMode black_mode,
-                                              PlayerComputerLevel computer_level);
+                                              guint computer_depth);
 PlayerControlsPanel *gcheckers_window_get_controls_panel(GCheckersWindow *self);
 GCheckersSgfController *gcheckers_window_get_sgf_controller(GCheckersWindow *self);
 

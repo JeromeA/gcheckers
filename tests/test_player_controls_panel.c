@@ -21,6 +21,7 @@ static void test_player_controls_panel_defaults(void) {
   g_assert_cmpuint(player_controls_panel_get_selected(panel, CHECKERS_COLOR_BLACK), ==, PLAYER_CONTROL_MODE_USER);
   g_assert_true(player_controls_panel_is_user_control(panel, CHECKERS_COLOR_WHITE));
   g_assert_true(player_controls_panel_is_user_control(panel, CHECKERS_COLOR_BLACK));
+  g_assert_cmpuint(player_controls_panel_get_computer_depth(panel), ==, 8);
 
   g_clear_object(&panel);
 }
@@ -43,16 +44,16 @@ static void test_player_controls_panel_control_signal(void) {
   g_clear_object(&panel);
 }
 
-static void test_player_controls_panel_level_depth_mapping(void) {
-  guint depth = 0;
-  g_assert_true(player_controls_panel_computer_level_depth(PLAYER_COMPUTER_LEVEL_1_RANDOM, &depth));
-  g_assert_cmpuint(depth, ==, 0);
-  g_assert_true(player_controls_panel_computer_level_depth(PLAYER_COMPUTER_LEVEL_2_DEPTH_4, &depth));
-  g_assert_cmpuint(depth, ==, 4);
-  g_assert_true(player_controls_panel_computer_level_depth(PLAYER_COMPUTER_LEVEL_3_DEPTH_8, &depth));
-  g_assert_cmpuint(depth, ==, 8);
-  g_assert_true(player_controls_panel_computer_level_depth(PLAYER_COMPUTER_LEVEL_4_DEPTH_12, &depth));
-  g_assert_cmpuint(depth, ==, 12);
+static void test_player_controls_panel_computer_depth(void) {
+  PlayerControlsPanel *panel = test_player_controls_panel_new_owned();
+
+  player_controls_panel_set_computer_depth(panel, 0);
+  g_assert_cmpuint(player_controls_panel_get_computer_depth(panel), ==, 0);
+
+  player_controls_panel_set_computer_depth(panel, 16);
+  g_assert_cmpuint(player_controls_panel_get_computer_depth(panel), ==, 16);
+
+  g_clear_object(&panel);
 }
 
 int main(int argc, char **argv) {
@@ -60,12 +61,12 @@ int main(int argc, char **argv) {
   if (!gtk_init_check()) {
     g_test_add_func("/player-controls/defaults", test_player_controls_panel_skip);
     g_test_add_func("/player-controls/control-signal", test_player_controls_panel_skip);
-    g_test_add_func("/player-controls/level-depth", test_player_controls_panel_skip);
+    g_test_add_func("/player-controls/computer-depth", test_player_controls_panel_skip);
     return g_test_run();
   }
 
   g_test_add_func("/player-controls/defaults", test_player_controls_panel_defaults);
   g_test_add_func("/player-controls/control-signal", test_player_controls_panel_control_signal);
-  g_test_add_func("/player-controls/level-depth", test_player_controls_panel_level_depth_mapping);
+  g_test_add_func("/player-controls/computer-depth", test_player_controls_panel_computer_depth);
   return g_test_run();
 }

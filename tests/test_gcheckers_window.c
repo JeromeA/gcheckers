@@ -212,7 +212,7 @@ static void test_gcheckers_window_auto_moves_when_next_player_is_computer(void) 
 
   player_controls_panel_set_mode(panel, CHECKERS_COLOR_WHITE, PLAYER_CONTROL_MODE_USER);
   player_controls_panel_set_mode(panel, CHECKERS_COLOR_BLACK, PLAYER_CONTROL_MODE_COMPUTER);
-  player_controls_panel_set_computer_level(panel, PLAYER_COMPUTER_LEVEL_2_DEPTH_4);
+  player_controls_panel_set_computer_depth(panel, 4);
 
   GCheckersSgfController *controller = gcheckers_window_get_sgf_controller(window);
   g_assert_nonnull(controller);
@@ -240,7 +240,7 @@ static void test_gcheckers_window_sgf_navigation_resets_controls_to_user(void) {
 
   player_controls_panel_set_mode(panel, CHECKERS_COLOR_WHITE, PLAYER_CONTROL_MODE_USER);
   player_controls_panel_set_mode(panel, CHECKERS_COLOR_BLACK, PLAYER_CONTROL_MODE_COMPUTER);
-  player_controls_panel_set_computer_level(panel, PLAYER_COMPUTER_LEVEL_3_DEPTH_8);
+  player_controls_panel_set_computer_depth(panel, 8);
 
   GCheckersSgfController *controller = gcheckers_window_get_sgf_controller(window);
   g_assert_nonnull(controller);
@@ -324,7 +324,7 @@ static void test_gcheckers_window_ruleset_switch_resets_model(void) {
                                            PLAYER_RULESET_AMERICAN,
                                            PLAYER_CONTROL_MODE_USER,
                                            PLAYER_CONTROL_MODE_USER,
-                                           PLAYER_COMPUTER_LEVEL_1_RANDOM);
+                                           0);
   test_gcheckers_window_drain_main_context(16);
 
   state = gcheckers_model_peek_state(model);

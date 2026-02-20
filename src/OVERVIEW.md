@@ -5,8 +5,8 @@ Class: `GCheckersWindow` (`GtkApplicationWindow`).
 Role: composition root that binds model state to UI updates, keeps board input available, and coordinates auto-play.
 Owns: `GCheckersModel`, `BoardView`, `PlayerControlsPanel`, and `GCheckersSgfController`.
 Collaborates with: `gcheckers_style_init()` for CSS, model signals for refresh, and SGF analysis signals to reset
-player dropdowns. Computer turns are routed by control mode: random (level 1), alpha-beta depth 4 (level 2),
-alpha-beta depth 8 (level 3), or alpha-beta depth 12 (level 4). Uses a three-pane layout: board (left), move
+player dropdowns. Computer turns are routed by control mode with alpha-beta depth configured from the shared
+`Computer level` slider (`0..16`). Uses a three-pane layout: board (left), move
 controls and SGF (middle), and analysis
 (right) with an `Analyze` toggle that runs iterative deepening in a worker thread and publishes best-to-worst move
 scores after each completed depth until toggled off.
@@ -28,12 +28,11 @@ and `GCheckersWindow` via the `analysis-requested` signal.
 ## `PlayerControlsPanel` (`src/player_controls_panel.c`)
 Class: `PlayerControlsPanel` (`GtkBox`).
 Role: encapsulates player mode controls.
-Modes: white/black each select `User` or `Computer`, plus a shared `Computer level` selector (`random`, `depth 4`,
-`depth 8`, `depth 12`).
+Modes: white/black each select `User` or `Computer`, plus a shared `Computer level` slider (depth `0..16`).
 Defaults: both white and black controls start as `User`.
 Signals: `control-changed` for window-level coordination.
 Collaborates with: `GCheckersWindow` (signal handlers and `player_controls_panel_set_all_user()`) and GTK widgets
-(`GtkDropDown`).
+(`GtkDropDown`, `GtkScale`).
 
 ## `gcheckers_style_init()` (`src/gcheckers_style.c`)
 Module: `gcheckers_style_init()` (style helper, not a class).
@@ -74,14 +73,9 @@ Collaborates with: `game.c` to validate and apply generated moves.
 
 ## GTK model wrapper (`src/checkers_model.c`, `src/checkers_model.h`)
 Class: `GCheckersModel` (`GObject`).
-Role: wrap the engine for GTK, including move validation, random/alpha-beta move selection, state-change signals, and
+Role: wrap the engine for GTK, including move validation, alpha-beta move selection, state-change signals, and
 last-move caching for board overlay rendering.
 Collaborates with: `GCheckersWindow` and SGF controllers via signals and high-level move APIs.
-
-## AI random selector (`src/ai_random.c`, `src/ai_random.h`)
-Module: random move selection.
-Role: choose a legal move uniformly from the current game state's move list.
-Collaborates with: `checkers_model.c` and `checkers_cli.c`.
 
 ## AI alpha-beta search (`src/ai_alpha_beta.c`, `src/ai_alpha_beta.h`)
 Module: alpha-beta search.

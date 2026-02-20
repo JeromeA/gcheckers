@@ -76,47 +76,25 @@ static void test_model_rejects_invalid_move(void) {
   g_object_unref(model);
 }
 
-static void test_model_random_move_outputs_move(void) {
-  GCheckersModel *model = gcheckers_model_new();
-
-  CheckersMove move;
-  bool moved = gcheckers_model_step_random_move(model, &move);
-  assert(moved);
-  assert(move.length >= 2);
-
-  g_object_unref(model);
-}
-
-static void test_model_choose_random_move_returns_legal_move(void) {
-  GCheckersModel *model = gcheckers_model_new();
-
-  MoveList moves = gcheckers_model_list_moves(model);
-  assert(moves.count > 0);
-
-  CheckersMove move = {0};
-  bool selected = gcheckers_model_choose_random_move(model, &move);
-  assert(selected);
-  assert(move.length >= 2);
-  assert(test_checkers_model_move_in_list(&moves, &move));
-
-  movelist_free(&moves);
-  g_object_unref(model);
-}
-
 static void test_model_choose_best_move_returns_legal_move(void) {
   GCheckersModel *model = gcheckers_model_new();
 
   MoveList moves = gcheckers_model_list_moves(model);
   assert(moves.count > 0);
 
+  CheckersMove depth1 = {0};
   CheckersMove depth4 = {0};
   CheckersMove depth8 = {0};
+  bool selected_1 = gcheckers_model_choose_best_move(model, 1, &depth1);
   bool selected_4 = gcheckers_model_choose_best_move(model, 4, &depth4);
   bool selected_8 = gcheckers_model_choose_best_move(model, 8, &depth8);
+  assert(selected_1);
   assert(selected_4);
   assert(selected_8);
+  assert(depth1.length >= 2);
   assert(depth4.length >= 2);
   assert(depth8.length >= 2);
+  assert(test_checkers_model_move_in_list(&moves, &depth1));
   assert(test_checkers_model_move_in_list(&moves, &depth4));
   assert(test_checkers_model_move_in_list(&moves, &depth8));
 
@@ -204,8 +182,6 @@ static void test_model_reset_clears_last_move(void) {
 int main(void) {
   test_model_reset_and_moves();
   test_model_rejects_invalid_move();
-  test_model_random_move_outputs_move();
-  test_model_choose_random_move_returns_legal_move();
   test_model_choose_best_move_returns_legal_move();
   test_model_analyze_moves_text();
   test_model_set_rules();

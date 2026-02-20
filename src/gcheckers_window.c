@@ -116,18 +116,9 @@ static gboolean gcheckers_window_choose_computer_move(GCheckersWindow *self, Che
   g_return_val_if_fail(self->controls_panel != NULL, FALSE);
   g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self->sgf_controller), FALSE);
 
-  PlayerComputerLevel level = player_controls_panel_get_computer_level(self->controls_panel);
-  guint depth = 0;
-  if (!player_controls_panel_computer_level_depth(level, &depth)) {
-    g_debug("No computer depth for current level");
-    return FALSE;
-  }
-
-  if (depth == 0) {
-    return gcheckers_sgf_controller_step_random_move(self->sgf_controller, move);
-  }
-
-  return gcheckers_sgf_controller_step_ai_move(self->sgf_controller, depth, move);
+  guint configured_depth = player_controls_panel_get_computer_depth(self->controls_panel);
+  guint effective_depth = configured_depth == 0 ? 1 : configured_depth;
+  return gcheckers_sgf_controller_step_ai_move(self->sgf_controller, effective_depth, move);
 }
 
 static CheckersRules gcheckers_window_rules_from_selection(PlayerRuleset ruleset) {
@@ -471,13 +462,13 @@ void gcheckers_window_apply_new_game_settings(GCheckersWindow *self,
                                               PlayerRuleset ruleset,
                                               PlayerControlMode white_mode,
                                               PlayerControlMode black_mode,
-                                              PlayerComputerLevel computer_level) {
+                                              guint computer_depth) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
   g_return_if_fail(self->controls_panel != NULL);
 
   player_controls_panel_set_mode(self->controls_panel, CHECKERS_COLOR_WHITE, white_mode);
   player_controls_panel_set_mode(self->controls_panel, CHECKERS_COLOR_BLACK, black_mode);
-  player_controls_panel_set_computer_level(self->controls_panel, computer_level);
+  player_controls_panel_set_computer_depth(self->controls_panel, computer_depth);
 
   gcheckers_window_set_ruleset(self, ruleset);
   gcheckers_window_start_new_game(self);
