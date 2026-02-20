@@ -7,6 +7,8 @@ struct _GCheckersModel {
   GObject parent_instance;
   Game game;
   GRand *rng;
+  CheckersMove last_move;
+  gboolean has_last_move;
 };
 
 G_DEFINE_TYPE(GCheckersModel, gcheckers_model, G_TYPE_OBJECT)
@@ -52,6 +54,7 @@ static void gcheckers_model_class_init(GCheckersModelClass *klass) {
 static void gcheckers_model_init(GCheckersModel *self) {
   game_init(&self->game);
   self->rng = g_rand_new();
+  self->has_last_move = FALSE;
 }
 
 GCheckersModel *gcheckers_model_new(void) {
@@ -63,6 +66,7 @@ void gcheckers_model_reset(GCheckersModel *self) {
 
   game_destroy(&self->game);
   game_init(&self->game);
+  self->has_last_move = FALSE;
   gcheckers_model_emit_state_changed(self);
 }
 
@@ -83,6 +87,8 @@ static gboolean gcheckers_model_apply_move_internal(GCheckersModel *self, const 
     return FALSE;
   }
 
+  self->last_move = *move;
+  self->has_last_move = TRUE;
   gcheckers_model_emit_state_changed(self);
   return TRUE;
 }
@@ -174,15 +180,9 @@ const GameState *gcheckers_model_peek_state(GCheckersModel *self) {
 const CheckersMove *gcheckers_model_peek_last_move(GCheckersModel *self) {
   g_return_val_if_fail(GCHECKERS_IS_MODEL(self), NULL);
 
-  if (self->game.history_size == 0) {
+  if (!self->has_last_move) {
     return NULL;
   }
 
-  return &self->game.history[self->game.history_size - 1];
-}
-
-guint gcheckers_model_get_history_size(GCheckersModel *self) {
-  g_return_val_if_fail(GCHECKERS_IS_MODEL(self), 0);
-
-  return (guint)self->game.history_size;
+  return &self->last_move;
 }

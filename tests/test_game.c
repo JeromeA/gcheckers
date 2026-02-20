@@ -17,7 +17,6 @@ static void test_apply_simple_move(void) {
   assert(board_get(&game.state.board, 21) == CHECKERS_PIECE_EMPTY);
   assert(board_get(&game.state.board, 17) == CHECKERS_PIECE_WHITE_MAN);
   assert(game.state.turn == CHECKERS_COLOR_BLACK);
-  assert(game.history_size == 1);
 
   game_destroy(&game);
 }

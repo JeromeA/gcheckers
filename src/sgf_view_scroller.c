@@ -3,7 +3,8 @@
 /*
  * SGF scroller behavior:
  * - A scroll request remembers selected-node context and tries to scroll immediately.
- * - Any failure to resolve selected-node geometry schedules one idle retry path.
+ * - Transient geometry/adjustment failures schedule one idle retry path.
+ * - Missing selected-node widget mappings are logged and treated as non-transient.
  * - Callers only issue scroll requests; retries are fully internal.
  */
 
@@ -16,6 +17,50 @@ struct _SgfViewScroller {
 };
 
 G_DEFINE_TYPE(SgfViewScroller, sgf_view_scroller, G_TYPE_OBJECT)
+
+typedef struct {
+  guint index;
+} SgfViewScrollerLogState;
+
+static void sgf_view_scroller_log_node_widgets_entry(gpointer key, gpointer value, gpointer user_data) {
+  const SgfNode *node = key;
+  GtkWidget *widget = value;
+  SgfViewScrollerLogState *state = user_data;
+
+  g_return_if_fail(state != NULL);
+
+  if (!node) {
+    g_debug("SGF scroll node_widgets[%u]: node=NULL widget=%p", state->index, widget);
+  } else if (!widget) {
+    g_debug("SGF scroll node_widgets[%u]: node=%p move=%u widget=NULL",
+            state->index,
+            node,
+            sgf_node_get_move_number(node));
+  } else {
+    g_debug("SGF scroll node_widgets[%u]: node=%p move=%u widget=%p type=%s",
+            state->index,
+            node,
+            sgf_node_get_move_number(node),
+            widget,
+            G_OBJECT_TYPE_NAME(widget));
+  }
+
+  state->index++;
+}
+
+static void sgf_view_scroller_log_node_widgets_snapshot(GHashTable *node_widgets, const SgfNode *selected) {
+  g_return_if_fail(node_widgets != NULL);
+
+  SgfViewScrollerLogState state = {0};
+  guint size = g_hash_table_size(node_widgets);
+  guint selected_move = selected ? sgf_node_get_move_number(selected) : 0;
+
+  g_debug("SGF scroll node_widgets snapshot: size=%u selected=%p move=%u",
+          size,
+          selected,
+          selected_move);
+  g_hash_table_foreach(node_widgets, sgf_view_scroller_log_node_widgets_entry, &state);
+}
 
 static void sgf_view_scroller_clear_context(SgfViewScroller *self) {
   g_return_if_fail(SGF_IS_VIEW_SCROLLER(self));
@@ -80,13 +125,12 @@ void sgf_view_scroller_scroll(SgfViewScroller *self,
 
   GtkWidget *widget = g_hash_table_lookup(node_widgets, (gpointer)selected);
   if (!widget) {
-    g_debug("SGF scroll attempt: selected widget missing");
-    sgf_view_scroller_schedule_retry(self);
+    g_debug("SGF scroll attempt: selected widget missing; not scheduling retry");
+    sgf_view_scroller_log_node_widgets_snapshot(node_widgets, selected);
     return;
   }
   if (!GTK_IS_WIDGET(widget)) {
-    g_debug("SGF scroll attempt: selected mapping is not a widget");
-    sgf_view_scroller_schedule_retry(self);
+    g_debug("SGF scroll attempt: selected mapping is not a widget; not scheduling retry");
     return;
   }
 

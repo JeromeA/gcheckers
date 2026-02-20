@@ -7,6 +7,8 @@
 struct _BoardSelectionController {
   GObject parent_instance;
   GCheckersModel *model;
+  BoardSelectionControllerMoveHandler move_handler;
+  gpointer move_handler_data;
   uint8_t selected_path[CHECKERS_MAX_MOVE_LENGTH];
   uint8_t selected_length;
 };
@@ -82,10 +84,10 @@ static gboolean board_selection_controller_moves_start_with(const MoveList *move
 
 static void board_selection_controller_apply_player_move(BoardSelectionController *self, const CheckersMove *move) {
   g_return_if_fail(BOARD_IS_SELECTION_CONTROLLER(self));
-  g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
   g_return_if_fail(move != NULL);
+  g_return_if_fail(self->move_handler != NULL);
 
-  if (!gcheckers_model_apply_move(self->model, move)) {
+  if (!self->move_handler(move, self->move_handler_data)) {
     g_debug("Failed to apply player move\n");
     return;
   }
@@ -110,6 +112,8 @@ static void board_selection_controller_class_init(BoardSelectionControllerClass 
 
 static void board_selection_controller_init(BoardSelectionController *self) {
   self->selected_length = 0;
+  self->move_handler = NULL;
+  self->move_handler_data = NULL;
 }
 
 BoardSelectionController *board_selection_controller_new(void) {
@@ -126,6 +130,15 @@ void board_selection_controller_set_model(BoardSelectionController *self, GCheck
 
   self->model = g_object_ref(model);
   board_selection_controller_clear(self);
+}
+
+void board_selection_controller_set_move_handler(BoardSelectionController *self,
+                                                 BoardSelectionControllerMoveHandler handler,
+                                                 gpointer user_data) {
+  g_return_if_fail(BOARD_IS_SELECTION_CONTROLLER(self));
+
+  self->move_handler = handler;
+  self->move_handler_data = user_data;
 }
 
 void board_selection_controller_clear(BoardSelectionController *self) {
@@ -156,13 +169,13 @@ gboolean board_selection_controller_contains(BoardSelectionController *self, uin
 gboolean board_selection_controller_handle_click(BoardSelectionController *self, uint8_t index) {
   g_return_val_if_fail(BOARD_IS_SELECTION_CONTROLLER(self), FALSE);
   g_return_val_if_fail(GCHECKERS_IS_MODEL(self->model), FALSE);
+  g_return_val_if_fail(self->move_handler != NULL, FALSE);
 
   MoveList moves = gcheckers_model_list_moves(self->model);
   if (moves.count == 0) {
     movelist_free(&moves);
-    gcheckers_model_step_random_move(self->model, NULL);
-    board_selection_controller_clear(self);
-    return TRUE;
+    g_debug("No available moves while handling board click");
+    return FALSE;
   }
 
   if (self->selected_length == 0) {

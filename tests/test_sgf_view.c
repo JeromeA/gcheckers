@@ -621,7 +621,7 @@ static void test_sgf_view_force_layout_syncs_selection(void) {
   g_clear_object(&tree);
 }
 
-static void test_sgf_view_scroller_retries_missing_node(void) {
+static void test_sgf_view_scroller_missing_node_does_not_retry(void) {
   SgfViewScroller *scroller = sgf_view_scroller_new();
   g_assert_nonnull(scroller);
 
@@ -665,7 +665,7 @@ static void test_sgf_view_scroller_retries_missing_node(void) {
 
   sgf_view_wait(120);
 
-  g_assert_cmpfloat(gtk_adjustment_get_value(hadjustment), >, 0.0);
+  g_assert_cmpfloat(gtk_adjustment_get_value(hadjustment), ==, 0.0);
   g_assert_cmpfloat(gtk_adjustment_get_value(vadjustment), ==, 0.0);
 
   g_hash_table_unref(node_widgets);
@@ -687,7 +687,7 @@ int main(int argc, char **argv) {
                     test_sgf_view_connectors_skip);
     g_test_add_func("/sgf-view/layout-syncs-selection", test_sgf_view_connectors_skip);
     g_test_add_func("/sgf-view/force-layout-syncs-selection", test_sgf_view_connectors_skip);
-    g_test_add_func("/sgf-view/scroller-retries-missing-node", test_sgf_view_connectors_skip);
+    g_test_add_func("/sgf-view/scroller-missing-node-no-retry", test_sgf_view_connectors_skip);
     return g_test_run();
   }
 
@@ -702,6 +702,6 @@ int main(int argc, char **argv) {
                   test_sgf_view_scrolls_selected_disc_fully_into_view);
   g_test_add_func("/sgf-view/layout-syncs-selection", test_sgf_view_layout_syncs_selection);
   g_test_add_func("/sgf-view/force-layout-syncs-selection", test_sgf_view_force_layout_syncs_selection);
-  g_test_add_func("/sgf-view/scroller-retries-missing-node", test_sgf_view_scroller_retries_missing_node);
+  g_test_add_func("/sgf-view/scroller-missing-node-no-retry", test_sgf_view_scroller_missing_node_does_not_retry);
   return g_test_run();
 }

@@ -37,6 +37,41 @@ static const int sgf_view_disc_stride = sgf_view_disc_size + (sgf_view_disc_bord
 
 static void sgf_view_rebuild(SgfView *self);
 
+static void sgf_view_log_node_widgets_entry(gpointer key, gpointer value, gpointer user_data) {
+  const SgfNode *node = key;
+  GtkWidget *widget = value;
+  guint *index = user_data;
+
+  g_return_if_fail(index != NULL);
+
+  if (!node) {
+    g_debug("SGF rebuild node_widgets[%u]: node=NULL widget=%p", *index, widget);
+  } else if (!widget) {
+    g_debug("SGF rebuild node_widgets[%u]: node=%p move=%u widget=NULL",
+            *index,
+            node,
+            sgf_node_get_move_number(node));
+  } else {
+    g_debug("SGF rebuild node_widgets[%u]: node=%p move=%u widget=%p type=%s",
+            *index,
+            node,
+            sgf_node_get_move_number(node),
+            widget,
+            G_OBJECT_TYPE_NAME(widget));
+  }
+
+  (*index)++;
+}
+
+static void sgf_view_log_node_widgets_snapshot(GHashTable *node_widgets) {
+  g_return_if_fail(node_widgets != NULL);
+
+  guint index = 0;
+  guint size = g_hash_table_size(node_widgets);
+  g_debug("SGF rebuild node_widgets snapshot: size=%u", size);
+  g_hash_table_foreach(node_widgets, sgf_view_log_node_widgets_entry, &index);
+}
+
 static void sgf_view_draw_tree(GtkDrawingArea * /*area*/,
                                cairo_t *cr,
                                int width,
@@ -184,6 +219,7 @@ static void sgf_view_rebuild(SgfView *self) {
                         self->disc_factory,
                         selected,
                         sgf_view_disc_stride);
+  sgf_view_log_node_widgets_snapshot(self->node_widgets);
   gtk_widget_queue_draw(self->lines_area);
   sgf_view_queue_scroll_to_selected(self);
 }
@@ -299,6 +335,8 @@ void sgf_view_set_tree(SgfView *self, SgfTree *tree) {
   g_return_if_fail(SGF_IS_VIEW(self));
 
   if (self->tree == tree) {
+    sgf_view_selection_controller_set_selected_raw(self->selection,
+                                                   tree ? sgf_tree_get_current(tree) : NULL);
     sgf_view_rebuild(self);
     return;
   }

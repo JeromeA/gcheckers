@@ -2,7 +2,6 @@
 
 #include <glib.h>
 #include <stdbool.h>
-#include <stdlib.h>
 #include <string.h>
 
 static bool rules_valid(const CheckersRules *rules) {
@@ -31,22 +30,6 @@ CheckersRules game_rules_international_draughts(void) {
   return rules;
 }
 
-static void ensure_capacity(Game *game) {
-  g_return_if_fail(game != NULL);
-
-  if (game->history_size < game->history_capacity) {
-    return;
-  }
-  size_t new_capacity = game->history_capacity == 0 ? 16 : game->history_capacity * 2;
-  CheckersMove *expanded = realloc(game->history, sizeof(CheckersMove) * new_capacity);
-  if (!expanded) {
-    g_debug("Failed to expand history buffer\n");
-    return;
-  }
-  game->history = expanded;
-  game->history_capacity = new_capacity;
-}
-
 void game_init(Game *game) {
   CheckersRules rules = game_rules_american_checkers();
   game_init_with_rules(game, &rules);
@@ -68,11 +51,6 @@ void game_init_with_rules(Game *game, const CheckersRules *rules) {
 
 void game_destroy(Game *game) {
   g_return_if_fail(game != NULL);
-
-  free(game->history);
-  game->history = NULL;
-  game->history_size = 0;
-  game->history_capacity = 0;
 }
 
 static bool promote_needed(CheckersPiece piece, int row, uint8_t board_size) {
@@ -153,11 +131,6 @@ int game_apply_move(Game *game, const CheckersMove *move) {
   }
   board_set(&state->board, destination, piece);
   remove_captured(game, move);
-
-  ensure_capacity(game);
-  if (game->history_size < game->history_capacity) {
-    game->history[game->history_size++] = *move;
-  }
 
   game->state.turn = game->state.turn == CHECKERS_COLOR_WHITE ? CHECKERS_COLOR_BLACK
                                                               : CHECKERS_COLOR_WHITE;

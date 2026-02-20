@@ -96,3 +96,15 @@ callers to know when to trigger retries and scattered the scroll path across mul
 
 The fix replaces those paths with `sgf_view_scroller_scroll()`: it remembers selected-node context, tries to clamp
 immediately, and schedules one internal idle retry path when selected widgets or bounds are not ready yet.
+
+## SGF/Game state drifted because model history polling was used as timeline source
+
+Move chronology and navigation should come from `SgfTree` current-node transitions, with game state projected from SGF.
+
+The old path appended SGF nodes by polling `GCheckersModel` history size/last move after model state changes, while
+board and AI actions could mutate the model directly. This inverted ownership and allowed SGF/game drift and stale
+selection pointers when SGF reset/rebuild timing diverged.
+
+The fix makes SGF the authority: move application now validates the model move, appends under SGF current, advances SGF
+current, then updates the model from that SGF transition (single-step parent->child or reset+replay from root). Game
+history storage was removed from `Game`, and SGF controller/window/board paths were rewired to use SGF-first APIs.

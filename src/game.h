@@ -45,9 +45,6 @@ typedef struct Game Game;
 struct Game {
   GameState state;
   CheckersRules rules;
-  CheckersMove *history;
-  size_t history_size;
-  size_t history_capacity;
 
   void (*print_state)(const Game *game, FILE *out);
   MoveList (*available_moves)(const Game *game);

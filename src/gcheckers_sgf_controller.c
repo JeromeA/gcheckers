@@ -8,9 +8,7 @@ struct _GCheckersSgfController {
   GCheckersModel *model;
   SgfTree *sgf_tree;
   SgfView *sgf_view;
-  gulong state_handler_id;
   gboolean is_replaying;
-  guint last_history_size;
 };
 
 G_DEFINE_TYPE(GCheckersSgfController, gcheckers_sgf_controller, G_TYPE_OBJECT)
@@ -21,6 +19,21 @@ enum {
 };
 
 static guint controller_signals[SIGNAL_LAST] = {0};
+
+static gboolean gcheckers_sgf_controller_moves_equal(const CheckersMove *left, const CheckersMove *right) {
+  g_return_val_if_fail(left != NULL, FALSE);
+  g_return_val_if_fail(right != NULL, FALSE);
+
+  if (left->length != right->length || left->captures != right->captures) {
+    return FALSE;
+  }
+
+  if (left->length == 0) {
+    return TRUE;
+  }
+
+  return memcmp(left->path, right->path, left->length * sizeof(left->path[0])) == 0;
+}
 
 static SgfColor gcheckers_sgf_controller_color_from_turn(CheckersColor color) {
   switch (color) {
@@ -36,54 +49,30 @@ static SgfColor gcheckers_sgf_controller_color_from_turn(CheckersColor color) {
 static void gcheckers_sgf_controller_disconnect_model(GCheckersSgfController *self) {
   g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self));
 
-  if (self->model && self->state_handler_id != 0) {
-    g_signal_handler_disconnect(self->model, self->state_handler_id);
-    self->state_handler_id = 0;
-  }
   g_clear_object(&self->model);
 }
 
-static void gcheckers_sgf_controller_append_move(GCheckersSgfController *self) {
-  g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self));
-  g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
-  g_return_if_fail(self->sgf_tree != NULL);
+static gboolean gcheckers_sgf_controller_extract_payload_move(const SgfNode *node, CheckersMove *move) {
+  g_return_val_if_fail(node != NULL, FALSE);
+  g_return_val_if_fail(move != NULL, FALSE);
 
-  if (self->is_replaying) {
-    return;
+  GBytes *payload = sgf_node_get_payload(node);
+  if (!payload) {
+    g_debug("Missing payload for SGF node %u", sgf_node_get_move_number(node));
+    return FALSE;
   }
 
-  guint history_size = gcheckers_model_get_history_size(self->model);
-  if (history_size <= self->last_history_size) {
-    self->last_history_size = history_size;
-    return;
+  gsize size = 0;
+  const void *data = g_bytes_get_data(payload, &size);
+  if (size != sizeof(*move)) {
+    g_debug("Unexpected SGF payload size %zu", size);
+    g_bytes_unref(payload);
+    return FALSE;
   }
 
-  const CheckersMove *last_move = gcheckers_model_peek_last_move(self->model);
-  if (!last_move) {
-    self->last_history_size = history_size;
-    return;
-  }
-
-  const GameState *state = gcheckers_model_peek_state(self->model);
-  if (!state) {
-    g_debug("Failed to fetch game state for SGF update\n");
-    return;
-  }
-
-  CheckersColor mover = state->turn == CHECKERS_COLOR_WHITE ? CHECKERS_COLOR_BLACK : CHECKERS_COLOR_WHITE;
-  SgfColor sgf_color = gcheckers_sgf_controller_color_from_turn(mover);
-  GBytes *payload = g_bytes_new(last_move, sizeof(*last_move));
-  const SgfNode *node = sgf_tree_append_move(self->sgf_tree, sgf_color, payload);
+  memcpy(move, data, sizeof(*move));
   g_bytes_unref(payload);
-
-  if (!node) {
-    g_debug("Failed to append SGF move\n");
-    self->last_history_size = history_size;
-    return;
-  }
-
-  sgf_view_refresh(self->sgf_view);
-  self->last_history_size = history_size;
+  return TRUE;
 }
 
 static GPtrArray *gcheckers_sgf_controller_build_node_path(const SgfNode *node) {
@@ -105,10 +94,10 @@ static GPtrArray *gcheckers_sgf_controller_build_node_path(const SgfNode *node) 
   return path;
 }
 
-static void gcheckers_sgf_controller_replay_to_node(GCheckersSgfController *self, const SgfNode *node) {
-  g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self));
-  g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
-  g_return_if_fail(node != NULL);
+static gboolean gcheckers_sgf_controller_replay_to_node(GCheckersSgfController *self, const SgfNode *node) {
+  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+  g_return_val_if_fail(GCHECKERS_IS_MODEL(self->model), FALSE);
+  g_return_val_if_fail(node != NULL, FALSE);
 
   self->is_replaying = TRUE;
   gcheckers_model_reset(self->model);
@@ -116,43 +105,80 @@ static void gcheckers_sgf_controller_replay_to_node(GCheckersSgfController *self
 
   GPtrArray *path = gcheckers_sgf_controller_build_node_path(node);
   if (!path) {
-    g_debug("Failed to build SGF node path for replay\n");
-    self->last_history_size = gcheckers_model_get_history_size(self->model);
+    g_debug("Failed to build SGF node path for replay");
     self->is_replaying = FALSE;
-    return;
+    return FALSE;
   }
 
+  gboolean success = TRUE;
   for (guint i = 0; i < path->len; ++i) {
     const SgfNode *step = g_ptr_array_index(path, i);
     if (sgf_node_get_move_number(step) == 0) {
       continue;
     }
 
-    GBytes *payload = sgf_node_get_payload(step);
-    if (!payload) {
-      g_debug("Missing payload for SGF node %u\n", sgf_node_get_move_number(step));
-      continue;
-    }
-
-    gsize size = 0;
-    const void *data = g_bytes_get_data(payload, &size);
-    if (size != sizeof(CheckersMove)) {
-      g_debug("Unexpected SGF payload size %zu\n", size);
-      g_bytes_unref(payload);
-      continue;
-    }
-
     CheckersMove move;
-    memcpy(&move, data, sizeof(move));
-    if (!gcheckers_model_apply_move(self->model, &move)) {
-      g_debug("Failed to replay SGF move %u\n", sgf_node_get_move_number(step));
+    if (!gcheckers_sgf_controller_extract_payload_move(step, &move)) {
+      success = FALSE;
+      break;
     }
-    g_bytes_unref(payload);
+
+    if (!gcheckers_model_apply_move(self->model, &move)) {
+      g_debug("Failed to replay SGF move %u", sgf_node_get_move_number(step));
+      success = FALSE;
+      break;
+    }
   }
 
   g_ptr_array_unref(path);
-  self->last_history_size = gcheckers_model_get_history_size(self->model);
   self->is_replaying = FALSE;
+  return success;
+}
+
+static gboolean gcheckers_sgf_controller_sync_model_for_transition(GCheckersSgfController *self,
+                                                                   const SgfNode *previous,
+                                                                   const SgfNode *target) {
+  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+  g_return_val_if_fail(GCHECKERS_IS_MODEL(self->model), FALSE);
+  g_return_val_if_fail(target != NULL, FALSE);
+
+  if (previous == target) {
+    return TRUE;
+  }
+
+  if (previous && sgf_node_get_parent(target) == previous) {
+    CheckersMove move;
+    if (!gcheckers_sgf_controller_extract_payload_move(target, &move)) {
+      return FALSE;
+    }
+
+    if (!gcheckers_model_apply_move(self->model, &move)) {
+      g_debug("Failed to apply SGF transition move %u", sgf_node_get_move_number(target));
+      return FALSE;
+    }
+
+    return TRUE;
+  }
+
+  return gcheckers_sgf_controller_replay_to_node(self, target);
+}
+
+static gboolean gcheckers_sgf_controller_move_current(GCheckersSgfController *self, const SgfNode *node) {
+  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+  g_return_val_if_fail(SGF_IS_TREE(self->sgf_tree), FALSE);
+  g_return_val_if_fail(node != NULL, FALSE);
+
+  const SgfNode *previous = sgf_tree_get_current(self->sgf_tree);
+  if (!sgf_tree_set_current(self->sgf_tree, node)) {
+    g_debug("Failed to select SGF node");
+    return FALSE;
+  }
+
+  if (!self->model) {
+    return TRUE;
+  }
+
+  return gcheckers_sgf_controller_sync_model_for_transition(self, previous, node);
 }
 
 static void gcheckers_sgf_controller_on_node_selected(SgfView * /*view*/,
@@ -163,23 +189,12 @@ static void gcheckers_sgf_controller_on_node_selected(SgfView * /*view*/,
   g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self));
   g_return_if_fail(node != NULL);
 
-  if (!sgf_tree_set_current(self->sgf_tree, node)) {
-    g_debug("Failed to select SGF node\n");
+  if (!gcheckers_sgf_controller_move_current(self, node)) {
     return;
   }
 
   g_signal_emit(self, controller_signals[SIGNAL_ANALYSIS_REQUESTED], 0, node);
-  gcheckers_sgf_controller_replay_to_node(self, node);
-}
-
-static void gcheckers_sgf_controller_on_model_state_changed(GCheckersModel *model,
-                                                            gpointer user_data) {
-  GCheckersSgfController *self = GCHECKERS_SGF_CONTROLLER(user_data);
-
-  g_return_if_fail(GCHECKERS_IS_MODEL(model));
-  g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self));
-
-  gcheckers_sgf_controller_append_move(self);
+  sgf_view_refresh(self->sgf_view);
 }
 
 static void gcheckers_sgf_controller_dispose(GObject *object) {
@@ -220,7 +235,6 @@ static void gcheckers_sgf_controller_init(GCheckersSgfController *self) {
                    self);
 
   self->is_replaying = FALSE;
-  self->last_history_size = 0;
 }
 
 GCheckersSgfController *gcheckers_sgf_controller_new(BoardView *board_view) {
@@ -235,13 +249,12 @@ void gcheckers_sgf_controller_set_model(GCheckersSgfController *self, GCheckersM
   g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self));
   g_return_if_fail(GCHECKERS_IS_MODEL(model));
 
-  gcheckers_sgf_controller_disconnect_model(self);
+  if (self->model == model) {
+    return;
+  }
 
+  gcheckers_sgf_controller_disconnect_model(self);
   self->model = g_object_ref(model);
-  self->state_handler_id = g_signal_connect(self->model,
-                                            "state-changed",
-                                            G_CALLBACK(gcheckers_sgf_controller_on_model_state_changed),
-                                            self);
   gcheckers_sgf_controller_reset(self);
 }
 
@@ -250,8 +263,83 @@ void gcheckers_sgf_controller_reset(GCheckersSgfController *self) {
 
   sgf_tree_reset(self->sgf_tree);
   sgf_view_set_tree(self->sgf_view, self->sgf_tree);
-  self->last_history_size = self->model ? gcheckers_model_get_history_size(self->model) : 0;
+  board_view_clear_selection(self->board_view);
   self->is_replaying = FALSE;
+}
+
+gboolean gcheckers_sgf_controller_apply_move(GCheckersSgfController *self, const CheckersMove *move) {
+  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+  g_return_val_if_fail(GCHECKERS_IS_MODEL(self->model), FALSE);
+  g_return_val_if_fail(move != NULL, FALSE);
+
+  MoveList moves = gcheckers_model_list_moves(self->model);
+  gboolean found = FALSE;
+  for (guint i = 0; i < moves.count; ++i) {
+    if (gcheckers_sgf_controller_moves_equal(&moves.moves[i], move)) {
+      found = TRUE;
+      break;
+    }
+  }
+
+  if (!found) {
+    g_debug("Attempted to apply move not present in current model move list");
+    movelist_free(&moves);
+    return FALSE;
+  }
+
+  const GameState *state = gcheckers_model_peek_state(self->model);
+  if (!state) {
+    g_debug("Failed to fetch game state for SGF append");
+    movelist_free(&moves);
+    return FALSE;
+  }
+
+  const SgfNode *previous = sgf_tree_get_current(self->sgf_tree);
+  GBytes *payload = g_bytes_new(move, sizeof(*move));
+  const SgfNode *node =
+      sgf_tree_append_move(self->sgf_tree, gcheckers_sgf_controller_color_from_turn(state->turn), payload);
+  g_bytes_unref(payload);
+  movelist_free(&moves);
+
+  if (!node) {
+    g_debug("Failed to append SGF move");
+    return FALSE;
+  }
+
+  if (!sgf_tree_set_current(self->sgf_tree, node)) {
+    g_debug("Failed to move SGF current to appended node");
+    return FALSE;
+  }
+
+  if (!gcheckers_sgf_controller_sync_model_for_transition(self, previous, node)) {
+    return FALSE;
+  }
+
+  sgf_view_refresh(self->sgf_view);
+  return TRUE;
+}
+
+gboolean gcheckers_sgf_controller_step_random_move(GCheckersSgfController *self, CheckersMove *out_move) {
+  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+  g_return_val_if_fail(GCHECKERS_IS_MODEL(self->model), FALSE);
+
+  MoveList moves = gcheckers_model_list_moves(self->model);
+  if (moves.count == 0) {
+    movelist_free(&moves);
+    g_debug("No available moves for random SGF step");
+    return FALSE;
+  }
+
+  guint choice = g_random_int_range(0, (gint)moves.count);
+  CheckersMove move = moves.moves[choice];
+  movelist_free(&moves);
+
+  gboolean applied = gcheckers_sgf_controller_apply_move(self, &move);
+  if (applied && out_move) {
+    *out_move = move;
+  }
+
+  return applied;
 }
 
 GtkWidget *gcheckers_sgf_controller_get_widget(GCheckersSgfController *self) {
@@ -259,7 +347,7 @@ GtkWidget *gcheckers_sgf_controller_get_widget(GCheckersSgfController *self) {
 
   GtkWidget *widget = sgf_view_get_widget(self->sgf_view);
   if (!widget) {
-    g_debug("Missing SGF view widget\n");
+    g_debug("Missing SGF view widget");
     return NULL;
   }
 
@@ -270,7 +358,7 @@ SgfTree *gcheckers_sgf_controller_get_tree(GCheckersSgfController *self) {
   g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), NULL);
 
   if (!self->sgf_tree) {
-    g_debug("Missing SGF tree\n");
+    g_debug("Missing SGF tree");
     return NULL;
   }
 
@@ -281,7 +369,7 @@ SgfView *gcheckers_sgf_controller_get_view(GCheckersSgfController *self) {
   g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), NULL);
 
   if (!self->sgf_view) {
-    g_debug("Missing SGF view\n");
+    g_debug("Missing SGF view");
     return NULL;
   }
 
@@ -298,7 +386,7 @@ void gcheckers_sgf_controller_force_layout_resync(GCheckersSgfController *self) 
   g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self));
 
   if (!self->sgf_view) {
-    g_debug("Missing SGF view for layout resync\n");
+    g_debug("Missing SGF view for layout resync");
     return;
   }
 

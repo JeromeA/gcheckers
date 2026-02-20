@@ -17,7 +17,6 @@ struct _GCheckersWindow {
   PlayerControlsPanel *controls_panel;
   GCheckersSgfController *sgf_controller;
   gulong state_handler_id;
-  guint last_history_size;
   guint auto_move_source_id;
 };
 
@@ -35,6 +34,21 @@ static void gcheckers_window_print_move(const char *label, const CheckersMove *m
     return;
   }
   g_print("%s plays: %s\n", label, buffer);
+}
+
+static gboolean gcheckers_window_apply_player_move(const CheckersMove *move, gpointer user_data) {
+  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
+
+  g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), FALSE);
+  g_return_val_if_fail(move != NULL, FALSE);
+  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self->sgf_controller), FALSE);
+
+  if (!gcheckers_sgf_controller_apply_move(self->sgf_controller, move)) {
+    return FALSE;
+  }
+
+  gcheckers_window_print_move("Player", move);
+  return TRUE;
 }
 
 static gboolean gcheckers_window_is_user_control(GCheckersWindow *self, CheckersColor color) {
@@ -119,13 +133,6 @@ static void gcheckers_window_schedule_auto_force_move(GCheckersWindow *self) {
 static void gcheckers_window_maybe_trigger_auto_move(GCheckersWindow *self) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
   g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
-
-  guint history_size = gcheckers_model_get_history_size(self->model);
-  if (history_size <= self->last_history_size) {
-    self->last_history_size = history_size;
-    return;
-  }
-  self->last_history_size = history_size;
 
   if (!self->sgf_controller) {
     g_debug("Missing SGF controller for auto move\n");
@@ -226,7 +233,7 @@ static void gcheckers_window_on_force_move_requested(PlayerControlsPanel * /*pan
   }
 
   CheckersMove move;
-  if (gcheckers_model_step_random_move(self->model, &move)) {
+  if (gcheckers_sgf_controller_step_random_move(self->sgf_controller, &move)) {
     gcheckers_window_print_move("AI", &move);
   }
 }
@@ -252,7 +259,6 @@ static void gcheckers_window_set_model(GCheckersWindow *self, GCheckersModel *mo
                                             self);
   board_view_set_model(self->board_view, self->model);
   gcheckers_sgf_controller_set_model(self->sgf_controller, self->model);
-  self->last_history_size = gcheckers_model_get_history_size(self->model);
   gcheckers_window_update_status(self);
   gcheckers_window_update_control_state(self);
 }
@@ -296,8 +302,6 @@ static void gcheckers_window_dispose(GObject *object) {
   g_clear_object(&self->board_view);
   g_clear_object(&self->model);
   self->controls_row = NULL;
-  self->last_history_size = 0;
-
   G_OBJECT_CLASS(gcheckers_window_parent_class)->dispose(object);
 }
 
@@ -308,7 +312,6 @@ static void gcheckers_window_class_init(GCheckersWindowClass *klass) {
 }
 
 static void gcheckers_window_init(GCheckersWindow *self) {
-  self->last_history_size = 0;
   self->auto_move_source_id = 0;
 
   gtk_window_set_title(GTK_WINDOW(self), "gcheckers");
@@ -380,6 +383,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
                    self);
 
   self->sgf_controller = gcheckers_sgf_controller_new(self->board_view);
+  board_view_set_move_handler(self->board_view, gcheckers_window_apply_player_move, self);
   GtkWidget *sgf_widget = gcheckers_sgf_controller_get_widget(self->sgf_controller);
   g_return_if_fail(sgf_widget != NULL);
   g_signal_connect(self->sgf_controller,

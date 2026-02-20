@@ -94,10 +94,11 @@ static void test_model_peek_last_move(void) {
   g_object_unref(model);
 }
 
-static void test_model_history_size(void) {
+static void test_model_reset_clears_last_move(void) {
   GCheckersModel *model = gcheckers_model_new();
 
-  assert(gcheckers_model_get_history_size(model) == 0);
+  const CheckersMove *last_move = gcheckers_model_peek_last_move(model);
+  assert(last_move == NULL);
 
   MoveList moves = gcheckers_model_list_moves(model);
   assert(moves.count > 0);
@@ -106,10 +107,12 @@ static void test_model_history_size(void) {
 
   bool moved = gcheckers_model_apply_move(model, &first_move);
   assert(moved);
-  assert(gcheckers_model_get_history_size(model) == 1);
+  last_move = gcheckers_model_peek_last_move(model);
+  assert(last_move != NULL);
 
   gcheckers_model_reset(model);
-  assert(gcheckers_model_get_history_size(model) == 0);
+  last_move = gcheckers_model_peek_last_move(model);
+  assert(last_move == NULL);
 
   g_object_unref(model);
 }
@@ -119,7 +122,7 @@ int main(void) {
   test_model_rejects_invalid_move();
   test_model_random_move_outputs_move();
   test_model_peek_last_move();
-  test_model_history_size();
+  test_model_reset_clears_last_move();
 
   return 0;
 }

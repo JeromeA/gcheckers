@@ -13,11 +13,12 @@ during dispose, cancels any pending auto-move idle source, and then clears its r
 
 ## `GCheckersSgfController` (`src/gcheckers_sgf_controller.c`)
 Class: `GCheckersSgfController` (`GObject`).
-Role: SGF history synchronization, node selection handling, replay orchestration, analysis signaling, and layout resync
-debug hooks.
-Owns: `SgfTree` and `SgfView`, plus replay guards (`is_replaying`, `last_history_size`).
-Collaborates with: `GCheckersModel` for history, `BoardView` to clear selection on replay, and `GCheckersWindow` via
-the `analysis-requested` signal.
+Role: SGF timeline authority and synchronization point between SGF current-node transitions and game state updates.
+Move application is SGF-first: validate model move, append under SGF current, set SGF current, then project that
+transition to the model (`single move` if parent->child, otherwise reset+replay from root).
+Owns: `SgfTree` and `SgfView`, plus replay guard (`is_replaying`).
+Collaborates with: `GCheckersModel` for move validation/application, `BoardView` to clear selection on replay/reset,
+and `GCheckersWindow` via the `analysis-requested` signal.
 
 ## `PlayerControlsPanel` (`src/player_controls_panel.c`)
 Class: `PlayerControlsPanel` (`GtkBox`).
@@ -50,7 +51,7 @@ Collaborates with: all game and model modules via compile-time limits.
 
 ## Game engine (`src/game.c`, `src/game.h`)
 Module: core game rules and state.
-Role: define game types, rule enforcement, history, promotion, winner updates, and the public game API.
+Role: define game types, rule enforcement, promotion, winner updates, and the public game API.
 Collaborates with: `move_gen.c` for move enumeration and `checkers_model.c` for GTK integration.
 
 ## Game printing (`src/game_print.c`)
@@ -65,7 +66,8 @@ Collaborates with: `game.c` to validate and apply generated moves.
 
 ## GTK model wrapper (`src/checkers_model.c`, `src/checkers_model.h`)
 Class: `GCheckersModel` (`GObject`).
-Role: wrap the engine for GTK, including move validation, random AI moves, and state-change signals.
+Role: wrap the engine for GTK, including move validation, random AI moves, state-change signals, and last-move caching
+for board overlay rendering.
 Collaborates with: `GCheckersWindow` and SGF controllers via signals and high-level move APIs.
 
 ## CLI entry point (`src/checkers_cli.c`)
@@ -119,7 +121,8 @@ Collaborates with: `PiecePalette` and board rendering.
 
 ### SGF tree (`src/sgf_tree.c`, `src/sgf_tree.h`)
 Module: SGF tree storage.
-Role: manage move nodes, parent/child links, payload access, and traversal helpers.
+Role: manage move nodes, parent/child links, payload access, traversal helpers, and the SGF current-node timeline
+used as the source of truth for move chronology/navigation.
 Collaborates with: SGF view and controller modules.
 
 ### SGF view (`src/sgf_view.c`, `src/sgf_view.h`)
@@ -149,8 +152,9 @@ Collaborates with: SGF node widget mapping and view sizing.
 ### SGF scroller (`src/sgf_view_scroller.c`, `src/sgf_view_scroller.h`)
 Module: selection scroll helper.
 Role: `sgf_view_scroller_scroll()` remembers selected-node context, attempts immediate horizontal clamping from selected
-widget bounds (`[bounds.origin.x, bounds.origin.x + bounds.size.width]`), and internally schedules an idle retry when
-selected widget lookup or geometry is not ready. Callers use one API and do not handle retry paths.
+widget bounds (`[bounds.origin.x, bounds.origin.x + bounds.size.width]`), and internally schedules idle retries only
+for transient geometry readiness paths. Missing selected-node widget mappings are logged with a hash-table dump and not
+retried to avoid perpetual idle loops on stale selection pointers. Callers use one API and do not handle retry paths.
 Collaborates with: `SgfView`, SGF node widget mapping, and selection controller updates.
 
 ### SGF selection controller (`src/sgf_view_selection_controller.c`, `src/sgf_view_selection_controller.h`)

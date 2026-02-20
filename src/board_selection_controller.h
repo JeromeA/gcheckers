@@ -13,8 +13,13 @@ G_DECLARE_FINAL_TYPE(BoardSelectionController,
                      SELECTION_CONTROLLER,
                      GObject)
 
+typedef gboolean (*BoardSelectionControllerMoveHandler)(const CheckersMove *move, gpointer user_data);
+
 BoardSelectionController *board_selection_controller_new(void);
 void board_selection_controller_set_model(BoardSelectionController *self, GCheckersModel *model);
+void board_selection_controller_set_move_handler(BoardSelectionController *self,
+                                                 BoardSelectionControllerMoveHandler handler,
+                                                 gpointer user_data);
 void board_selection_controller_clear(BoardSelectionController *self);
 const uint8_t *board_selection_controller_peek_path(BoardSelectionController *self, uint8_t *length);
 

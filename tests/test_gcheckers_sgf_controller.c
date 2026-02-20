@@ -10,7 +10,10 @@ static void test_gcheckers_sgf_controller_skip(void) {
   g_test_skip("GTK display not available.");
 }
 
-static gboolean apply_first_move(GCheckersModel *model, CheckersMove *out_move) {
+static gboolean apply_first_move(GCheckersSgfController *controller,
+                                 GCheckersModel *model,
+                                 CheckersMove *out_move) {
+  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(controller), FALSE);
   g_return_val_if_fail(GCHECKERS_IS_MODEL(model), FALSE);
   g_return_val_if_fail(out_move != NULL, FALSE);
 
@@ -22,19 +25,21 @@ static gboolean apply_first_move(GCheckersModel *model, CheckersMove *out_move) 
   }
 
   *out_move = moves.moves[0];
-  gboolean applied = gcheckers_model_apply_move(model, out_move);
+  gboolean applied = gcheckers_sgf_controller_apply_move(controller, out_move);
   movelist_free(&moves);
   if (!applied) {
-    g_debug("Failed to apply test move for SGF controller\n");
+    g_debug("Failed to apply test move through SGF controller\n");
     return FALSE;
   }
 
   return TRUE;
 }
 
-static gboolean apply_first_distinct_move(GCheckersModel *model,
+static gboolean apply_first_distinct_move(GCheckersSgfController *controller,
+                                          GCheckersModel *model,
                                           const CheckersMove *exclude,
                                           CheckersMove *out_move) {
+  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(controller), FALSE);
   g_return_val_if_fail(GCHECKERS_IS_MODEL(model), FALSE);
   g_return_val_if_fail(out_move != NULL, FALSE);
 
@@ -62,10 +67,10 @@ static gboolean apply_first_distinct_move(GCheckersModel *model,
     return FALSE;
   }
 
-  gboolean applied = gcheckers_model_apply_move(model, out_move);
+  gboolean applied = gcheckers_sgf_controller_apply_move(controller, out_move);
   movelist_free(&moves);
   if (!applied) {
-    g_debug("Failed to apply distinct test move for SGF controller\n");
+    g_debug("Failed to apply distinct test move through SGF controller\n");
     return FALSE;
   }
 
@@ -94,7 +99,7 @@ static void test_gcheckers_sgf_controller_appends_payload(void) {
   gcheckers_sgf_controller_set_model(controller, model);
 
   CheckersMove move;
-  g_assert_true(apply_first_move(model, &move));
+  g_assert_true(apply_first_move(controller, model, &move));
 
   SgfTree *tree = gcheckers_sgf_controller_get_tree(controller);
   const SgfNode *node = sgf_tree_get_first_child(tree);
@@ -122,9 +127,8 @@ static void test_gcheckers_sgf_controller_replay_branching(void) {
 
   CheckersMove move_1;
   CheckersMove move_2;
-  g_assert_true(apply_first_move(model, &move_1));
-  g_assert_true(apply_first_move(model, &move_2));
-  g_assert_cmpuint(gcheckers_model_get_history_size(model), ==, 2);
+  g_assert_true(apply_first_move(controller, model, &move_1));
+  g_assert_true(apply_first_move(controller, model, &move_2));
 
   SgfTree *tree = gcheckers_sgf_controller_get_tree(controller);
   const SgfNode *node_1 = sgf_tree_get_first_child(tree);
@@ -137,10 +141,12 @@ static void test_gcheckers_sgf_controller_replay_branching(void) {
   SgfView *view = gcheckers_sgf_controller_get_view(controller);
   g_signal_emit_by_name(view, "node-selected", node_1);
 
-  g_assert_cmpuint(gcheckers_model_get_history_size(model), ==, 1);
+  const GameState *state = gcheckers_model_peek_state(model);
+  g_assert_nonnull(state);
+  g_assert_cmpuint(state->turn, ==, CHECKERS_COLOR_BLACK);
 
   CheckersMove branch_move;
-  if (!apply_first_distinct_move(model, &move_2, &branch_move)) {
+  if (!apply_first_distinct_move(controller, model, &move_2, &branch_move)) {
     g_test_skip("No alternative branch move available.");
     g_clear_object(&controller);
     g_clear_object(&model);
@@ -164,7 +170,7 @@ static void test_gcheckers_sgf_controller_reset_clears_tree(void) {
   gcheckers_sgf_controller_set_model(controller, model);
 
   CheckersMove move;
-  g_assert_true(apply_first_move(model, &move));
+  g_assert_true(apply_first_move(controller, model, &move));
 
   gcheckers_sgf_controller_reset(controller);
 

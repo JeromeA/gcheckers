@@ -69,7 +69,10 @@ static void test_gcheckers_window_drain_main_context(guint max_iterations) {
   g_debug("Main context still busy after %u iterations\n", max_iterations);
 }
 
-static gboolean apply_first_move(GCheckersModel *model, CheckersMove *out_move) {
+static gboolean apply_first_move(GCheckersSgfController *controller,
+                                 GCheckersModel *model,
+                                 CheckersMove *out_move) {
+  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(controller), FALSE);
   g_return_val_if_fail(GCHECKERS_IS_MODEL(model), FALSE);
   g_return_val_if_fail(out_move != NULL, FALSE);
 
@@ -81,10 +84,10 @@ static gboolean apply_first_move(GCheckersModel *model, CheckersMove *out_move) 
   }
 
   *out_move = moves.moves[0];
-  gboolean applied = gcheckers_model_apply_move(model, out_move);
+  gboolean applied = gcheckers_sgf_controller_apply_move(controller, out_move);
   movelist_free(&moves);
   if (!applied) {
-    g_debug("Failed to apply test move for gcheckers window\n");
+    g_debug("Failed to apply test move through SGF controller\n");
     return FALSE;
   }
 
@@ -188,12 +191,16 @@ static void test_gcheckers_window_auto_moves_when_next_player_is_computer(void) 
   player_controls_panel_set_selected(panel, CHECKERS_COLOR_WHITE, 0);
   player_controls_panel_set_selected(panel, CHECKERS_COLOR_BLACK, 1);
 
+  GCheckersSgfController *controller = gcheckers_window_get_sgf_controller(window);
+  g_assert_nonnull(controller);
+
   CheckersMove move;
-  g_assert_true(apply_first_move(model, &move));
+  g_assert_true(apply_first_move(controller, model, &move));
   test_gcheckers_window_drain_main_context(16);
 
-  guint history_size = gcheckers_model_get_history_size(model);
-  g_assert_cmpuint(history_size, >=, 2);
+  const GameState *state = gcheckers_model_peek_state(model);
+  g_assert_nonnull(state);
+  g_assert_cmpuint(state->turn, ==, CHECKERS_COLOR_WHITE);
 
   g_clear_object(&window);
   g_clear_object(&model);
@@ -211,12 +218,12 @@ static void test_gcheckers_window_sgf_navigation_resets_controls_to_user(void) {
   player_controls_panel_set_selected(panel, CHECKERS_COLOR_WHITE, 0);
   player_controls_panel_set_selected(panel, CHECKERS_COLOR_BLACK, 1);
 
-  CheckersMove move;
-  g_assert_true(apply_first_move(model, &move));
-  test_gcheckers_window_drain_main_context(16);
-
   GCheckersSgfController *controller = gcheckers_window_get_sgf_controller(window);
   g_assert_nonnull(controller);
+
+  CheckersMove move;
+  g_assert_true(apply_first_move(controller, model, &move));
+  test_gcheckers_window_drain_main_context(16);
 
   SgfTree *tree = gcheckers_sgf_controller_get_tree(controller);
   const SgfNode *node = sgf_tree_get_first_child(tree);

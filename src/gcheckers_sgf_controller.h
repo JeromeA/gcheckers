@@ -21,6 +21,8 @@ G_DECLARE_FINAL_TYPE(GCheckersSgfController,
 GCheckersSgfController *gcheckers_sgf_controller_new(BoardView *board_view);
 void gcheckers_sgf_controller_set_model(GCheckersSgfController *self, GCheckersModel *model);
 void gcheckers_sgf_controller_reset(GCheckersSgfController *self);
+gboolean gcheckers_sgf_controller_apply_move(GCheckersSgfController *self, const CheckersMove *move);
+gboolean gcheckers_sgf_controller_step_random_move(GCheckersSgfController *self, CheckersMove *out_move);
 GtkWidget *gcheckers_sgf_controller_get_widget(GCheckersSgfController *self);
 SgfTree *gcheckers_sgf_controller_get_tree(GCheckersSgfController *self);
 SgfView *gcheckers_sgf_controller_get_view(GCheckersSgfController *self);

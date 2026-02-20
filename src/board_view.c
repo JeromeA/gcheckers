@@ -18,6 +18,8 @@ struct _BoardView {
   BoardMoveOverlay *board_overlay;
   BoardSelectionController *selection_controller;
   PiecePalette *piece_palette;
+  BoardViewMoveHandler move_handler;
+  gpointer move_handler_data;
   gboolean input_enabled;
 };
 
@@ -163,6 +165,16 @@ void board_view_set_model(BoardView *self, GCheckersModel *model) {
   board_view_update(self);
 }
 
+void board_view_set_move_handler(BoardView *self, BoardViewMoveHandler handler, gpointer user_data) {
+  g_return_if_fail(BOARD_IS_VIEW(self));
+
+  self->move_handler = handler;
+  self->move_handler_data = user_data;
+  board_selection_controller_set_move_handler(self->selection_controller,
+                                              self->move_handler,
+                                              self->move_handler_data);
+}
+
 void board_view_update(BoardView *self) {
   g_return_if_fail(BOARD_IS_VIEW(self));
 
@@ -255,6 +267,8 @@ static void board_view_init(BoardView *self) {
 
   self->selection_controller = board_selection_controller_new();
   self->piece_palette = piece_palette_new_default();
+  self->move_handler = NULL;
+  self->move_handler_data = NULL;
   self->input_enabled = TRUE;
 }
 
