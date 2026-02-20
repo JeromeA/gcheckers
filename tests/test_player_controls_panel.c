@@ -36,7 +36,7 @@ static void test_player_controls_panel_control_signal(void) {
   guint count = 0;
 
   g_signal_connect(panel, "control-changed", G_CALLBACK(on_control_changed), &count);
-  player_controls_panel_set_mode(panel, CHECKERS_COLOR_BLACK, PLAYER_CONTROL_MODE_COMP_LEVEL_1_RANDOM);
+  player_controls_panel_set_mode(panel, CHECKERS_COLOR_BLACK, PLAYER_CONTROL_MODE_COMPUTER);
 
   g_assert_cmpuint(count, >, 0);
 
@@ -78,14 +78,13 @@ static void test_player_controls_panel_force_move_sensitive(void) {
   g_clear_object(&panel);
 }
 
-static void test_player_controls_panel_mode_depth_mapping(void) {
+static void test_player_controls_panel_level_depth_mapping(void) {
   guint depth = 0;
-  g_assert_false(player_controls_panel_mode_depth(PLAYER_CONTROL_MODE_USER, &depth));
-  g_assert_true(player_controls_panel_mode_depth(PLAYER_CONTROL_MODE_COMP_LEVEL_1_RANDOM, &depth));
+  g_assert_true(player_controls_panel_computer_level_depth(PLAYER_COMPUTER_LEVEL_1_RANDOM, &depth));
   g_assert_cmpuint(depth, ==, 0);
-  g_assert_true(player_controls_panel_mode_depth(PLAYER_CONTROL_MODE_COMP_LEVEL_2_DEPTH_4, &depth));
+  g_assert_true(player_controls_panel_computer_level_depth(PLAYER_COMPUTER_LEVEL_2_DEPTH_4, &depth));
   g_assert_cmpuint(depth, ==, 4);
-  g_assert_true(player_controls_panel_mode_depth(PLAYER_CONTROL_MODE_COMP_LEVEL_3_DEPTH_8, &depth));
+  g_assert_true(player_controls_panel_computer_level_depth(PLAYER_COMPUTER_LEVEL_3_DEPTH_8, &depth));
   g_assert_cmpuint(depth, ==, 8);
 }
 
@@ -96,7 +95,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/player-controls/control-signal", test_player_controls_panel_skip);
     g_test_add_func("/player-controls/force-signal", test_player_controls_panel_skip);
     g_test_add_func("/player-controls/force-sensitive", test_player_controls_panel_skip);
-    g_test_add_func("/player-controls/mode-depth", test_player_controls_panel_skip);
+    g_test_add_func("/player-controls/level-depth", test_player_controls_panel_skip);
     return g_test_run();
   }
 
@@ -104,6 +103,6 @@ int main(int argc, char **argv) {
   g_test_add_func("/player-controls/control-signal", test_player_controls_panel_control_signal);
   g_test_add_func("/player-controls/force-signal", test_player_controls_panel_force_move_signal);
   g_test_add_func("/player-controls/force-sensitive", test_player_controls_panel_force_move_sensitive);
-  g_test_add_func("/player-controls/mode-depth", test_player_controls_panel_mode_depth_mapping);
+  g_test_add_func("/player-controls/level-depth", test_player_controls_panel_level_depth_mapping);
   return g_test_run();
 }

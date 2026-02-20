@@ -2,8 +2,7 @@
 
 ## `GCheckersWindow` (`src/gcheckers_window.c`)
 Class: `GCheckersWindow` (`GtkApplicationWindow`).
-Role: composition root that binds model state to UI updates, keeps board input available, coordinates auto-play, and
-exposes a debug SGF reselect button to force layout resyncs.
+Role: composition root that binds model state to UI updates, keeps board input available, and coordinates auto-play.
 Owns: `GCheckersModel`, `BoardView`, `PlayerControlsPanel`, and `GCheckersSgfController`.
 Collaborates with: `gcheckers_style_init()` for CSS, model signals for refresh, and SGF analysis signals to reset
 player dropdowns. Computer turns are routed by control mode: random (level 1), alpha-beta depth 4 (level 2), or
@@ -26,7 +25,8 @@ and `GCheckersWindow` via the `analysis-requested` signal.
 ## `PlayerControlsPanel` (`src/player_controls_panel.c`)
 Class: `PlayerControlsPanel` (`GtkBox`).
 Role: encapsulates player mode dropdowns and force-move UI.
-Modes: `User`, `Comp Level 1 (random)`, `Comp Level 2 (depth 4)`, `Comp Level 3 (depth 8)`.
+Modes: white/black each select `User` or `Computer`, plus a shared `Computer level` selector (`random`, `depth 4`,
+`depth 8`).
 Defaults: both white and black controls start as `User`.
 Signals: `control-changed` and `force-move-requested` for window-level coordination.
 Collaborates with: `GCheckersWindow` (signal handlers and `player_controls_panel_set_all_user()`) and GTK widgets

@@ -10,8 +10,7 @@ struct _GCheckersWindow {
   GtkApplicationWindow parent_instance;
   GCheckersModel *model;
   GtkWidget *status_label;
-  GtkWidget *reset_button;
-  GtkWidget *reselect_sgf_button;
+  GtkWidget *new_game_button;
   GtkWidget *controls_row;
   BoardView *board_view;
   PlayerControlsPanel *controls_panel;
@@ -68,16 +67,16 @@ static gboolean gcheckers_window_is_computer_control(GCheckersWindow *self, Chec
   return !gcheckers_window_is_user_control(self, color);
 }
 
-static gboolean gcheckers_window_choose_computer_move(GCheckersWindow *self, CheckersColor color, CheckersMove *move) {
+static gboolean gcheckers_window_choose_computer_move(GCheckersWindow *self, CheckersMove *move) {
   g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), FALSE);
   g_return_val_if_fail(move != NULL, FALSE);
   g_return_val_if_fail(self->controls_panel != NULL, FALSE);
   g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self->sgf_controller), FALSE);
 
-  PlayerControlMode mode = player_controls_panel_get_mode(self->controls_panel, color);
+  PlayerComputerLevel level = player_controls_panel_get_computer_level(self->controls_panel);
   guint depth = 0;
-  if (!player_controls_panel_mode_depth(mode, &depth)) {
-    g_debug("No computer depth for current control mode");
+  if (!player_controls_panel_computer_level_depth(level, &depth)) {
+    g_debug("No computer depth for current level");
     return FALSE;
   }
 
@@ -188,7 +187,7 @@ static void gcheckers_window_on_state_changed(GCheckersModel *model, gpointer us
   gcheckers_window_maybe_trigger_auto_move(self);
 }
 
-static void gcheckers_window_on_reset_clicked(GtkButton * /*button*/, gpointer user_data) {
+static void gcheckers_window_on_new_game_clicked(GtkButton * /*button*/, gpointer user_data) {
   GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
 
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
@@ -197,19 +196,6 @@ static void gcheckers_window_on_reset_clicked(GtkButton * /*button*/, gpointer u
   gcheckers_model_reset(self->model);
   board_view_clear_selection(self->board_view);
   gcheckers_sgf_controller_new_game(self->sgf_controller);
-}
-
-static void gcheckers_window_on_sgf_reselect_clicked(GtkButton * /*button*/, gpointer user_data) {
-  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
-
-  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
-
-  if (!self->sgf_controller) {
-    g_debug("Missing SGF controller for layout resync\n");
-    return;
-  }
-
-  gcheckers_sgf_controller_force_layout_resync(self->sgf_controller);
 }
 
 static void gcheckers_window_on_control_changed(PlayerControlsPanel * /*panel*/, gpointer user_data) {
@@ -253,7 +239,7 @@ static void gcheckers_window_on_force_move_requested(PlayerControlsPanel * /*pan
   }
 
   CheckersMove move;
-  if (gcheckers_window_choose_computer_move(self, state->turn, &move)) {
+  if (gcheckers_window_choose_computer_move(self, &move)) {
     gcheckers_window_print_move("AI", &move);
   }
 }
@@ -357,36 +343,19 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_paned_set_start_child(GTK_PANED(paned), left_panel);
   gtk_paned_set_shrink_start_child(GTK_PANED(paned), FALSE);
 
-  self->status_label = gtk_label_new(NULL);
-  gtk_label_set_xalign(GTK_LABEL(self->status_label), 0.0f);
-  gtk_label_set_wrap(GTK_LABEL(self->status_label), TRUE);
-  gtk_box_append(GTK_BOX(left_panel), self->status_label);
-
   self->board_view = board_view_new();
   gtk_box_append(GTK_BOX(left_panel), board_view_get_widget(self->board_view));
-
-  GtkWidget *button_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
-  gtk_box_append(GTK_BOX(left_panel), button_row);
-
-  self->reset_button = gtk_button_new_with_label("Reset");
-  g_signal_connect(self->reset_button,
-                   "clicked",
-                   G_CALLBACK(gcheckers_window_on_reset_clicked),
-                   self);
-  gtk_box_append(GTK_BOX(button_row), self->reset_button);
-
-  self->reselect_sgf_button = gtk_button_new_with_label("Reselect SGF");
-  g_signal_connect(self->reselect_sgf_button,
-                   "clicked",
-                   G_CALLBACK(gcheckers_window_on_sgf_reselect_clicked),
-                   self);
-  gtk_box_append(GTK_BOX(button_row), self->reselect_sgf_button);
 
   GtkWidget *right_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
   gtk_widget_set_hexpand(right_panel, TRUE);
   gtk_widget_set_vexpand(right_panel, TRUE);
   gtk_paned_set_end_child(GTK_PANED(paned), right_panel);
   gtk_paned_set_shrink_end_child(GTK_PANED(paned), FALSE);
+
+  self->status_label = gtk_label_new(NULL);
+  gtk_label_set_xalign(GTK_LABEL(self->status_label), 0.0f);
+  gtk_label_set_wrap(GTK_LABEL(self->status_label), TRUE);
+  gtk_box_append(GTK_BOX(right_panel), self->status_label);
 
   self->controls_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
   gtk_box_append(GTK_BOX(right_panel), self->controls_row);
@@ -401,6 +370,13 @@ static void gcheckers_window_init(GCheckersWindow *self) {
                    "force-move-requested",
                    G_CALLBACK(gcheckers_window_on_force_move_requested),
                    self);
+
+  self->new_game_button = gtk_button_new_with_label("New game");
+  g_signal_connect(self->new_game_button,
+                   "clicked",
+                   G_CALLBACK(gcheckers_window_on_new_game_clicked),
+                   self);
+  gtk_box_append(GTK_BOX(self->controls_row), self->new_game_button);
 
   self->sgf_controller = gcheckers_sgf_controller_new(self->board_view);
   board_view_set_move_handler(self->board_view, gcheckers_window_apply_player_move, self);

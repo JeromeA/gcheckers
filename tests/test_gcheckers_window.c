@@ -168,7 +168,7 @@ static void test_gcheckers_window_computer_selection_keeps_board_enabled(void) {
   PlayerControlsPanel *panel = gcheckers_window_get_controls_panel(window);
   g_assert_nonnull(panel);
 
-  player_controls_panel_set_mode(panel, CHECKERS_COLOR_WHITE, PLAYER_CONTROL_MODE_COMP_LEVEL_1_RANDOM);
+  player_controls_panel_set_mode(panel, CHECKERS_COLOR_WHITE, PLAYER_CONTROL_MODE_COMPUTER);
   test_gcheckers_window_drain_main_context(8);
 
   GtkWidget *square = test_gcheckers_window_find_board_square(GTK_WIDGET(window));
@@ -189,7 +189,8 @@ static void test_gcheckers_window_auto_moves_when_next_player_is_computer(void) 
   g_assert_nonnull(panel);
 
   player_controls_panel_set_mode(panel, CHECKERS_COLOR_WHITE, PLAYER_CONTROL_MODE_USER);
-  player_controls_panel_set_mode(panel, CHECKERS_COLOR_BLACK, PLAYER_CONTROL_MODE_COMP_LEVEL_2_DEPTH_4);
+  player_controls_panel_set_mode(panel, CHECKERS_COLOR_BLACK, PLAYER_CONTROL_MODE_COMPUTER);
+  player_controls_panel_set_computer_level(panel, PLAYER_COMPUTER_LEVEL_2_DEPTH_4);
 
   GCheckersSgfController *controller = gcheckers_window_get_sgf_controller(window);
   g_assert_nonnull(controller);
@@ -216,7 +217,8 @@ static void test_gcheckers_window_sgf_navigation_resets_controls_to_user(void) {
   g_assert_nonnull(panel);
 
   player_controls_panel_set_mode(panel, CHECKERS_COLOR_WHITE, PLAYER_CONTROL_MODE_USER);
-  player_controls_panel_set_mode(panel, CHECKERS_COLOR_BLACK, PLAYER_CONTROL_MODE_COMP_LEVEL_3_DEPTH_8);
+  player_controls_panel_set_mode(panel, CHECKERS_COLOR_BLACK, PLAYER_CONTROL_MODE_COMPUTER);
+  player_controls_panel_set_computer_level(panel, PLAYER_COMPUTER_LEVEL_3_DEPTH_8);
 
   GCheckersSgfController *controller = gcheckers_window_get_sgf_controller(window);
   g_assert_nonnull(controller);
@@ -241,6 +243,30 @@ static void test_gcheckers_window_sgf_navigation_resets_controls_to_user(void) {
   g_clear_object(&app);
 }
 
+static void test_gcheckers_window_force_move_works_on_user_turn(void) {
+  GtkApplication *app = test_gcheckers_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersWindow *window = gcheckers_window_new(app, model);
+
+  PlayerControlsPanel *panel = gcheckers_window_get_controls_panel(window);
+  g_assert_nonnull(panel);
+  g_assert_true(player_controls_panel_is_user_control(panel, CHECKERS_COLOR_WHITE));
+  g_assert_true(player_controls_panel_is_user_control(panel, CHECKERS_COLOR_BLACK));
+
+  GtkWidget *button = player_controls_panel_get_force_move_button(panel);
+  g_assert_nonnull(button);
+  g_signal_emit_by_name(button, "clicked");
+  test_gcheckers_window_drain_main_context(16);
+
+  const GameState *state = gcheckers_model_peek_state(model);
+  g_assert_nonnull(state);
+  g_assert_cmpuint(state->turn, ==, CHECKERS_COLOR_BLACK);
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   if (!gtk_init_check()) {
@@ -250,6 +276,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/gcheckers-window/computer-selection-keeps-board-enabled", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/auto-move-next-player-computer", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/sgf-navigation-resets-controls", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/force-move-user-turn", test_gcheckers_window_skip);
     return g_test_run();
   }
 
@@ -278,5 +305,7 @@ int main(int argc, char **argv) {
                   test_gcheckers_window_auto_moves_when_next_player_is_computer);
   g_test_add_func("/gcheckers-window/sgf-navigation-resets-controls",
                   test_gcheckers_window_sgf_navigation_resets_controls_to_user);
+  g_test_add_func("/gcheckers-window/force-move-user-turn",
+                  test_gcheckers_window_force_move_works_on_user_turn);
   return g_test_run();
 }
