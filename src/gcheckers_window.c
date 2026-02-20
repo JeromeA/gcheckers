@@ -10,6 +10,7 @@
 struct _GCheckersWindow {
   GtkApplicationWindow parent_instance;
   GCheckersModel *model;
+  GtkWidget *main_paned;
   GtkWidget *status_label;
   GtkWidget *new_game_button;
   GtkWidget *analyze_toggle_button;
@@ -20,6 +21,7 @@ struct _GCheckersWindow {
   GCheckersSgfController *sgf_controller;
   gulong state_handler_id;
   guint auto_move_source_id;
+  guint paned_tick_id;
   gint analysis_generation;
 };
 
@@ -38,6 +40,25 @@ typedef struct {
   gint generation;
   char *text;
 } GCheckersWindowAnalysisUpdate;
+
+static gboolean gcheckers_window_constrain_main_split_cb(GtkWidget * /*widget*/,
+                                                         GdkFrameClock * /*frame_clock*/,
+                                                         gpointer user_data) {
+  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
+  g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), G_SOURCE_CONTINUE);
+
+  if (!self->main_paned || !GTK_IS_PANED(self->main_paned)) {
+    return G_SOURCE_CONTINUE;
+  }
+
+  int height = gtk_widget_get_height(self->main_paned);
+  int position = gtk_paned_get_position(GTK_PANED(self->main_paned));
+  if (height > 0 && position > height) {
+    gtk_paned_set_position(GTK_PANED(self->main_paned), height);
+  }
+
+  return G_SOURCE_CONTINUE;
+}
 
 static void gcheckers_window_print_move(const char *label, const CheckersMove *move) {
   g_return_if_fail(label != NULL);
@@ -476,6 +497,10 @@ static void gcheckers_window_dispose(GObject *object) {
   gcheckers_window_unparent_controls_panel(self);
 
   gcheckers_window_stop_analysis(self);
+  if (self->paned_tick_id != 0 && self->main_paned) {
+    gtk_widget_remove_tick_callback(self->main_paned, self->paned_tick_id);
+    self->paned_tick_id = 0;
+  }
   g_clear_object(&self->sgf_controller);
   if (panel_removed) {
     g_clear_object(&self->controls_panel);
@@ -484,6 +509,7 @@ static void gcheckers_window_dispose(GObject *object) {
   }
   g_clear_object(&self->board_view);
   g_clear_object(&self->model);
+  self->main_paned = NULL;
   self->analyze_toggle_button = NULL;
   self->analysis_buffer = NULL;
   self->controls_row = NULL;
@@ -498,6 +524,7 @@ static void gcheckers_window_class_init(GCheckersWindowClass *klass) {
 
 static void gcheckers_window_init(GCheckersWindow *self) {
   self->auto_move_source_id = 0;
+  self->paned_tick_id = 0;
   self->analysis_generation = 1;
 
   gtk_window_set_title(GTK_WINDOW(self), "gcheckers");
@@ -516,6 +543,11 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_widget_set_hexpand(paned, TRUE);
   gtk_widget_set_vexpand(paned, TRUE);
   gtk_box_append(GTK_BOX(content), paned);
+  self->main_paned = paned;
+  self->paned_tick_id = gtk_widget_add_tick_callback(paned,
+                                                      gcheckers_window_constrain_main_split_cb,
+                                                      self,
+                                                      NULL);
 
   GtkWidget *left_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
   gtk_widget_set_hexpand(left_panel, TRUE);
@@ -524,7 +556,11 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_paned_set_shrink_start_child(GTK_PANED(paned), FALSE);
 
   self->board_view = board_view_new();
-  gtk_box_append(GTK_BOX(left_panel), board_view_get_widget(self->board_view));
+  GtkWidget *board_aspect = gtk_aspect_frame_new(0.5f, 0.5f, 1.0f, FALSE);
+  gtk_widget_set_hexpand(board_aspect, TRUE);
+  gtk_widget_set_vexpand(board_aspect, TRUE);
+  gtk_box_append(GTK_BOX(left_panel), board_aspect);
+  gtk_aspect_frame_set_child(GTK_ASPECT_FRAME(board_aspect), board_view_get_widget(self->board_view));
 
   GtkWidget *right_split = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
   gtk_widget_set_hexpand(right_split, TRUE);
@@ -541,6 +577,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   GtkWidget *analysis_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
   gtk_widget_set_hexpand(analysis_panel, TRUE);
   gtk_widget_set_vexpand(analysis_panel, TRUE);
+  gtk_widget_set_size_request(analysis_panel, 400, -1);
   gtk_paned_set_end_child(GTK_PANED(right_split), analysis_panel);
   gtk_paned_set_shrink_end_child(GTK_PANED(right_split), FALSE);
 
