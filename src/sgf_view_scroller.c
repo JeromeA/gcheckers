@@ -137,6 +137,22 @@ void sgf_view_scroller_scroll(SgfViewScroller *self,
     return;
   }
 
+  GtkWidget *parent = gtk_widget_get_parent(widget);
+  if (parent) {
+    graphene_rect_t parent_bounds;
+    if (gtk_widget_compute_bounds(widget, parent, &parent_bounds)) {
+      g_debug("SGF scroll attempt: parent bounds [x=%.1f y=%.1f w=%.1f h=%.1f]",
+              parent_bounds.origin.x,
+              parent_bounds.origin.y,
+              parent_bounds.size.width,
+              parent_bounds.size.height);
+    } else {
+      g_debug("SGF scroll attempt: parent bounds unavailable");
+    }
+  } else {
+    g_debug("SGF scroll attempt: selected widget has no parent");
+  }
+
   GtkWidget *content = gtk_widget_get_ancestor(widget, GTK_TYPE_OVERLAY);
   if (!content) {
     g_debug("SGF scroll attempt: selected widget has no overlay ancestor");
