@@ -95,8 +95,10 @@ Collaborates with: `game.c` and `game_print.c`.
 
 ## GTK application entry (`src/gcheckers.c`, `src/gcheckers_application.c`, `src/gcheckers_application.h`)
 Class: `GCheckersApplication` (`GtkApplication`).
-Role: define the GTK application type and activation flow that creates the main window and model.
-Collaborates with: `GCheckersWindow` for UI wiring.
+Role: define the GTK application type and activation flow that creates the main window and model, installs app actions
+(`app.new-game`, `app.quit`), and publishes a menubar model (`File` -> `New game...`, `Quit`) with keyboard
+accelerators.
+Collaborates with: `GCheckersWindow` for UI wiring and new-game dialog presentation.
 
 ## Board view subsystem
 

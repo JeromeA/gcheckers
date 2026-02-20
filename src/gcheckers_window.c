@@ -61,6 +61,15 @@ static gboolean gcheckers_window_constrain_main_split_cb(GtkWidget * /*widget*/,
   return G_SOURCE_CONTINUE;
 }
 
+static void gcheckers_window_start_new_game(GCheckersWindow *self) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
+
+  gcheckers_model_reset(self->model);
+  board_view_clear_selection(self->board_view);
+  gcheckers_sgf_controller_new_game(self->sgf_controller);
+}
+
 static void gcheckers_window_print_move(const char *label, const CheckersMove *move) {
   g_return_if_fail(label != NULL);
   g_return_if_fail(move != NULL);
@@ -399,9 +408,7 @@ static void gcheckers_window_on_new_game_clicked(GtkButton * /*button*/, gpointe
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
   g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
 
-  gcheckers_model_reset(self->model);
-  board_view_clear_selection(self->board_view);
-  gcheckers_sgf_controller_new_game(self->sgf_controller);
+  gcheckers_window_start_new_game(self);
 }
 
 static void gcheckers_window_on_control_changed(PlayerControlsPanel * /*panel*/, gpointer user_data) {
@@ -466,6 +473,23 @@ static void gcheckers_window_on_force_move_requested(PlayerControlsPanel * /*pan
   if (gcheckers_window_choose_computer_move(self, &move)) {
     gcheckers_window_print_move("AI", &move);
   }
+}
+
+void gcheckers_window_apply_new_game_settings(GCheckersWindow *self,
+                                              PlayerRuleset ruleset,
+                                              PlayerControlMode white_mode,
+                                              PlayerControlMode black_mode,
+                                              PlayerComputerLevel computer_level) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(self->controls_panel != NULL);
+
+  player_controls_panel_set_ruleset(self->controls_panel, ruleset);
+  player_controls_panel_set_mode(self->controls_panel, CHECKERS_COLOR_WHITE, white_mode);
+  player_controls_panel_set_mode(self->controls_panel, CHECKERS_COLOR_BLACK, black_mode);
+  player_controls_panel_set_computer_level(self->controls_panel, computer_level);
+
+  gcheckers_window_apply_ruleset_selection(self);
+  gcheckers_window_start_new_game(self);
 }
 
 static void gcheckers_window_set_model(GCheckersWindow *self, GCheckersModel *model) {
@@ -562,11 +586,16 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gcheckers_style_init();
 
   GtkWidget *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
-  gtk_widget_set_margin_top(content, 16);
-  gtk_widget_set_margin_bottom(content, 16);
-  gtk_widget_set_margin_start(content, 16);
-  gtk_widget_set_margin_end(content, 16);
   gtk_window_set_child(GTK_WINDOW(self), content);
+
+  GApplication *app = g_application_get_default();
+  if (GTK_IS_APPLICATION(app)) {
+    GMenuModel *menubar = gtk_application_get_menubar(GTK_APPLICATION(app));
+    if (menubar != NULL) {
+      GtkWidget *menu_bar = gtk_popover_menu_bar_new_from_model(menubar);
+      gtk_box_append(GTK_BOX(content), menu_bar);
+    }
+  }
 
   GtkWidget *paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
   gtk_widget_set_hexpand(paned, TRUE);

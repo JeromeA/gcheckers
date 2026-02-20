@@ -66,8 +66,9 @@ GCheckersModel *gcheckers_model_new(void) {
 void gcheckers_model_reset(GCheckersModel *self) {
   g_return_if_fail(GCHECKERS_IS_MODEL(self));
 
+  CheckersRules rules = self->game.rules;
   game_destroy(&self->game);
-  game_init(&self->game);
+  game_init_with_rules(&self->game, &rules);
   self->has_last_move = FALSE;
   gcheckers_model_emit_state_changed(self);
 }
