@@ -98,9 +98,10 @@ static void sgf_view_queue_scroll_to_selected(SgfView *self) {
 
   const SgfNode *selected = self->tree ? sgf_tree_get_current(self->tree) : NULL;
   if (!selected) {
-    g_debug("SGF view has no selection to scroll");
+    g_debug("SGF view scroll request ignored: reason=no-selection");
     return;
   }
+
   sgf_view_scroller_scroll(self->scroller,
                            GTK_SCROLLED_WINDOW(self->root),
                            self->node_widgets,
