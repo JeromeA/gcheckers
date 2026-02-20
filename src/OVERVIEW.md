@@ -25,6 +25,7 @@ and `GCheckersWindow` via the `analysis-requested` signal.
 ## `PlayerControlsPanel` (`src/player_controls_panel.c`)
 Class: `PlayerControlsPanel` (`GtkBox`).
 Role: encapsulates player mode dropdowns and force-move UI.
+Defaults: both white and black controls start as `User`.
 Signals: `control-changed` and `force-move-requested` for window-level coordination.
 Collaborates with: `GCheckersWindow` (signal handlers and `player_controls_panel_set_all_user()`) and GTK widgets
 (`GtkDropDown`, `GtkButton`).

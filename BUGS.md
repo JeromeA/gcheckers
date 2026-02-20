@@ -108,3 +108,12 @@ selection pointers when SGF reset/rebuild timing diverged.
 The fix makes SGF the authority: move application now validates the model move, appends under SGF current, advances SGF
 current, then updates the model from that SGF transition (single-step parent->child or reset+replay from root). Game
 history storage was removed from `Game`, and SGF controller/window/board paths were rewired to use SGF-first APIs.
+
+## New games started with black controlled by computer by default
+
+A new game should start with both white and black player controls set to `User`.
+
+The player controls panel initialized white to `User` but black to `Computer`, so a fresh game auto-played black unless
+the user changed the dropdown manually.
+
+The fix sets both dropdown defaults to `User` and updates widget tests to assert the new default behavior.

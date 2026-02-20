@@ -106,7 +106,7 @@ static void player_controls_panel_init(PlayerControlsPanel *self) {
   self->white_control = GTK_DROP_DOWN(gtk_drop_down_new_from_strings(control_options));
   self->black_control = GTK_DROP_DOWN(gtk_drop_down_new_from_strings(control_options));
   gtk_drop_down_set_selected(self->white_control, 0);
-  gtk_drop_down_set_selected(self->black_control, 1);
+  gtk_drop_down_set_selected(self->black_control, 0);
   gtk_grid_attach(GTK_GRID(controls_grid), GTK_WIDGET(self->white_control), 1, 0, 1, 1);
   gtk_grid_attach(GTK_GRID(controls_grid), GTK_WIDGET(self->black_control), 1, 1, 1, 1);
 

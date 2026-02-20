@@ -18,9 +18,9 @@ static void test_player_controls_panel_defaults(void) {
   PlayerControlsPanel *panel = test_player_controls_panel_new_owned();
 
   g_assert_cmpuint(player_controls_panel_get_selected(panel, CHECKERS_COLOR_WHITE), ==, 0);
-  g_assert_cmpuint(player_controls_panel_get_selected(panel, CHECKERS_COLOR_BLACK), ==, 1);
+  g_assert_cmpuint(player_controls_panel_get_selected(panel, CHECKERS_COLOR_BLACK), ==, 0);
   g_assert_true(player_controls_panel_is_user_control(panel, CHECKERS_COLOR_WHITE));
-  g_assert_false(player_controls_panel_is_user_control(panel, CHECKERS_COLOR_BLACK));
+  g_assert_true(player_controls_panel_is_user_control(panel, CHECKERS_COLOR_BLACK));
 
   g_clear_object(&panel);
 }
