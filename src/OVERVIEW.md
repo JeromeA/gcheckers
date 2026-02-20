@@ -148,10 +148,9 @@ Collaborates with: SGF node widget mapping and view sizing.
 
 ### SGF scroller (`src/sgf_view_scroller.c`, `src/sgf_view_scroller.h`)
 Module: selection scroll helper.
-Role: on scroll requests remember the selected node and attempt scrolling immediately, and on layout updates retry
-scrolling for the remembered node. Scrolling uses only selected-widget horizontal bounds
-(`[bounds.origin.x, bounds.origin.x + bounds.size.width]`); if bounds are unavailable or x is negative before layout
-settles, it schedules an idle retry. Debug logs emit the selected bounds immediately once geometry is available.
+Role: `sgf_view_scroller_scroll()` remembers selected-node context, attempts immediate horizontal clamping from selected
+widget bounds (`[bounds.origin.x, bounds.origin.x + bounds.size.width]`), and internally schedules an idle retry when
+selected widget lookup or geometry is not ready. Callers use one API and do not handle retry paths.
 Collaborates with: `SgfView`, SGF node widget mapping, and selection controller updates.
 
 ### SGF selection controller (`src/sgf_view_selection_controller.c`, `src/sgf_view_selection_controller.h`)

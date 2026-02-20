@@ -86,3 +86,13 @@ code that depended on derived extents and extra bounds comparisons unrelated to 
 
 The fix removes those diagnostic helpers and the associated test coverage, leaving link rendering and scrolling based on
 disc bounds and selected-widget bounds respectively.
+
+## SGF scroller exposed multiple retry entry points instead of one scroll API
+
+SGF selection scrolling should expose a single caller API that either scrolls now or retries later internally.
+
+The old scroller split behavior between `request_scroll`, `on_layout_changed`, and helper retry functions. That forced
+callers to know when to trigger retries and scattered the scroll path across multiple entry points.
+
+The fix replaces those paths with `sgf_view_scroller_scroll()`: it remembers selected-node context, tries to clamp
+immediately, and schedules one internal idle retry path when selected widgets or bounds are not ready yet.

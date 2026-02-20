@@ -12,13 +12,10 @@ G_BEGIN_DECLS
 G_DECLARE_FINAL_TYPE(SgfViewScroller, sgf_view_scroller, SGF, VIEW_SCROLLER, GObject)
 
 SgfViewScroller *sgf_view_scroller_new(void);
-void sgf_view_scroller_request_scroll(SgfViewScroller *self,
-                                      GtkScrolledWindow *root,
-                                      GHashTable *node_widgets,
-                                      const SgfNode *selected);
-void sgf_view_scroller_on_layout_changed(SgfViewScroller *self,
-                                         GtkScrolledWindow *root,
-                                         GHashTable *node_widgets);
+void sgf_view_scroller_scroll(SgfViewScroller *self,
+                              GtkScrolledWindow *root,
+                              GHashTable *node_widgets,
+                              const SgfNode *selected);
 
 G_END_DECLS
 
