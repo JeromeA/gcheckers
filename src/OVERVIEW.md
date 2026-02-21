@@ -11,6 +11,7 @@ and SGF view (middle), and analysis
  (right) with an `Analyze` toggle that runs iterative deepening in a worker thread and publishes best-to-worst move
 scores after each completed depth until toggled off. Top-level menu actions are also exposed in a toolbar
 (`New game...`, `Force move`) via GTK actions.
+Default panel widths target about `500/300/300` pixels at the default window width (`1100x700`).
 Lifecycle: sinks and retains an owned `PlayerControlsPanel` reference, removes it from its current `GtkBox` parent
 during dispose via `gcheckers_widget_remove_from_parent()`, and then clears its references.
 during dispose, cancels any pending auto-move idle source, and then clears its references.

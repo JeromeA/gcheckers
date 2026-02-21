@@ -556,7 +556,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   self->applied_ruleset = PLAYER_RULESET_INTERNATIONAL;
 
   gtk_window_set_title(GTK_WINDOW(self), "gcheckers");
-  gtk_window_set_default_size(GTK_WINDOW(self), 1200, 700);
+  gtk_window_set_default_size(GTK_WINDOW(self), 1100, 700);
 
   gcheckers_style_init();
 
@@ -643,8 +643,8 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_widget_set_margin_end(analysis_panel, 8);
   gtk_paned_set_end_child(GTK_PANED(right_split), analysis_panel);
   gtk_paned_set_shrink_end_child(GTK_PANED(right_split), FALSE);
-  gtk_paned_set_position(GTK_PANED(paned), 400);
-  gtk_paned_set_position(GTK_PANED(right_split), 400);
+  gtk_paned_set_position(GTK_PANED(paned), 500);
+  gtk_paned_set_position(GTK_PANED(right_split), 300);
 
   GtkWidget *sgf_mode_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
   GtkWidget *sgf_mode_label = gtk_label_new("Mode");
