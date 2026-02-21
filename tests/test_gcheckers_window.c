@@ -79,6 +79,28 @@ static GtkToggleButton *test_gcheckers_window_find_toggle_button_with_label(GtkW
   return NULL;
 }
 
+static GtkWidget *test_gcheckers_window_find_widget_for_action(GtkWidget *root, const char *action_name) {
+  g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
+  g_return_val_if_fail(action_name != NULL, NULL);
+
+  if (GTK_IS_ACTIONABLE(root)) {
+    const char *bound_action = gtk_actionable_get_action_name(GTK_ACTIONABLE(root));
+    if (bound_action && g_strcmp0(bound_action, action_name) == 0) {
+      return root;
+    }
+  }
+
+  for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
+       child = gtk_widget_get_next_sibling(child)) {
+    GtkWidget *match = test_gcheckers_window_find_widget_for_action(child, action_name);
+    if (match != NULL) {
+      return match;
+    }
+  }
+
+  return NULL;
+}
+
 static void test_gcheckers_window_drain_main_context(guint max_iterations) {
   g_return_if_fail(max_iterations > 0);
 
@@ -287,6 +309,21 @@ static void test_gcheckers_window_force_move_works_on_user_turn(void) {
   g_clear_object(&app);
 }
 
+static void test_gcheckers_window_toolbar_actions_exist(void) {
+  GtkApplication *app = test_gcheckers_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersWindow *window = gcheckers_window_new(app, model);
+
+  GtkWidget *new_game_button = test_gcheckers_window_find_widget_for_action(GTK_WIDGET(window), "app.new-game");
+  GtkWidget *force_move_button = test_gcheckers_window_find_widget_for_action(GTK_WIDGET(window), "app.force-move");
+  g_assert_nonnull(new_game_button);
+  g_assert_nonnull(force_move_button);
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
 static void test_gcheckers_window_analysis_toggle(void) {
   GtkApplication *app = test_gcheckers_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
@@ -349,6 +386,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/gcheckers-window/auto-move-next-player-computer", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/sgf-navigation-resets-controls", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/force-move-user-turn", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/toolbar-actions", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/analysis-toggle", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/ruleset-switch", test_gcheckers_window_skip);
     return g_test_run();
@@ -381,6 +419,7 @@ int main(int argc, char **argv) {
                   test_gcheckers_window_sgf_navigation_resets_controls_to_user);
   g_test_add_func("/gcheckers-window/force-move-user-turn",
                   test_gcheckers_window_force_move_works_on_user_turn);
+  g_test_add_func("/gcheckers-window/toolbar-actions", test_gcheckers_window_toolbar_actions_exist);
   g_test_add_func("/gcheckers-window/analysis-toggle", test_gcheckers_window_analysis_toggle);
   g_test_add_func("/gcheckers-window/ruleset-switch", test_gcheckers_window_ruleset_switch_resets_model);
   return g_test_run();

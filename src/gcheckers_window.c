@@ -578,6 +578,18 @@ static void gcheckers_window_init(GCheckersWindow *self) {
     }
   }
 
+  GtkWidget *toolbar = gtk_action_bar_new();
+  GtkWidget *new_game_button = gtk_button_new_from_icon_name("document-new-symbolic");
+  gtk_widget_set_tooltip_text(new_game_button, "New game...");
+  gtk_actionable_set_action_name(GTK_ACTIONABLE(new_game_button), "app.new-game");
+  gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), new_game_button);
+
+  GtkWidget *force_move_button = gtk_button_new_from_icon_name("go-next-symbolic");
+  gtk_widget_set_tooltip_text(force_move_button, "Force move");
+  gtk_actionable_set_action_name(GTK_ACTIONABLE(force_move_button), "app.force-move");
+  gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), force_move_button);
+  gtk_box_append(GTK_BOX(content), toolbar);
+
   GtkWidget *paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
   gtk_widget_set_hexpand(paned, TRUE);
   gtk_widget_set_vexpand(paned, TRUE);
