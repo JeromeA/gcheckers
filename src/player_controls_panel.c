@@ -86,22 +86,25 @@ static void player_controls_panel_init(PlayerControlsPanel *self) {
   gtk_orientable_set_orientation(GTK_ORIENTABLE(self), GTK_ORIENTATION_HORIZONTAL);
   gtk_box_set_spacing(GTK_BOX(self), 12);
 
-  GtkWidget *controls_grid = gtk_grid_new();
-  gtk_grid_set_row_spacing(GTK_GRID(controls_grid), 6);
-  gtk_grid_set_column_spacing(GTK_GRID(controls_grid), 8);
-  gtk_box_append(GTK_BOX(self), controls_grid);
+  GtkWidget *controls_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+  gtk_box_append(GTK_BOX(self), controls_row);
+
+  GtkWidget *white_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+  GtkWidget *black_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+  GtkWidget *computer_level_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+  gtk_box_append(GTK_BOX(controls_row), white_box);
+  gtk_box_append(GTK_BOX(controls_row), black_box);
+  gtk_box_append(GTK_BOX(controls_row), computer_level_box);
 
   GtkWidget *white_label = gtk_label_new("White");
-  gtk_widget_set_halign(white_label, GTK_ALIGN_START);
-  gtk_grid_attach(GTK_GRID(controls_grid), white_label, 0, 0, 1, 1);
-
   GtkWidget *black_label = gtk_label_new("Black");
-  gtk_widget_set_halign(black_label, GTK_ALIGN_START);
-  gtk_grid_attach(GTK_GRID(controls_grid), black_label, 0, 1, 1, 1);
-
   GtkWidget *computer_level_label = gtk_label_new("Computer level");
+  gtk_widget_set_halign(white_label, GTK_ALIGN_START);
+  gtk_widget_set_halign(black_label, GTK_ALIGN_START);
   gtk_widget_set_halign(computer_level_label, GTK_ALIGN_START);
-  gtk_grid_attach(GTK_GRID(controls_grid), computer_level_label, 0, 2, 1, 1);
+  gtk_box_append(GTK_BOX(white_box), white_label);
+  gtk_box_append(GTK_BOX(black_box), black_label);
+  gtk_box_append(GTK_BOX(computer_level_box), computer_level_label);
 
   static const char *control_options[] = {"User", "Computer", NULL};
   self->white_control = GTK_DROP_DOWN(gtk_drop_down_new_from_strings(control_options));
@@ -112,12 +115,14 @@ static void player_controls_panel_init(PlayerControlsPanel *self) {
   gtk_scale_set_draw_value(self->computer_depth_scale, TRUE);
   gtk_widget_set_hexpand(GTK_WIDGET(self->computer_depth_scale), TRUE);
   gtk_widget_set_size_request(GTK_WIDGET(self->computer_depth_scale), 100, -1);
+  gtk_widget_set_size_request(GTK_WIDGET(self->white_control), 100, -1);
+  gtk_widget_set_size_request(GTK_WIDGET(self->black_control), 100, -1);
   player_controls_panel_set_mode(self, CHECKERS_COLOR_WHITE, PLAYER_CONTROL_MODE_USER);
   player_controls_panel_set_mode(self, CHECKERS_COLOR_BLACK, PLAYER_CONTROL_MODE_USER);
   player_controls_panel_set_computer_depth(self, 8);
-  gtk_grid_attach(GTK_GRID(controls_grid), GTK_WIDGET(self->white_control), 1, 0, 1, 1);
-  gtk_grid_attach(GTK_GRID(controls_grid), GTK_WIDGET(self->black_control), 1, 1, 1, 1);
-  gtk_grid_attach(GTK_GRID(controls_grid), GTK_WIDGET(self->computer_depth_scale), 1, 2, 1, 1);
+  gtk_box_append(GTK_BOX(white_box), GTK_WIDGET(self->white_control));
+  gtk_box_append(GTK_BOX(black_box), GTK_WIDGET(self->black_control));
+  gtk_box_append(GTK_BOX(computer_level_box), GTK_WIDGET(self->computer_depth_scale));
 
   g_signal_connect(self->white_control,
                    "notify::selected",

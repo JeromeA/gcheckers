@@ -6,9 +6,9 @@ Role: composition root that binds model state to UI updates, keeps board input a
 Owns: `GCheckersModel`, `BoardView`, `PlayerControlsPanel`, and `GCheckersSgfController`.
 Collaborates with: `gcheckers_style_init()` for CSS, model signals for refresh, and SGF analysis signals to reset
 player dropdowns. Computer turns are routed by control mode with alpha-beta depth configured from the shared
-`Computer level` slider (`0..16`). Uses a three-pane layout: board (left), move
-controls and SGF (middle), and analysis
-(right) with an `Analyze` toggle that runs iterative deepening in a worker thread and publishes best-to-worst move
+`Computer level` slider (`0..16`). Uses a three-pane layout: board and player controls (left), SGF mode selector
+and SGF view (middle), and analysis
+ (right) with an `Analyze` toggle that runs iterative deepening in a worker thread and publishes best-to-worst move
 scores after each completed depth until toggled off. Top-level menu actions are also exposed in a toolbar
 (`New game...`, `Force move`) via GTK actions.
 Lifecycle: sinks and retains an owned `PlayerControlsPanel` reference, removes it from its current `GtkBox` parent

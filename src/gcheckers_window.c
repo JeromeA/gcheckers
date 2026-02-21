@@ -11,11 +11,11 @@ struct _GCheckersWindow {
   GtkApplicationWindow parent_instance;
   GCheckersModel *model;
   GtkWidget *main_paned;
-  GtkWidget *status_label;
   GtkWidget *analyze_toggle_button;
   GtkTextBuffer *analysis_buffer;
   BoardView *board_view;
   PlayerControlsPanel *controls_panel;
+  GtkDropDown *sgf_mode_control;
   GCheckersSgfController *sgf_controller;
   PlayerRuleset applied_ruleset;
   gulong state_handler_id;
@@ -319,13 +319,6 @@ static void gcheckers_window_update_status(GCheckersWindow *self) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
   g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
 
-  g_autofree char *status = gcheckers_model_format_status(self->model);
-  if (!status) {
-    g_debug("Failed to format status text\n");
-    return;
-  }
-  gtk_label_set_text(GTK_LABEL(self->status_label), status);
-
   board_view_update(self->board_view);
 }
 
@@ -546,6 +539,7 @@ static void gcheckers_window_dispose(GObject *object) {
   self->main_paned = NULL;
   self->analyze_toggle_button = NULL;
   self->analysis_buffer = NULL;
+  self->sgf_mode_control = NULL;
   G_OBJECT_CLASS(gcheckers_window_parent_class)->dispose(object);
 }
 
@@ -562,7 +556,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   self->applied_ruleset = PLAYER_RULESET_INTERNATIONAL;
 
   gtk_window_set_title(GTK_WINDOW(self), "gcheckers");
-  gtk_window_set_default_size(GTK_WINDOW(self), 600, 700);
+  gtk_window_set_default_size(GTK_WINDOW(self), 1200, 700);
 
   gcheckers_style_init();
 
@@ -606,6 +600,13 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_paned_set_start_child(GTK_PANED(paned), left_panel);
   gtk_paned_set_shrink_start_child(GTK_PANED(paned), FALSE);
 
+  self->controls_panel = g_object_ref_sink(player_controls_panel_new());
+  gtk_box_append(GTK_BOX(left_panel), GTK_WIDGET(self->controls_panel));
+  g_signal_connect(self->controls_panel,
+                   "control-changed",
+                   G_CALLBACK(gcheckers_window_on_control_changed),
+                   self);
+
   self->board_view = board_view_new();
   GtkWidget *board_aspect = gtk_aspect_frame_new(0.5f, 0.5f, 1.0f, FALSE);
   gtk_widget_set_hexpand(board_aspect, TRUE);
@@ -628,21 +629,20 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   GtkWidget *analysis_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
   gtk_widget_set_hexpand(analysis_panel, TRUE);
   gtk_widget_set_vexpand(analysis_panel, TRUE);
-  gtk_widget_set_size_request(analysis_panel, 400, -1);
   gtk_paned_set_end_child(GTK_PANED(right_split), analysis_panel);
   gtk_paned_set_shrink_end_child(GTK_PANED(right_split), FALSE);
+  gtk_paned_set_position(GTK_PANED(paned), 400);
+  gtk_paned_set_position(GTK_PANED(right_split), 400);
 
-  self->status_label = gtk_label_new(NULL);
-  gtk_label_set_xalign(GTK_LABEL(self->status_label), 0.0f);
-  gtk_label_set_wrap(GTK_LABEL(self->status_label), TRUE);
-  gtk_box_append(GTK_BOX(middle_panel), self->status_label);
-
-  self->controls_panel = g_object_ref_sink(player_controls_panel_new());
-  gtk_box_append(GTK_BOX(middle_panel), GTK_WIDGET(self->controls_panel));
-  g_signal_connect(self->controls_panel,
-                   "control-changed",
-                   G_CALLBACK(gcheckers_window_on_control_changed),
-                   self);
+  GtkWidget *sgf_mode_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+  GtkWidget *sgf_mode_label = gtk_label_new("Mode");
+  gtk_widget_set_halign(sgf_mode_label, GTK_ALIGN_START);
+  gtk_box_append(GTK_BOX(sgf_mode_row), sgf_mode_label);
+  self->sgf_mode_control = GTK_DROP_DOWN(gtk_drop_down_new_from_strings(
+      (const char *[]){"Play", "Edit", NULL}));
+  gtk_drop_down_set_selected(self->sgf_mode_control, 0);
+  gtk_box_append(GTK_BOX(sgf_mode_row), GTK_WIDGET(self->sgf_mode_control));
+  gtk_box_append(GTK_BOX(middle_panel), sgf_mode_row);
 
   self->sgf_controller = gcheckers_sgf_controller_new(self->board_view);
   board_view_set_move_handler(self->board_view, gcheckers_window_apply_player_move, self);
