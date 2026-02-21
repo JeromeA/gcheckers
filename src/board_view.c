@@ -25,7 +25,7 @@ struct _BoardView {
 
 G_DEFINE_TYPE(BoardView, board_view, G_TYPE_OBJECT)
 
-static const int board_view_square_size = 63;
+static const int board_view_square_size = 31;
 
 static void board_view_update_board(BoardView *self, const GameState *state) {
   g_return_if_fail(BOARD_IS_VIEW(self));
