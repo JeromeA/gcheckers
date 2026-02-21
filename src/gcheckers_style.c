@@ -75,7 +75,8 @@ static const char *gcheckers_style_css =
     "  color: #666;"
     "  font-size: 18px;"
     "}"
-    ".sgf-disc-selected { box-shadow: 0 0 0 3px #5cc7ff; }";
+    ".sgf-disc-selected { box-shadow: 0 0 0 3px #5cc7ff; }"
+    "scale { padding: 0; }";
 
 void gcheckers_style_init(void) {
   static gsize initialized = 0;
