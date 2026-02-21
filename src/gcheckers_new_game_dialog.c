@@ -91,6 +91,7 @@ void gcheckers_window_present_new_game_dialog(GCheckersWindow *self) {
   gtk_scale_set_digits(computer_depth_scale, 0);
   gtk_scale_set_draw_value(computer_depth_scale, TRUE);
   gtk_widget_set_hexpand(GTK_WIDGET(computer_depth_scale), TRUE);
+  gtk_widget_set_size_request(GTK_WIDGET(computer_depth_scale), 100, -1);
 
   gtk_drop_down_set_selected(ruleset, gcheckers_window_get_ruleset(self));
   gtk_drop_down_set_selected(white_player, player_controls_panel_get_mode(controls_panel, CHECKERS_COLOR_WHITE));

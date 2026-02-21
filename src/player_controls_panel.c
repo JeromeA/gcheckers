@@ -111,6 +111,7 @@ static void player_controls_panel_init(PlayerControlsPanel *self) {
   gtk_scale_set_digits(self->computer_depth_scale, 0);
   gtk_scale_set_draw_value(self->computer_depth_scale, TRUE);
   gtk_widget_set_hexpand(GTK_WIDGET(self->computer_depth_scale), TRUE);
+  gtk_widget_set_size_request(GTK_WIDGET(self->computer_depth_scale), 100, -1);
   player_controls_panel_set_mode(self, CHECKERS_COLOR_WHITE, PLAYER_CONTROL_MODE_USER);
   player_controls_panel_set_mode(self, CHECKERS_COLOR_BLACK, PLAYER_CONTROL_MODE_USER);
   player_controls_panel_set_computer_depth(self, 8);
