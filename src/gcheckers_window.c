@@ -594,9 +594,13 @@ static void gcheckers_window_init(GCheckersWindow *self) {
                                                       self,
                                                       NULL);
 
-  GtkWidget *left_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
+  GtkWidget *left_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_widget_set_hexpand(left_panel, TRUE);
   gtk_widget_set_vexpand(left_panel, TRUE);
+  gtk_widget_set_margin_top(left_panel, 8);
+  gtk_widget_set_margin_bottom(left_panel, 8);
+  gtk_widget_set_margin_start(left_panel, 8);
+  gtk_widget_set_margin_end(left_panel, 8);
   gtk_paned_set_start_child(GTK_PANED(paned), left_panel);
   gtk_paned_set_shrink_start_child(GTK_PANED(paned), FALSE);
 
@@ -620,15 +624,23 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_paned_set_end_child(GTK_PANED(paned), right_split);
   gtk_paned_set_shrink_end_child(GTK_PANED(paned), FALSE);
 
-  GtkWidget *middle_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
+  GtkWidget *middle_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_widget_set_hexpand(middle_panel, TRUE);
   gtk_widget_set_vexpand(middle_panel, TRUE);
+  gtk_widget_set_margin_top(middle_panel, 8);
+  gtk_widget_set_margin_bottom(middle_panel, 8);
+  gtk_widget_set_margin_start(middle_panel, 8);
+  gtk_widget_set_margin_end(middle_panel, 8);
   gtk_paned_set_start_child(GTK_PANED(right_split), middle_panel);
   gtk_paned_set_shrink_start_child(GTK_PANED(right_split), FALSE);
 
-  GtkWidget *analysis_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
+  GtkWidget *analysis_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_widget_set_hexpand(analysis_panel, TRUE);
   gtk_widget_set_vexpand(analysis_panel, TRUE);
+  gtk_widget_set_margin_top(analysis_panel, 8);
+  gtk_widget_set_margin_bottom(analysis_panel, 8);
+  gtk_widget_set_margin_start(analysis_panel, 8);
+  gtk_widget_set_margin_end(analysis_panel, 8);
   gtk_paned_set_end_child(GTK_PANED(right_split), analysis_panel);
   gtk_paned_set_shrink_end_child(GTK_PANED(right_split), FALSE);
   gtk_paned_set_position(GTK_PANED(paned), 400);
