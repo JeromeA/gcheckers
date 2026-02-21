@@ -421,6 +421,84 @@ static void gcheckers_window_on_analyze_toggled(GtkToggleButton *button, gpointe
   gcheckers_window_stop_analysis(self);
 }
 
+static void gcheckers_window_on_sgf_rewind(GSimpleAction * /*action*/,
+                                           GVariant * /*parameter*/,
+                                           gpointer user_data) {
+  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
+
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self->sgf_controller));
+
+  if (!gcheckers_sgf_controller_rewind_to_start(self->sgf_controller)) {
+    g_debug("SGF rewind ignored");
+  }
+}
+
+static void gcheckers_window_on_sgf_step_backward(GSimpleAction * /*action*/,
+                                                  GVariant * /*parameter*/,
+                                                  gpointer user_data) {
+  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
+
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self->sgf_controller));
+
+  if (!gcheckers_sgf_controller_step_backward(self->sgf_controller)) {
+    g_debug("SGF step backward ignored");
+  }
+}
+
+static void gcheckers_window_on_sgf_step_forward(GSimpleAction * /*action*/,
+                                                 GVariant * /*parameter*/,
+                                                 gpointer user_data) {
+  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
+
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self->sgf_controller));
+
+  if (!gcheckers_sgf_controller_step_forward(self->sgf_controller)) {
+    g_debug("SGF step forward ignored");
+  }
+}
+
+static void gcheckers_window_on_sgf_step_forward_to_branch(GSimpleAction * /*action*/,
+                                                           GVariant * /*parameter*/,
+                                                           gpointer user_data) {
+  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
+
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self->sgf_controller));
+
+  if (!gcheckers_sgf_controller_step_forward_to_branch(self->sgf_controller)) {
+    g_debug("SGF step forward to branch ignored");
+  }
+}
+
+static void gcheckers_window_on_sgf_step_forward_to_end(GSimpleAction * /*action*/,
+                                                        GVariant * /*parameter*/,
+                                                        gpointer user_data) {
+  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
+
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self->sgf_controller));
+
+  if (!gcheckers_sgf_controller_step_forward_to_end(self->sgf_controller)) {
+    g_debug("SGF step forward to end ignored");
+  }
+}
+
+static GtkWidget *gcheckers_window_new_toolbar_action_button(const char *icon_name,
+                                                             const char *tooltip_text,
+                                                             const char *action_name) {
+  g_return_val_if_fail(icon_name != NULL, NULL);
+  g_return_val_if_fail(tooltip_text != NULL, NULL);
+  g_return_val_if_fail(action_name != NULL, NULL);
+
+  GtkWidget *button = gtk_button_new_from_icon_name(icon_name);
+  gtk_widget_set_tooltip_text(button, tooltip_text);
+  gtk_actionable_set_action_name(GTK_ACTIONABLE(button), action_name);
+  return button;
+}
+
 void gcheckers_window_force_move(GCheckersWindow *self) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
   g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
@@ -555,6 +633,53 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   self->analysis_generation = 1;
   self->applied_ruleset = PLAYER_RULESET_INTERNATIONAL;
 
+  static const GActionEntry window_actions[] = {
+      {
+          .name = "sgf-rewind",
+          .activate = gcheckers_window_on_sgf_rewind,
+          .parameter_type = NULL,
+          .state = NULL,
+          .change_state = NULL,
+          .padding = {0},
+      },
+      {
+          .name = "sgf-step-backward",
+          .activate = gcheckers_window_on_sgf_step_backward,
+          .parameter_type = NULL,
+          .state = NULL,
+          .change_state = NULL,
+          .padding = {0},
+      },
+      {
+          .name = "sgf-step-forward",
+          .activate = gcheckers_window_on_sgf_step_forward,
+          .parameter_type = NULL,
+          .state = NULL,
+          .change_state = NULL,
+          .padding = {0},
+      },
+      {
+          .name = "sgf-step-forward-to-branch",
+          .activate = gcheckers_window_on_sgf_step_forward_to_branch,
+          .parameter_type = NULL,
+          .state = NULL,
+          .change_state = NULL,
+          .padding = {0},
+      },
+      {
+          .name = "sgf-step-forward-to-end",
+          .activate = gcheckers_window_on_sgf_step_forward_to_end,
+          .parameter_type = NULL,
+          .state = NULL,
+          .change_state = NULL,
+          .padding = {0},
+      },
+  };
+  g_action_map_add_action_entries(G_ACTION_MAP(self),
+                                  window_actions,
+                                  G_N_ELEMENTS(window_actions),
+                                  self);
+
   gtk_window_set_title(GTK_WINDOW(self), "gcheckers");
   gtk_window_set_default_size(GTK_WINDOW(self), 1100, 700);
 
@@ -573,15 +698,43 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   }
 
   GtkWidget *toolbar = gtk_action_bar_new();
-  GtkWidget *new_game_button = gtk_button_new_from_icon_name("document-new-symbolic");
-  gtk_widget_set_tooltip_text(new_game_button, "New game...");
-  gtk_actionable_set_action_name(GTK_ACTIONABLE(new_game_button), "app.new-game");
+  GtkWidget *new_game_button =
+      gcheckers_window_new_toolbar_action_button("document-new-symbolic", "New game...", "app.new-game");
   gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), new_game_button);
 
-  GtkWidget *force_move_button = gtk_button_new_from_icon_name("go-next-symbolic");
-  gtk_widget_set_tooltip_text(force_move_button, "Force move");
-  gtk_actionable_set_action_name(GTK_ACTIONABLE(force_move_button), "app.force-move");
+  GtkWidget *force_move_button =
+      gcheckers_window_new_toolbar_action_button("go-next-symbolic", "Force move", "app.force-move");
   gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), force_move_button);
+
+  GtkWidget *toolbar_separator = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
+  gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), toolbar_separator);
+
+  GtkWidget *rewind_button = gcheckers_window_new_toolbar_action_button("media-skip-backward-symbolic",
+                                                                         "Rewind to start",
+                                                                         "win.sgf-rewind");
+  gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), rewind_button);
+
+  GtkWidget *step_backward_button =
+      gcheckers_window_new_toolbar_action_button("go-previous-symbolic",
+                                                 "Back one move",
+                                                 "win.sgf-step-backward");
+  gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), step_backward_button);
+
+  GtkWidget *step_forward_button = gcheckers_window_new_toolbar_action_button("go-next-symbolic",
+                                                                               "Forward one move",
+                                                                               "win.sgf-step-forward");
+  gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), step_forward_button);
+
+  GtkWidget *step_to_branch_button =
+      gcheckers_window_new_toolbar_action_button("view-more-symbolic",
+                                                 "Forward to next branch point",
+                                                 "win.sgf-step-forward-to-branch");
+  gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), step_to_branch_button);
+
+  GtkWidget *step_to_end_button = gcheckers_window_new_toolbar_action_button("media-skip-forward-symbolic",
+                                                                              "Forward to main line end",
+                                                                              "win.sgf-step-forward-to-end");
+  gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), step_to_end_button);
   gtk_box_append(GTK_BOX(content), toolbar);
 
   GtkWidget *paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);

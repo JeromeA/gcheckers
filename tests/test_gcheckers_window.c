@@ -316,8 +316,52 @@ static void test_gcheckers_window_toolbar_actions_exist(void) {
 
   GtkWidget *new_game_button = test_gcheckers_window_find_widget_for_action(GTK_WIDGET(window), "app.new-game");
   GtkWidget *force_move_button = test_gcheckers_window_find_widget_for_action(GTK_WIDGET(window), "app.force-move");
+  GtkWidget *rewind_button = test_gcheckers_window_find_widget_for_action(GTK_WIDGET(window), "win.sgf-rewind");
+  GtkWidget *step_backward_button =
+      test_gcheckers_window_find_widget_for_action(GTK_WIDGET(window), "win.sgf-step-backward");
+  GtkWidget *step_forward_button =
+      test_gcheckers_window_find_widget_for_action(GTK_WIDGET(window), "win.sgf-step-forward");
+  GtkWidget *step_to_branch_button =
+      test_gcheckers_window_find_widget_for_action(GTK_WIDGET(window), "win.sgf-step-forward-to-branch");
+  GtkWidget *step_to_end_button =
+      test_gcheckers_window_find_widget_for_action(GTK_WIDGET(window), "win.sgf-step-forward-to-end");
   g_assert_nonnull(new_game_button);
   g_assert_nonnull(force_move_button);
+  g_assert_nonnull(rewind_button);
+  g_assert_nonnull(step_backward_button);
+  g_assert_nonnull(step_forward_button);
+  g_assert_nonnull(step_to_branch_button);
+  g_assert_nonnull(step_to_end_button);
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
+static void test_gcheckers_window_sgf_actions_navigate_timeline(void) {
+  GtkApplication *app = test_gcheckers_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersWindow *window = gcheckers_window_new(app, model);
+
+  GCheckersSgfController *controller = gcheckers_window_get_sgf_controller(window);
+  g_assert_nonnull(controller);
+
+  CheckersMove move = {0};
+  g_assert_true(apply_first_move(controller, model, &move));
+  g_assert_true(apply_first_move(controller, model, &move));
+
+  SgfTree *tree = gcheckers_sgf_controller_get_tree(controller);
+  g_assert_nonnull(tree);
+  g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 2);
+
+  g_action_group_activate_action(G_ACTION_GROUP(window), "sgf-step-backward", NULL);
+  g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 1);
+
+  g_action_group_activate_action(G_ACTION_GROUP(window), "sgf-step-forward", NULL);
+  g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 2);
+
+  g_action_group_activate_action(G_ACTION_GROUP(window), "sgf-rewind", NULL);
+  g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 0);
 
   g_clear_object(&window);
   g_clear_object(&model);
@@ -387,6 +431,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/gcheckers-window/sgf-navigation-resets-controls", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/force-move-user-turn", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/toolbar-actions", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/sgf-actions-navigate", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/analysis-toggle", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/ruleset-switch", test_gcheckers_window_skip);
     return g_test_run();
@@ -420,6 +465,8 @@ int main(int argc, char **argv) {
   g_test_add_func("/gcheckers-window/force-move-user-turn",
                   test_gcheckers_window_force_move_works_on_user_turn);
   g_test_add_func("/gcheckers-window/toolbar-actions", test_gcheckers_window_toolbar_actions_exist);
+  g_test_add_func("/gcheckers-window/sgf-actions-navigate",
+                  test_gcheckers_window_sgf_actions_navigate_timeline);
   g_test_add_func("/gcheckers-window/analysis-toggle", test_gcheckers_window_analysis_toggle);
   g_test_add_func("/gcheckers-window/ruleset-switch", test_gcheckers_window_ruleset_switch_resets_model);
   return g_test_run();

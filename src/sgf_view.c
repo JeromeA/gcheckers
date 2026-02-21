@@ -212,12 +212,17 @@ static gboolean sgf_view_on_key_pressed(GtkEventControllerKey * /*controller*/,
 
   g_return_val_if_fail(SGF_IS_VIEW(self), GDK_EVENT_PROPAGATE);
 
-  SgfViewNavigation navigation;
   if (keyval == GDK_KEY_Left) {
-    navigation = SGF_VIEW_NAVIGATE_PARENT;
-  } else if (keyval == GDK_KEY_Right) {
-    navigation = SGF_VIEW_NAVIGATE_CHILD;
-  } else if (keyval == GDK_KEY_Up) {
+    return gtk_widget_activate_action(self->root, "win.sgf-step-backward", NULL) ? GDK_EVENT_STOP
+                                                                                  : GDK_EVENT_PROPAGATE;
+  }
+  if (keyval == GDK_KEY_Right) {
+    return gtk_widget_activate_action(self->root, "win.sgf-step-forward", NULL) ? GDK_EVENT_STOP
+                                                                                 : GDK_EVENT_PROPAGATE;
+  }
+
+  SgfViewNavigation navigation;
+  if (keyval == GDK_KEY_Up) {
     navigation = SGF_VIEW_NAVIGATE_PREVIOUS_SIBLING;
   } else if (keyval == GDK_KEY_Down) {
     navigation = SGF_VIEW_NAVIGATE_NEXT_SIBLING;

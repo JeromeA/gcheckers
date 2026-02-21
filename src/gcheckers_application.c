@@ -90,13 +90,21 @@ static void gcheckers_application_startup(GApplication *app) {
   GMenu *menubar = g_menu_new();
   GMenu *file_menu = g_menu_new();
   GMenu *game_menu = g_menu_new();
+  GMenu *game_navigation_menu = g_menu_new();
   g_menu_append(file_menu, "New game...", "app.new-game");
   g_menu_append(file_menu, "Quit", "app.quit");
   g_menu_append(game_menu, "Force move", "app.force-move");
+  g_menu_append(game_navigation_menu, "Rewind to start", "win.sgf-rewind");
+  g_menu_append(game_navigation_menu, "Back one move", "win.sgf-step-backward");
+  g_menu_append(game_navigation_menu, "Forward one move", "win.sgf-step-forward");
+  g_menu_append(game_navigation_menu, "Forward to next branch", "win.sgf-step-forward-to-branch");
+  g_menu_append(game_navigation_menu, "Forward to main line end", "win.sgf-step-forward-to-end");
+  g_menu_append_section(game_menu, NULL, G_MENU_MODEL(game_navigation_menu));
   g_menu_append_submenu(menubar, "File", G_MENU_MODEL(file_menu));
   g_menu_append_submenu(menubar, "Game", G_MENU_MODEL(game_menu));
   gtk_application_set_menubar(GTK_APPLICATION(app), G_MENU_MODEL(menubar));
 
+  g_object_unref(game_navigation_menu);
   g_object_unref(game_menu);
   g_object_unref(file_menu);
   g_object_unref(menubar);
@@ -107,6 +115,12 @@ static void gcheckers_application_startup(GApplication *app) {
   gtk_application_set_accels_for_action(GTK_APPLICATION(app),
                                         "app.quit",
                                         (const char *[]){"<Primary>q", NULL});
+  gtk_application_set_accels_for_action(GTK_APPLICATION(app),
+                                        "win.sgf-step-backward",
+                                        (const char *[]){"Left", NULL});
+  gtk_application_set_accels_for_action(GTK_APPLICATION(app),
+                                        "win.sgf-step-forward",
+                                        (const char *[]){"Right", NULL});
 }
 
 static void gcheckers_application_activate(GApplication *app) {

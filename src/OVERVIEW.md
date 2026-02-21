@@ -10,7 +10,7 @@ player dropdowns. Computer turns are routed by control mode with alpha-beta dept
 and SGF view (middle), and analysis
  (right) with an `Analyze` toggle that runs iterative deepening in a worker thread and publishes best-to-worst move
 scores after each completed depth until toggled off. Top-level menu actions are also exposed in a toolbar
-(`New game...`, `Force move`) via GTK actions.
+(`New game...`, `Force move`, SGF timeline rewind/step/skip actions) via GTK actions.
 Default panel widths target about `500/300/300` pixels at the default window width (`1100x700`).
 Lifecycle: sinks and retains an owned `PlayerControlsPanel` reference, removes it from its current `GtkBox` parent
 during dispose via `gcheckers_widget_remove_from_parent()`, and then clears its references.
@@ -22,7 +22,8 @@ Role: SGF timeline authority and synchronization point between SGF current-node 
 Move application is SGF-first: validate model move, append under SGF current, set SGF current, then project that
 transition to the model (`single move` if parent->child, otherwise reset+replay from root).
 `gcheckers_sgf_controller_set_model()` only binds/disconnects model references; timeline clearing is explicit via
-`gcheckers_sgf_controller_new_game()`.
+`gcheckers_sgf_controller_new_game()`. Exposes SGF navigation helpers used by window actions: rewind to root, step
+backward, step forward on main line, step to next branch point, and step to main-line end.
 Owns: `SgfTree` and `SgfView`, plus replay guard (`is_replaying`).
 Collaborates with: `GCheckersModel` for move validation/application, `BoardView` to clear selection on replay/reset,
 and `GCheckersWindow` via the `analysis-requested` signal.
@@ -93,8 +94,8 @@ Collaborates with: `game.c` and `game_print.c`.
 ## GTK application entry (`src/gcheckers.c`, `src/gcheckers_application.c`, `src/gcheckers_application.h`)
 Class: `GCheckersApplication` (`GtkApplication`).
 Role: define the GTK application type and activation flow that creates the main window and model, installs app actions
-(`app.new-game`, `app.force-move`, `app.quit`), and publishes a menubar model (`File` -> `New game...`, `Quit`;
-`Game` -> `Force move`) with keyboard accelerators.
+(`app.new-game`, `app.force-move`, `app.quit`), installs window SGF navigation actions, and publishes a menubar model
+(`File` -> `New game...`, `Quit`; `Game` -> `Force move` + SGF navigation section) with keyboard accelerators.
 Collaborates with: `GCheckersWindow` for UI wiring and new-game dialog presentation.
 
 ## Board view subsystem

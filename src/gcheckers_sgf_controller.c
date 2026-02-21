@@ -181,6 +181,19 @@ static gboolean gcheckers_sgf_controller_move_current(GCheckersSgfController *se
   return gcheckers_sgf_controller_sync_model_for_transition(self, previous, node);
 }
 
+static gboolean gcheckers_sgf_controller_navigate_to(GCheckersSgfController *self, const SgfNode *node) {
+  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+  g_return_val_if_fail(node != NULL, FALSE);
+
+  if (!gcheckers_sgf_controller_move_current(self, node)) {
+    return FALSE;
+  }
+
+  g_signal_emit(self, controller_signals[SIGNAL_ANALYSIS_REQUESTED], 0, node);
+  sgf_view_refresh(self->sgf_view);
+  return TRUE;
+}
+
 static void gcheckers_sgf_controller_on_node_selected(SgfView * /*view*/,
                                                       const SgfNode *node,
                                                       gpointer user_data) {
@@ -335,6 +348,117 @@ gboolean gcheckers_sgf_controller_step_ai_move(GCheckersSgfController *self, gui
   }
 
   return applied;
+}
+
+gboolean gcheckers_sgf_controller_rewind_to_start(GCheckersSgfController *self) {
+  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+  g_return_val_if_fail(SGF_IS_TREE(self->sgf_tree), FALSE);
+
+  const SgfNode *root = sgf_tree_get_root(self->sgf_tree);
+  if (!root) {
+    g_debug("Missing SGF root node");
+    return FALSE;
+  }
+
+  if (sgf_tree_get_current(self->sgf_tree) == root) {
+    return FALSE;
+  }
+
+  return gcheckers_sgf_controller_navigate_to(self, root);
+}
+
+gboolean gcheckers_sgf_controller_step_backward(GCheckersSgfController *self) {
+  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+  g_return_val_if_fail(SGF_IS_TREE(self->sgf_tree), FALSE);
+
+  const SgfNode *current = sgf_tree_get_current(self->sgf_tree);
+  if (!current) {
+    g_debug("Missing SGF current node");
+    return FALSE;
+  }
+
+  const SgfNode *target = sgf_node_get_parent(current);
+  if (!target) {
+    return FALSE;
+  }
+
+  return gcheckers_sgf_controller_navigate_to(self, target);
+}
+
+gboolean gcheckers_sgf_controller_step_forward(GCheckersSgfController *self) {
+  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+  g_return_val_if_fail(SGF_IS_TREE(self->sgf_tree), FALSE);
+
+  const SgfNode *current = sgf_tree_get_current(self->sgf_tree);
+  if (!current) {
+    g_debug("Missing SGF current node");
+    return FALSE;
+  }
+
+  const GPtrArray *children = sgf_node_get_children(current);
+  if (!children || children->len == 0) {
+    return FALSE;
+  }
+
+  const SgfNode *target = g_ptr_array_index((GPtrArray *)children, 0);
+  g_return_val_if_fail(target != NULL, FALSE);
+  return gcheckers_sgf_controller_navigate_to(self, target);
+}
+
+gboolean gcheckers_sgf_controller_step_forward_to_branch(GCheckersSgfController *self) {
+  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+  g_return_val_if_fail(SGF_IS_TREE(self->sgf_tree), FALSE);
+
+  const SgfNode *cursor = sgf_tree_get_current(self->sgf_tree);
+  if (!cursor) {
+    g_debug("Missing SGF current node");
+    return FALSE;
+  }
+
+  gboolean moved = FALSE;
+  while (TRUE) {
+    const GPtrArray *children = sgf_node_get_children(cursor);
+    if (!children || children->len == 0 || children->len >= 2) {
+      break;
+    }
+    cursor = g_ptr_array_index((GPtrArray *)children, 0);
+    g_return_val_if_fail(cursor != NULL, FALSE);
+    moved = TRUE;
+  }
+
+  if (!moved) {
+    return FALSE;
+  }
+
+  return gcheckers_sgf_controller_navigate_to(self, cursor);
+}
+
+gboolean gcheckers_sgf_controller_step_forward_to_end(GCheckersSgfController *self) {
+  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+  g_return_val_if_fail(SGF_IS_TREE(self->sgf_tree), FALSE);
+
+  const SgfNode *cursor = sgf_tree_get_current(self->sgf_tree);
+  if (!cursor) {
+    g_debug("Missing SGF current node");
+    return FALSE;
+  }
+
+  gboolean moved = FALSE;
+  while (TRUE) {
+    const GPtrArray *children = sgf_node_get_children(cursor);
+    if (!children || children->len == 0) {
+      break;
+    }
+    cursor = g_ptr_array_index((GPtrArray *)children, 0);
+    g_return_val_if_fail(cursor != NULL, FALSE);
+    moved = TRUE;
+  }
+
+  if (!moved) {
+    return FALSE;
+  }
+
+  return gcheckers_sgf_controller_navigate_to(self, cursor);
 }
 
 GtkWidget *gcheckers_sgf_controller_get_widget(GCheckersSgfController *self) {
