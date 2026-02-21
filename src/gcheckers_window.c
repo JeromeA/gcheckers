@@ -566,7 +566,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
 
   gcheckers_style_init();
 
-  GtkWidget *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
+  GtkWidget *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_window_set_child(GTK_WINDOW(self), content);
 
   GApplication *app = g_application_get_default();
