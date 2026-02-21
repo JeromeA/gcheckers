@@ -703,7 +703,9 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), new_game_button);
 
   GtkWidget *force_move_button =
-      gcheckers_window_new_toolbar_action_button("go-next-symbolic", "Force move", "app.force-move");
+      gcheckers_window_new_toolbar_action_button("media-playback-start-symbolic",
+                                                 "Force move",
+                                                 "app.force-move");
   gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), force_move_button);
 
   GtkWidget *toolbar_separator = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
@@ -726,7 +728,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), step_forward_button);
 
   GtkWidget *step_to_branch_button =
-      gcheckers_window_new_toolbar_action_button("view-more-symbolic",
+      gcheckers_window_new_toolbar_action_button("media-seek-forward-symbolic",
                                                  "Forward to next branch point",
                                                  "win.sgf-step-forward-to-branch");
   gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), step_to_branch_button);
