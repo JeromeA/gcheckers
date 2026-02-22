@@ -14,7 +14,8 @@ scores after each completed depth until toggled off. Top-level menu actions are 
 Owns modal flows for `New game` and `Import games` wizards.
 Import wizard persists BoardGameArena email/password and remember flag with `GSettings` when fetching history, and
 prefills credentials on the credentials step from stored values. Parsed login responses drive in-memory result
-handling; status/error responses trigger an error dialog and close the wizard.
+handling; status/error responses trigger an error dialog and close the wizard. Successful login advances to a history
+step that lists checkers games as `table_id` + `player_one vs player_two`.
 Import fetch flow for BoardGameArena uses a dedicated libcurl client: GET home page, extract `requestToken`, then
 POST `loginUserWithPassword.html` with username/password/remember/request token and logs the HTTP/body result.
 Default panel widths target about `500/300/300` pixels at the default window width (`1100x700`).
@@ -99,9 +100,13 @@ Collaborates with: `checkers_model.c` for model-facing AI move selection and ana
 Module: BoardGameArena login HTTP client.
 Role: perform libcurl requests to fetch `requestToken` from `https://en.boardgamearena.com/`, then submit
 `username`/`password`/`remember_me`/`request_token` to
-`https://en.boardgamearena.com/account/auth/loginUserWithPassword.html`.
-Collaborates with: import dialog flow for "Fetch game history" and `tests/test_bga_client.c` (token parsing + live
-login smoke test with env-provided credentials).
+`https://en.boardgamearena.com/account/auth/loginUserWithPassword.html`, then prefetch
+`https://boardgamearena.com/gamestats?...` and refresh `requestToken` from that page before fetching checkers history
+from `https://boardgamearena.com/gamestats/gamestats/getGames.html` for the authenticated user/session.
+All BoardGameArena HTTP response bodies are saved to `/tmp/gcheckers-bga-*.txt` for debugging.
+History parsing extracts each table's `table_id`, start timestamp (rendered as `YYYYMMDD HH:MM`, UTC), and player names.
+Collaborates with: import dialog flow for "Fetch game history" and `tests/test_bga_client.c` (token/login/history
+parsing + live login smoke test with env-provided credentials).
 
 ## CLI entry point (`src/checkers_cli.c`)
 Module: CLI front end.

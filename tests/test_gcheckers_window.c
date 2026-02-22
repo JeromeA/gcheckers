@@ -511,7 +511,9 @@ static void test_gcheckers_window_import_wizard_flow(void) {
   g_assert_nonnull(test_gcheckers_window_find_label_with_text(GTK_WIDGET(dialog), "Password"));
   g_assert_nonnull(test_gcheckers_window_find_check_button_with_label(GTK_WIDGET(dialog), "Remember credentials"));
 
-  g_signal_emit_by_name(next_button, "clicked");
+  GtkButton *cancel_button = test_gcheckers_window_find_button_with_label(GTK_WIDGET(dialog), "Cancel");
+  g_assert_nonnull(cancel_button);
+  g_signal_emit_by_name(cancel_button, "clicked");
   test_gcheckers_window_drain_main_context(16);
   GtkWindow *after_close = test_gcheckers_window_find_toplevel_by_title("Import games");
   g_assert_null(after_close);

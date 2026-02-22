@@ -11,7 +11,8 @@ typedef enum {
 
 typedef enum {
   GCHECKERS_IMPORT_STEP_SITE = 0,
-  GCHECKERS_IMPORT_STEP_CREDENTIALS
+  GCHECKERS_IMPORT_STEP_CREDENTIALS,
+  GCHECKERS_IMPORT_STEP_HISTORY
 } GCheckersImportStep;
 
 typedef struct {
@@ -24,6 +25,7 @@ typedef struct {
   GtkEntry *email_entry;
   GtkEntry *password_entry;
   GtkCheckButton *remember_check;
+  GtkListBox *history_list;
   GSettings *settings;
   GCheckersImportStep step;
 } GCheckersWindowImportDialogData;
@@ -114,7 +116,20 @@ static void gcheckers_import_dialog_save_credentials(GCheckersWindowImportDialog
   g_settings_set_string(data->settings, gcheckers_import_key_password, password ? password : "");
 }
 
-static void gcheckers_import_dialog_show_error_dialog(GCheckersWindowImportDialogData *data, const char *text) {
+static void gcheckers_import_dialog_on_error_ok_clicked(GtkButton *button, gpointer user_data) {
+  GtkWindow *error_dialog = GTK_WINDOW(user_data);
+  g_return_if_fail(GTK_IS_BUTTON(button));
+  g_return_if_fail(GTK_IS_WINDOW(error_dialog));
+
+  GtkWindow *wizard_dialog = g_object_get_data(G_OBJECT(error_dialog), "wizard-dialog");
+  if (GTK_IS_WINDOW(wizard_dialog)) {
+    gtk_window_destroy(wizard_dialog);
+  }
+  gtk_window_destroy(error_dialog);
+}
+
+static void gcheckers_import_dialog_show_error_and_close_wizard(GCheckersWindowImportDialogData *data,
+                                                                const char *text) {
   g_return_if_fail(data != NULL);
   g_return_if_fail(text != NULL);
 
@@ -139,7 +154,8 @@ static void gcheckers_import_dialog_show_error_dialog(GCheckersWindowImportDialo
   GtkWidget *ok_button = gtk_button_new_with_label("OK");
   gtk_widget_set_halign(ok_button, GTK_ALIGN_END);
   gtk_box_append(GTK_BOX(content), ok_button);
-  g_signal_connect_swapped(ok_button, "clicked", G_CALLBACK(gtk_window_destroy), dialog);
+  g_object_set_data(G_OBJECT(dialog), "wizard-dialog", data->dialog);
+  g_signal_connect(ok_button, "clicked", G_CALLBACK(gcheckers_import_dialog_on_error_ok_clicked), dialog);
   gtk_window_present(GTK_WINDOW(dialog));
 }
 
@@ -177,6 +193,14 @@ static void gcheckers_window_import_dialog_update_step(GCheckersWindowImportDial
     gtk_button_set_label(data->next_button, "Next");
     gtk_widget_set_sensitive(GTK_WIDGET(data->next_button),
                              gcheckers_import_dialog_is_board_game_arena_selected(data));
+    return;
+  }
+
+  if (data->step == GCHECKERS_IMPORT_STEP_HISTORY) {
+    gtk_stack_set_visible_child_name(data->stack, "history");
+    gtk_widget_set_sensitive(GTK_WIDGET(data->back_button), FALSE);
+    gtk_button_set_label(data->next_button, "Close");
+    gtk_widget_set_sensitive(GTK_WIDGET(data->next_button), TRUE);
     return;
   }
 
@@ -226,6 +250,9 @@ static void gcheckers_window_on_import_dialog_next_clicked(GtkButton * /*button*
   g_return_if_fail(GTK_IS_WINDOW(data->dialog));
   g_return_if_fail(GTK_IS_ENTRY(data->email_entry));
   g_return_if_fail(GTK_IS_CHECK_BUTTON(data->remember_check));
+  g_return_if_fail(GTK_IS_LIST_BOX(data->history_list));
+
+  g_debug("Import flow: Next clicked at step=%d", (int)data->step);
 
   if (data->step == GCHECKERS_IMPORT_STEP_SITE) {
     if (!gcheckers_import_dialog_is_board_game_arena_selected(data)) {
@@ -234,10 +261,18 @@ static void gcheckers_window_on_import_dialog_next_clicked(GtkButton * /*button*
     }
 
     data->step = GCHECKERS_IMPORT_STEP_CREDENTIALS;
+    g_debug("Import flow: moving to credentials step");
     gcheckers_window_import_dialog_update_step(data);
     return;
   }
 
+  if (data->step == GCHECKERS_IMPORT_STEP_HISTORY) {
+    g_debug("Import flow: closing wizard from history step");
+    gtk_window_destroy(data->dialog);
+    return;
+  }
+
+  g_debug("Import flow: starting BGA login sequence");
   gcheckers_import_dialog_save_credentials(data);
   const char *email = gtk_editable_get_text(GTK_EDITABLE(data->email_entry));
   const char *password = gtk_editable_get_text(GTK_EDITABLE(data->password_entry));
@@ -251,34 +286,49 @@ static void gcheckers_window_on_import_dialog_next_clicked(GtkButton * /*button*
   BgaClientSession *session = bga_client_session_new(&error);
   if (session == NULL) {
     g_debug("Failed to initialize BoardGameArena client session: %s", error ? error->message : "unknown error");
+    gcheckers_import_dialog_show_error_and_close_wizard(
+        data,
+        "Unable to initialize BoardGameArena session.");
     return;
   }
 
   g_autofree char *request_token = NULL;
   if (!bga_client_session_fetch_homepage_and_request_token(session, NULL, &request_token, &error)) {
     g_debug("Failed to fetch BoardGameArena request token: %s", error ? error->message : "unknown error");
+    gcheckers_import_dialog_show_error_and_close_wizard(
+        data,
+        "Unable to fetch BoardGameArena request token.");
     bga_client_session_free(session);
     return;
   }
-  g_debug("BoardGameArena request token: %s", request_token);
 
   BgaHttpResponse login_response = {0};
   if (!bga_client_session_login_with_password(session, &credentials, request_token, &login_response, &error)) {
     g_debug("Failed to login to BoardGameArena: %s", error ? error->message : "unknown error");
+    gcheckers_import_dialog_show_error_and_close_wizard(
+        data,
+        "Unable to login to BoardGameArena.");
     bga_http_response_clear(&login_response);
     bga_client_session_free(session);
     return;
   }
-  bga_client_session_free(session);
 
   g_debug("BoardGameArena login HTTP %ld", login_response.http_status);
-  g_debug("BoardGameArena login response body: %s", login_response.body ? login_response.body : "");
+  g_debug("Import flow: login request completed, parsing response");
   BgaLoginResult parsed = {0};
   if (!bga_client_parse_login_response(login_response.body ? login_response.body : "", &parsed, &error)) {
-    g_debug("Failed to parse BoardGameArena login response: %s", error ? error->message : "unknown error");
+    g_debug("Import flow: failed to parse BoardGameArena login response: %s",
+            error ? error->message : "unknown error");
+    gcheckers_import_dialog_show_error_and_close_wizard(
+        data,
+        "Unable to parse BoardGameArena login response.");
     bga_http_response_clear(&login_response);
+    bga_client_session_free(session);
     return;
   }
+  g_debug("Import flow: parsed login result kind=%d user_id=%s",
+          (int)parsed.kind,
+          parsed.user_id != NULL ? parsed.user_id : "(null)");
 
   if (parsed.kind == BGA_LOGIN_RESULT_STATUS_ZERO || parsed.kind == BGA_LOGIN_RESULT_SUCCESS_FALSE) {
     g_autofree char *dialog_text = NULL;
@@ -289,16 +339,80 @@ static void gcheckers_window_on_import_dialog_next_clicked(GtkButton * /*button*
     } else {
       dialog_text = g_strdup_printf("Login failed.\nMessage: %s", parsed.message ? parsed.message : "(none)");
     }
-    gcheckers_import_dialog_show_error_dialog(data, dialog_text);
+    gcheckers_import_dialog_show_error_and_close_wizard(data, dialog_text);
     bga_login_result_clear(&parsed);
     bga_http_response_clear(&login_response);
-    gtk_window_destroy(data->dialog);
+    bga_client_session_free(session);
+    g_debug("Import flow: login failed, showing error dialog and closing wizard after OK");
     return;
   }
 
+  g_autofree char *history_user_id = g_strdup(parsed.user_id != NULL ? parsed.user_id : "");
   bga_login_result_clear(&parsed);
   bga_http_response_clear(&login_response);
-  gtk_window_destroy(data->dialog);
+
+  if (history_user_id[0] == '\0') {
+    g_debug("Import flow: missing user_id in successful BoardGameArena login response");
+    gcheckers_import_dialog_show_error_and_close_wizard(
+        data,
+        "BoardGameArena login succeeded but user_id is missing.");
+    bga_client_session_free(session);
+    return;
+  }
+  g_debug("Import flow: fetching checkers history for user_id=%s", history_user_id);
+
+  BgaHttpResponse history_response = {0};
+  if (!bga_client_session_fetch_checkers_history(session, history_user_id, &history_response, &error)) {
+    g_debug("Import flow: failed to fetch BoardGameArena history: %s",
+            error ? error->message : "unknown error");
+    gcheckers_import_dialog_show_error_and_close_wizard(
+        data,
+        "Unable to fetch BoardGameArena checkers history.");
+    bga_http_response_clear(&history_response);
+    bga_client_session_free(session);
+    return;
+  }
+  bga_client_session_free(session);
+  g_debug("Import flow: history HTTP status=%ld", history_response.http_status);
+
+  g_autoptr(GPtrArray) games = NULL;
+  if (!bga_client_parse_checkers_history_games(history_response.body ? history_response.body : "", &games, &error)) {
+    g_debug("Import flow: failed to parse BoardGameArena history: %s",
+            error ? error->message : "unknown error");
+    gcheckers_import_dialog_show_error_and_close_wizard(
+        data,
+        "Unable to parse BoardGameArena checkers history.");
+    bga_http_response_clear(&history_response);
+    return;
+  }
+  bga_http_response_clear(&history_response);
+  g_debug("Import flow: parsed %u checkers games", games->len);
+
+  GtkWidget *row = gtk_widget_get_first_child(GTK_WIDGET(data->history_list));
+  while (row != NULL) {
+    GtkWidget *next = gtk_widget_get_next_sibling(row);
+    gtk_list_box_remove(data->history_list, row);
+    row = next;
+  }
+
+  for (guint i = 0; i < games->len; ++i) {
+    BgaHistoryGameSummary *summary = g_ptr_array_index(games, i);
+    g_return_if_fail(summary != NULL);
+
+    GtkWidget *line = gtk_label_new(NULL);
+    g_autofree char *text = g_strdup_printf("%s  |  %s  |  %s vs %s",
+                                            summary->start_at ? summary->start_at : "",
+                                            summary->table_id,
+                                            summary->player_one,
+                                            summary->player_two);
+    gtk_label_set_text(GTK_LABEL(line), text);
+    gtk_widget_set_halign(line, GTK_ALIGN_START);
+    gtk_list_box_append(data->history_list, line);
+  }
+
+  data->step = GCHECKERS_IMPORT_STEP_HISTORY;
+  gcheckers_window_import_dialog_update_step(data);
+  g_debug("Import flow: switched wizard to history step");
 }
 
 void gcheckers_window_present_import_dialog(GCheckersWindow *self) {
@@ -370,8 +484,25 @@ void gcheckers_window_present_import_dialog(GCheckersWindow *self) {
   GtkCheckButton *remember_check = GTK_CHECK_BUTTON(gtk_check_button_new_with_label("Remember credentials"));
   gtk_box_append(GTK_BOX(credentials_page), GTK_WIDGET(remember_check));
 
+  GtkWidget *history_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+  GtkWidget *history_title = gtk_label_new("BoardGameArena checkers history");
+  gtk_widget_set_halign(history_title, GTK_ALIGN_START);
+  gtk_box_append(GTK_BOX(history_page), history_title);
+
+  GtkWidget *history_scroll = gtk_scrolled_window_new();
+  gtk_widget_set_hexpand(history_scroll, TRUE);
+  gtk_widget_set_vexpand(history_scroll, TRUE);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(history_scroll),
+                                 GTK_POLICY_AUTOMATIC,
+                                 GTK_POLICY_AUTOMATIC);
+  gtk_box_append(GTK_BOX(history_page), history_scroll);
+
+  GtkListBox *history_list = GTK_LIST_BOX(gtk_list_box_new());
+  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(history_scroll), GTK_WIDGET(history_list));
+
   gtk_stack_add_named(GTK_STACK(stack), site_page, "site");
   gtk_stack_add_named(GTK_STACK(stack), credentials_page, "credentials");
+  gtk_stack_add_named(GTK_STACK(stack), history_page, "history");
 
   GtkWidget *actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
   gtk_widget_set_halign(actions, GTK_ALIGN_END);
@@ -394,6 +525,7 @@ void gcheckers_window_present_import_dialog(GCheckersWindow *self) {
   data->email_entry = email_entry;
   data->password_entry = password_entry;
   data->remember_check = remember_check;
+  data->history_list = history_list;
   data->settings = gcheckers_import_dialog_create_settings();
   data->step = GCHECKERS_IMPORT_STEP_SITE;
 
