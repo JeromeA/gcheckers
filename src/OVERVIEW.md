@@ -11,6 +11,9 @@ and SGF view (middle), and analysis
  (right) with an `Analyze` toggle that runs iterative deepening in a worker thread and publishes best-to-worst move
 scores after each completed depth until toggled off. Top-level menu actions are also exposed in a toolbar
 (`New game...`, `Force move`, SGF timeline rewind/step/skip actions) via GTK actions.
+Owns modal flows for `New game` and `Import games` wizards.
+Import wizard persists BoardGameArena email/password and remember flag with `GSettings` when fetching history, and
+prefills credentials on the credentials step from stored values.
 Default panel widths target about `500/300/300` pixels at the default window width (`1100x700`).
 Lifecycle: sinks and retains an owned `PlayerControlsPanel` reference, removes it from its current `GtkBox` parent
 during dispose via `gcheckers_widget_remove_from_parent()`, and then clears its references.
@@ -97,8 +100,9 @@ Collaborates with: `game.c` and `game_print.c`.
 ## GTK application entry (`src/gcheckers.c`, `src/gcheckers_application.c`, `src/gcheckers_application.h`)
 Class: `GCheckersApplication` (`GtkApplication`).
 Role: define the GTK application type and activation flow that creates the main window and model, installs app actions
-(`app.new-game`, `app.force-move`, `app.quit`), installs window SGF navigation actions, and publishes a menubar model
-(`File` -> `New game...`, `Quit`; `Game` -> `Force move` + SGF navigation section) with keyboard accelerators.
+(`app.new-game`, `app.import`, `app.force-move`, `app.quit`), installs window SGF navigation actions, and publishes a
+menubar model (`File` -> `New game...`, `Import...`, `Load...`, `Save as...`, `Quit`; `Game` -> `Force move` + SGF
+navigation section) with keyboard accelerators.
 Collaborates with: `GCheckersWindow` for UI wiring and new-game dialog presentation.
 
 ## Board view subsystem

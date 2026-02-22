@@ -44,10 +44,13 @@ BROADWAYD_BIN ?= gtk4-broadwayd
 CHROMIUM_BIN ?= google-chrome
 XDG_RUNTIME_DIR ?= /tmp/xdg-runtime
 BROADWAY_TEST_LOG ?= /tmp/broadwayd-$(BROADWAY_TEST_PORT).log
+GSETTINGS_SCHEMA_DIR := data/schemas
+GSETTINGS_SCHEMA_XML := $(GSETTINGS_SCHEMA_DIR)/com.example.gcheckers.gschema.xml
+GSETTINGS_SCHEMA_COMPILED := $(GSETTINGS_SCHEMA_DIR)/gschemas.compiled
 
 .PHONY: all clean test coverage screenshot test_screenshot test_sgf_view_broadway
 
-all: libgame.a checkers gcheckers
+all: $(GSETTINGS_SCHEMA_COMPILED) libgame.a checkers gcheckers
 
 libgame.a: $(OBJS)
 	ar rcs $@ $^
@@ -172,7 +175,9 @@ test_gcheckers_sgf_controller: tests/test_gcheckers_sgf_controller.c src/gchecke
 		src/sgf_view_layout.c src/sgf_view_link_renderer.c src/sgf_view_scroller.c \
 		src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(SRCS) $(LDLIBS) $(GTK_LIBS)
 
-test_gcheckers_window: tests/test_gcheckers_window.c src/gcheckers_window.c src/gcheckers_new_game_dialog.c \
+test_gcheckers_window: $(GSETTINGS_SCHEMA_COMPILED) tests/test_gcheckers_window.c src/gcheckers_window.c \
+	src/gcheckers_new_game_dialog.c \
+	src/gcheckers_import_dialog.c \
 	src/gcheckers_window.h \
 	src/gcheckers_style.c src/gcheckers_style.h src/player_controls_panel.c src/player_controls_panel.h \
 	src/gcheckers_sgf_controller.c src/gcheckers_sgf_controller.h src/board_view.c src/board_view.h \
@@ -186,6 +191,7 @@ test_gcheckers_window: tests/test_gcheckers_window.c src/gcheckers_window.c src/
 	$(SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_gcheckers_window.c src/gcheckers_window.c \
 		src/gcheckers_new_game_dialog.c \
+		src/gcheckers_import_dialog.c \
 		src/gcheckers_style.c src/player_controls_panel.c src/gcheckers_sgf_controller.c \
 		src/board_view.c src/board_grid.c src/board_square.c src/board_move_overlay.c \
 		src/board_selection_controller.c src/piece_palette.c src/gcheckers_man_paintable.c \
@@ -208,7 +214,9 @@ test_screenshot: gcheckers tools/screenshot_gcheckers.sh
 		test -s "$$tmp_file"; \
 		rm -f "$$tmp_file"
 
-gcheckers: src/gcheckers.c src/gcheckers_application.c src/gcheckers_window.c src/gcheckers_new_game_dialog.c \
+gcheckers: $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c src/gcheckers_application.c src/gcheckers_window.c \
+	src/gcheckers_new_game_dialog.c \
+	src/gcheckers_import_dialog.c \
 	src/gcheckers_window.h \
 	src/gcheckers_style.c src/gcheckers_style.h src/player_controls_panel.c src/player_controls_panel.h \
 	src/gcheckers_sgf_controller.c src/gcheckers_sgf_controller.h src/board_view.c src/board_view.h \
@@ -221,17 +229,22 @@ gcheckers: src/gcheckers.c src/gcheckers_application.c src/gcheckers_window.c sr
 	src/sgf_view_scroller.c src/sgf_view_scroller.h src/sgf_view_selection_controller.c \
 	src/sgf_view_selection_controller.h $(SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/gcheckers.c src/gcheckers_application.c \
-		src/gcheckers_window.c src/gcheckers_new_game_dialog.c src/gcheckers_style.c src/player_controls_panel.c \
+		src/gcheckers_window.c src/gcheckers_new_game_dialog.c src/gcheckers_import_dialog.c src/gcheckers_style.c \
+		src/player_controls_panel.c \
 		src/gcheckers_sgf_controller.c src/board_view.c src/board_grid.c src/board_square.c \
 		src/board_move_overlay.c src/board_selection_controller.c src/piece_palette.c \
 		src/gcheckers_man_paintable.c src/sgf_tree.c src/sgf_view.c src/sgf_view_disc_factory.c \
 		src/sgf_view_layout.c src/sgf_view_link_renderer.c src/sgf_view_scroller.c \
 		src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(SRCS) $(LDLIBS) $(GTK_LIBS)
 
+$(GSETTINGS_SCHEMA_COMPILED): $(GSETTINGS_SCHEMA_XML)
+	glib-compile-schemas $(GSETTINGS_SCHEMA_DIR)
+
 clean:
 	rm -f $(OBJS) libgame.a test_game test_game_print test_board test_move_gen test_checkers_model \
 		test_sgf_tree test_sgf_view test_board_view test_player_controls_panel test_gcheckers_sgf_controller \
 		test_gcheckers_window test_screenshot checkers gcheckers
+	rm -f $(GSETTINGS_SCHEMA_COMPILED)
 	rm -rf $(COV_DIR)
 
 screenshot: gcheckers tools/screenshot_gcheckers.sh

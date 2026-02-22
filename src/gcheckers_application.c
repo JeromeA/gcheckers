@@ -28,6 +28,25 @@ static void gcheckers_application_on_new_game(GSimpleAction * /*action*/,
   gcheckers_window_present_new_game_dialog(GCHECKERS_WINDOW(window));
 }
 
+static void gcheckers_application_on_import(GSimpleAction * /*action*/,
+                                            GVariant * /*parameter*/,
+                                            gpointer user_data) {
+  GCheckersApplication *self = GCHECKERS_APPLICATION(user_data);
+  g_return_if_fail(GCHECKERS_IS_APPLICATION(self));
+
+  GtkWindow *window = gtk_application_get_active_window(GTK_APPLICATION(self));
+  if (!window) {
+    g_debug("No active window for import action");
+    return;
+  }
+  if (!GCHECKERS_IS_WINDOW(window)) {
+    g_debug("Active window is not a gcheckers window");
+    return;
+  }
+
+  gcheckers_window_present_import_dialog(GCHECKERS_WINDOW(window));
+}
+
 static void gcheckers_application_on_quit(GSimpleAction * /*action*/,
                                           GVariant * /*parameter*/,
                                           gpointer user_data) {
@@ -69,6 +88,14 @@ static void gcheckers_application_startup(GApplication *app) {
           .padding = {0},
       },
       {
+          .name = "import",
+          .activate = gcheckers_application_on_import,
+          .parameter_type = NULL,
+          .state = NULL,
+          .change_state = NULL,
+          .padding = {0},
+      },
+      {
           .name = "force-move",
           .activate = gcheckers_application_on_force_move,
           .parameter_type = NULL,
@@ -94,7 +121,7 @@ static void gcheckers_application_startup(GApplication *app) {
   GMenu *game_menu = g_menu_new();
   GMenu *game_navigation_menu = g_menu_new();
   g_menu_append(file_primary_menu, "New game...", "app.new-game");
-  g_menu_append(file_primary_menu, "Import...", NULL);
+  g_menu_append(file_primary_menu, "Import...", "app.import");
   g_menu_append(file_primary_menu, "Load...", NULL);
   g_menu_append(file_primary_menu, "Save as...", NULL);
   g_menu_append_section(file_menu, NULL, G_MENU_MODEL(file_primary_menu));

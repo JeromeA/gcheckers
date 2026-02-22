@@ -9,3 +9,4 @@ test_move_gen
 test_checkers_model
 coverage/
 gcheckers.png
+data/schemas/gschemas.compiled

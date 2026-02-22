@@ -79,6 +79,72 @@ static GtkToggleButton *test_gcheckers_window_find_toggle_button_with_label(GtkW
   return NULL;
 }
 
+static GtkButton *test_gcheckers_window_find_button_with_label(GtkWidget *root, const char *label) {
+  g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
+  g_return_val_if_fail(label != NULL, NULL);
+
+  if (GTK_IS_BUTTON(root)) {
+    const char *button_label = gtk_button_get_label(GTK_BUTTON(root));
+    if (button_label && g_strcmp0(button_label, label) == 0) {
+      return GTK_BUTTON(root);
+    }
+  }
+
+  for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
+       child = gtk_widget_get_next_sibling(child)) {
+    GtkButton *match = test_gcheckers_window_find_button_with_label(child, label);
+    if (match != NULL) {
+      return match;
+    }
+  }
+
+  return NULL;
+}
+
+static GtkCheckButton *test_gcheckers_window_find_check_button_with_label(GtkWidget *root, const char *label) {
+  g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
+  g_return_val_if_fail(label != NULL, NULL);
+
+  if (GTK_IS_CHECK_BUTTON(root)) {
+    const char *button_label = gtk_check_button_get_label(GTK_CHECK_BUTTON(root));
+    if (button_label && g_strcmp0(button_label, label) == 0) {
+      return GTK_CHECK_BUTTON(root);
+    }
+  }
+
+  for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
+       child = gtk_widget_get_next_sibling(child)) {
+    GtkCheckButton *match = test_gcheckers_window_find_check_button_with_label(child, label);
+    if (match != NULL) {
+      return match;
+    }
+  }
+
+  return NULL;
+}
+
+static GtkLabel *test_gcheckers_window_find_label_with_text(GtkWidget *root, const char *text) {
+  g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
+  g_return_val_if_fail(text != NULL, NULL);
+
+  if (GTK_IS_LABEL(root)) {
+    const char *label_text = gtk_label_get_text(GTK_LABEL(root));
+    if (label_text && g_strcmp0(label_text, text) == 0) {
+      return GTK_LABEL(root);
+    }
+  }
+
+  for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
+       child = gtk_widget_get_next_sibling(child)) {
+    GtkLabel *match = test_gcheckers_window_find_label_with_text(child, text);
+    if (match != NULL) {
+      return match;
+    }
+  }
+
+  return NULL;
+}
+
 static GtkWidget *test_gcheckers_window_find_widget_for_action(GtkWidget *root, const char *action_name) {
   g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
   g_return_val_if_fail(action_name != NULL, NULL);
@@ -96,6 +162,30 @@ static GtkWidget *test_gcheckers_window_find_widget_for_action(GtkWidget *root, 
     if (match != NULL) {
       return match;
     }
+  }
+
+  return NULL;
+}
+
+static GtkWindow *test_gcheckers_window_find_toplevel_by_title(const char *title) {
+  g_return_val_if_fail(title != NULL, NULL);
+
+  GListModel *toplevels = gtk_window_get_toplevels();
+  guint count = g_list_model_get_n_items(toplevels);
+  for (guint i = 0; i < count; ++i) {
+    GtkWindow *window = g_list_model_get_item(toplevels, i);
+    if (!GTK_IS_WINDOW(window)) {
+      if (window != NULL) {
+        g_object_unref(window);
+      }
+      continue;
+    }
+
+    const char *window_title = gtk_window_get_title(window);
+    if (window_title && g_strcmp0(window_title, title) == 0) {
+      return window;
+    }
+    g_object_unref(window);
   }
 
   return NULL;
@@ -391,6 +481,47 @@ static void test_gcheckers_window_analysis_toggle(void) {
   g_clear_object(&app);
 }
 
+static void test_gcheckers_window_import_wizard_flow(void) {
+  GtkApplication *app = test_gcheckers_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersWindow *window = gcheckers_window_new(app, model);
+  gtk_window_present(GTK_WINDOW(window));
+  test_gcheckers_window_drain_main_context(16);
+
+  g_action_group_activate_action(G_ACTION_GROUP(app), "import", NULL);
+  test_gcheckers_window_drain_main_context(32);
+
+  GtkWindow *dialog = test_gcheckers_window_find_toplevel_by_title("Import games");
+  g_assert_nonnull(dialog);
+
+  GtkButton *next_button = test_gcheckers_window_find_button_with_label(GTK_WIDGET(dialog), "Next");
+  g_assert_nonnull(next_button);
+  g_assert_true(gtk_widget_get_sensitive(GTK_WIDGET(next_button)));
+
+  GtkWidget *drop_down_widget = test_gcheckers_window_find_by_type(GTK_WIDGET(dialog), GTK_TYPE_DROP_DOWN);
+  g_assert_nonnull(drop_down_widget);
+  gtk_drop_down_set_selected(GTK_DROP_DOWN(drop_down_widget), 3);
+  test_gcheckers_window_drain_main_context(16);
+  g_assert_true(gtk_widget_get_sensitive(GTK_WIDGET(next_button)));
+
+  g_signal_emit_by_name(next_button, "clicked");
+  test_gcheckers_window_drain_main_context(16);
+  g_assert_cmpstr(gtk_button_get_label(next_button), ==, "Fetch game history");
+  g_assert_nonnull(test_gcheckers_window_find_label_with_text(GTK_WIDGET(dialog), "Email"));
+  g_assert_nonnull(test_gcheckers_window_find_label_with_text(GTK_WIDGET(dialog), "Password"));
+  g_assert_nonnull(test_gcheckers_window_find_check_button_with_label(GTK_WIDGET(dialog), "Remember credentials"));
+
+  g_signal_emit_by_name(next_button, "clicked");
+  test_gcheckers_window_drain_main_context(16);
+  GtkWindow *after_close = test_gcheckers_window_find_toplevel_by_title("Import games");
+  g_assert_null(after_close);
+
+  g_clear_object(&dialog);
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
 static void test_gcheckers_window_ruleset_switch_resets_model(void) {
   GtkApplication *app = test_gcheckers_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
@@ -433,6 +564,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/gcheckers-window/toolbar-actions", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/sgf-actions-navigate", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/analysis-toggle", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/import-wizard-flow", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/ruleset-switch", test_gcheckers_window_skip);
     return g_test_run();
   }
@@ -468,6 +600,7 @@ int main(int argc, char **argv) {
   g_test_add_func("/gcheckers-window/sgf-actions-navigate",
                   test_gcheckers_window_sgf_actions_navigate_timeline);
   g_test_add_func("/gcheckers-window/analysis-toggle", test_gcheckers_window_analysis_toggle);
+  g_test_add_func("/gcheckers-window/import-wizard-flow", test_gcheckers_window_import_wizard_flow);
   g_test_add_func("/gcheckers-window/ruleset-switch", test_gcheckers_window_ruleset_switch_resets_model);
   return g_test_run();
 }
