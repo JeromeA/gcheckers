@@ -190,7 +190,7 @@ static gboolean gcheckers_sgf_controller_navigate_to(GCheckersSgfController *sel
   }
 
   g_signal_emit(self, controller_signals[SIGNAL_ANALYSIS_REQUESTED], 0, node);
-  sgf_view_refresh(self->sgf_view);
+  sgf_view_set_selected(self->sgf_view, node);
   return TRUE;
 }
 
@@ -207,7 +207,7 @@ static void gcheckers_sgf_controller_on_node_selected(SgfView * /*view*/,
   }
 
   g_signal_emit(self, controller_signals[SIGNAL_ANALYSIS_REQUESTED], 0, node);
-  sgf_view_refresh(self->sgf_view);
+  sgf_view_set_selected(self->sgf_view, node);
 }
 
 static void gcheckers_sgf_controller_dispose(GObject *object) {

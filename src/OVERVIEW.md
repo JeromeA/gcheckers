@@ -24,6 +24,8 @@ transition to the model (`single move` if parent->child, otherwise reset+replay 
 `gcheckers_sgf_controller_set_model()` only binds/disconnects model references; timeline clearing is explicit via
 `gcheckers_sgf_controller_new_game()`. Exposes SGF navigation helpers used by window actions: rewind to root, step
 backward, step forward on main line, step to next branch point, and step to main-line end.
+Selection-only navigation updates SGF view selection in place (`sgf_view_set_selected`) instead of rebuilding the
+entire SGF layout.
 Owns: `SgfTree` and `SgfView`, plus replay guard (`is_replaying`).
 Collaborates with: `GCheckersModel` for move validation/application, `BoardView` to clear selection on replay/reset,
 and `GCheckersWindow` via the `analysis-requested` signal.
