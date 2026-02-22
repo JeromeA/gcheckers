@@ -114,6 +114,35 @@ static void gcheckers_import_dialog_save_credentials(GCheckersWindowImportDialog
   g_settings_set_string(data->settings, gcheckers_import_key_password, password ? password : "");
 }
 
+static void gcheckers_import_dialog_show_error_dialog(GCheckersWindowImportDialogData *data, const char *text) {
+  g_return_if_fail(data != NULL);
+  g_return_if_fail(text != NULL);
+
+  GtkWidget *dialog = gtk_window_new();
+  gtk_window_set_title(GTK_WINDOW(dialog), "Import error");
+  gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
+  gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(data->self));
+  gtk_window_set_destroy_with_parent(GTK_WINDOW(dialog), TRUE);
+
+  GtkWidget *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
+  gtk_widget_set_margin_top(content, 12);
+  gtk_widget_set_margin_bottom(content, 12);
+  gtk_widget_set_margin_start(content, 12);
+  gtk_widget_set_margin_end(content, 12);
+  gtk_window_set_child(GTK_WINDOW(dialog), content);
+
+  GtkWidget *label = gtk_label_new(text);
+  gtk_widget_set_halign(label, GTK_ALIGN_START);
+  gtk_label_set_wrap(GTK_LABEL(label), TRUE);
+  gtk_box_append(GTK_BOX(content), label);
+
+  GtkWidget *ok_button = gtk_button_new_with_label("OK");
+  gtk_widget_set_halign(ok_button, GTK_ALIGN_END);
+  gtk_box_append(GTK_BOX(content), ok_button);
+  g_signal_connect_swapped(ok_button, "clicked", G_CALLBACK(gtk_window_destroy), dialog);
+  gtk_window_present(GTK_WINDOW(dialog));
+}
+
 static gboolean gcheckers_import_dialog_is_board_game_arena_selected(GCheckersWindowImportDialogData *data) {
   g_return_val_if_fail(data != NULL, FALSE);
   g_return_val_if_fail(GTK_IS_DROP_DOWN(data->site_drop_down), FALSE);
@@ -244,6 +273,30 @@ static void gcheckers_window_on_import_dialog_next_clicked(GtkButton * /*button*
 
   g_debug("BoardGameArena login HTTP %ld", login_response.http_status);
   g_debug("BoardGameArena login response body: %s", login_response.body ? login_response.body : "");
+  BgaLoginResult parsed = {0};
+  if (!bga_client_parse_login_response(login_response.body ? login_response.body : "", &parsed, &error)) {
+    g_debug("Failed to parse BoardGameArena login response: %s", error ? error->message : "unknown error");
+    bga_http_response_clear(&login_response);
+    return;
+  }
+
+  if (parsed.kind == BGA_LOGIN_RESULT_STATUS_ZERO || parsed.kind == BGA_LOGIN_RESULT_SUCCESS_FALSE) {
+    g_autofree char *dialog_text = NULL;
+    if (parsed.kind == BGA_LOGIN_RESULT_STATUS_ZERO) {
+      dialog_text = g_strdup_printf("Login failed.\nError: %s\nException: %s",
+                                    parsed.error ? parsed.error : "(none)",
+                                    parsed.exception ? parsed.exception : "(none)");
+    } else {
+      dialog_text = g_strdup_printf("Login failed.\nMessage: %s", parsed.message ? parsed.message : "(none)");
+    }
+    gcheckers_import_dialog_show_error_dialog(data, dialog_text);
+    bga_login_result_clear(&parsed);
+    bga_http_response_clear(&login_response);
+    gtk_window_destroy(data->dialog);
+    return;
+  }
+
+  bga_login_result_clear(&parsed);
   bga_http_response_clear(&login_response);
   gtk_window_destroy(data->dialog);
 }

@@ -13,7 +13,8 @@ scores after each completed depth until toggled off. Top-level menu actions are 
 (`New game...`, `Force move`, SGF timeline rewind/step/skip actions) via GTK actions.
 Owns modal flows for `New game` and `Import games` wizards.
 Import wizard persists BoardGameArena email/password and remember flag with `GSettings` when fetching history, and
-prefills credentials on the credentials step from stored values.
+prefills credentials on the credentials step from stored values. Parsed login responses drive in-memory result
+handling; status/error responses trigger an error dialog and close the wizard.
 Import fetch flow for BoardGameArena uses a dedicated libcurl client: GET home page, extract `requestToken`, then
 POST `loginUserWithPassword.html` with username/password/remember/request token and logs the HTTP/body result.
 Default panel widths target about `500/300/300` pixels at the default window width (`1100x700`).
