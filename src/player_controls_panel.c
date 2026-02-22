@@ -119,7 +119,7 @@ static void player_controls_panel_init(PlayerControlsPanel *self) {
   gtk_widget_set_size_request(GTK_WIDGET(self->black_control), 100, -1);
   player_controls_panel_set_mode(self, CHECKERS_COLOR_WHITE, PLAYER_CONTROL_MODE_USER);
   player_controls_panel_set_mode(self, CHECKERS_COLOR_BLACK, PLAYER_CONTROL_MODE_USER);
-  player_controls_panel_set_computer_depth(self, 8);
+  player_controls_panel_set_computer_depth(self, PLAYER_COMPUTER_DEPTH_DEFAULT);
   gtk_box_append(GTK_BOX(white_box), GTK_WIDGET(self->white_control));
   gtk_box_append(GTK_BOX(black_box), GTK_WIDGET(self->black_control));
   gtk_box_append(GTK_BOX(computer_level_box), GTK_WIDGET(self->computer_depth_scale));
@@ -195,15 +195,15 @@ void player_controls_panel_set_computer_depth(PlayerControlsPanel *self, guint d
 }
 
 guint player_controls_panel_get_computer_depth(PlayerControlsPanel *self) {
-  g_return_val_if_fail(PLAYER_IS_CONTROLS_PANEL(self), 8);
-  g_return_val_if_fail(self->computer_depth_scale != NULL, 8);
+  g_return_val_if_fail(PLAYER_IS_CONTROLS_PANEL(self), PLAYER_COMPUTER_DEPTH_DEFAULT);
+  g_return_val_if_fail(self->computer_depth_scale != NULL, PLAYER_COMPUTER_DEPTH_DEFAULT);
 
   gdouble value = gtk_range_get_value(GTK_RANGE(self->computer_depth_scale));
   guint depth = (guint)value;
 
   if (!player_controls_panel_computer_depth_valid(depth)) {
     g_debug("Unexpected computer depth value");
-    return 8;
+    return PLAYER_COMPUTER_DEPTH_DEFAULT;
   }
 
   return depth;

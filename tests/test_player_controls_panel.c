@@ -21,7 +21,7 @@ static void test_player_controls_panel_defaults(void) {
   g_assert_cmpuint(player_controls_panel_get_selected(panel, CHECKERS_COLOR_BLACK), ==, PLAYER_CONTROL_MODE_USER);
   g_assert_true(player_controls_panel_is_user_control(panel, CHECKERS_COLOR_WHITE));
   g_assert_true(player_controls_panel_is_user_control(panel, CHECKERS_COLOR_BLACK));
-  g_assert_cmpuint(player_controls_panel_get_computer_depth(panel), ==, 8);
+  g_assert_cmpuint(player_controls_panel_get_computer_depth(panel), ==, PLAYER_COMPUTER_DEPTH_DEFAULT);
 
   g_clear_object(&panel);
 }
