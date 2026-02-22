@@ -8,9 +8,11 @@ GOBJECT_CFLAGS := $(shell pkg-config --cflags gobject-2.0)
 GOBJECT_LIBS := $(shell pkg-config --libs gobject-2.0)
 GTK_CFLAGS := $(shell pkg-config --cflags gtk4)
 GTK_LIBS := $(shell pkg-config --libs gtk4)
-LDLIBS := $(GLIB_LIBS) $(GOBJECT_LIBS) -lm
+CURL_CFLAGS := $(shell pkg-config --cflags libcurl)
+CURL_LIBS := $(shell pkg-config --libs libcurl)
+LDLIBS := $(GLIB_LIBS) $(GOBJECT_LIBS) $(CURL_LIBS) -lm
 
-CFLAGS += $(GLIB_CFLAGS) $(GOBJECT_CFLAGS)
+CFLAGS += $(GLIB_CFLAGS) $(GOBJECT_CFLAGS) $(CURL_CFLAGS)
 
 SRCS := src/board.c src/game.c src/game_print.c src/move_gen.c src/ai_alpha_beta.c \
 	src/checkers_model.c
@@ -59,6 +61,7 @@ libgame.a: $(OBJS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 test: test_game test_game_print test_board test_move_gen test_checkers_model test_sgf_tree test_sgf_view \
+	test_bga_client \
 	test_board_view test_player_controls_panel test_gcheckers_sgf_controller test_gcheckers_window test_screenshot
 	./test_game
 	./test_game_print
@@ -66,6 +69,7 @@ test: test_game test_game_print test_board test_move_gen test_checkers_model tes
 	./test_move_gen
 	./test_checkers_model
 	./test_sgf_tree
+	./test_bga_client
 	$(MAKE) test_sgf_view_broadway
 	$(MAKE) test_gtk_broadway
 
@@ -86,6 +90,9 @@ checkers: src/checkers_cli.c $(SRCS) src/game.h
 
 test_checkers_model: tests/test_checkers_model.c $(SRCS) src/checkers_model.h
 	$(CC) $(CFLAGS) -o $@ tests/test_checkers_model.c $(SRCS) $(LDLIBS)
+
+test_bga_client: tests/test_bga_client.c src/bga_client.c src/bga_client.h
+	$(CC) $(CFLAGS) -o $@ tests/test_bga_client.c src/bga_client.c $(LDLIBS)
 
 test_sgf_tree: tests/test_sgf_tree.c $(SGF_TREE_SRCS) src/sgf_tree.h
 	$(CC) $(CFLAGS) -o $@ tests/test_sgf_tree.c $(SGF_TREE_SRCS) $(LDLIBS)
@@ -178,6 +185,7 @@ test_gcheckers_sgf_controller: tests/test_gcheckers_sgf_controller.c src/gchecke
 test_gcheckers_window: $(GSETTINGS_SCHEMA_COMPILED) tests/test_gcheckers_window.c src/gcheckers_window.c \
 	src/gcheckers_new_game_dialog.c \
 	src/gcheckers_import_dialog.c \
+	src/bga_client.c src/bga_client.h \
 	src/gcheckers_window.h \
 	src/gcheckers_style.c src/gcheckers_style.h src/player_controls_panel.c src/player_controls_panel.h \
 	src/gcheckers_sgf_controller.c src/gcheckers_sgf_controller.h src/board_view.c src/board_view.h \
@@ -192,6 +200,7 @@ test_gcheckers_window: $(GSETTINGS_SCHEMA_COMPILED) tests/test_gcheckers_window.
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_gcheckers_window.c src/gcheckers_window.c \
 		src/gcheckers_new_game_dialog.c \
 		src/gcheckers_import_dialog.c \
+		src/bga_client.c \
 		src/gcheckers_style.c src/player_controls_panel.c src/gcheckers_sgf_controller.c \
 		src/board_view.c src/board_grid.c src/board_square.c src/board_move_overlay.c \
 		src/board_selection_controller.c src/piece_palette.c src/gcheckers_man_paintable.c \
@@ -217,6 +226,7 @@ test_screenshot: gcheckers tools/screenshot_gcheckers.sh
 gcheckers: $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c src/gcheckers_application.c src/gcheckers_window.c \
 	src/gcheckers_new_game_dialog.c \
 	src/gcheckers_import_dialog.c \
+	src/bga_client.c src/bga_client.h \
 	src/gcheckers_window.h \
 	src/gcheckers_style.c src/gcheckers_style.h src/player_controls_panel.c src/player_controls_panel.h \
 	src/gcheckers_sgf_controller.c src/gcheckers_sgf_controller.h src/board_view.c src/board_view.h \
@@ -230,7 +240,7 @@ gcheckers: $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c src/gcheckers_applicatio
 	src/sgf_view_selection_controller.h $(SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/gcheckers.c src/gcheckers_application.c \
 		src/gcheckers_window.c src/gcheckers_new_game_dialog.c src/gcheckers_import_dialog.c src/gcheckers_style.c \
-		src/player_controls_panel.c \
+		src/player_controls_panel.c src/bga_client.c \
 		src/gcheckers_sgf_controller.c src/board_view.c src/board_grid.c src/board_square.c \
 		src/board_move_overlay.c src/board_selection_controller.c src/piece_palette.c \
 		src/gcheckers_man_paintable.c src/sgf_tree.c src/sgf_view.c src/sgf_view_disc_factory.c \
@@ -242,7 +252,8 @@ $(GSETTINGS_SCHEMA_COMPILED): $(GSETTINGS_SCHEMA_XML)
 
 clean:
 	rm -f $(OBJS) libgame.a test_game test_game_print test_board test_move_gen test_checkers_model \
-		test_sgf_tree test_sgf_view test_board_view test_player_controls_panel test_gcheckers_sgf_controller \
+		test_sgf_tree test_sgf_view test_bga_client test_board_view test_player_controls_panel \
+		test_gcheckers_sgf_controller \
 		test_gcheckers_window test_screenshot checkers gcheckers
 	rm -f $(GSETTINGS_SCHEMA_COMPILED)
 	rm -rf $(COV_DIR)

@@ -14,6 +14,8 @@ scores after each completed depth until toggled off. Top-level menu actions are 
 Owns modal flows for `New game` and `Import games` wizards.
 Import wizard persists BoardGameArena email/password and remember flag with `GSettings` when fetching history, and
 prefills credentials on the credentials step from stored values.
+Import fetch flow for BoardGameArena uses a dedicated libcurl client: GET home page, extract `requestToken`, then
+POST `loginUserWithPassword.html` with username/password/remember/request token and logs the HTTP/body result.
 Default panel widths target about `500/300/300` pixels at the default window width (`1100x700`).
 Lifecycle: sinks and retains an owned `PlayerControlsPanel` reference, removes it from its current `GtkBox` parent
 during dispose via `gcheckers_widget_remove_from_parent()`, and then clears its references.
@@ -91,6 +93,14 @@ Role: choose a move and analyze all legal moves via depth-limited alpha-beta wit
 terminal-win scoring. Root move choice randomizes among all equal best-scoring moves, so repeated games can vary
 without lowering evaluation quality.
 Collaborates with: `checkers_model.c` for model-facing AI move selection and analysis text generation.
+
+## BoardGameArena client (`src/bga_client.c`, `src/bga_client.h`)
+Module: BoardGameArena login HTTP client.
+Role: perform libcurl requests to fetch `requestToken` from `https://en.boardgamearena.com/`, then submit
+`username`/`password`/`remember_me`/`request_token` to
+`https://en.boardgamearena.com/account/auth/loginUserWithPassword.html`.
+Collaborates with: import dialog flow for "Fetch game history" and `tests/test_bga_client.c` (token parsing + live
+login smoke test with env-provided credentials).
 
 ## CLI entry point (`src/checkers_cli.c`)
 Module: CLI front end.

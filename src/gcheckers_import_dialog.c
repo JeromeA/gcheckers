@@ -1,5 +1,7 @@
 #include "gcheckers_window.h"
 
+#include "bga_client.h"
+
 typedef enum {
   GCHECKERS_IMPORT_SITE_LIDRAUGHT = 0,
   GCHECKERS_IMPORT_SITE_FLYORDIE,
@@ -209,10 +211,40 @@ static void gcheckers_window_on_import_dialog_next_clicked(GtkButton * /*button*
 
   gcheckers_import_dialog_save_credentials(data);
   const char *email = gtk_editable_get_text(GTK_EDITABLE(data->email_entry));
+  const char *password = gtk_editable_get_text(GTK_EDITABLE(data->password_entry));
   gboolean remember = gtk_check_button_get_active(data->remember_check);
-  g_debug("BoardGameArena history fetch requested for %s (remember=%s)",
-          email ? email : "",
-          remember ? "true" : "false");
+  BgaCredentials credentials = {
+    .username = email ? email : "",
+    .password = password ? password : "",
+    .remember_me = remember,
+  };
+  g_autoptr(GError) error = NULL;
+  BgaClientSession *session = bga_client_session_new(&error);
+  if (session == NULL) {
+    g_debug("Failed to initialize BoardGameArena client session: %s", error ? error->message : "unknown error");
+    return;
+  }
+
+  g_autofree char *request_token = NULL;
+  if (!bga_client_session_fetch_homepage_and_request_token(session, NULL, &request_token, &error)) {
+    g_debug("Failed to fetch BoardGameArena request token: %s", error ? error->message : "unknown error");
+    bga_client_session_free(session);
+    return;
+  }
+  g_debug("BoardGameArena request token: %s", request_token);
+
+  BgaHttpResponse login_response = {0};
+  if (!bga_client_session_login_with_password(session, &credentials, request_token, &login_response, &error)) {
+    g_debug("Failed to login to BoardGameArena: %s", error ? error->message : "unknown error");
+    bga_http_response_clear(&login_response);
+    bga_client_session_free(session);
+    return;
+  }
+  bga_client_session_free(session);
+
+  g_debug("BoardGameArena login HTTP %ld", login_response.http_status);
+  g_debug("BoardGameArena login response body: %s", login_response.body ? login_response.body : "");
+  bga_http_response_clear(&login_response);
   gtk_window_destroy(data->dialog);
 }
 
