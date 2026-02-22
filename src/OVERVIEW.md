@@ -83,7 +83,8 @@ Collaborates with: `GCheckersWindow` and SGF controllers via signals and high-le
 ## AI alpha-beta search (`src/ai_alpha_beta.c`, `src/ai_alpha_beta.h`)
 Module: alpha-beta search.
 Role: choose a move and analyze all legal moves via depth-limited alpha-beta with a material heuristic and
-terminal-win scoring.
+terminal-win scoring. Root move choice randomizes among all equal best-scoring moves, so repeated games can vary
+without lowering evaluation quality.
 Collaborates with: `checkers_model.c` for model-facing AI move selection and analysis text generation.
 
 ## CLI entry point (`src/checkers_cli.c`)

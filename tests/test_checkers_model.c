@@ -4,6 +4,7 @@
 
 #include <glib.h>
 
+#include "../src/ai_alpha_beta.h"
 #include "../src/checkers_model.h"
 
 static gboolean test_checkers_model_move_in_list(const MoveList *moves, const CheckersMove *move) {
@@ -22,6 +23,17 @@ static gboolean test_checkers_model_move_in_list(const MoveList *moves, const Ch
   }
 
   return FALSE;
+}
+
+static gboolean test_checkers_model_move_equals(const CheckersMove *left, const CheckersMove *right) {
+  g_return_val_if_fail(left != NULL, FALSE);
+  g_return_val_if_fail(right != NULL, FALSE);
+
+  if (left->length != right->length || left->captures != right->captures) {
+    return FALSE;
+  }
+
+  return memcmp(left->path, right->path, left->length * sizeof(left->path[0])) == 0;
 }
 
 static void test_model_reset_and_moves(void) {
@@ -99,6 +111,39 @@ static void test_model_choose_best_move_returns_legal_move(void) {
   assert(test_checkers_model_move_in_list(&moves, &depth8));
 
   movelist_free(&moves);
+  g_object_unref(model);
+}
+
+static void test_model_choose_best_move_randomized_within_best_ties(void) {
+  GCheckersModel *model = gcheckers_model_new();
+
+  Game game = {0};
+  bool copied = gcheckers_model_copy_game(model, &game);
+  assert(copied);
+
+  CheckersScoredMoveList scored_moves = {0};
+  bool analyzed = checkers_ai_alpha_beta_analyze_moves(&game, 1, &scored_moves);
+  assert(analyzed);
+  assert(scored_moves.count > 1);
+
+  gint best_score = scored_moves.moves[0].score;
+  size_t best_count = 1;
+  while (best_count < scored_moves.count && scored_moves.moves[best_count].score == best_score) {
+    best_count++;
+  }
+  assert(best_count > 1);
+
+  const guint seed = 0xC0FFEEu;
+  g_random_set_seed(seed);
+  guint expected_index = g_random_int_range(0, (gint)best_count);
+
+  CheckersMove selected = {0};
+  g_random_set_seed(seed);
+  bool chosen = gcheckers_model_choose_best_move(model, 1, &selected);
+  assert(chosen);
+  assert(test_checkers_model_move_equals(&selected, &scored_moves.moves[expected_index].move));
+
+  checkers_scored_move_list_free(&scored_moves);
   g_object_unref(model);
 }
 
@@ -183,6 +228,7 @@ int main(void) {
   test_model_reset_and_moves();
   test_model_rejects_invalid_move();
   test_model_choose_best_move_returns_legal_move();
+  test_model_choose_best_move_randomized_within_best_ties();
   test_model_analyze_moves_text();
   test_model_set_rules();
   test_model_peek_last_move();

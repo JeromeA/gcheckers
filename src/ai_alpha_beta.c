@@ -257,7 +257,14 @@ gboolean checkers_ai_alpha_beta_choose_move(const Game *game, guint max_depth, C
     return FALSE;
   }
 
-  *out_move = scored_moves.moves[0].move;
+  gint best_score = scored_moves.moves[0].score;
+  size_t best_count = 1;
+  while (best_count < scored_moves.count && scored_moves.moves[best_count].score == best_score) {
+    best_count++;
+  }
+
+  guint selected_index = g_random_int_range(0, (gint)best_count);
+  *out_move = scored_moves.moves[selected_index].move;
   checkers_scored_move_list_free(&scored_moves);
   return TRUE;
 }
