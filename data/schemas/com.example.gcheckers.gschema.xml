@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="com.example.gcheckers" path="/com/example/gcheckers/">
+    <key name="import-remember" type="b">
+      <default>false</default>
+      <summary>Remember import credentials</summary>
+      <description>When true, gcheckers stores import credentials for BoardGameArena.</description>
+    </key>
+    <key name="import-email" type="s">
+      <default>""</default>
+      <summary>Stored import email</summary>
+      <description>Email used for BoardGameArena import when remember is enabled.</description>
+    </key>
+    <key name="import-password" type="s">
+      <default>""</default>
+      <summary>Stored import password</summary>
+      <description>Password used for BoardGameArena import when remember is enabled.</description>
+    </key>
+  </schema>
+</schemalist>
