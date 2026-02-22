@@ -165,7 +165,9 @@ Collaborates with: `SgfView` and link rendering.
 
 ### SGF link renderer (`src/sgf_view_link_renderer.c`, `src/sgf_view_link_renderer.h`)
 Module: connector renderer.
-Role: compute disc bounds/centers and draw connector lines directly between SGF node discs.
+Role: compute disc bounds/centers and draw connector lines between SGF node discs. First-child links are direct,
+second-child links are direct diagonals, and child index 3+ uses a two-segment route (vertical to previous sibling
+row, then diagonal to the target) to keep dense branching readable.
 Collaborates with: SGF node widget mapping and view sizing.
 
 ### SGF scroller (`src/sgf_view_scroller.c`, `src/sgf_view_scroller.h`)

@@ -71,6 +71,29 @@ static void sgf_view_link_renderer_draw_links_for_node(GtkWidget *lines_area,
                                                               &child_y,
                                                               &child_bounds);
     if (has_parent && has_child) {
+      if (i >= 2) {
+        const SgfNode *previous_child = g_ptr_array_index(children, i - 1);
+        double previous_child_x = 0.0;
+        double previous_child_y = 0.0;
+        graphene_rect_t previous_child_bounds;
+        gboolean has_previous_child = sgf_view_link_renderer_get_disc_info(lines_area,
+                                                                           node_widgets,
+                                                                           previous_child,
+                                                                           &previous_child_x,
+                                                                           &previous_child_y,
+                                                                           &previous_child_bounds);
+        (void)previous_child_x;
+        (void)previous_child_bounds;
+        if (has_previous_child) {
+          cairo_move_to(cr, parent_x, parent_y);
+          cairo_line_to(cr, parent_x, previous_child_y);
+          cairo_line_to(cr, child_x, child_y);
+          cairo_stroke(cr);
+          sgf_view_link_renderer_draw_links_for_node(lines_area, node_widgets, child, cr);
+          continue;
+        }
+      }
+
       cairo_move_to(cr, parent_x, parent_y);
       cairo_line_to(cr, child_x, child_y);
       cairo_stroke(cr);
