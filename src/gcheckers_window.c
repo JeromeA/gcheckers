@@ -2,6 +2,7 @@
 #include "gcheckers_window.h"
 
 #include "board_view.h"
+#include "gcheckers_sgf_file_actions.h"
 #include "gcheckers_sgf_controller.h"
 #include "gcheckers_style.h"
 #include "player_controls_panel.h"
@@ -66,18 +67,6 @@ static void gcheckers_window_start_new_game(GCheckersWindow *self) {
   gcheckers_sgf_controller_new_game(self->sgf_controller);
 }
 
-static void gcheckers_window_print_move(const char *label, const CheckersMove *move) {
-  g_return_if_fail(label != NULL);
-  g_return_if_fail(move != NULL);
-
-  char buffer[128];
-  if (!game_format_move_notation(move, buffer, sizeof(buffer))) {
-    g_debug("Failed to format move notation\n");
-    return;
-  }
-  g_print("%s plays: %s\n", label, buffer);
-}
-
 static gboolean gcheckers_window_apply_player_move(const CheckersMove *move, gpointer user_data) {
   GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
 
@@ -89,7 +78,6 @@ static gboolean gcheckers_window_apply_player_move(const CheckersMove *move, gpo
     return FALSE;
   }
 
-  gcheckers_window_print_move("Player", move);
   return TRUE;
 }
 
@@ -518,9 +506,7 @@ void gcheckers_window_force_move(GCheckersWindow *self) {
   }
 
   CheckersMove move;
-  if (gcheckers_window_choose_computer_move(self, &move)) {
-    gcheckers_window_print_move("AI", &move);
-  }
+  gcheckers_window_choose_computer_move(self, &move);
 }
 
 PlayerRuleset gcheckers_window_get_ruleset(GCheckersWindow *self) {
@@ -679,6 +665,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
                                   window_actions,
                                   G_N_ELEMENTS(window_actions),
                                   self);
+  gcheckers_window_install_sgf_file_actions(self);
 
   gtk_window_set_title(GTK_WINDOW(self), "gcheckers");
   gtk_window_set_default_size(GTK_WINDOW(self), 1100, 700);

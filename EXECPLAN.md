@@ -135,3 +135,6 @@ Key resulting interfaces:
 Plan updates:
 - 2026-02-20: Replaced prior board-view refactor plan with SGF-source-of-truth execution record to match implemented
   architecture changes requested in this task.
+- 2026-03-01: Added SGF load/save architecture split: GTK-free `sgf_io` core module (`src/sgf_io.c`) plus GTK window
+  action integration (`win.sgf-load`, `win.sgf-save-as`) in `src/gcheckers_sgf_file_actions.c`, with menu wiring in
+  `src/gcheckers_application.c` and roundtrip coverage in `tests/test_sgf_io.c`.

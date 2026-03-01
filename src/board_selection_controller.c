@@ -24,7 +24,6 @@ static void board_selection_controller_print_move(const char *label, const Check
     g_debug("Failed to format move notation\n");
     return;
   }
-  g_print("%s plays: %s\n", label, buffer);
 }
 
 static gboolean board_selection_controller_move_has_prefix(const CheckersMove *move,

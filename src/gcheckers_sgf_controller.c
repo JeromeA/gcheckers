@@ -1,4 +1,5 @@
 #include "gcheckers_sgf_controller.h"
+#include "sgf_io.h"
 
 #include <string.h>
 
@@ -459,6 +460,43 @@ gboolean gcheckers_sgf_controller_step_forward_to_end(GCheckersSgfController *se
   }
 
   return gcheckers_sgf_controller_navigate_to(self, cursor);
+}
+
+gboolean gcheckers_sgf_controller_load_file(GCheckersSgfController *self, const char *path, GError **error) {
+  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+  g_return_val_if_fail(path != NULL, FALSE);
+
+  g_autoptr(SgfTree) loaded = NULL;
+  if (!sgf_io_load_file(path, &loaded, error)) {
+    return FALSE;
+  }
+
+  g_clear_object(&self->sgf_tree);
+  self->sgf_tree = g_steal_pointer(&loaded);
+  sgf_view_set_tree(self->sgf_view, self->sgf_tree);
+  board_view_clear_selection(self->board_view);
+
+  const SgfNode *selected = sgf_tree_get_current(self->sgf_tree);
+  if (self->model != NULL) {
+    if (selected == NULL || !gcheckers_sgf_controller_replay_to_node(self, selected)) {
+      g_set_error_literal(error, g_quark_from_static_string("gcheckers-sgf-controller-error"), 1,
+                          "Unable to replay loaded SGF tree");
+      return FALSE;
+    }
+  }
+
+  if (selected != NULL) {
+    g_signal_emit(self, controller_signals[SIGNAL_ANALYSIS_REQUESTED], 0, selected);
+  }
+  return TRUE;
+}
+
+gboolean gcheckers_sgf_controller_save_file(GCheckersSgfController *self, const char *path, GError **error) {
+  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+  g_return_val_if_fail(path != NULL, FALSE);
+  g_return_val_if_fail(SGF_IS_TREE(self->sgf_tree), FALSE);
+
+  return sgf_io_save_file(path, self->sgf_tree, error);
 }
 
 GtkWidget *gcheckers_sgf_controller_get_widget(GCheckersSgfController *self) {

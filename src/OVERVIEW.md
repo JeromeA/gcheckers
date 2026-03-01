@@ -7,9 +7,9 @@ Owns: `GCheckersModel`, `BoardView`, `PlayerControlsPanel`, and `GCheckersSgfCon
 Collaborates with: `gcheckers_style_init()` for CSS, model signals for refresh, and SGF analysis signals to reset
 player dropdowns. Computer turns are routed by control mode with alpha-beta depth configured from the shared
 `Computer level` slider (`0..16`). Uses a three-pane layout: board and player controls (left), SGF mode selector
-and SGF view (middle), and analysis
- (right) with an `Analyze` toggle that runs iterative deepening in a worker thread and publishes best-to-worst move
-scores after each completed depth until toggled off. Top-level menu actions are also exposed in a toolbar
+and SGF view (middle), and analysis (right) with an `Analyze` toggle that runs iterative deepening in a worker thread
+and publishes best-to-worst move scores after each completed depth until toggled off. Top-level menu actions are
+also exposed in a toolbar
 (`New game...`, `Force move`, SGF timeline rewind/step/skip actions) via GTK actions.
 Owns modal flows for `New game` and `Import games` wizards.
 Import wizard persists BoardGameArena email/password and remember flag with `GSettings` when fetching history, and
@@ -104,7 +104,8 @@ Role: perform libcurl requests to fetch `requestToken` from `https://en.boardgam
 `https://boardgamearena.com/gamestats?...` and refresh `requestToken` from that page before fetching checkers history
 from `https://boardgamearena.com/gamestats/gamestats/getGames.html` for the authenticated user/session.
 All BoardGameArena HTTP response bodies are saved to `/tmp/gcheckers-bga-*.txt` for debugging.
-History parsing extracts each table's `table_id`, start timestamp (rendered as `YYYYMMDD HH:MM`, UTC), and player names.
+History parsing extracts each table's `table_id`, start timestamp (rendered as `YYYY-MM-DD HH:MM`, UTC), and player
+names.
 Collaborates with: import dialog flow for "Fetch game history" and `tests/test_bga_client.c` (token/login/history
 parsing + live login smoke test with env-provided credentials).
 
@@ -166,6 +167,14 @@ Role: manage move nodes, parent/child links, payload access, traversal helpers, 
 used as the source of truth for move chronology/navigation.
 Collaborates with: SGF view and controller modules.
 
+### SGF IO (`src/sgf_io.c`, `src/sgf_io.h`)
+Module: SGF load/save core.
+Role: serialize and deserialize SGF trees using SGF syntax (`(`, `)`, `;`, `PROP[...]`) with move properties
+`B[...]`/`W[...]` and standard SGF variation nesting for branches. gcheckers writes SGF metadata (`FF`, `CA`, `AP`,
+`GM`) and does not persist current UI selection. This layer is GTK-free so it can be reused by both GUI actions and
+future CLI commands.
+Collaborates with: `GCheckersSgfController` load/save entry points and `tests/test_sgf_io.c`.
+
 ### SGF view (`src/sgf_view.c`, `src/sgf_view.h`)
 Class: `SgfView` (`GtkWidget`).
 Role: game-agnostic move tree UI that wires together layout, rendering, selection helpers, and selection resync calls.
@@ -204,3 +213,9 @@ Collaborates with: `SgfView`, SGF node widget mapping, and selection controller 
 Module: SGF selection logic.
 Role: track SGF selection, update CSS classes, and navigate siblings and parents.
 Collaborates with: `SgfView`, the SGF tree, and the scroller.
+
+### SGF file actions (`src/gcheckers_sgf_file_actions.c`, `src/gcheckers_sgf_file_actions.h`)
+Module: GTK SGF file action integration.
+Role: register `win.sgf-load` and `win.sgf-save-as` actions, present `GtkFileDialog` file pickers, call SGF
+controller load/save APIs, and show errors as modal dialogs.
+Collaborates with: `GCheckersWindow` action map and `GCheckersSgfController`.

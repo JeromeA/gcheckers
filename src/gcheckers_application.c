@@ -122,8 +122,8 @@ static void gcheckers_application_startup(GApplication *app) {
   GMenu *game_navigation_menu = g_menu_new();
   g_menu_append(file_primary_menu, "New game...", "app.new-game");
   g_menu_append(file_primary_menu, "Import...", "app.import");
-  g_menu_append(file_primary_menu, "Load...", NULL);
-  g_menu_append(file_primary_menu, "Save as...", NULL);
+  g_menu_append(file_primary_menu, "Load...", "win.sgf-load");
+  g_menu_append(file_primary_menu, "Save as...", "win.sgf-save-as");
   g_menu_append_section(file_menu, NULL, G_MENU_MODEL(file_primary_menu));
   g_menu_append(file_quit_menu, "Quit", "app.quit");
   g_menu_append_section(file_menu, NULL, G_MENU_MODEL(file_quit_menu));

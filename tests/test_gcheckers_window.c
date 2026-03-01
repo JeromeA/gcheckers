@@ -422,6 +422,8 @@ static void test_gcheckers_window_toolbar_actions_exist(void) {
   g_assert_nonnull(step_forward_button);
   g_assert_nonnull(step_to_branch_button);
   g_assert_nonnull(step_to_end_button);
+  g_assert_nonnull(g_action_map_lookup_action(G_ACTION_MAP(window), "sgf-load"));
+  g_assert_nonnull(g_action_map_lookup_action(G_ACTION_MAP(window), "sgf-save-as"));
 
   g_clear_object(&window);
   g_clear_object(&model);
