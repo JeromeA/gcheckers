@@ -134,8 +134,8 @@ Collaborates with: `game.c` and `game_print.c`.
 ## Position finder CLI (`src/find_position.c`)
 Module: CLI front end.
 Role: hardcode ad hoc position-search queries by combining reusable search traversal, predicates, and line formatters.
-Current query scans unique positions after exactly two plies from the initial state and prints those where depth-12
-evaluation is non-zero.
+Current query scans unique positions after exactly four plies from the initial state and prints lines where at least
+one of those four plies is a deep mistake: not a mistake at depth 8, but a mistake at depth 10.
 Collaborates with: `position_search.c`, `position_predicate.c`, and `position_format.c`.
 
 ## GTK application entry (`src/gcheckers.c`, `src/gcheckers_application.c`, `src/gcheckers_application.h`)

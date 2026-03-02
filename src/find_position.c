@@ -7,18 +7,27 @@
 
 typedef struct {
   guint match_count;
-  CheckersEvalProfilePredicate *predicate;
+  CheckersDeepMistakePredicate *predicate;
 } MatchPrinter;
 
 static gboolean match_printer_print(const CheckersMove *line,
                                     guint line_length,
-                                    CheckersEvalProfilePredicate *predicate,
+                                    CheckersDeepMistakePredicate *predicate,
                                     guint match_number) {
   g_return_val_if_fail(predicate != NULL, FALSE);
 
-  gint score = 0;
-  if (!checkers_eval_profile_predicate_get_last_non_zero_score(predicate, &score)) {
-    g_debug("Missing cached score for match output");
+  guint mistake_ply = 0;
+  gint shallow_best_score = 0;
+  gint shallow_played_score = 0;
+  gint deep_best_score = 0;
+  gint deep_played_score = 0;
+  if (!checkers_deep_mistake_predicate_get_last_details(predicate,
+                                                        &mistake_ply,
+                                                        &shallow_best_score,
+                                                        &shallow_played_score,
+                                                        &deep_best_score,
+                                                        &deep_played_score)) {
+    g_debug("Missing cached deep mistake details for match output");
     return FALSE;
   }
 
@@ -28,7 +37,14 @@ static gboolean match_printer_print(const CheckersMove *line,
     return FALSE;
   }
 
-  printf("%u) score=%d line=%s\n", match_number, score, line_text);
+  printf("%u) mistake_ply=%u shallow(best=%d played=%d) deep(best=%d played=%d) line=%s\n",
+         match_number,
+         mistake_ply,
+         shallow_best_score,
+         shallow_played_score,
+         deep_best_score,
+         deep_played_score,
+         line_text);
   g_free(line_text);
   return TRUE;
 }
@@ -57,8 +73,8 @@ int main(int /*argc*/, char **/*argv*/) {
       .deduplicate_positions = TRUE,
   };
 
-  CheckersEvalProfilePredicate predicate = {0};
-  checkers_eval_profile_predicate_init(&predicate, 2, 4, 10);
+  CheckersDeepMistakePredicate predicate = {0};
+  checkers_deep_mistake_predicate_init(&predicate, &game, 4, 8, 12);
 
   MatchPrinter printer = {
       .match_count = 0,
@@ -68,7 +84,7 @@ int main(int /*argc*/, char **/*argv*/) {
   CheckersPositionSearchStats stats = {0};
   gboolean ok = checkers_position_search(&game,
                                          &options,
-                                         checkers_position_predicate_eval_profile,
+                                         checkers_position_predicate_has_deep_mistake,
                                          &predicate,
                                          on_match_found,
                                          &printer,

@@ -2,6 +2,59 @@
 
 #include "ai_alpha_beta.h"
 
+#include <string.h>
+
+static gboolean checkers_moves_equal(const CheckersMove *left, const CheckersMove *right) {
+  g_return_val_if_fail(left != NULL, FALSE);
+  g_return_val_if_fail(right != NULL, FALSE);
+
+  if (left->length != right->length || left->captures != right->captures) {
+    return FALSE;
+  }
+  return memcmp(left->path, right->path, left->length * sizeof(left->path[0])) == 0;
+}
+
+static gboolean checkers_score_played_move(const Game *position,
+                                           const CheckersMove *played_move,
+                                           guint depth,
+                                           gint *out_best_score,
+                                           gint *out_played_score) {
+  g_return_val_if_fail(position != NULL, FALSE);
+  g_return_val_if_fail(played_move != NULL, FALSE);
+  g_return_val_if_fail(depth > 0, FALSE);
+  g_return_val_if_fail(out_best_score != NULL, FALSE);
+  g_return_val_if_fail(out_played_score != NULL, FALSE);
+
+  CheckersScoredMoveList scored_moves = {0};
+  gboolean ok = checkers_ai_alpha_beta_analyze_moves(position, depth, &scored_moves);
+  if (!ok || scored_moves.count == 0) {
+    g_debug("Failed to score position while checking move quality");
+    checkers_scored_move_list_free(&scored_moves);
+    return FALSE;
+  }
+
+  *out_best_score = scored_moves.moves[0].score;
+  gboolean found = FALSE;
+  gint played_score = 0;
+  for (size_t i = 0; i < scored_moves.count; ++i) {
+    if (!checkers_moves_equal(played_move, &scored_moves.moves[i].move)) {
+      continue;
+    }
+    found = TRUE;
+    played_score = scored_moves.moves[i].score;
+    break;
+  }
+
+  checkers_scored_move_list_free(&scored_moves);
+  if (!found) {
+    g_debug("Line move not found among legal scored moves");
+    return FALSE;
+  }
+
+  *out_played_score = played_score;
+  return TRUE;
+}
+
 void checkers_eval_non_zero_predicate_init(CheckersEvalNonZeroPredicate *predicate, guint depth) {
   g_return_if_fail(predicate != NULL);
   g_return_if_fail(depth > 0);
@@ -27,6 +80,47 @@ void checkers_eval_profile_predicate_init(CheckersEvalProfilePredicate *predicat
   predicate->last_score_zero_b = 0;
   predicate->last_score_non_zero = 0;
   predicate->has_last_scores = FALSE;
+}
+
+void checkers_mistake_predicate_init(CheckersMistakePredicate *predicate,
+                                     const Game *root,
+                                     guint max_checked_plies,
+                                     guint depth) {
+  g_return_if_fail(predicate != NULL);
+  g_return_if_fail(root != NULL);
+  g_return_if_fail(max_checked_plies > 0);
+  g_return_if_fail(depth > 0);
+
+  predicate->root = *root;
+  predicate->max_checked_plies = max_checked_plies;
+  predicate->depth = depth;
+  predicate->last_mistake_ply = 0;
+  predicate->last_best_score = 0;
+  predicate->last_played_score = 0;
+  predicate->has_last_mistake = FALSE;
+}
+
+void checkers_deep_mistake_predicate_init(CheckersDeepMistakePredicate *predicate,
+                                          const Game *root,
+                                          guint max_checked_plies,
+                                          guint shallow_depth,
+                                          guint deep_depth) {
+  g_return_if_fail(predicate != NULL);
+  g_return_if_fail(root != NULL);
+  g_return_if_fail(max_checked_plies > 0);
+  g_return_if_fail(shallow_depth > 0);
+  g_return_if_fail(deep_depth > 0);
+
+  predicate->root = *root;
+  predicate->max_checked_plies = max_checked_plies;
+  predicate->shallow_depth = shallow_depth;
+  predicate->deep_depth = deep_depth;
+  predicate->last_mistake_ply = 0;
+  predicate->last_shallow_best_score = 0;
+  predicate->last_shallow_played_score = 0;
+  predicate->last_deep_best_score = 0;
+  predicate->last_deep_played_score = 0;
+  predicate->has_last_mistake = FALSE;
 }
 
 gboolean checkers_position_eval_best_score(const Game *position, guint depth, gint *out_score) {
@@ -89,6 +183,104 @@ gboolean checkers_position_predicate_eval_profile(const Game *position,
   return score_zero_a == 0 && score_zero_b == 0 && score_non_zero != 0;
 }
 
+gboolean checkers_position_predicate_has_mistake(const Game */*position*/,
+                                                 const CheckersMove *line,
+                                                 guint line_length,
+                                                 gpointer user_data) {
+  g_return_val_if_fail(line != NULL, FALSE);
+  g_return_val_if_fail(user_data != NULL, FALSE);
+
+  CheckersMistakePredicate *predicate = user_data;
+  if (line_length < predicate->max_checked_plies) {
+    g_debug("Insufficient line length for mistake predicate");
+    predicate->has_last_mistake = FALSE;
+    return FALSE;
+  }
+
+  Game current = predicate->root;
+  predicate->has_last_mistake = FALSE;
+  for (guint ply = 0; ply < predicate->max_checked_plies; ++ply) {
+    gint best_score = 0;
+    gint played_score = 0;
+    if (!checkers_score_played_move(&current, &line[ply], predicate->depth, &best_score, &played_score)) {
+      return FALSE;
+    }
+
+    if (played_score < best_score) {
+      predicate->last_mistake_ply = ply + 1;
+      predicate->last_best_score = best_score;
+      predicate->last_played_score = played_score;
+      predicate->has_last_mistake = TRUE;
+      return TRUE;
+    }
+
+    if (game_apply_move(&current, &line[ply]) != 0) {
+      g_debug("Failed to replay line while checking mistakes");
+      return FALSE;
+    }
+  }
+
+  return FALSE;
+}
+
+gboolean checkers_position_predicate_has_deep_mistake(const Game */*position*/,
+                                                      const CheckersMove *line,
+                                                      guint line_length,
+                                                      gpointer user_data) {
+  g_return_val_if_fail(line != NULL, FALSE);
+  g_return_val_if_fail(user_data != NULL, FALSE);
+
+  CheckersDeepMistakePredicate *predicate = user_data;
+  if (line_length < predicate->max_checked_plies) {
+    g_debug("Insufficient line length for deep mistake predicate");
+    predicate->has_last_mistake = FALSE;
+    return FALSE;
+  }
+
+  Game current = predicate->root;
+  predicate->has_last_mistake = FALSE;
+  for (guint ply = 0; ply < predicate->max_checked_plies; ++ply) {
+    gint shallow_best_score = 0;
+    gint shallow_played_score = 0;
+    if (!checkers_score_played_move(&current,
+                                    &line[ply],
+                                    predicate->shallow_depth,
+                                    &shallow_best_score,
+                                    &shallow_played_score)) {
+      return FALSE;
+    }
+
+    gint deep_best_score = 0;
+    gint deep_played_score = 0;
+    if (!checkers_score_played_move(&current,
+                                    &line[ply],
+                                    predicate->deep_depth,
+                                    &deep_best_score,
+                                    &deep_played_score)) {
+      return FALSE;
+    }
+
+    gboolean shallow_is_mistake = shallow_played_score < shallow_best_score;
+    gboolean deep_is_mistake = deep_played_score < deep_best_score;
+    if (!shallow_is_mistake && deep_is_mistake) {
+      predicate->last_mistake_ply = ply + 1;
+      predicate->last_shallow_best_score = shallow_best_score;
+      predicate->last_shallow_played_score = shallow_played_score;
+      predicate->last_deep_best_score = deep_best_score;
+      predicate->last_deep_played_score = deep_played_score;
+      predicate->has_last_mistake = TRUE;
+      return TRUE;
+    }
+
+    if (game_apply_move(&current, &line[ply]) != 0) {
+      g_debug("Failed to replay line while checking deep mistakes");
+      return FALSE;
+    }
+  }
+
+  return FALSE;
+}
+
 gboolean checkers_eval_non_zero_predicate_get_last_score(const CheckersEvalNonZeroPredicate *predicate,
                                                          gint *out_score) {
   g_return_val_if_fail(predicate != NULL, FALSE);
@@ -114,5 +306,51 @@ gboolean checkers_eval_profile_predicate_get_last_non_zero_score(const CheckersE
   }
 
   *out_score = predicate->last_score_non_zero;
+  return TRUE;
+}
+
+gboolean checkers_mistake_predicate_get_last_details(const CheckersMistakePredicate *predicate,
+                                                     guint *out_ply,
+                                                     gint *out_best_score,
+                                                     gint *out_played_score) {
+  g_return_val_if_fail(predicate != NULL, FALSE);
+  g_return_val_if_fail(out_ply != NULL, FALSE);
+  g_return_val_if_fail(out_best_score != NULL, FALSE);
+  g_return_val_if_fail(out_played_score != NULL, FALSE);
+
+  if (!predicate->has_last_mistake) {
+    g_debug("No cached mistake details available");
+    return FALSE;
+  }
+
+  *out_ply = predicate->last_mistake_ply;
+  *out_best_score = predicate->last_best_score;
+  *out_played_score = predicate->last_played_score;
+  return TRUE;
+}
+
+gboolean checkers_deep_mistake_predicate_get_last_details(const CheckersDeepMistakePredicate *predicate,
+                                                          guint *out_ply,
+                                                          gint *out_shallow_best_score,
+                                                          gint *out_shallow_played_score,
+                                                          gint *out_deep_best_score,
+                                                          gint *out_deep_played_score) {
+  g_return_val_if_fail(predicate != NULL, FALSE);
+  g_return_val_if_fail(out_ply != NULL, FALSE);
+  g_return_val_if_fail(out_shallow_best_score != NULL, FALSE);
+  g_return_val_if_fail(out_shallow_played_score != NULL, FALSE);
+  g_return_val_if_fail(out_deep_best_score != NULL, FALSE);
+  g_return_val_if_fail(out_deep_played_score != NULL, FALSE);
+
+  if (!predicate->has_last_mistake) {
+    g_debug("No cached deep mistake details available");
+    return FALSE;
+  }
+
+  *out_ply = predicate->last_mistake_ply;
+  *out_shallow_best_score = predicate->last_shallow_best_score;
+  *out_shallow_played_score = predicate->last_shallow_played_score;
+  *out_deep_best_score = predicate->last_deep_best_score;
+  *out_deep_played_score = predicate->last_deep_played_score;
   return TRUE;
 }
