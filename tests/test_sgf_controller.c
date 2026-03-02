@@ -2,7 +2,7 @@
 
 #include "board_view.h"
 #include "checkers_model.h"
-#include "gcheckers_sgf_controller.h"
+#include "sgf_controller.h"
 
 #include <string.h>
 

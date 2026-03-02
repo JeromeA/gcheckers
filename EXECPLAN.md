@@ -66,12 +66,12 @@ branching/replay behavior without history-size polling.
 Relevant modules:
 
 - `src/sgf_tree.c`, `src/sgf_tree.h`: SGF node graph and current-node pointer.
-- `src/gcheckers_sgf_controller.c`, `src/gcheckers_sgf_controller.h`: SGF authority and SGF<->model projection logic.
+- `src/sgf_controller.c`, `src/sgf_controller.h`: SGF authority and SGF<->model projection logic.
 - `src/checkers_model.c`, `src/checkers_model.h`: model API and state-change emission.
 - `src/game.c`, `src/game.h`: core game state transitions (now without history buffer).
-- `src/board_selection_controller.c`, `src/board_view.c`, `src/gcheckers_window.c`: board and window input/control
+- `src/board_selection_controller.c`, `src/board_view.c`, `src/window.c`: board and window input/control
   paths.
-- `tests/test_gcheckers_sgf_controller.c`, `tests/test_gcheckers_window.c`, `tests/test_checkers_model.c`,
+- `tests/test_sgf_controller.c`, `tests/test_window.c`, `tests/test_checkers_model.c`,
   `tests/test_game.c`: regression and behavior tests for the refactor.
 
 ## Plan of Work
@@ -136,5 +136,5 @@ Plan updates:
 - 2026-02-20: Replaced prior board-view refactor plan with SGF-source-of-truth execution record to match implemented
   architecture changes requested in this task.
 - 2026-03-01: Added SGF load/save architecture split: GTK-free `sgf_io` core module (`src/sgf_io.c`) plus GTK window
-  action integration (`win.sgf-load`, `win.sgf-save-as`) in `src/gcheckers_sgf_file_actions.c`, with menu wiring in
-  `src/gcheckers_application.c` and roundtrip coverage in `tests/test_sgf_io.c`.
+  action integration (`win.sgf-load`, `win.sgf-save-as`) in `src/sgf_file_actions.c`, with menu wiring in
+  `src/application.c` and roundtrip coverage in `tests/test_sgf_io.c`.

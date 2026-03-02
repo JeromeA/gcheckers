@@ -1,4 +1,4 @@
-#include "gcheckers_style.h"
+#include "style.h"
 
 #include <gtk/gtk.h>
 

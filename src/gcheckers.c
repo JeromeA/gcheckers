@@ -1,4 +1,4 @@
-#include "gcheckers_application.h"
+#include "application.h"
 
 int main(int argc, char **argv) {
   GCheckersApplication *app = gcheckers_application_new();

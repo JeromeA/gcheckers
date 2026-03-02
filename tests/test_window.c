@@ -1,8 +1,8 @@
 #include <gtk/gtk.h>
 
 #include "checkers_model.h"
-#include "gcheckers_sgf_controller.h"
-#include "gcheckers_window.h"
+#include "sgf_controller.h"
+#include "window.h"
 #include "player_controls_panel.h"
 #include "sgf_tree.h"
 

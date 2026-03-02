@@ -1,6 +1,6 @@
 #include "piece_palette.h"
 
-#include "gcheckers_man_paintable.h"
+#include "man_paintable.h"
 
 struct _PiecePalette {
   GObject parent_instance;

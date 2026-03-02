@@ -1,6 +1,6 @@
 # Project overview
 
-## `GCheckersWindow` (`src/gcheckers_window.c`)
+## `GCheckersWindow` (`src/window.c`)
 Class: `GCheckersWindow` (`GtkApplicationWindow`).
 Role: composition root that binds model state to UI updates, keeps board input available, and coordinates auto-play.
 Owns: `GCheckersModel`, `BoardView`, `PlayerControlsPanel`, and `GCheckersSgfController`.
@@ -23,7 +23,7 @@ Lifecycle: sinks and retains an owned `PlayerControlsPanel` reference, removes i
 during dispose via `gcheckers_widget_remove_from_parent()`, and then clears its references.
 during dispose, cancels any pending auto-move idle source, and then clears its references.
 
-## `GCheckersSgfController` (`src/gcheckers_sgf_controller.c`)
+## `GCheckersSgfController` (`src/sgf_controller.c`)
 Class: `GCheckersSgfController` (`GObject`).
 Role: SGF timeline authority and synchronization point between SGF current-node transitions and game state updates.
 Move application is SGF-first: validate model move, append under SGF current, set SGF current, then project that
@@ -46,7 +46,7 @@ Signals: `control-changed` for window-level coordination.
 Collaborates with: `GCheckersWindow` (signal handlers and `player_controls_panel_set_all_user()`) and GTK widgets
 (`GtkDropDown`, `GtkScale`).
 
-## `gcheckers_style_init()` (`src/gcheckers_style.c`)
+## `gcheckers_style_init()` (`src/style.c`)
 Module: `gcheckers_style_init()` (style helper, not a class).
 Role: installs application CSS once per process using `g_once_init_enter/leave`, including SGF disc colors.
 Owns: CSS string and `GtkCssProvider` setup.
@@ -138,7 +138,7 @@ Current query scans unique positions after exactly four plies from the initial s
 one of those four plies is a deep mistake: not a mistake at depth 8, but a mistake at depth 10.
 Collaborates with: `position_search.c`, `position_predicate.c`, and `position_format.c`.
 
-## GTK application entry (`src/gcheckers.c`, `src/gcheckers_application.c`, `src/gcheckers_application.h`)
+## GTK application entry (`src/gcheckers.c`, `src/application.c`, `src/application.h`)
 Class: `GCheckersApplication` (`GtkApplication`).
 Role: define the GTK application type and activation flow that creates the main window and model, installs app actions
 (`app.new-game`, `app.import`, `app.force-move`, `app.quit`), installs window SGF navigation actions, and publishes a
@@ -178,7 +178,7 @@ Module: piece paintable palette.
 Role: provide paintables and fallback symbols for checker men and kings.
 Collaborates with: `BoardSquare` and paintable factories.
 
-### Man paintable (`src/gcheckers_man_paintable.c`, `src/gcheckers_man_paintable.h`)
+### Man paintable (`src/man_paintable.c`, `src/man_paintable.h`)
 Module: `GdkPaintable` factory.
 Role: render checker men and kings as paintables for GTK widgets.
 Collaborates with: `PiecePalette` and board rendering.
@@ -238,7 +238,7 @@ Module: SGF selection logic.
 Role: track SGF selection, update CSS classes, and navigate siblings and parents.
 Collaborates with: `SgfView`, the SGF tree, and the scroller.
 
-### SGF file actions (`src/gcheckers_sgf_file_actions.c`, `src/gcheckers_sgf_file_actions.h`)
+### SGF file actions (`src/sgf_file_actions.c`, `src/sgf_file_actions.h`)
 Module: GTK SGF file action integration.
 Role: register `win.sgf-load` and `win.sgf-save-as` actions, present `GtkFileDialog` file pickers, call SGF
 controller load/save APIs, and show errors as modal dialogs.

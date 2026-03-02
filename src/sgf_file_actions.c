@@ -1,4 +1,4 @@
-#include "gcheckers_sgf_file_actions.h"
+#include "sgf_file_actions.h"
 
 static void gcheckers_window_show_file_error_dialog(GCheckersWindow *self, const char *title, const char *message) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));

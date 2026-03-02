@@ -1,4 +1,4 @@
-#include "gcheckers_window.h"
+#include "window.h"
 
 #include "bga_client.h"
 

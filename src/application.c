@@ -1,7 +1,7 @@
-#include "gcheckers_application.h"
+#include "application.h"
 
 #include "checkers_model.h"
-#include "gcheckers_window.h"
+#include "window.h"
 
 struct _GCheckersApplication {
   GtkApplication parent_instance;

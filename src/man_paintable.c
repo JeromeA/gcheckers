@@ -1,4 +1,4 @@
-#include "gcheckers_man_paintable.h"
+#include "man_paintable.h"
 
 #include <math.h>
 

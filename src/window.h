@@ -2,7 +2,7 @@
 #define GCHECKERS_WINDOW_H
 
 #include "checkers_model.h"
-#include "gcheckers_sgf_controller.h"
+#include "sgf_controller.h"
 #include "player_controls_panel.h"
 
 #include <gtk/gtk.h>

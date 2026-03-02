@@ -1,7 +1,7 @@
 #ifndef GCHECKERS_SGF_FILE_ACTIONS_H
 #define GCHECKERS_SGF_FILE_ACTIONS_H
 
-#include "gcheckers_window.h"
+#include "window.h"
 
 G_BEGIN_DECLS
 

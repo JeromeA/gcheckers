@@ -1,4 +1,4 @@
-#include "gcheckers_sgf_controller.h"
+#include "sgf_controller.h"
 #include "sgf_io.h"
 
 #include <string.h>

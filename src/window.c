@@ -1,10 +1,10 @@
 #include "ai_alpha_beta.h"
-#include "gcheckers_window.h"
+#include "window.h"
 
 #include "board_view.h"
-#include "gcheckers_sgf_file_actions.h"
-#include "gcheckers_sgf_controller.h"
-#include "gcheckers_style.h"
+#include "sgf_file_actions.h"
+#include "sgf_controller.h"
+#include "style.h"
 #include "player_controls_panel.h"
 #include "widget_utils.h"
 
