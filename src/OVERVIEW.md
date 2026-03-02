@@ -93,8 +93,25 @@ Collaborates with: `GCheckersWindow` and SGF controllers via signals and high-le
 Module: alpha-beta search.
 Role: choose a move and analyze all legal moves via depth-limited alpha-beta with a material heuristic and
 terminal-win scoring. Root move choice randomizes among all equal best-scoring moves, so repeated games can vary
-without lowering evaluation quality.
+without lowering evaluation quality. Also exposes direct position scoring for tooling predicates.
 Collaborates with: `checkers_model.c` for model-facing AI move selection and analysis text generation.
+
+## Position search helpers (`src/position_search.c`, `src/position_search.h`)
+Module: position traversal.
+Role: enumerate game positions over a ply range, apply caller-provided predicates, report matches via callbacks, and
+optionally deduplicate transpositions by board state + side to move.
+Collaborates with: predicate and formatting modules plus `find_position`.
+
+## Position predicates (`src/position_predicate.c`, `src/position_predicate.h`)
+Module: reusable position predicates.
+Role: provide search predicates and helpers such as "alpha-beta score is non-zero at depth N", with a cached score
+for immediate match reporting.
+Collaborates with: `ai_alpha_beta.c` and `position_search.c`.
+
+## Position formatting (`src/position_format.c`, `src/position_format.h`)
+Module: position output formatting.
+Role: format move sequences for CLI/tooling output.
+Collaborates with: `find_position` and search callbacks.
 
 ## BoardGameArena client (`src/bga_client.c`, `src/bga_client.h`)
 Module: BoardGameArena login HTTP client.
@@ -113,6 +130,13 @@ parsing + live login smoke test with env-provided credentials).
 Module: CLI front end.
 Role: provide a prompt-driven loop for human vs. AI play in the terminal.
 Collaborates with: `game.c` and `game_print.c`.
+
+## Position finder CLI (`src/find_position.c`)
+Module: CLI front end.
+Role: hardcode ad hoc position-search queries by combining reusable search traversal, predicates, and line formatters.
+Current query scans unique positions after exactly two plies from the initial state and prints those where depth-12
+evaluation is non-zero.
+Collaborates with: `position_search.c`, `position_predicate.c`, and `position_format.c`.
 
 ## GTK application entry (`src/gcheckers.c`, `src/gcheckers_application.c`, `src/gcheckers_application.h`)
 Class: `GCheckersApplication` (`GtkApplication`).

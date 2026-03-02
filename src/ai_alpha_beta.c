@@ -247,6 +247,31 @@ gboolean checkers_ai_alpha_beta_analyze_moves(const Game *game, guint max_depth,
   return checkers_ai_alpha_beta_analyze_moves_cancellable(game, max_depth, out_moves, NULL, NULL);
 }
 
+gboolean checkers_ai_alpha_beta_evaluate_position(const Game *game, guint max_depth, gint *out_score) {
+  g_return_val_if_fail(game != NULL, FALSE);
+  g_return_val_if_fail(max_depth > 0, FALSE);
+  g_return_val_if_fail(out_score != NULL, FALSE);
+
+  Game root = *game;
+  gboolean cancelled = FALSE;
+  gint score = checkers_ai_alpha_beta_search(&root,
+                                             max_depth,
+                                             0,
+                                             INT_MIN,
+                                             INT_MAX,
+                                             game->state.turn,
+                                             NULL,
+                                             NULL,
+                                             &cancelled);
+  if (cancelled) {
+    g_debug("Unexpected cancellation while evaluating position");
+    return FALSE;
+  }
+
+  *out_score = score;
+  return TRUE;
+}
+
 gboolean checkers_ai_alpha_beta_choose_move(const Game *game, guint max_depth, CheckersMove *out_move) {
   g_return_val_if_fail(game != NULL, FALSE);
   g_return_val_if_fail(out_move != NULL, FALSE);

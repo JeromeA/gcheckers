@@ -24,6 +24,7 @@ gboolean checkers_ai_alpha_beta_analyze_moves_cancellable(const Game *game,
                                                           CheckersScoredMoveList *out_moves,
                                                           CheckersAiCancelFunc should_cancel,
                                                           gpointer user_data);
+gboolean checkers_ai_alpha_beta_evaluate_position(const Game *game, guint max_depth, gint *out_score);
 void checkers_scored_move_list_free(CheckersScoredMoveList *list);
 
 #endif
