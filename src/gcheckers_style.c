@@ -23,7 +23,7 @@ static const char *gcheckers_style_css =
     "  padding: 2px 6px;"
     "}"
     ".square-index {"
-    "  font-size: 6px;"
+    "  font-size: 9px;"
     "  font-weight: 600;"
     "  padding: 1px 3px;"
     "  border-radius: 6px;"

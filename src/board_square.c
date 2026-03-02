@@ -40,9 +40,9 @@ static void board_square_build(BoardSquare *self) {
 
   GtkWidget *index_label = gtk_label_new(NULL);
   gtk_label_set_xalign(GTK_LABEL(index_label), 0.5f);
-  gtk_widget_set_halign(index_label, GTK_ALIGN_CENTER);
+  gtk_widget_set_halign(index_label, GTK_ALIGN_START);
   gtk_widget_set_valign(index_label, GTK_ALIGN_END);
-  gtk_widget_set_margin_bottom(index_label, 2);
+  gtk_widget_set_margin_bottom(index_label, 0);
   gtk_widget_add_css_class(index_label, "square-index");
 
   gtk_overlay_set_child(GTK_OVERLAY(container), piece_stack);
