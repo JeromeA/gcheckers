@@ -8,6 +8,8 @@
 #include "player_controls_panel.h"
 #include "widget_utils.h"
 
+#include <string.h>
+
 struct _GCheckersWindow {
   GtkApplicationWindow parent_instance;
   GCheckersModel *model;
@@ -22,7 +24,11 @@ struct _GCheckersWindow {
   gulong state_handler_id;
   guint auto_move_source_id;
   guint paned_tick_id;
+  guint analysis_ui_source_id;
   gint analysis_generation;
+  GMutex analysis_report_mutex;
+  char *analysis_report_text;
+  gint analysis_report_generation;
 };
 
 G_DEFINE_TYPE(GCheckersWindow, gcheckers_window, GTK_TYPE_APPLICATION_WINDOW)
@@ -31,13 +37,15 @@ typedef struct {
   GCheckersWindow *self;
   Game game;
   gint generation;
+  guint current_depth;
+  gint64 last_progress_publish_us;
+  guint last_completed_depth;
+  char *last_completed_text;
 } GCheckersWindowAnalysisTask;
 
-typedef struct {
-  GCheckersWindow *self;
-  gint generation;
-  char *text;
-} GCheckersWindowAnalysisUpdate;
+enum {
+  GCHECKERS_WINDOW_ANALYSIS_UI_INTERVAL_MS = 100,
+};
 
 static gboolean gcheckers_window_constrain_main_split_cb(GtkWidget * /*widget*/,
                                                          GdkFrameClock * /*frame_clock*/,
@@ -164,36 +172,72 @@ static gboolean gcheckers_window_should_cancel_analysis(gpointer user_data) {
   return g_atomic_int_get(&task->self->analysis_generation) != task->generation;
 }
 
-static gboolean gcheckers_window_analysis_publish_cb(gpointer user_data) {
-  GCheckersWindowAnalysisUpdate *update = user_data;
-  g_return_val_if_fail(update != NULL, G_SOURCE_REMOVE);
-
-  if (g_atomic_int_get(&update->self->analysis_generation) == update->generation) {
-    gcheckers_window_set_analysis_text(update->self, update->text);
-  }
-
-  g_free(update->text);
-  g_object_unref(update->self);
-  g_free(update);
-  return G_SOURCE_REMOVE;
-}
-
 static void gcheckers_window_analysis_publish(GCheckersWindow *self, gint generation, const char *text) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
   g_return_if_fail(text != NULL);
 
-  GCheckersWindowAnalysisUpdate *update = g_new0(GCheckersWindowAnalysisUpdate, 1);
-  update->self = g_object_ref(self);
-  update->generation = generation;
-  update->text = g_strdup(text);
-  g_main_context_invoke(NULL, gcheckers_window_analysis_publish_cb, update);
+  g_mutex_lock(&self->analysis_report_mutex);
+  if (generation >= self->analysis_report_generation) {
+    g_free(self->analysis_report_text);
+    self->analysis_report_text = g_strdup(text);
+    self->analysis_report_generation = generation;
+  }
+  g_mutex_unlock(&self->analysis_report_mutex);
 }
 
-static char *gcheckers_window_analysis_format_depth(const CheckersScoredMoveList *moves, guint depth) {
+static gboolean gcheckers_window_analysis_flush_cb(gpointer user_data) {
+  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
+  g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), G_SOURCE_REMOVE);
+
+  g_autofree char *text = NULL;
+  gint generation = 0;
+
+  g_mutex_lock(&self->analysis_report_mutex);
+  if (self->analysis_report_text != NULL) {
+    text = g_strdup(self->analysis_report_text);
+    generation = self->analysis_report_generation;
+    g_clear_pointer(&self->analysis_report_text, g_free);
+  }
+  g_mutex_unlock(&self->analysis_report_mutex);
+
+  if (text != NULL && g_atomic_int_get(&self->analysis_generation) == generation) {
+    gcheckers_window_set_analysis_text(self, text);
+  }
+
+  if (!self->analyze_toggle_button || !GTK_IS_TOGGLE_BUTTON(self->analyze_toggle_button)) {
+    self->analysis_ui_source_id = 0;
+    return G_SOURCE_REMOVE;
+  }
+  if (!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(self->analyze_toggle_button))) {
+    self->analysis_ui_source_id = 0;
+    return G_SOURCE_REMOVE;
+  }
+
+  return G_SOURCE_CONTINUE;
+}
+
+static void gcheckers_window_start_analysis_flush_loop(GCheckersWindow *self) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+
+  if (self->analysis_ui_source_id != 0) {
+    return;
+  }
+
+  self->analysis_ui_source_id = g_timeout_add_full(G_PRIORITY_DEFAULT,
+                                                   GCHECKERS_WINDOW_ANALYSIS_UI_INTERVAL_MS,
+                                                   gcheckers_window_analysis_flush_cb,
+                                                   self,
+                                                   NULL);
+}
+
+static char *gcheckers_window_analysis_format_depth(const CheckersScoredMoveList *moves,
+                                                    guint depth,
+                                                    guint64 nodes) {
   g_return_val_if_fail(moves != NULL, NULL);
 
   GString *text = g_string_new(NULL);
   g_string_append_printf(text, "Analysis depth: %u\n", depth);
+  g_string_append_printf(text, "Nodes: %" G_GUINT64_FORMAT "\n", nodes);
   g_string_append(text, "Best to worst:\n");
   for (size_t i = 0; i < moves->count; ++i) {
     char notation[128];
@@ -206,18 +250,78 @@ static char *gcheckers_window_analysis_format_depth(const CheckersScoredMoveList
   return g_string_free(text, FALSE);
 }
 
+static char *gcheckers_window_analysis_extract_scores(const char *report_text) {
+  g_return_val_if_fail(report_text != NULL, NULL);
+
+  const char *scores = strstr(report_text, "Best to worst:\n");
+  if (scores == NULL) {
+    return g_strdup("(scores unavailable)\n");
+  }
+
+  return g_strdup(scores);
+}
+
+static char *gcheckers_window_analysis_format_progress(const GCheckersWindowAnalysisTask *task, guint64 nodes) {
+  g_return_val_if_fail(task != NULL, NULL);
+
+  GString *text = g_string_new(NULL);
+  g_string_append_printf(text, "Analysis depth: %u (searching)\n", task->current_depth);
+  g_string_append_printf(text, "Nodes: %" G_GUINT64_FORMAT "\n", nodes);
+
+  if (task->last_completed_text == NULL) {
+    g_string_append(text, "Best to worst:\n");
+    g_string_append(text, "(searching...)\n");
+    return g_string_free(text, FALSE);
+  }
+
+  g_autofree char *scores = gcheckers_window_analysis_extract_scores(task->last_completed_text);
+  g_string_append_printf(text, "Last completed depth: %u\n", task->last_completed_depth);
+  g_string_append(text, scores);
+  return g_string_free(text, FALSE);
+}
+
+static void gcheckers_window_analysis_on_progress(guint64 nodes, gpointer user_data) {
+  GCheckersWindowAnalysisTask *task = user_data;
+  g_return_if_fail(task != NULL);
+  g_return_if_fail(GCHECKERS_IS_WINDOW(task->self));
+
+  const gint64 interval_us = (gint64)GCHECKERS_WINDOW_ANALYSIS_UI_INTERVAL_MS * 1000;
+  gint64 now = g_get_monotonic_time();
+  if (task->last_progress_publish_us != 0 && now - task->last_progress_publish_us < interval_us) {
+    return;
+  }
+
+  task->last_progress_publish_us = now;
+  g_autofree char *text = gcheckers_window_analysis_format_progress(task, nodes);
+  if (text == NULL) {
+    g_debug("Failed to format analysis progress text");
+    return;
+  }
+
+  gcheckers_window_analysis_publish(task->self, task->generation, text);
+}
+
 static gpointer gcheckers_window_analysis_thread(gpointer user_data) {
   GCheckersWindowAnalysisTask *task = user_data;
   g_return_val_if_fail(task != NULL, NULL);
 
   guint depth = 8;
   while (!gcheckers_window_should_cancel_analysis(task)) {
+    task->current_depth = depth;
+    task->last_progress_publish_us = 0;
+    gcheckers_window_analysis_on_progress(0, task);
+
     CheckersScoredMoveList moves = {0};
-    gboolean ok = checkers_ai_alpha_beta_analyze_moves_cancellable(&task->game,
-                                                                   depth,
-                                                                   &moves,
-                                                                   gcheckers_window_should_cancel_analysis,
-                                                                   task);
+    guint64 nodes = 0;
+    gboolean ok = checkers_ai_alpha_beta_analyze_moves_cancellable_with_nodes_progress(
+        &task->game,
+        depth,
+        &moves,
+        gcheckers_window_should_cancel_analysis,
+        task,
+        &nodes,
+        gcheckers_window_analysis_on_progress,
+        task);
     if (!ok) {
       if (!gcheckers_window_should_cancel_analysis(task)) {
         gcheckers_window_analysis_publish(task->self, task->generation, "No legal moves to analyze.");
@@ -225,12 +329,15 @@ static gpointer gcheckers_window_analysis_thread(gpointer user_data) {
       break;
     }
 
-    g_autofree char *text = gcheckers_window_analysis_format_depth(&moves, depth);
+    g_autofree char *text = gcheckers_window_analysis_format_depth(&moves, depth, nodes);
     checkers_scored_move_list_free(&moves);
     if (!text) {
       break;
     }
 
+    g_free(task->last_completed_text);
+    task->last_completed_text = g_strdup(text);
+    task->last_completed_depth = depth;
     gcheckers_window_analysis_publish(task->self, task->generation, text);
     if (depth == G_MAXUINT) {
       break;
@@ -239,6 +346,7 @@ static gpointer gcheckers_window_analysis_thread(gpointer user_data) {
   }
 
   g_object_unref(task->self);
+  g_free(task->last_completed_text);
   g_free(task);
   return NULL;
 }
@@ -247,6 +355,11 @@ static void gcheckers_window_stop_analysis(GCheckersWindow *self) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
 
   g_atomic_int_inc(&self->analysis_generation);
+  g_clear_handle_id(&self->analysis_ui_source_id, g_source_remove);
+
+  g_mutex_lock(&self->analysis_report_mutex);
+  g_clear_pointer(&self->analysis_report_text, g_free);
+  g_mutex_unlock(&self->analysis_report_mutex);
 }
 
 static void gcheckers_window_start_analysis(GCheckersWindow *self) {
@@ -261,6 +374,7 @@ static void gcheckers_window_start_analysis(GCheckersWindow *self) {
 
   gint generation = g_atomic_int_add(&self->analysis_generation, 1) + 1;
   gcheckers_window_set_analysis_text(self, "Analyzing...");
+  gcheckers_window_start_analysis_flush_loop(self);
 
   GCheckersWindowAnalysisTask *task = g_new0(GCheckersWindowAnalysisTask, 1);
   task->self = g_object_ref(self);
@@ -584,6 +698,7 @@ static void gcheckers_window_dispose(GObject *object) {
 
   gboolean panel_removed = gcheckers_window_unparent_controls_panel(self);
   g_clear_handle_id(&self->auto_move_source_id, g_source_remove);
+  g_clear_handle_id(&self->analysis_ui_source_id, g_source_remove);
 
   gcheckers_window_unparent_controls_panel(self);
 
@@ -607,16 +722,30 @@ static void gcheckers_window_dispose(GObject *object) {
   G_OBJECT_CLASS(gcheckers_window_parent_class)->dispose(object);
 }
 
+static void gcheckers_window_finalize(GObject *object) {
+  GCheckersWindow *self = GCHECKERS_WINDOW(object);
+
+  g_clear_pointer(&self->analysis_report_text, g_free);
+  g_mutex_clear(&self->analysis_report_mutex);
+
+  G_OBJECT_CLASS(gcheckers_window_parent_class)->finalize(object);
+}
+
 static void gcheckers_window_class_init(GCheckersWindowClass *klass) {
   GObjectClass *object_class = G_OBJECT_CLASS(klass);
 
   object_class->dispose = gcheckers_window_dispose;
+  object_class->finalize = gcheckers_window_finalize;
 }
 
 static void gcheckers_window_init(GCheckersWindow *self) {
   self->auto_move_source_id = 0;
   self->paned_tick_id = 0;
+  self->analysis_ui_source_id = 0;
   self->analysis_generation = 1;
+  self->analysis_report_text = NULL;
+  self->analysis_report_generation = 0;
+  g_mutex_init(&self->analysis_report_mutex);
   self->applied_ruleset = PLAYER_RULESET_INTERNATIONAL;
 
   static const GActionEntry window_actions[] = {

@@ -36,6 +36,20 @@ static gboolean test_checkers_model_move_equals(const CheckersMove *left, const 
   return memcmp(left->path, right->path, left->length * sizeof(left->path[0])) == 0;
 }
 
+typedef struct {
+  guint calls;
+  guint64 last_nodes;
+} ProgressProbe;
+
+static void test_model_analysis_progress_probe(guint64 nodes, gpointer user_data) {
+  ProgressProbe *probe = user_data;
+  g_return_if_fail(probe != NULL);
+
+  assert(nodes >= probe->last_nodes);
+  probe->last_nodes = nodes;
+  probe->calls++;
+}
+
 static void test_model_reset_and_moves(void) {
   GCheckersModel *model = gcheckers_model_new();
 
@@ -152,9 +166,34 @@ static void test_model_analyze_moves_text(void) {
 
   char *analysis = gcheckers_model_analyze_moves_text(model, 4);
   assert(analysis != NULL);
+  const char *nodes_line = strstr(analysis, "Nodes: ");
+  assert(nodes_line != NULL);
+  guint64 nodes = g_ascii_strtoull(nodes_line + strlen("Nodes: "), NULL, 10);
+  assert(nodes > 0);
   assert(strstr(analysis, "Best to worst:") != NULL);
   g_free(analysis);
 
+  g_object_unref(model);
+}
+
+static void test_model_analyze_moves_progress_callback(void) {
+  GCheckersModel *model = gcheckers_model_new();
+  Game game = {0};
+  bool copied = gcheckers_model_copy_game(model, &game);
+  assert(copied);
+
+  ProgressProbe probe = {0};
+  CheckersScoredMoveList scored_moves = {0};
+  guint64 nodes = 0;
+  gboolean analyzed = checkers_ai_alpha_beta_analyze_moves_cancellable_with_nodes_progress(
+      &game, 5, &scored_moves, NULL, NULL, &nodes, test_model_analysis_progress_probe, &probe);
+  assert(analyzed);
+  assert(scored_moves.count > 0);
+  assert(nodes > 0);
+  assert(probe.calls > 0);
+  assert(probe.last_nodes > 0);
+
+  checkers_scored_move_list_free(&scored_moves);
   g_object_unref(model);
 }
 
@@ -230,6 +269,7 @@ int main(void) {
   test_model_choose_best_move_returns_legal_move();
   test_model_choose_best_move_randomized_within_best_ties();
   test_model_analyze_moves_text();
+  test_model_analyze_moves_progress_callback();
   test_model_set_rules();
   test_model_peek_last_move();
   test_model_reset_clears_last_move();

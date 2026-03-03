@@ -67,9 +67,19 @@ static gint checkers_ai_alpha_beta_search(Game *game,
                                           CheckersColor perspective,
                                           CheckersAiCancelFunc should_cancel,
                                           gpointer user_data,
-                                          gboolean *cancelled) {
+                                          gboolean *cancelled,
+                                          guint64 *nodes,
+                                          CheckersAiProgressFunc on_progress,
+                                          gpointer progress_user_data) {
   g_return_val_if_fail(game != NULL, 0);
   g_return_val_if_fail(cancelled != NULL, 0);
+
+  if (nodes != NULL) {
+    (*nodes)++;
+    if (on_progress != NULL) {
+      on_progress(*nodes, progress_user_data);
+    }
+  }
 
   if (should_cancel && should_cancel(user_data)) {
     *cancelled = TRUE;
@@ -114,7 +124,10 @@ static gint checkers_ai_alpha_beta_search(Game *game,
                                                perspective,
                                                should_cancel,
                                                user_data,
-                                               cancelled);
+                                               cancelled,
+                                               nodes,
+                                               on_progress,
+                                               progress_user_data);
     if (*cancelled) {
       break;
     }
@@ -176,6 +189,39 @@ gboolean checkers_ai_alpha_beta_analyze_moves_cancellable(const Game *game,
                                                           CheckersScoredMoveList *out_moves,
                                                           CheckersAiCancelFunc should_cancel,
                                                           gpointer user_data) {
+  return checkers_ai_alpha_beta_analyze_moves_cancellable_with_nodes(game,
+                                                                     max_depth,
+                                                                     out_moves,
+                                                                     should_cancel,
+                                                                     user_data,
+                                                                     NULL);
+}
+
+gboolean checkers_ai_alpha_beta_analyze_moves_cancellable_with_nodes(const Game *game,
+                                                                     guint max_depth,
+                                                                     CheckersScoredMoveList *out_moves,
+                                                                     CheckersAiCancelFunc should_cancel,
+                                                                     gpointer user_data,
+                                                                     guint64 *out_nodes) {
+  return checkers_ai_alpha_beta_analyze_moves_cancellable_with_nodes_progress(game,
+                                                                               max_depth,
+                                                                               out_moves,
+                                                                               should_cancel,
+                                                                               user_data,
+                                                                               out_nodes,
+                                                                               NULL,
+                                                                               NULL);
+}
+
+gboolean checkers_ai_alpha_beta_analyze_moves_cancellable_with_nodes_progress(
+    const Game *game,
+    guint max_depth,
+    CheckersScoredMoveList *out_moves,
+    CheckersAiCancelFunc should_cancel,
+    gpointer user_data,
+    guint64 *out_nodes,
+    CheckersAiProgressFunc on_progress,
+    gpointer progress_user_data) {
   g_return_val_if_fail(game != NULL, FALSE);
   g_return_val_if_fail(max_depth > 0, FALSE);
   g_return_val_if_fail(out_moves != NULL, FALSE);
@@ -194,6 +240,7 @@ gboolean checkers_ai_alpha_beta_analyze_moves_cancellable(const Game *game,
   size_t write = 0;
   CheckersColor perspective = game->state.turn;
   gboolean cancelled = FALSE;
+  guint64 nodes = 0;
 
   for (size_t i = 0; i < moves.count; ++i) {
     if (should_cancel && should_cancel(user_data)) {
@@ -215,7 +262,10 @@ gboolean checkers_ai_alpha_beta_analyze_moves_cancellable(const Game *game,
                                                perspective,
                                                should_cancel,
                                                user_data,
-                                               &cancelled);
+                                               &cancelled,
+                                               &nodes,
+                                               on_progress,
+                                               progress_user_data);
     if (cancelled) {
       break;
     }
@@ -240,11 +290,26 @@ gboolean checkers_ai_alpha_beta_analyze_moves_cancellable(const Game *game,
   qsort(scored_moves, write, sizeof(scored_moves[0]), checkers_ai_scored_move_compare_desc);
   out_moves->moves = scored_moves;
   out_moves->count = write;
+  if (out_nodes != NULL) {
+    *out_nodes = nodes;
+  }
   return TRUE;
 }
 
 gboolean checkers_ai_alpha_beta_analyze_moves(const Game *game, guint max_depth, CheckersScoredMoveList *out_moves) {
-  return checkers_ai_alpha_beta_analyze_moves_cancellable(game, max_depth, out_moves, NULL, NULL);
+  return checkers_ai_alpha_beta_analyze_moves_cancellable_with_nodes(game, max_depth, out_moves, NULL, NULL, NULL);
+}
+
+gboolean checkers_ai_alpha_beta_analyze_moves_with_nodes(const Game *game,
+                                                         guint max_depth,
+                                                         CheckersScoredMoveList *out_moves,
+                                                         guint64 *out_nodes) {
+  return checkers_ai_alpha_beta_analyze_moves_cancellable_with_nodes(game,
+                                                                     max_depth,
+                                                                     out_moves,
+                                                                     NULL,
+                                                                     NULL,
+                                                                     out_nodes);
 }
 
 gboolean checkers_ai_alpha_beta_evaluate_position(const Game *game, guint max_depth, gint *out_score) {
@@ -262,7 +327,10 @@ gboolean checkers_ai_alpha_beta_evaluate_position(const Game *game, guint max_de
                                              game->state.turn,
                                              NULL,
                                              NULL,
-                                             &cancelled);
+                                             &cancelled,
+                                             NULL,
+                                             NULL,
+                                             NULL);
   if (cancelled) {
     g_debug("Unexpected cancellation while evaluating position");
     return FALSE;

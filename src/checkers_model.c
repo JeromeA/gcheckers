@@ -165,12 +165,14 @@ char *gcheckers_model_analyze_moves_text(GCheckersModel *self, guint max_depth) 
   g_return_val_if_fail(max_depth > 0, NULL);
 
   CheckersScoredMoveList scored_moves = {0};
-  if (!checkers_ai_alpha_beta_analyze_moves(&self->game, max_depth, &scored_moves)) {
+  guint64 nodes = 0;
+  if (!checkers_ai_alpha_beta_analyze_moves_with_nodes(&self->game, max_depth, &scored_moves, &nodes)) {
     return g_strdup("No legal moves to analyze.");
   }
 
   GString *text = g_string_new(NULL);
   g_string_append_printf(text, "Analysis depth: %u\n", max_depth);
+  g_string_append_printf(text, "Nodes: %" G_GUINT64_FORMAT "\n", nodes);
   g_string_append(text, "Best to worst:\n");
 
   for (size_t i = 0; i < scored_moves.count; ++i) {

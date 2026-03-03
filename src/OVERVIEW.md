@@ -8,7 +8,10 @@ Collaborates with: `gcheckers_style_init()` for CSS, model signals for refresh, 
 player dropdowns. Computer turns are routed by control mode with alpha-beta depth configured from the shared
 `Computer level` slider (`0..16`). Uses a three-pane layout: board and player controls (left), SGF mode selector
 and SGF view (middle), and analysis (right) with an `Analyze` toggle that runs iterative deepening in a worker thread
-and publishes best-to-worst move scores after each completed depth until toggled off. Top-level menu actions are
+and publishes best-to-worst move scores plus searched node counts after each completed depth until toggled off.
+Worker output is staged through a mutex-protected shared report buffer, and the GTK text view is refreshed from the
+main thread every 100ms while analysis is active. During a depth search, intermediate node-count snapshots are
+published and shown with a temporary `(searching...)` marker. Top-level menu actions are
 also exposed in a toolbar
 (`New game...`, `Force move`, SGF timeline rewind/step/skip actions) via GTK actions.
 Owns modal flows for `New game` and `Import games` wizards.
@@ -93,7 +96,8 @@ Collaborates with: `GCheckersWindow` and SGF controllers via signals and high-le
 Module: alpha-beta search.
 Role: choose a move and analyze all legal moves via depth-limited alpha-beta with a material heuristic and
 terminal-win scoring. Root move choice randomizes among all equal best-scoring moves, so repeated games can vary
-without lowering evaluation quality. Also exposes direct position scoring for tooling predicates.
+without lowering evaluation quality. Analysis APIs can also report searched node counts for progress/reporting.
+Also exposes direct position scoring for tooling predicates.
 Collaborates with: `checkers_model.c` for model-facing AI move selection and analysis text generation.
 
 ## Position search helpers (`src/position_search.c`, `src/position_search.h`)

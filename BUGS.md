@@ -117,3 +117,23 @@ The player controls panel initialized white to `User` but black to `Computer`, s
 the user changed the dropdown manually.
 
 The fix sets both dropdown defaults to `User` and updates widget tests to assert the new default behavior.
+
+## Analysis node count appeared frozen until depth completed
+
+The analysis panel should show node-count progress continuously while a single depth search is running.
+
+The worker thread only published text when a depth finished, so even with a 100ms UI timer the `Nodes` value stayed
+unchanged for long-running depths and then jumped at depth boundaries.
+
+The fix adds alpha-beta progress callbacks that report running node counts during search, and the analysis worker now
+publishes throttled in-depth `(searching...)` snapshots that the main thread flushes every 100ms.
+
+## Analysis progress snapshots hid move scores between completed depths
+
+The analysis report should keep showing move scores while also reporting live node-count progress.
+
+The progress text replaced the full report body with a `(searching...)` placeholder, so users could temporarily lose
+the best-to-worst scored move list until a depth completed and published the final report again.
+
+The fix keeps a copy of the last completed depth report and includes its scored move section in in-progress snapshots,
+while still updating `Nodes` live for the currently searching depth.
