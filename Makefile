@@ -15,7 +15,7 @@ LDLIBS := $(GLIB_LIBS) $(GOBJECT_LIBS) $(CURL_LIBS) -lm
 CFLAGS += $(GLIB_CFLAGS) $(GOBJECT_CFLAGS) $(CURL_CFLAGS)
 
 SRCS := src/board.c src/game.c src/game_print.c src/move_gen.c src/ai_alpha_beta.c \
-	src/checkers_model.c
+	src/ai_transposition_table.c src/ai_zobrist.c src/checkers_model.c
 POSITION_SRCS := src/position_search.c src/position_predicate.c src/position_format.c
 BOARD_SRCS := src/board.c
 SGF_TREE_SRCS := src/sgf_tree.c
@@ -61,7 +61,8 @@ libgame.a: $(OBJS)
 %.o: %.c src/game.h src/board.h src/checkers_constants.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
-test: test_game test_game_print test_board test_move_gen test_checkers_model test_position_search \
+test: test_game test_game_print test_board test_move_gen test_checkers_model \
+	test_ai_transposition_table test_position_search \
 	test_position_predicate test_sgf_tree test_sgf_io test_sgf_view test_bga_client \
 	test_board_view test_player_controls_panel test_sgf_controller test_window test_screenshot
 	./test_game
@@ -69,6 +70,7 @@ test: test_game test_game_print test_board test_move_gen test_checkers_model tes
 	./test_board
 	./test_move_gen
 	./test_checkers_model
+	./test_ai_transposition_table
 	./test_position_search
 	./test_position_predicate
 	./test_sgf_tree
@@ -99,6 +101,9 @@ find_position: src/find_position.c $(POSITION_SRCS) $(SRCS) src/position_search.
 test_checkers_model: tests/test_checkers_model.c $(SRCS) src/checkers_model.h
 	$(CC) $(CFLAGS) -o $@ tests/test_checkers_model.c $(SRCS) $(LDLIBS)
 
+test_ai_transposition_table: tests/test_ai_transposition_table.c $(SRCS) src/ai_transposition_table.h src/ai_zobrist.h
+	$(CC) $(CFLAGS) -o $@ tests/test_ai_transposition_table.c $(SRCS) $(LDLIBS)
+
 test_position_search: tests/test_position_search.c $(POSITION_SRCS) $(SRCS) src/position_search.h
 	$(CC) $(CFLAGS) -o $@ tests/test_position_search.c $(POSITION_SRCS) $(SRCS) $(LDLIBS)
 
@@ -111,7 +116,8 @@ test_bga_client: tests/test_bga_client.c src/bga_client.c src/bga_client.h
 test_sgf_tree: tests/test_sgf_tree.c $(SGF_TREE_SRCS) src/sgf_tree.h
 	$(CC) $(CFLAGS) -o $@ tests/test_sgf_tree.c $(SGF_TREE_SRCS) $(LDLIBS)
 
-test_sgf_io: tests/test_sgf_io.c src/sgf_io.c src/sgf_io.h src/sgf_tree.c src/sgf_tree.h src/game.h src/game_print.c src/board.c
+test_sgf_io: tests/test_sgf_io.c src/sgf_io.c src/sgf_io.h src/sgf_tree.c src/sgf_tree.h \
+	src/game.h src/game_print.c src/board.c
 	$(CC) $(CFLAGS) -o $@ tests/test_sgf_io.c src/sgf_io.c src/sgf_tree.c src/game_print.c src/board.c $(LDLIBS)
 
 test_sgf_view: tests/test_sgf_view.c $(SGF_VIEW_SRCS) $(SGF_TREE_SRCS) $(WIDGET_UTILS_SRCS) \
@@ -274,7 +280,7 @@ $(GSETTINGS_SCHEMA_COMPILED): $(GSETTINGS_SCHEMA_XML)
 
 clean:
 	rm -f $(OBJS) libgame.a test_game test_game_print test_board test_move_gen test_checkers_model \
-		test_position_search test_position_predicate test_sgf_tree test_sgf_io test_sgf_view \
+		test_ai_transposition_table test_position_search test_position_predicate test_sgf_tree test_sgf_io test_sgf_view \
 		test_bga_client test_board_view test_player_controls_panel test_sgf_controller \
 		test_window test_screenshot checkers find_position gcheckers
 	rm -f $(GSETTINGS_SCHEMA_COMPILED)

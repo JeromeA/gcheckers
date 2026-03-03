@@ -37,14 +37,17 @@ typedef struct {
   GCheckersWindow *self;
   Game game;
   gint generation;
+  CheckersAiTranspositionTable *tt;
   guint current_depth;
   gint64 last_progress_publish_us;
+  CheckersAiSearchStats current_stats;
   guint last_completed_depth;
   char *last_completed_text;
 } GCheckersWindowAnalysisTask;
 
 enum {
   GCHECKERS_WINDOW_ANALYSIS_UI_INTERVAL_MS = 100,
+  GCHECKERS_WINDOW_ANALYSIS_TT_SIZE_MB = 64,
 };
 
 static gboolean gcheckers_window_constrain_main_split_cb(GtkWidget * /*widget*/,
@@ -232,12 +235,19 @@ static void gcheckers_window_start_analysis_flush_loop(GCheckersWindow *self) {
 
 static char *gcheckers_window_analysis_format_depth(const CheckersScoredMoveList *moves,
                                                     guint depth,
-                                                    guint64 nodes) {
+                                                    guint64 nodes,
+                                                    const CheckersAiSearchStats *stats) {
   g_return_val_if_fail(moves != NULL, NULL);
+  g_return_val_if_fail(stats != NULL, NULL);
 
   GString *text = g_string_new(NULL);
+  gdouble ratio = stats->tt_probes == 0 ? 0.0 : (100.0 * (gdouble)stats->tt_hits) / (gdouble)stats->tt_probes;
   g_string_append_printf(text, "Analysis depth: %u\n", depth);
   g_string_append_printf(text, "Nodes: %" G_GUINT64_FORMAT "\n", nodes);
+  g_string_append_printf(text, "TT hits: %" G_GUINT64_FORMAT "\n", stats->tt_hits);
+  g_string_append_printf(text, "TT probes: %" G_GUINT64_FORMAT "\n", stats->tt_probes);
+  g_string_append_printf(text, "TT hit ratio: %.2f%%\n", ratio);
+  g_string_append_printf(text, "TT cutoffs: %" G_GUINT64_FORMAT "\n", stats->tt_cutoffs);
   g_string_append(text, "Best to worst:\n");
   for (size_t i = 0; i < moves->count; ++i) {
     char notation[128];
@@ -261,12 +271,24 @@ static char *gcheckers_window_analysis_extract_scores(const char *report_text) {
   return g_strdup(scores);
 }
 
+static void gcheckers_window_analysis_append_tt_stats(GString *text, const CheckersAiSearchStats *stats) {
+  g_return_if_fail(text != NULL);
+  g_return_if_fail(stats != NULL);
+
+  gdouble ratio = stats->tt_probes == 0 ? 0.0 : (100.0 * (gdouble)stats->tt_hits) / (gdouble)stats->tt_probes;
+  g_string_append_printf(text, "TT hits: %" G_GUINT64_FORMAT "\n", stats->tt_hits);
+  g_string_append_printf(text, "TT probes: %" G_GUINT64_FORMAT "\n", stats->tt_probes);
+  g_string_append_printf(text, "TT hit ratio: %.2f%%\n", ratio);
+  g_string_append_printf(text, "TT cutoffs: %" G_GUINT64_FORMAT "\n", stats->tt_cutoffs);
+}
+
 static char *gcheckers_window_analysis_format_progress(const GCheckersWindowAnalysisTask *task, guint64 nodes) {
   g_return_val_if_fail(task != NULL, NULL);
 
   GString *text = g_string_new(NULL);
   g_string_append_printf(text, "Analysis depth: %u (searching)\n", task->current_depth);
   g_string_append_printf(text, "Nodes: %" G_GUINT64_FORMAT "\n", nodes);
+  gcheckers_window_analysis_append_tt_stats(text, &task->current_stats);
 
   if (task->last_completed_text == NULL) {
     g_string_append(text, "Best to worst:\n");
@@ -309,11 +331,12 @@ static gpointer gcheckers_window_analysis_thread(gpointer user_data) {
   while (!gcheckers_window_should_cancel_analysis(task)) {
     task->current_depth = depth;
     task->last_progress_publish_us = 0;
+    memset(&task->current_stats, 0, sizeof(task->current_stats));
     gcheckers_window_analysis_on_progress(0, task);
 
     CheckersScoredMoveList moves = {0};
     guint64 nodes = 0;
-    gboolean ok = checkers_ai_alpha_beta_analyze_moves_cancellable_with_nodes_progress(
+    gboolean ok = checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(
         &task->game,
         depth,
         &moves,
@@ -321,7 +344,9 @@ static gpointer gcheckers_window_analysis_thread(gpointer user_data) {
         task,
         &nodes,
         gcheckers_window_analysis_on_progress,
-        task);
+        task,
+        task->tt,
+        &task->current_stats);
     if (!ok) {
       if (!gcheckers_window_should_cancel_analysis(task)) {
         gcheckers_window_analysis_publish(task->self, task->generation, "No legal moves to analyze.");
@@ -329,7 +354,7 @@ static gpointer gcheckers_window_analysis_thread(gpointer user_data) {
       break;
     }
 
-    g_autofree char *text = gcheckers_window_analysis_format_depth(&moves, depth, nodes);
+    g_autofree char *text = gcheckers_window_analysis_format_depth(&moves, depth, nodes, &task->current_stats);
     checkers_scored_move_list_free(&moves);
     if (!text) {
       break;
@@ -346,6 +371,7 @@ static gpointer gcheckers_window_analysis_thread(gpointer user_data) {
   }
 
   g_object_unref(task->self);
+  checkers_ai_tt_free(task->tt);
   g_free(task->last_completed_text);
   g_free(task);
   return NULL;
@@ -380,6 +406,10 @@ static void gcheckers_window_start_analysis(GCheckersWindow *self) {
   task->self = g_object_ref(self);
   task->game = game;
   task->generation = generation;
+  task->tt = checkers_ai_tt_new(GCHECKERS_WINDOW_ANALYSIS_TT_SIZE_MB);
+  if (task->tt == NULL) {
+    g_debug("Failed to allocate analysis TT, continuing without TT caching");
+  }
   GThread *thread = g_thread_new("analysis-thread", gcheckers_window_analysis_thread, task);
   g_thread_unref(thread);
 }
