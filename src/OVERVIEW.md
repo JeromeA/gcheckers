@@ -8,7 +8,8 @@ Collaborates with: `gcheckers_style_init()` for CSS, model signals for refresh, 
 player dropdowns. Computer turns are routed by control mode with alpha-beta depth configured from the shared
 `Computer level` slider (`0..16`). Uses a three-pane layout: board and player controls (left), SGF mode selector
 and SGF view (middle), and analysis (right) with an `Analyze` toggle that runs iterative deepening in a worker thread
-and publishes best-to-worst move scores plus searched node counts after each completed depth until toggled off.
+and publishes best-to-worst move scores plus cumulative searched node counts after each completed depth until toggled
+off.
 Worker output is staged through a mutex-protected shared report buffer, and the GTK text view is refreshed from the
 main thread every 100ms while analysis is active. During a depth search, intermediate node-count snapshots are
 published and shown with a temporary `(searching...)` marker. Analysis now also reports cumulative TT

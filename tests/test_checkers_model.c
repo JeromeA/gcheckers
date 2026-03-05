@@ -41,12 +41,13 @@ typedef struct {
   guint64 last_nodes;
 } ProgressProbe;
 
-static void test_model_analysis_progress_probe(guint64 nodes, gpointer user_data) {
+static void test_model_analysis_progress_probe(const CheckersAiSearchStats *stats, gpointer user_data) {
   ProgressProbe *probe = user_data;
+  g_return_if_fail(stats != NULL);
   g_return_if_fail(probe != NULL);
 
-  assert(nodes >= probe->last_nodes);
-  probe->last_nodes = nodes;
+  assert(stats->nodes >= probe->last_nodes);
+  probe->last_nodes = stats->nodes;
   probe->calls++;
 }
 
@@ -184,12 +185,20 @@ static void test_model_analyze_moves_progress_callback(void) {
 
   ProgressProbe probe = {0};
   CheckersScoredMoveList scored_moves = {0};
-  guint64 nodes = 0;
-  gboolean analyzed = checkers_ai_alpha_beta_analyze_moves_cancellable_with_nodes_progress(
-      &game, 5, &scored_moves, NULL, NULL, &nodes, test_model_analysis_progress_probe, &probe);
+  CheckersAiSearchStats stats = {0};
+  checkers_ai_search_stats_clear(&stats);
+  gboolean analyzed = checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(&game,
+                                                                                5,
+                                                                                &scored_moves,
+                                                                                NULL,
+                                                                                NULL,
+                                                                                test_model_analysis_progress_probe,
+                                                                                &probe,
+                                                                                NULL,
+                                                                                &stats);
   assert(analyzed);
   assert(scored_moves.count > 0);
-  assert(nodes > 0);
+  assert(stats.nodes > 0);
   assert(probe.calls > 0);
   assert(probe.last_nodes > 0);
 
@@ -207,39 +216,37 @@ static void test_model_analyze_moves_reuses_tt_across_depths(void) {
   assert(tt != NULL);
 
   CheckersScoredMoveList first = {0};
-  guint64 nodes_first = 0;
   CheckersAiSearchStats stats_first = {0};
+  checkers_ai_search_stats_clear(&stats_first);
   gboolean ok = checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(&game,
                                                                           5,
                                                                           &first,
                                                                           NULL,
                                                                           NULL,
-                                                                          &nodes_first,
                                                                           NULL,
                                                                           NULL,
                                                                           tt,
                                                                           &stats_first);
   assert(ok);
   assert(first.count > 0);
-  assert(nodes_first > 0);
+  assert(stats_first.nodes > 0);
   checkers_scored_move_list_free(&first);
 
   CheckersScoredMoveList second = {0};
-  guint64 nodes_second = 0;
   CheckersAiSearchStats stats_second = {0};
+  checkers_ai_search_stats_clear(&stats_second);
   ok = checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(&game,
                                                                  6,
                                                                  &second,
                                                                  NULL,
                                                                  NULL,
-                                                                 &nodes_second,
                                                                  NULL,
                                                                  NULL,
                                                                  tt,
                                                                  &stats_second);
   assert(ok);
   assert(second.count > 0);
-  assert(nodes_second > 0);
+  assert(stats_second.nodes > 0);
   assert(stats_second.tt_hits > 0);
   checkers_scored_move_list_free(&second);
 
@@ -259,39 +266,36 @@ static void test_model_analyze_moves_stats_can_accumulate_across_calls(void) {
   CheckersAiSearchStats stats = {0};
   checkers_ai_search_stats_clear(&stats);
   CheckersScoredMoveList first = {0};
-  guint64 nodes_first = 0;
   gboolean ok = checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(&game,
                                                                           5,
                                                                           &first,
                                                                           NULL,
                                                                           NULL,
-                                                                          &nodes_first,
                                                                           NULL,
                                                                           NULL,
                                                                           tt,
                                                                           &stats);
   assert(ok);
   assert(first.count > 0);
-  assert(nodes_first > 0);
+  assert(stats.nodes > 0);
+  guint64 nodes_after_first = stats.nodes;
   guint64 probes_after_first = stats.tt_probes;
   guint64 hits_after_first = stats.tt_hits;
   checkers_scored_move_list_free(&first);
 
   CheckersScoredMoveList second = {0};
-  guint64 nodes_second = 0;
   ok = checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(&game,
                                                                  6,
                                                                  &second,
                                                                  NULL,
                                                                  NULL,
-                                                                 &nodes_second,
                                                                  NULL,
                                                                  NULL,
                                                                  tt,
                                                                  &stats);
   assert(ok);
   assert(second.count > 0);
-  assert(nodes_second > 0);
+  assert(stats.nodes > nodes_after_first);
   assert(stats.tt_probes > probes_after_first);
   assert(stats.tt_hits >= hits_after_first);
   checkers_scored_move_list_free(&second);
@@ -312,41 +316,35 @@ static void test_model_analyze_moves_stats_can_be_per_call(void) {
   CheckersAiSearchStats first_stats = {0};
   checkers_ai_search_stats_clear(&first_stats);
   CheckersScoredMoveList first = {0};
-  guint64 nodes_first = 0;
   gboolean ok = checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(&game,
                                                                           5,
                                                                           &first,
                                                                           NULL,
                                                                           NULL,
-                                                                          &nodes_first,
                                                                           NULL,
                                                                           NULL,
                                                                           tt,
                                                                           &first_stats);
   assert(ok);
   assert(first.count > 0);
-  assert(nodes_first > 0);
-  assert(first_stats.nodes == nodes_first);
+  assert(first_stats.nodes > 0);
   checkers_scored_move_list_free(&first);
 
   CheckersAiSearchStats second_stats = {0};
   checkers_ai_search_stats_clear(&second_stats);
   CheckersScoredMoveList second = {0};
-  guint64 nodes_second = 0;
   ok = checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(&game,
                                                                  6,
                                                                  &second,
                                                                  NULL,
                                                                  NULL,
-                                                                 &nodes_second,
                                                                  NULL,
                                                                  NULL,
                                                                  tt,
                                                                  &second_stats);
   assert(ok);
   assert(second.count > 0);
-  assert(nodes_second > 0);
-  assert(second_stats.nodes == nodes_second);
+  assert(second_stats.nodes > 0);
   assert(second_stats.tt_probes >= second_stats.tt_hits);
   checkers_scored_move_list_free(&second);
 

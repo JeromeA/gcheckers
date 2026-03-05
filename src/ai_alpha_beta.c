@@ -12,28 +12,33 @@ typedef struct {
   gpointer cancel_user_data;
   CheckersAiProgressFunc on_progress;
   gpointer progress_user_data;
-  guint64 *nodes;
   CheckersAiSearchStats *stats;
   CheckersAiTranspositionTable *tt;
 } CheckersAiSearchContext;
 
 static void checkers_ai_search_count_node(CheckersAiSearchContext *ctx) {
-  g_return_if_fail(ctx != NULL);
+  /*
+   * Hot-path assumption reminder:
+   * The following checks are enforced at API boundaries by callers.
+   * Keep the commented checks below as reminders if call paths change.
+   */
+  /* g_return_if_fail(ctx != NULL); */
+  /* g_return_if_fail(ctx->stats != NULL); */
 
-  if (ctx->nodes != NULL) {
-    (*ctx->nodes)++;
-    if (ctx->on_progress != NULL) {
-      ctx->on_progress(*ctx->nodes, ctx->progress_user_data);
-    }
-  }
-  if (ctx->stats != NULL) {
-    ctx->stats->nodes++;
+  ctx->stats->nodes++;
+  if (ctx->on_progress != NULL) {
+    ctx->on_progress(ctx->stats, ctx->progress_user_data);
   }
 }
 
 static gboolean checkers_ai_moves_match(const CheckersMove *left, const CheckersMove *right) {
-  g_return_val_if_fail(left != NULL, FALSE);
-  g_return_val_if_fail(right != NULL, FALSE);
+  /*
+   * Hot-path assumption reminder:
+   * The following checks are enforced at API boundaries by callers.
+   * Keep the commented checks below as reminders if call paths change.
+   */
+  /* g_return_val_if_fail(left != NULL, FALSE); */
+  /* g_return_val_if_fail(right != NULL, FALSE); */
 
   if (left->length != right->length || left->captures != right->captures) {
     return FALSE;
@@ -46,7 +51,12 @@ static gboolean checkers_ai_moves_match(const CheckersMove *left, const Checkers
 }
 
 static gint checkers_ai_material_score(const Game *game, CheckersColor perspective) {
-  g_return_val_if_fail(game != NULL, 0);
+  /*
+   * Hot-path assumption reminder:
+   * The following checks are enforced at API boundaries by callers.
+   * Keep the commented checks below as reminders if call paths change.
+   */
+  /* g_return_val_if_fail(game != NULL, 0); */
 
   const CheckersBoard *board = &game->state.board;
   uint8_t squares = board_playable_squares(board->board_size);
@@ -81,7 +91,12 @@ static gint checkers_ai_material_score(const Game *game, CheckersColor perspecti
 }
 
 static gint checkers_ai_terminal_score(const Game *game, CheckersColor perspective, guint ply_depth) {
-  g_return_val_if_fail(game != NULL, 0);
+  /*
+   * Hot-path assumption reminder:
+   * The following checks are enforced at API boundaries by callers.
+   * Keep the commented checks below as reminders if call paths change.
+   */
+  /* g_return_val_if_fail(game != NULL, 0); */
 
   if (game->state.winner == CHECKERS_WINNER_NONE) {
     return checkers_ai_material_score(game, perspective);
@@ -107,7 +122,12 @@ static void checkers_ai_tt_store_result(CheckersAiSearchContext *ctx,
                                         gint score,
                                         CheckersAiTtBound bound,
                                         const CheckersMove *best_move) {
-  g_return_if_fail(ctx != NULL);
+  /*
+   * Hot-path assumption reminder:
+   * The following checks are enforced at API boundaries by callers.
+   * Keep the commented checks below as reminders if call paths change.
+   */
+  /* g_return_if_fail(ctx != NULL); */
 
   if (ctx->tt == NULL) {
     return;
@@ -125,13 +145,18 @@ static gboolean checkers_ai_tt_probe(CheckersAiSearchContext *ctx,
                                      gboolean *out_has_entry,
                                      gboolean *out_cutoff,
                                      gint *out_cutoff_score) {
-  g_return_val_if_fail(ctx != NULL, FALSE);
-  g_return_val_if_fail(alpha != NULL, FALSE);
-  g_return_val_if_fail(beta != NULL, FALSE);
-  g_return_val_if_fail(out_entry != NULL, FALSE);
-  g_return_val_if_fail(out_has_entry != NULL, FALSE);
-  g_return_val_if_fail(out_cutoff != NULL, FALSE);
-  g_return_val_if_fail(out_cutoff_score != NULL, FALSE);
+  /*
+   * Hot-path assumption reminder:
+   * The following checks are enforced at API boundaries by callers.
+   * Keep the commented checks below as reminders if call paths change.
+   */
+  /* g_return_val_if_fail(ctx != NULL, FALSE); */
+  /* g_return_val_if_fail(alpha != NULL, FALSE); */
+  /* g_return_val_if_fail(beta != NULL, FALSE); */
+  /* g_return_val_if_fail(out_entry != NULL, FALSE); */
+  /* g_return_val_if_fail(out_has_entry != NULL, FALSE); */
+  /* g_return_val_if_fail(out_cutoff != NULL, FALSE); */
+  /* g_return_val_if_fail(out_cutoff_score != NULL, FALSE); */
 
   *out_has_entry = FALSE;
   *out_cutoff = FALSE;
@@ -192,9 +217,14 @@ static gint checkers_ai_alpha_beta_search(Game *game,
                                           gint beta,
                                           CheckersAiSearchContext *ctx,
                                           gboolean *cancelled) {
-  g_return_val_if_fail(game != NULL, 0);
-  g_return_val_if_fail(ctx != NULL, 0);
-  g_return_val_if_fail(cancelled != NULL, 0);
+  /*
+   * Hot-path assumption reminder:
+   * The following checks are enforced at API boundaries by callers.
+   * Keep the commented checks below as reminders if call paths change.
+   */
+  /* g_return_val_if_fail(game != NULL, 0); */
+  /* g_return_val_if_fail(ctx != NULL, 0); */
+  /* g_return_val_if_fail(cancelled != NULL, 0); */
 
   checkers_ai_search_count_node(ctx);
 
@@ -375,49 +405,17 @@ gboolean checkers_ai_alpha_beta_analyze_moves_cancellable(const Game *game,
                                                           CheckersScoredMoveList *out_moves,
                                                           CheckersAiCancelFunc should_cancel,
                                                           gpointer user_data) {
-  return checkers_ai_alpha_beta_analyze_moves_cancellable_with_nodes(game,
-                                                                     max_depth,
-                                                                     out_moves,
-                                                                     should_cancel,
-                                                                     user_data,
-                                                                     NULL);
-}
-
-gboolean checkers_ai_alpha_beta_analyze_moves_cancellable_with_nodes(const Game *game,
-                                                                     guint max_depth,
-                                                                     CheckersScoredMoveList *out_moves,
-                                                                     CheckersAiCancelFunc should_cancel,
-                                                                     gpointer user_data,
-                                                                     guint64 *out_nodes) {
-  return checkers_ai_alpha_beta_analyze_moves_cancellable_with_nodes_progress(game,
-                                                                               max_depth,
-                                                                               out_moves,
-                                                                               should_cancel,
-                                                                               user_data,
-                                                                               out_nodes,
-                                                                               NULL,
-                                                                               NULL);
-}
-
-gboolean checkers_ai_alpha_beta_analyze_moves_cancellable_with_nodes_progress(
-    const Game *game,
-    guint max_depth,
-    CheckersScoredMoveList *out_moves,
-    CheckersAiCancelFunc should_cancel,
-    gpointer user_data,
-    guint64 *out_nodes,
-    CheckersAiProgressFunc on_progress,
-    gpointer progress_user_data) {
+  CheckersAiSearchStats stats = {0};
+  checkers_ai_search_stats_clear(&stats);
   return checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(game,
                                                                    max_depth,
                                                                    out_moves,
                                                                    should_cancel,
                                                                    user_data,
-                                                                   out_nodes,
-                                                                   on_progress,
-                                                                   progress_user_data,
                                                                    NULL,
-                                                                   NULL);
+                                                                   NULL,
+                                                                   NULL,
+                                                                   &stats);
 }
 
 gboolean checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(const Game *game,
@@ -425,20 +423,18 @@ gboolean checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(const Game *ga
                                                                   CheckersScoredMoveList *out_moves,
                                                                   CheckersAiCancelFunc should_cancel,
                                                                   gpointer user_data,
-                                                                  guint64 *out_nodes,
                                                                   CheckersAiProgressFunc on_progress,
                                                                   gpointer progress_user_data,
                                                                   CheckersAiTranspositionTable *tt,
                                                                   CheckersAiSearchStats *out_stats) {
   g_return_val_if_fail(game != NULL, FALSE);
+  g_return_val_if_fail(game->available_moves != NULL, FALSE);
   g_return_val_if_fail(max_depth > 0, FALSE);
   g_return_val_if_fail(out_moves != NULL, FALSE);
+  g_return_val_if_fail(out_stats != NULL, FALSE);
 
   out_moves->moves = NULL;
   out_moves->count = 0;
-  if (out_nodes != NULL) {
-    *out_nodes = 0;
-  }
 
   MoveList moves = game->available_moves(game);
   if (moves.count == 0) {
@@ -454,7 +450,6 @@ gboolean checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(const Game *ga
   CheckersScoredMove *scored_moves = g_new0(CheckersScoredMove, moves.count);
   size_t write = 0;
   gboolean cancelled = FALSE;
-  guint64 nodes = 0;
 
   CheckersAiSearchContext ctx = {
       .perspective = game->state.turn,
@@ -462,7 +457,6 @@ gboolean checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(const Game *ga
       .cancel_user_data = user_data,
       .on_progress = on_progress,
       .progress_user_data = progress_user_data,
-      .nodes = &nodes,
       .stats = out_stats,
       .tt = tt,
   };
@@ -510,44 +504,30 @@ gboolean checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(const Game *ga
   qsort(scored_moves, write, sizeof(scored_moves[0]), checkers_ai_scored_move_compare_desc);
   out_moves->moves = scored_moves;
   out_moves->count = write;
-  if (out_nodes != NULL) {
-    *out_nodes = nodes;
-  }
   return TRUE;
 }
 
 gboolean checkers_ai_alpha_beta_analyze_moves(const Game *game, guint max_depth, CheckersScoredMoveList *out_moves) {
-  return checkers_ai_alpha_beta_analyze_moves_cancellable_with_nodes(game, max_depth, out_moves, NULL, NULL, NULL);
-}
-
-gboolean checkers_ai_alpha_beta_analyze_moves_with_nodes(const Game *game,
-                                                         guint max_depth,
-                                                         CheckersScoredMoveList *out_moves,
-                                                         guint64 *out_nodes) {
-  return checkers_ai_alpha_beta_analyze_moves_cancellable_with_nodes(game,
-                                                                     max_depth,
-                                                                     out_moves,
-                                                                     NULL,
-                                                                     NULL,
-                                                                     out_nodes);
+  return checkers_ai_alpha_beta_analyze_moves_cancellable(game, max_depth, out_moves, NULL, NULL);
 }
 
 gboolean checkers_ai_alpha_beta_evaluate_position(const Game *game, guint max_depth, gint *out_score) {
   g_return_val_if_fail(game != NULL, FALSE);
+  g_return_val_if_fail(game->available_moves != NULL, FALSE);
   g_return_val_if_fail(max_depth > 0, FALSE);
   g_return_val_if_fail(out_score != NULL, FALSE);
 
   Game root = *game;
   gboolean cancelled = FALSE;
-  guint64 nodes = 0;
+  CheckersAiSearchStats stats = {0};
+  checkers_ai_search_stats_clear(&stats);
   CheckersAiSearchContext ctx = {
       .perspective = game->state.turn,
       .should_cancel = NULL,
       .cancel_user_data = NULL,
       .on_progress = NULL,
       .progress_user_data = NULL,
-      .nodes = &nodes,
-      .stats = NULL,
+      .stats = &stats,
       .tt = NULL,
   };
 

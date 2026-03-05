@@ -237,14 +237,13 @@ static void gcheckers_window_analysis_append_tt_stats(GString *text, const Check
 
 static char *gcheckers_window_analysis_format_depth(const CheckersScoredMoveList *moves,
                                                     guint depth,
-                                                    guint64 nodes,
                                                     const CheckersAiSearchStats *stats) {
   g_return_val_if_fail(moves != NULL, NULL);
   g_return_val_if_fail(stats != NULL, NULL);
 
   GString *text = g_string_new(NULL);
   g_string_append_printf(text, "Analysis depth: %u\n", depth);
-  g_string_append_printf(text, "Nodes: %" G_GUINT64_FORMAT "\n", nodes);
+  g_string_append_printf(text, "Nodes: %" G_GUINT64_FORMAT "\n", stats->nodes);
   gcheckers_window_analysis_append_tt_stats(text, stats);
   g_string_append(text, "Best to worst:\n");
   for (size_t i = 0; i < moves->count; ++i) {
@@ -280,13 +279,15 @@ static void gcheckers_window_analysis_append_tt_stats(GString *text, const Check
   g_string_append_printf(text, "TT cutoffs: %" G_GUINT64_FORMAT "\n", stats->tt_cutoffs);
 }
 
-static char *gcheckers_window_analysis_format_progress(const GCheckersWindowAnalysisTask *task, guint64 nodes) {
+static char *gcheckers_window_analysis_format_progress(const GCheckersWindowAnalysisTask *task,
+                                                       const CheckersAiSearchStats *stats) {
   g_return_val_if_fail(task != NULL, NULL);
+  g_return_val_if_fail(stats != NULL, NULL);
 
   GString *text = g_string_new(NULL);
   g_string_append_printf(text, "Analysis depth: %u (searching)\n", task->current_depth);
-  g_string_append_printf(text, "Nodes: %" G_GUINT64_FORMAT "\n", nodes);
-  gcheckers_window_analysis_append_tt_stats(text, &task->cumulative_stats);
+  g_string_append_printf(text, "Nodes: %" G_GUINT64_FORMAT "\n", stats->nodes);
+  gcheckers_window_analysis_append_tt_stats(text, stats);
 
   if (task->last_completed_text == NULL) {
     g_string_append(text, "Best to worst:\n");
@@ -300,8 +301,9 @@ static char *gcheckers_window_analysis_format_progress(const GCheckersWindowAnal
   return g_string_free(text, FALSE);
 }
 
-static void gcheckers_window_analysis_on_progress(guint64 nodes, gpointer user_data) {
+static void gcheckers_window_analysis_on_progress(const CheckersAiSearchStats *stats, gpointer user_data) {
   GCheckersWindowAnalysisTask *task = user_data;
+  g_return_if_fail(stats != NULL);
   g_return_if_fail(task != NULL);
   g_return_if_fail(GCHECKERS_IS_WINDOW(task->self));
 
@@ -312,7 +314,7 @@ static void gcheckers_window_analysis_on_progress(guint64 nodes, gpointer user_d
   }
 
   task->last_progress_publish_us = now;
-  g_autofree char *text = gcheckers_window_analysis_format_progress(task, nodes);
+  g_autofree char *text = gcheckers_window_analysis_format_progress(task, stats);
   if (text == NULL) {
     g_debug("Failed to format analysis progress text");
     return;
@@ -329,17 +331,15 @@ static gpointer gcheckers_window_analysis_thread(gpointer user_data) {
   while (!gcheckers_window_should_cancel_analysis(task)) {
     task->current_depth = depth;
     task->last_progress_publish_us = 0;
-    gcheckers_window_analysis_on_progress(0, task);
+    gcheckers_window_analysis_on_progress(&task->cumulative_stats, task);
 
     CheckersScoredMoveList moves = {0};
-    guint64 nodes = 0;
     gboolean ok = checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(
         &task->game,
         depth,
         &moves,
         gcheckers_window_should_cancel_analysis,
         task,
-        &nodes,
         gcheckers_window_analysis_on_progress,
         task,
         task->tt,
@@ -351,7 +351,7 @@ static gpointer gcheckers_window_analysis_thread(gpointer user_data) {
       break;
     }
 
-    g_autofree char *text = gcheckers_window_analysis_format_depth(&moves, depth, nodes, &task->cumulative_stats);
+    g_autofree char *text = gcheckers_window_analysis_format_depth(&moves, depth, &task->cumulative_stats);
     checkers_scored_move_list_free(&moves);
     if (!text) {
       break;

@@ -172,14 +172,13 @@ char *gcheckers_model_analyze_moves_text(GCheckersModel *self, guint max_depth) 
   g_return_val_if_fail(max_depth > 0, NULL);
 
   CheckersScoredMoveList scored_moves = {0};
-  guint64 nodes = 0;
   CheckersAiSearchStats stats = {0};
+  checkers_ai_search_stats_clear(&stats);
   gboolean ok = checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(&self->game,
                                                                           max_depth,
                                                                           &scored_moves,
                                                                           NULL,
                                                                           NULL,
-                                                                          &nodes,
                                                                           NULL,
                                                                           NULL,
                                                                           self->analysis_tt,
@@ -190,7 +189,7 @@ char *gcheckers_model_analyze_moves_text(GCheckersModel *self, guint max_depth) 
 
   GString *text = g_string_new(NULL);
   g_string_append_printf(text, "Analysis depth: %u\n", max_depth);
-  g_string_append_printf(text, "Nodes: %" G_GUINT64_FORMAT "\n", nodes);
+  g_string_append_printf(text, "Nodes: %" G_GUINT64_FORMAT "\n", stats.nodes);
   g_string_append_printf(text, "TT hits: %" G_GUINT64_FORMAT "\n", stats.tt_hits);
   g_string_append_printf(text, "TT probes: %" G_GUINT64_FORMAT "\n", stats.tt_probes);
   gdouble ratio = stats.tt_probes == 0 ? 0.0 : (100.0 * (gdouble)stats.tt_hits) / (gdouble)stats.tt_probes;
