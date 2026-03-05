@@ -47,7 +47,7 @@ typedef struct {
 
 enum {
   GCHECKERS_WINDOW_ANALYSIS_UI_INTERVAL_MS = 100,
-  GCHECKERS_WINDOW_ANALYSIS_TT_SIZE_MB = 64,
+  GCHECKERS_WINDOW_ANALYSIS_TT_SIZE_MB = 256,
 };
 
 static gboolean gcheckers_window_constrain_main_split_cb(GtkWidget * /*widget*/,
@@ -327,7 +327,7 @@ static gpointer gcheckers_window_analysis_thread(gpointer user_data) {
   GCheckersWindowAnalysisTask *task = user_data;
   g_return_val_if_fail(task != NULL, NULL);
 
-  guint depth = 8;
+  guint depth = 10;
   while (!gcheckers_window_should_cancel_analysis(task)) {
     task->current_depth = depth;
     task->last_progress_publish_us = 0;
