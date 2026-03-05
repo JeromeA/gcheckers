@@ -346,6 +346,22 @@ static int checkers_ai_scored_move_compare_desc(const void *left, const void *ri
   return 0;
 }
 
+void checkers_ai_search_stats_clear(CheckersAiSearchStats *stats) {
+  g_return_if_fail(stats != NULL);
+
+  memset(stats, 0, sizeof(*stats));
+}
+
+void checkers_ai_search_stats_add(CheckersAiSearchStats *dest, const CheckersAiSearchStats *src) {
+  g_return_if_fail(dest != NULL);
+  g_return_if_fail(src != NULL);
+
+  dest->nodes += src->nodes;
+  dest->tt_probes += src->tt_probes;
+  dest->tt_hits += src->tt_hits;
+  dest->tt_cutoffs += src->tt_cutoffs;
+}
+
 void checkers_scored_move_list_free(CheckersScoredMoveList *list) {
   g_return_if_fail(list != NULL);
 
@@ -422,9 +438,6 @@ gboolean checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(const Game *ga
   out_moves->count = 0;
   if (out_nodes != NULL) {
     *out_nodes = 0;
-  }
-  if (out_stats != NULL) {
-    memset(out_stats, 0, sizeof(*out_stats));
   }
 
   MoveList moves = game->available_moves(game);

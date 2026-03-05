@@ -247,6 +247,113 @@ static void test_model_analyze_moves_reuses_tt_across_depths(void) {
   g_object_unref(model);
 }
 
+static void test_model_analyze_moves_stats_can_accumulate_across_calls(void) {
+  GCheckersModel *model = gcheckers_model_new();
+  Game game = {0};
+  bool copied = gcheckers_model_copy_game(model, &game);
+  assert(copied);
+
+  CheckersAiTranspositionTable *tt = checkers_ai_tt_new(16);
+  assert(tt != NULL);
+
+  CheckersAiSearchStats stats = {0};
+  checkers_ai_search_stats_clear(&stats);
+  CheckersScoredMoveList first = {0};
+  guint64 nodes_first = 0;
+  gboolean ok = checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(&game,
+                                                                          5,
+                                                                          &first,
+                                                                          NULL,
+                                                                          NULL,
+                                                                          &nodes_first,
+                                                                          NULL,
+                                                                          NULL,
+                                                                          tt,
+                                                                          &stats);
+  assert(ok);
+  assert(first.count > 0);
+  assert(nodes_first > 0);
+  guint64 probes_after_first = stats.tt_probes;
+  guint64 hits_after_first = stats.tt_hits;
+  checkers_scored_move_list_free(&first);
+
+  CheckersScoredMoveList second = {0};
+  guint64 nodes_second = 0;
+  ok = checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(&game,
+                                                                 6,
+                                                                 &second,
+                                                                 NULL,
+                                                                 NULL,
+                                                                 &nodes_second,
+                                                                 NULL,
+                                                                 NULL,
+                                                                 tt,
+                                                                 &stats);
+  assert(ok);
+  assert(second.count > 0);
+  assert(nodes_second > 0);
+  assert(stats.tt_probes > probes_after_first);
+  assert(stats.tt_hits >= hits_after_first);
+  checkers_scored_move_list_free(&second);
+
+  checkers_ai_tt_free(tt);
+  g_object_unref(model);
+}
+
+static void test_model_analyze_moves_stats_can_be_per_call(void) {
+  GCheckersModel *model = gcheckers_model_new();
+  Game game = {0};
+  bool copied = gcheckers_model_copy_game(model, &game);
+  assert(copied);
+
+  CheckersAiTranspositionTable *tt = checkers_ai_tt_new(16);
+  assert(tt != NULL);
+
+  CheckersAiSearchStats first_stats = {0};
+  checkers_ai_search_stats_clear(&first_stats);
+  CheckersScoredMoveList first = {0};
+  guint64 nodes_first = 0;
+  gboolean ok = checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(&game,
+                                                                          5,
+                                                                          &first,
+                                                                          NULL,
+                                                                          NULL,
+                                                                          &nodes_first,
+                                                                          NULL,
+                                                                          NULL,
+                                                                          tt,
+                                                                          &first_stats);
+  assert(ok);
+  assert(first.count > 0);
+  assert(nodes_first > 0);
+  assert(first_stats.nodes == nodes_first);
+  checkers_scored_move_list_free(&first);
+
+  CheckersAiSearchStats second_stats = {0};
+  checkers_ai_search_stats_clear(&second_stats);
+  CheckersScoredMoveList second = {0};
+  guint64 nodes_second = 0;
+  ok = checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(&game,
+                                                                 6,
+                                                                 &second,
+                                                                 NULL,
+                                                                 NULL,
+                                                                 &nodes_second,
+                                                                 NULL,
+                                                                 NULL,
+                                                                 tt,
+                                                                 &second_stats);
+  assert(ok);
+  assert(second.count > 0);
+  assert(nodes_second > 0);
+  assert(second_stats.nodes == nodes_second);
+  assert(second_stats.tt_probes >= second_stats.tt_hits);
+  checkers_scored_move_list_free(&second);
+
+  checkers_ai_tt_free(tt);
+  g_object_unref(model);
+}
+
 static void test_model_set_rules(void) {
   GCheckersModel *model = gcheckers_model_new();
   const GameState *state = gcheckers_model_peek_state(model);
@@ -321,6 +428,8 @@ int main(void) {
   test_model_analyze_moves_text();
   test_model_analyze_moves_progress_callback();
   test_model_analyze_moves_reuses_tt_across_depths();
+  test_model_analyze_moves_stats_can_accumulate_across_calls();
+  test_model_analyze_moves_stats_can_be_per_call();
   test_model_set_rules();
   test_model_peek_last_move();
   test_model_reset_clears_last_move();
