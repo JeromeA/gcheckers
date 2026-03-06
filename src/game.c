@@ -1,5 +1,4 @@
 #include "game.h"
-#include "rulesets.h"
 #include <glib.h>
 #include <stdbool.h>
 #include <string.h>
@@ -10,18 +9,10 @@ static bool rules_valid(const CheckersRules *rules) {
   return rules->board_size == 8 || rules->board_size == 10;
 }
 
-static bool rules_is_known_global(const CheckersRules *rules) {
-  g_return_val_if_fail(rules != NULL, false);
-
-  return rules == &checkers_rules_american || rules == &checkers_rules_international ||
-         rules == &checkers_rules_russian;
-}
-
 void game_init_with_rules(Game *game, const CheckersRules *rules) {
   g_return_if_fail(game != NULL);
   g_return_if_fail(rules != NULL);
   g_return_if_fail(rules_valid(rules));
-  g_return_if_fail(rules_is_known_global(rules));
 
   memset(game, 0, sizeof(*game));
   game->rules = rules;

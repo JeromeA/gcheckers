@@ -1,65 +1,58 @@
 #include "rulesets.h"
 
-const CheckersRules checkers_rules_american = {
-    .board_size = 8,
-    .men_can_jump_backwards = FALSE,
-    .capture_mandatory = TRUE,
-    .longest_capture_mandatory = FALSE,
-    .kings_can_fly = FALSE,
-};
-
-const CheckersRules checkers_rules_international = {
-    .board_size = 10,
-    .men_can_jump_backwards = TRUE,
-    .capture_mandatory = TRUE,
-    .longest_capture_mandatory = TRUE,
-    .kings_can_fly = TRUE,
-};
-
-const CheckersRules checkers_rules_russian = {
-    .board_size = 8,
-    .men_can_jump_backwards = TRUE,
-    .capture_mandatory = TRUE,
-    .longest_capture_mandatory = TRUE,
-    .kings_can_fly = TRUE,
-};
-
 typedef struct {
-  PlayerRuleset ruleset;
   const char *name;
   const char *summary;
-  const CheckersRules *rules;
+  CheckersRules rules;
 } CheckersRulesetInfo;
 
 static const CheckersRulesetInfo checkers_rulesets[] = {
-    {
-        .ruleset = PLAYER_RULESET_AMERICAN,
-        .name = "American (8x8)",
-        .summary = "8x8 board, mandatory captures, short kings, and no backward captures for men.",
-        .rules = &checkers_rules_american,
-    },
-    {
-        .ruleset = PLAYER_RULESET_INTERNATIONAL,
-        .name = "International (10x10)",
-        .summary = "10x10 board, mandatory longest captures, flying kings, and backward captures for men.",
-        .rules = &checkers_rules_international,
-    },
-    {
-        .ruleset = PLAYER_RULESET_RUSSIAN,
-        .name = "Russian (8x8)",
-        .summary = "8x8 board, mandatory longest captures, flying kings, and backward captures for men.",
-        .rules = &checkers_rules_russian,
-    },
+  [PLAYER_RULESET_AMERICAN] =
+      {.name = "American (8x8)",
+       .summary = "8x8 board, mandatory captures, short kings, and no backward captures for men.",
+       .rules =
+           {
+             .board_size = 8,
+             .men_can_jump_backwards = FALSE,
+             .capture_mandatory = TRUE,
+             .longest_capture_mandatory = FALSE,
+             .kings_can_fly = FALSE,
+           }},
+  [PLAYER_RULESET_INTERNATIONAL] =
+      {.name = "International (10x10)",
+       .summary = "10x10 board, mandatory longest captures, flying kings, and backward captures for men.",
+       .rules =
+           {
+             .board_size = 10,
+             .men_can_jump_backwards = TRUE,
+             .capture_mandatory = TRUE,
+             .longest_capture_mandatory = TRUE,
+             .kings_can_fly = TRUE,
+           }},
+  [PLAYER_RULESET_RUSSIAN] =
+      {.name = "Russian (8x8)",
+       .summary = "8x8 board, mandatory longest captures, flying kings, and backward captures for men.",
+       .rules =
+           {
+             .board_size = 8,
+             .men_can_jump_backwards = TRUE,
+             .capture_mandatory = TRUE,
+             .longest_capture_mandatory = TRUE,
+             .kings_can_fly = TRUE,
+           }},
 };
 
+static gboolean checkers_ruleset_index_is_valid(PlayerRuleset ruleset) {
+  gint ruleset_index = (gint)ruleset;
+  return ruleset_index >= 0 && (guint)ruleset_index < G_N_ELEMENTS(checkers_rulesets);
+}
+
 static const CheckersRulesetInfo *checkers_ruleset_info(PlayerRuleset ruleset) {
-  for (guint i = 0; i < G_N_ELEMENTS(checkers_rulesets); ++i) {
-    if (checkers_rulesets[i].ruleset == ruleset) {
-      return &checkers_rulesets[i];
-    }
+  if (!checkers_ruleset_index_is_valid(ruleset)) {
+    return NULL;
   }
 
-  return NULL;
+  return &checkers_rulesets[(gint)ruleset];
 }
 
 guint checkers_ruleset_count(void) {
@@ -91,5 +84,5 @@ const CheckersRules *checkers_ruleset_get_rules(PlayerRuleset ruleset) {
     return NULL;
   }
 
-  return info->rules;
+  return &info->rules;
 }

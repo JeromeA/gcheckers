@@ -86,7 +86,8 @@ before initialization.
 
 ## Ruleset catalog (`src/rulesets.c`, `src/rulesets.h`, `src/ruleset.h`)
 Module: ruleset metadata and presets.
-Role: central single source of truth for ruleset IDs, display names, UI summaries, and `CheckersRules` values.
+Role: central single source of truth for ruleset IDs, display names, UI summaries, and `CheckersRules` values in one
+enum-indexed table.
 Collaborates with: `window.c`/`new_game_dialog.c` for UI selection + summaries, and all game creators for explicit
 `game_init_with_rules()` setup.
 
