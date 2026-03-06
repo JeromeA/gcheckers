@@ -44,18 +44,14 @@ typedef struct Game Game;
 
 struct Game {
   GameState state;
-  CheckersRules rules;
+  const CheckersRules *rules;
 
   void (*print_state)(const Game *game, FILE *out);
   MoveList (*available_moves)(const Game *game);
 };
 
-void game_init(Game *game);
 void game_init_with_rules(Game *game, const CheckersRules *rules);
 void game_destroy(Game *game);
-
-CheckersRules game_rules_american_checkers(void);
-CheckersRules game_rules_international_draughts(void);
 
 MoveList game_list_available_moves(const Game *game);
 void movelist_free(MoveList *list);

@@ -1,0 +1,10 @@
+#ifndef CHECKERS_RULESET_H
+#define CHECKERS_RULESET_H
+
+typedef enum {
+  PLAYER_RULESET_AMERICAN = 0,
+  PLAYER_RULESET_INTERNATIONAL = 1,
+  PLAYER_RULESET_RUSSIAN = 2
+} PlayerRuleset;
+
+#endif

@@ -7,14 +7,23 @@
 #include <string.h>
 
 #include "../src/game.h"
+#include "../src/rulesets.h"
+
+static void test_init_game_with_ruleset(Game *game, PlayerRuleset ruleset) {
+  assert(game != NULL);
+
+  const CheckersRules *rules = checkers_ruleset_get_rules(ruleset);
+  assert(rules != NULL);
+  game_init_with_rules(game, rules);
+}
 
 static void test_initial_setup_moves(void) {
   Game game;
-  game_init(&game);
+  test_init_game_with_ruleset(&game, PLAYER_RULESET_AMERICAN);
 
   assert(game.state.turn == CHECKERS_COLOR_WHITE);
   assert(game.state.winner == CHECKERS_WINNER_NONE);
-  assert(game.rules.board_size == 8);
+  assert(game.rules->board_size == 8);
 
   for (uint8_t i = 0; i < 12; ++i) {
     assert(board_get(&game.state.board, i) == CHECKERS_PIECE_BLACK_MAN);
@@ -39,12 +48,12 @@ static void test_initial_setup_moves(void) {
 
 static void test_move_selection_helpers(void) {
   Game game;
-  game_init(&game);
+  test_init_game_with_ruleset(&game, PLAYER_RULESET_AMERICAN);
   memset(game.state.board.data, 0, sizeof(game.state.board.data));
   game.state.turn = CHECKERS_COLOR_WHITE;
 
-  int8_t white_index = board_index_from_coord(5, 0, game.rules.board_size);
-  int8_t landing_index = board_index_from_coord(4, 1, game.rules.board_size);
+  int8_t white_index = board_index_from_coord(5, 0, game.rules->board_size);
+  int8_t landing_index = board_index_from_coord(4, 1, game.rules->board_size);
   assert(white_index >= 0 && landing_index >= 0);
 
   board_set(&game.state.board, (uint8_t)white_index, CHECKERS_PIECE_WHITE_MAN);
@@ -69,14 +78,14 @@ static void test_move_selection_helpers(void) {
 
 static void test_forced_capture_and_removal_moves(void) {
   Game game;
-  game_init(&game);
+  test_init_game_with_ruleset(&game, PLAYER_RULESET_AMERICAN);
   memset(game.state.board.data, 0, sizeof(game.state.board.data));
   game.state.turn = CHECKERS_COLOR_WHITE;
   game.state.winner = CHECKERS_WINNER_NONE;
 
-  int8_t white_index = board_index_from_coord(5, 2, game.rules.board_size);
-  int8_t black_index = board_index_from_coord(4, 3, game.rules.board_size);
-  int8_t landing_index = board_index_from_coord(3, 4, game.rules.board_size);
+  int8_t white_index = board_index_from_coord(5, 2, game.rules->board_size);
+  int8_t black_index = board_index_from_coord(4, 3, game.rules->board_size);
+  int8_t landing_index = board_index_from_coord(3, 4, game.rules->board_size);
   assert(white_index >= 0 && black_index >= 0 && landing_index >= 0);
 
   board_set(&game.state.board, (uint8_t)white_index, CHECKERS_PIECE_WHITE_MAN);
@@ -104,7 +113,7 @@ static void test_forced_capture_and_removal_moves(void) {
 
 static void test_no_capture_over_own_piece(void) {
   Game game;
-  game_init(&game);
+  test_init_game_with_ruleset(&game, PLAYER_RULESET_AMERICAN);
   memset(game.state.board.data, 0, sizeof(game.state.board.data));
   game.state.turn = CHECKERS_COLOR_WHITE;
   game.state.winner = CHECKERS_WINNER_NONE;
@@ -130,17 +139,14 @@ static void test_no_capture_over_own_piece(void) {
 }
 
 static void test_men_backward_jump_rule(void) {
-  CheckersRules rules = game_rules_american_checkers();
-  rules.men_can_jump_backwards = false;
-
   Game game;
-  game_init_with_rules(&game, &rules);
+  test_init_game_with_ruleset(&game, PLAYER_RULESET_AMERICAN);
   memset(game.state.board.data, 0, sizeof(game.state.board.data));
   game.state.turn = CHECKERS_COLOR_WHITE;
 
-  int8_t white_index = board_index_from_coord(2, 1, game.rules.board_size);
-  int8_t black_index = board_index_from_coord(3, 2, game.rules.board_size);
-  int8_t landing_index = board_index_from_coord(4, 3, game.rules.board_size);
+  int8_t white_index = board_index_from_coord(2, 1, game.rules->board_size);
+  int8_t black_index = board_index_from_coord(3, 2, game.rules->board_size);
+  int8_t landing_index = board_index_from_coord(4, 3, game.rules->board_size);
   assert(white_index >= 0 && black_index >= 0 && landing_index >= 0);
 
   board_set(&game.state.board, (uint8_t)white_index, CHECKERS_PIECE_WHITE_MAN);
@@ -153,8 +159,7 @@ static void test_men_backward_jump_rule(void) {
   movelist_free(&moves);
   game_destroy(&game);
 
-  rules.men_can_jump_backwards = true;
-  game_init_with_rules(&game, &rules);
+  test_init_game_with_ruleset(&game, PLAYER_RULESET_RUSSIAN);
   memset(game.state.board.data, 0, sizeof(game.state.board.data));
   game.state.turn = CHECKERS_COLOR_WHITE;
   board_set(&game.state.board, (uint8_t)white_index, CHECKERS_PIECE_WHITE_MAN);
@@ -170,55 +175,49 @@ static void test_men_backward_jump_rule(void) {
   game_destroy(&game);
 }
 
-static void test_capture_optional_rule(void) {
-  CheckersRules rules = game_rules_american_checkers();
-  rules.capture_mandatory = false;
-
+static void test_capture_mandatory_rule(void) {
   Game game;
-  game_init_with_rules(&game, &rules);
+  test_init_game_with_ruleset(&game, PLAYER_RULESET_AMERICAN);
   memset(game.state.board.data, 0, sizeof(game.state.board.data));
   game.state.turn = CHECKERS_COLOR_WHITE;
 
-  int8_t white_index = board_index_from_coord(5, 2, game.rules.board_size);
-  int8_t black_index = board_index_from_coord(4, 3, game.rules.board_size);
-  int8_t landing_index = board_index_from_coord(3, 4, game.rules.board_size);
+  int8_t white_index = board_index_from_coord(5, 2, game.rules->board_size);
+  int8_t black_index = board_index_from_coord(4, 3, game.rules->board_size);
+  int8_t landing_index = board_index_from_coord(3, 4, game.rules->board_size);
   assert(white_index >= 0 && black_index >= 0 && landing_index >= 0);
 
   board_set(&game.state.board, (uint8_t)white_index, CHECKERS_PIECE_WHITE_MAN);
   board_set(&game.state.board, (uint8_t)black_index, CHECKERS_PIECE_BLACK_MAN);
 
   MoveList moves = game_list_available_moves(&game);
-  bool saw_capture = false;
-  bool saw_simple = false;
+  bool saw_capture = FALSE;
+  bool saw_simple = FALSE;
   for (size_t i = 0; i < moves.count; ++i) {
     if (moves.moves[i].captures > 0) {
-      saw_capture = true;
+      saw_capture = TRUE;
     } else {
-      saw_simple = true;
+      saw_simple = TRUE;
     }
   }
   assert(saw_capture);
-  assert(saw_simple);
+  assert(!saw_simple);
   movelist_free(&moves);
 
   game_destroy(&game);
 }
 
 static void test_longest_capture_rule(void) {
-  CheckersRules rules = game_rules_american_checkers();
-  rules.longest_capture_mandatory = true;
-
   Game game;
-  game_init_with_rules(&game, &rules);
+  test_init_game_with_ruleset(&game, PLAYER_RULESET_RUSSIAN);
   memset(game.state.board.data, 0, sizeof(game.state.board.data));
   game.state.turn = CHECKERS_COLOR_WHITE;
 
-  int8_t multi_start = board_index_from_coord(5, 0, game.rules.board_size);
-  int8_t single_start = board_index_from_coord(5, 4, game.rules.board_size);
-  int8_t first_mid = board_index_from_coord(4, 1, game.rules.board_size);
-  int8_t second_mid = board_index_from_coord(2, 3, game.rules.board_size);
-  int8_t single_mid = board_index_from_coord(4, 5, game.rules.board_size);
-  int8_t multi_end = board_index_from_coord(1, 4, game.rules.board_size);
+  int8_t multi_start = board_index_from_coord(5, 0, game.rules->board_size);
+  int8_t single_start = board_index_from_coord(5, 4, game.rules->board_size);
+  int8_t first_mid = board_index_from_coord(4, 1, game.rules->board_size);
+  int8_t second_mid = board_index_from_coord(2, 3, game.rules->board_size);
+  int8_t single_mid = board_index_from_coord(4, 5, game.rules->board_size);
+  int8_t multi_end = board_index_from_coord(1, 4, game.rules->board_size);
   assert(multi_start >= 0 && single_start >= 0 && first_mid >= 0 && second_mid >= 0);
   assert(single_mid >= 0 && multi_end >= 0);
 
@@ -239,17 +238,14 @@ static void test_longest_capture_rule(void) {
 }
 
 static void test_kings_can_fly(void) {
-  CheckersRules rules = game_rules_international_draughts();
-  rules.board_size = 8;
-
   Game game;
-  game_init_with_rules(&game, &rules);
+  test_init_game_with_ruleset(&game, PLAYER_RULESET_RUSSIAN);
   memset(game.state.board.data, 0, sizeof(game.state.board.data));
   game.state.turn = CHECKERS_COLOR_WHITE;
 
-  int8_t king_index = board_index_from_coord(5, 0, game.rules.board_size);
-  int8_t enemy_index = board_index_from_coord(3, 2, game.rules.board_size);
-  int8_t landing_far = board_index_from_coord(1, 4, game.rules.board_size);
+  int8_t king_index = board_index_from_coord(5, 0, game.rules->board_size);
+  int8_t enemy_index = board_index_from_coord(3, 2, game.rules->board_size);
+  int8_t landing_far = board_index_from_coord(1, 4, game.rules->board_size);
   assert(king_index >= 0 && enemy_index >= 0 && landing_far >= 0);
 
   board_set(&game.state.board, (uint8_t)king_index, CHECKERS_PIECE_WHITE_KING);
@@ -275,7 +271,7 @@ int main(void) {
   test_forced_capture_and_removal_moves();
   test_no_capture_over_own_piece();
   test_men_backward_jump_rule();
-  test_capture_optional_rule();
+  test_capture_mandatory_rule();
   test_longest_capture_rule();
   test_kings_can_fly();
 

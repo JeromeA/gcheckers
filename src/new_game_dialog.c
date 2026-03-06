@@ -1,9 +1,11 @@
 #include "window.h"
+#include "rulesets.h"
 
 typedef struct {
   GCheckersWindow *self;
   GtkWindow *dialog;
   GtkDropDown *ruleset;
+  GtkLabel *ruleset_summary;
   GtkDropDown *white_player;
   GtkDropDown *black_player;
   GtkScale *computer_depth_scale;
@@ -46,6 +48,30 @@ static void gcheckers_window_on_new_game_dialog_confirm_clicked(GtkButton * /*bu
   gtk_window_destroy(data->dialog);
 }
 
+static void gcheckers_window_new_game_update_ruleset_summary(GCheckersWindowNewGameDialogData *data) {
+  g_return_if_fail(data != NULL);
+  g_return_if_fail(GTK_IS_LABEL(data->ruleset_summary));
+  g_return_if_fail(GTK_IS_DROP_DOWN(data->ruleset));
+
+  PlayerRuleset ruleset = (PlayerRuleset)gtk_drop_down_get_selected(data->ruleset);
+  const char *summary = checkers_ruleset_summary(ruleset);
+  if (summary == NULL) {
+    g_debug("Missing ruleset summary");
+    return;
+  }
+
+  gtk_label_set_text(data->ruleset_summary, summary);
+}
+
+static void gcheckers_window_on_new_game_ruleset_selected(GObject * /*object*/,
+                                                          GParamSpec * /*pspec*/,
+                                                          gpointer user_data) {
+  GCheckersWindowNewGameDialogData *data = user_data;
+  g_return_if_fail(data != NULL);
+
+  gcheckers_window_new_game_update_ruleset_summary(data);
+}
+
 void gcheckers_window_present_new_game_dialog(GCheckersWindow *self) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
 
@@ -70,7 +96,18 @@ void gcheckers_window_present_new_game_dialog(GCheckersWindow *self) {
   gtk_grid_set_column_spacing(GTK_GRID(grid), 12);
   gtk_box_append(GTK_BOX(content), grid);
 
-  static const char *ruleset_options[] = {"American (8x8)", "International (10x10)", NULL};
+  guint ruleset_count = checkers_ruleset_count();
+  g_return_if_fail(ruleset_count > 0);
+  g_return_if_fail(ruleset_count <= G_MAXUINT8);
+  g_auto(GStrv) ruleset_options = g_new0(char *, ruleset_count + 1);
+  for (guint i = 0; i < ruleset_count; ++i) {
+    const char *name = checkers_ruleset_name((PlayerRuleset)i);
+    if (name == NULL) {
+      g_debug("Missing ruleset name");
+      return;
+    }
+    ruleset_options[i] = g_strdup(name);
+  }
   static const char *player_options[] = {"User", "Computer", NULL};
   GtkWidget *ruleset_label = gtk_label_new("Ruleset");
   gtk_widget_set_halign(ruleset_label, GTK_ALIGN_START);
@@ -80,8 +117,14 @@ void gcheckers_window_present_new_game_dialog(GCheckersWindow *self) {
   gtk_widget_set_halign(black_label, GTK_ALIGN_START);
   GtkWidget *level_label = gtk_label_new("AI level");
   gtk_widget_set_halign(level_label, GTK_ALIGN_START);
+  GtkWidget *ruleset_summary = gtk_label_new(NULL);
+  gtk_widget_set_halign(ruleset_summary, GTK_ALIGN_START);
+  gtk_label_set_xalign(GTK_LABEL(ruleset_summary), 0.0f);
+  gtk_label_set_wrap(GTK_LABEL(ruleset_summary), TRUE);
+  gtk_widget_set_hexpand(ruleset_summary, TRUE);
 
-  GtkDropDown *ruleset = GTK_DROP_DOWN(gtk_drop_down_new_from_strings(ruleset_options));
+  GtkDropDown *ruleset = GTK_DROP_DOWN(
+      gtk_drop_down_new_from_strings((const char *const *)ruleset_options));
   GtkDropDown *white_player = GTK_DROP_DOWN(gtk_drop_down_new_from_strings(player_options));
   GtkDropDown *black_player = GTK_DROP_DOWN(gtk_drop_down_new_from_strings(player_options));
   GtkScale *computer_depth_scale = GTK_SCALE(gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL,
@@ -101,12 +144,13 @@ void gcheckers_window_present_new_game_dialog(GCheckersWindow *self) {
 
   gtk_grid_attach(GTK_GRID(grid), ruleset_label, 0, 0, 1, 1);
   gtk_grid_attach(GTK_GRID(grid), GTK_WIDGET(ruleset), 1, 0, 1, 1);
-  gtk_grid_attach(GTK_GRID(grid), white_label, 0, 1, 1, 1);
-  gtk_grid_attach(GTK_GRID(grid), GTK_WIDGET(white_player), 1, 1, 1, 1);
-  gtk_grid_attach(GTK_GRID(grid), black_label, 0, 2, 1, 1);
-  gtk_grid_attach(GTK_GRID(grid), GTK_WIDGET(black_player), 1, 2, 1, 1);
-  gtk_grid_attach(GTK_GRID(grid), level_label, 0, 3, 1, 1);
-  gtk_grid_attach(GTK_GRID(grid), GTK_WIDGET(computer_depth_scale), 1, 3, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), ruleset_summary, 1, 1, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), white_label, 0, 2, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), GTK_WIDGET(white_player), 1, 2, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), black_label, 0, 3, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), GTK_WIDGET(black_player), 1, 3, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), level_label, 0, 4, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), GTK_WIDGET(computer_depth_scale), 1, 4, 1, 1);
 
   GtkWidget *actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
   gtk_widget_set_halign(actions, GTK_ALIGN_END);
@@ -121,9 +165,11 @@ void gcheckers_window_present_new_game_dialog(GCheckersWindow *self) {
   data->self = g_object_ref(self);
   data->dialog = GTK_WINDOW(dialog);
   data->ruleset = ruleset;
+  data->ruleset_summary = GTK_LABEL(ruleset_summary);
   data->white_player = white_player;
   data->black_player = black_player;
   data->computer_depth_scale = computer_depth_scale;
+  gcheckers_window_new_game_update_ruleset_summary(data);
 
   g_signal_connect(cancel_button,
                    "clicked",
@@ -136,6 +182,10 @@ void gcheckers_window_present_new_game_dialog(GCheckersWindow *self) {
   g_signal_connect(dialog,
                    "destroy",
                    G_CALLBACK(gcheckers_window_on_new_game_dialog_destroy),
+                   data);
+  g_signal_connect(ruleset,
+                   "notify::selected",
+                   G_CALLBACK(gcheckers_window_on_new_game_ruleset_selected),
                    data);
   gtk_window_present(GTK_WINDOW(dialog));
 }

@@ -15,6 +15,7 @@ LDLIBS := $(GLIB_LIBS) $(GOBJECT_LIBS) $(CURL_LIBS) -lm
 CFLAGS += $(GLIB_CFLAGS) $(GOBJECT_CFLAGS) $(CURL_CFLAGS)
 
 SRCS := src/board.c src/game.c src/game_print.c src/move_gen.c src/ai_alpha_beta.c \
+	src/rulesets.c \
 	src/ai_transposition_table.c src/ai_zobrist.c src/checkers_model.c
 POSITION_SRCS := src/position_search.c src/position_predicate.c src/position_format.c
 BOARD_SRCS := src/board.c
@@ -207,6 +208,7 @@ test_sgf_controller: tests/test_sgf_controller.c src/sgf_controller.c \
 
 test_window: $(GSETTINGS_SCHEMA_COMPILED) tests/test_window.c src/window.c \
 	src/new_game_dialog.c \
+	src/rulesets.c src/rulesets.h \
 	src/import_dialog.c \
 	src/sgf_file_actions.c src/sgf_file_actions.h \
 	src/bga_client.c src/bga_client.h \
@@ -251,6 +253,7 @@ test_screenshot: gcheckers tools/screenshot_gcheckers.sh
 
 gcheckers: $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c src/application.c src/window.c \
 	src/new_game_dialog.c \
+	src/rulesets.c src/rulesets.h \
 	src/import_dialog.c \
 	src/sgf_file_actions.c src/sgf_file_actions.h \
 	src/bga_client.c src/bga_client.h \

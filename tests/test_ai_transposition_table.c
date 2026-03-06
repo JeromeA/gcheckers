@@ -7,10 +7,19 @@
 #include "../src/ai_transposition_table.h"
 #include "../src/ai_zobrist.h"
 #include "../src/game.h"
+#include "../src/rulesets.h"
+
+static void test_init_game_with_ruleset(Game *game, PlayerRuleset ruleset) {
+  assert(game != NULL);
+
+  const CheckersRules *rules = checkers_ruleset_get_rules(ruleset);
+  assert(rules != NULL);
+  game_init_with_rules(game, rules);
+}
 
 static void test_zobrist_distinguishes_turn_and_position(void) {
   Game game = {0};
-  game_init(&game);
+  test_init_game_with_ruleset(&game, PLAYER_RULESET_AMERICAN);
 
   guint64 key_start = checkers_ai_zobrist_key(&game);
 

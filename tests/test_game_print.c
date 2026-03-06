@@ -8,6 +8,15 @@
 #include <string.h>
 
 #include "../src/game.h"
+#include "../src/rulesets.h"
+
+static void test_init_game_with_ruleset(Game *game, PlayerRuleset ruleset) {
+  assert(game != NULL);
+
+  const CheckersRules *rules = checkers_ruleset_get_rules(ruleset);
+  assert(rules != NULL);
+  game_init_with_rules(game, rules);
+}
 
 static void test_move_notation(void) {
   CheckersMove simple = {.path = {0, 4}, .length = 2, .captures = 0};
@@ -31,10 +40,10 @@ static void test_move_notation(void) {
 
 static void test_print_state_format(void) {
   Game game;
-  game_init(&game);
+  test_init_game_with_ruleset(&game, PLAYER_RULESET_AMERICAN);
 
-  int8_t white_king = board_index_from_coord(3, 0, game.rules.board_size);
-  int8_t black_king = board_index_from_coord(3, 2, game.rules.board_size);
+  int8_t white_king = board_index_from_coord(3, 0, game.rules->board_size);
+  int8_t black_king = board_index_from_coord(3, 2, game.rules->board_size);
   assert(white_king >= 0 && black_king >= 0);
   board_set(&game.state.board, (uint8_t)white_king, CHECKERS_PIECE_WHITE_KING);
   board_set(&game.state.board, (uint8_t)black_king, CHECKERS_PIECE_BLACK_KING);

@@ -6,6 +6,7 @@
 
 #include "../src/ai_alpha_beta.h"
 #include "../src/checkers_model.h"
+#include "../src/rulesets.h"
 
 static gboolean test_checkers_model_move_in_list(const MoveList *moves, const CheckersMove *move) {
   g_return_val_if_fail(moves != NULL, FALSE);
@@ -358,8 +359,9 @@ static void test_model_set_rules(void) {
   assert(state != NULL);
   assert(state->board.board_size == 8);
 
-  CheckersRules international = game_rules_international_draughts();
-  gcheckers_model_set_rules(model, &international);
+  const CheckersRules *international = checkers_ruleset_get_rules(PLAYER_RULESET_INTERNATIONAL);
+  assert(international != NULL);
+  gcheckers_model_set_rules(model, international);
 
   state = gcheckers_model_peek_state(model);
   assert(state != NULL);

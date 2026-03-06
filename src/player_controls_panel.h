@@ -2,6 +2,7 @@
 #define PLAYER_CONTROLS_PANEL_H
 
 #include "game.h"
+#include "ruleset.h"
 
 #include <gtk/gtk.h>
 
@@ -23,11 +24,6 @@ typedef enum {
 #define PLAYER_COMPUTER_DEPTH_MIN 2
 #define PLAYER_COMPUTER_DEPTH_MAX 16
 #define PLAYER_COMPUTER_DEPTH_DEFAULT 6
-
-typedef enum {
-  PLAYER_RULESET_AMERICAN = 0,
-  PLAYER_RULESET_INTERNATIONAL = 1
-} PlayerRuleset;
 
 PlayerControlsPanel *player_controls_panel_new(void);
 GtkDropDown *player_controls_panel_get_drop_down(PlayerControlsPanel *self, CheckersColor color);

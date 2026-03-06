@@ -144,11 +144,11 @@ void game_print_state(const Game *game, FILE *out) {
   fprintf(out, "Turn: %s\n", game->state.turn == CHECKERS_COLOR_WHITE ? "White" : "Black");
   fprintf(out, "Winner: %s\n", game_winner_label(game->state.winner));
 
-  int max_square = board_playable_squares(game->rules.board_size);
-  for (int row = 0; row < game->rules.board_size; ++row) {
-    for (int col = 0; col < game->rules.board_size; ++col) {
+  int max_square = board_playable_squares(game->rules->board_size);
+  for (int row = 0; row < game->rules->board_size; ++row) {
+    for (int col = 0; col < game->rules->board_size; ++col) {
       bool playable = (row + col) % 2 != 0;
-      int8_t idx = playable ? board_index_from_coord(row, col, game->rules.board_size) : -1;
+      int8_t idx = playable ? board_index_from_coord(row, col, game->rules->board_size) : -1;
       CheckersPiece piece = CHECKERS_PIECE_EMPTY;
       if (idx >= 0) {
         piece = board_get(&game->state.board, (uint8_t)idx);
@@ -161,9 +161,9 @@ void game_print_state(const Game *game, FILE *out) {
       fputs(top, out);
     }
     fputc('\n', out);
-    for (int col = 0; col < game->rules.board_size; ++col) {
+    for (int col = 0; col < game->rules->board_size; ++col) {
       bool playable = (row + col) % 2 != 0;
-      int8_t idx = playable ? board_index_from_coord(row, col, game->rules.board_size) : -1;
+      int8_t idx = playable ? board_index_from_coord(row, col, game->rules->board_size) : -1;
       CheckersPiece piece = CHECKERS_PIECE_EMPTY;
       if (idx >= 0) {
         piece = board_get(&game->state.board, (uint8_t)idx);

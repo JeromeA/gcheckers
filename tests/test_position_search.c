@@ -5,6 +5,7 @@
 #include <glib.h>
 
 #include "../src/position_search.h"
+#include "../src/rulesets.h"
 
 typedef struct {
   guint matches;
@@ -17,6 +18,14 @@ typedef struct {
   uint8_t winner;
   uint8_t board_data[CHECKERS_MAX_SQUARES];
 } PositionKey;
+
+static void test_init_game_with_ruleset(Game *game, PlayerRuleset ruleset) {
+  assert(game != NULL);
+
+  const CheckersRules *rules = checkers_ruleset_get_rules(ruleset);
+  assert(rules != NULL);
+  game_init_with_rules(game, rules);
+}
 
 static gboolean predicate_true(const Game */*position*/,
                                const CheckersMove */*line*/,
@@ -98,7 +107,7 @@ static guint expected_unique_positions_after_two_plies(const Game *root) {
 
 static void test_search_counts_two_plies_paths(void) {
   Game game;
-  game_init(&game);
+  test_init_game_with_ruleset(&game, PLAYER_RULESET_AMERICAN);
 
   guint expected = expected_paths_after_two_plies(&game);
   CheckersPositionSearchOptions options = {
@@ -130,7 +139,7 @@ static void test_search_counts_two_plies_paths(void) {
 
 static void test_search_counts_two_plies_unique_positions(void) {
   Game game;
-  game_init(&game);
+  test_init_game_with_ruleset(&game, PLAYER_RULESET_AMERICAN);
 
   guint expected_unique = expected_unique_positions_after_two_plies(&game);
   CheckersPositionSearchOptions options = {
@@ -162,7 +171,7 @@ static void test_search_counts_two_plies_unique_positions(void) {
 
 static void test_search_counts_one_ply(void) {
   Game game;
-  game_init(&game);
+  test_init_game_with_ruleset(&game, PLAYER_RULESET_AMERICAN);
 
   MoveList moves = game.available_moves(&game);
   guint expected = (guint)moves.count;

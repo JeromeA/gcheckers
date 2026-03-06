@@ -1,5 +1,5 @@
 #include "game.h"
-
+#include "rulesets.h"
 #include <glib.h>
 #include <stdbool.h>
 #include <string.h>
@@ -10,39 +10,22 @@ static bool rules_valid(const CheckersRules *rules) {
   return rules->board_size == 8 || rules->board_size == 10;
 }
 
-CheckersRules game_rules_american_checkers(void) {
-  CheckersRules rules = {
-      .board_size = 8,
-      .men_can_jump_backwards = false,
-      .capture_mandatory = true,
-      .longest_capture_mandatory = false,
-      .kings_can_fly = false};
-  return rules;
-}
+static bool rules_is_known_global(const CheckersRules *rules) {
+  g_return_val_if_fail(rules != NULL, false);
 
-CheckersRules game_rules_international_draughts(void) {
-  CheckersRules rules = {
-      .board_size = 10,
-      .men_can_jump_backwards = true,
-      .capture_mandatory = true,
-      .longest_capture_mandatory = true,
-      .kings_can_fly = true};
-  return rules;
-}
-
-void game_init(Game *game) {
-  CheckersRules rules = game_rules_american_checkers();
-  game_init_with_rules(game, &rules);
+  return rules == &checkers_rules_american || rules == &checkers_rules_international ||
+         rules == &checkers_rules_russian;
 }
 
 void game_init_with_rules(Game *game, const CheckersRules *rules) {
   g_return_if_fail(game != NULL);
   g_return_if_fail(rules != NULL);
   g_return_if_fail(rules_valid(rules));
+  g_return_if_fail(rules_is_known_global(rules));
 
   memset(game, 0, sizeof(*game));
-  game->rules = *rules;
-  board_reset(&game->state.board, game->rules.board_size);
+  game->rules = rules;
+  board_reset(&game->state.board, game->rules->board_size);
   game->state.turn = CHECKERS_COLOR_WHITE;
   game->state.winner = CHECKERS_WINNER_NONE;
   game->print_state = game_print_state;
@@ -78,13 +61,13 @@ static void remove_captured(Game *game, const CheckersMove *move) {
     int from_col = 0;
     int to_row = 0;
     int to_col = 0;
-    board_coord_from_index(from, &from_row, &from_col, game->rules.board_size);
-    board_coord_from_index(to, &to_row, &to_col, game->rules.board_size);
+    board_coord_from_index(from, &from_row, &from_col, game->rules->board_size);
+    board_coord_from_index(to, &to_row, &to_col, game->rules->board_size);
 
     int dr = (to_row > from_row) ? 1 : -1;
     int dc = (to_col > from_col) ? 1 : -1;
     for (int r = from_row + dr, c = from_col + dc; r != to_row && c != to_col; r += dr, c += dc) {
-      int8_t mid_index = board_index_from_coord(r, c, game->rules.board_size);
+      int8_t mid_index = board_index_from_coord(r, c, game->rules->board_size);
       if (mid_index < 0) {
         continue;
       }
@@ -124,8 +107,8 @@ int game_apply_move(Game *game, const CheckersMove *move) {
   uint8_t destination = move->path[move->length - 1];
   int dest_row = 0;
   int dest_col = 0;
-  board_coord_from_index(destination, &dest_row, &dest_col, game->rules.board_size);
-  if (promote_needed(piece, dest_row, game->rules.board_size)) {
+  board_coord_from_index(destination, &dest_row, &dest_col, game->rules->board_size);
+  if (promote_needed(piece, dest_row, game->rules->board_size)) {
     piece = board_piece_color(piece) == CHECKERS_COLOR_WHITE ? CHECKERS_PIECE_WHITE_KING
                                                              : CHECKERS_PIECE_BLACK_KING;
   }

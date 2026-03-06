@@ -19,6 +19,8 @@ Top-level menu actions are
 also exposed in a toolbar
 (`New game...`, `Force move`, SGF timeline rewind/step/skip actions) via GTK actions.
 Owns modal flows for `New game` and `Import games` wizards.
+`New game` shows a ruleset dropdown (American/International/Russian) with a concise summary label below it.
+Ruleset names, summaries, and `CheckersRules` construction are defined in one shared catalog (`rulesets.c`).
 Import wizard persists BoardGameArena email/password and remember flag with `GSettings` when fetching history, and
 prefills credentials on the credentials step from stored values. Parsed login responses drive in-memory result
 handling; status/error responses trigger an error dialog and close the wizard. Successful login advances to a history
@@ -79,6 +81,14 @@ Collaborates with: all game and model modules via compile-time limits.
 Module: core game rules and state.
 Role: define game types, rule enforcement, promotion, winner updates, and the public game API.
 Collaborates with: `move_gen.c` for move enumeration and `checkers_model.c` for GTK integration.
+Game creation is explicit via `game_init_with_rules()`; callers fetch concrete presets from the shared ruleset catalog
+before initialization.
+
+## Ruleset catalog (`src/rulesets.c`, `src/rulesets.h`, `src/ruleset.h`)
+Module: ruleset metadata and presets.
+Role: central single source of truth for ruleset IDs, display names, UI summaries, and `CheckersRules` values.
+Collaborates with: `window.c`/`new_game_dialog.c` for UI selection + summaries, and all game creators for explicit
+`game_init_with_rules()` setup.
 
 ## Game printing (`src/game_print.c`)
 Module: terminal formatting helpers.

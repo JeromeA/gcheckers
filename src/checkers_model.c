@@ -1,5 +1,6 @@
 #include "ai_alpha_beta.h"
 #include "checkers_model.h"
+#include "rulesets.h"
 
 #include <glib.h>
 #include <string.h>
@@ -51,7 +52,9 @@ static void gcheckers_model_class_init(GCheckersModelClass *klass) {
 }
 
 static void gcheckers_model_init(GCheckersModel *self) {
-  game_init(&self->game);
+  const CheckersRules *rules = checkers_ruleset_get_rules(PLAYER_RULESET_AMERICAN);
+  g_return_if_fail(rules != NULL);
+  game_init_with_rules(&self->game, rules);
   self->has_last_move = FALSE;
   self->analysis_tt = checkers_ai_tt_new(GCHECKERS_MODEL_ANALYSIS_TT_SIZE_MB);
   if (self->analysis_tt == NULL) {
@@ -66,9 +69,9 @@ GCheckersModel *gcheckers_model_new(void) {
 void gcheckers_model_reset(GCheckersModel *self) {
   g_return_if_fail(GCHECKERS_IS_MODEL(self));
 
-  CheckersRules rules = self->game.rules;
+  const CheckersRules *rules = self->game.rules;
   game_destroy(&self->game);
-  game_init_with_rules(&self->game, &rules);
+  game_init_with_rules(&self->game, rules);
   self->has_last_move = FALSE;
   gcheckers_model_emit_state_changed(self);
 }
@@ -77,7 +80,7 @@ void gcheckers_model_set_rules(GCheckersModel *self, const CheckersRules *rules)
   g_return_if_fail(GCHECKERS_IS_MODEL(self));
   g_return_if_fail(rules != NULL);
 
-  if (memcmp(&self->game.rules, rules, sizeof(*rules)) == 0) {
+  if (self->game.rules == rules) {
     return;
   }
 

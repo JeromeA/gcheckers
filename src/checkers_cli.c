@@ -1,5 +1,6 @@
 #include "ai_alpha_beta.h"
 #include "game.h"
+#include "rulesets.h"
 
 #include <glib.h>
 #include <stdbool.h>
@@ -111,7 +112,9 @@ static bool play_turn_ai(Game *game) {
 
 int main(int /*argc*/, char **/*argv*/) {
   Game game;
-  game_init(&game);
+  const CheckersRules *rules = checkers_ruleset_get_rules(PLAYER_RULESET_AMERICAN);
+  g_return_val_if_fail(rules != NULL, 1);
+  game_init_with_rules(&game, rules);
 
   while (game.state.winner == CHECKERS_WINNER_NONE) {
     game.print_state(&game, stdout);

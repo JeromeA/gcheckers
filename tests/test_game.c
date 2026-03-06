@@ -5,10 +5,19 @@
 #include <stdio.h>
 
 #include "../src/game.h"
+#include "../src/rulesets.h"
+
+static void test_init_game_with_ruleset(Game *game, PlayerRuleset ruleset) {
+  assert(game != NULL);
+
+  const CheckersRules *rules = checkers_ruleset_get_rules(ruleset);
+  assert(rules != NULL);
+  game_init_with_rules(game, rules);
+}
 
 static void test_apply_simple_move(void) {
   Game game;
-  game_init(&game);
+  test_init_game_with_ruleset(&game, PLAYER_RULESET_AMERICAN);
 
   CheckersMove move = {.path = {21, 17}, .length = 2, .captures = 0};
   int rc = game_apply_move(&game, &move);
@@ -23,10 +32,11 @@ static void test_apply_simple_move(void) {
 
 static void test_presets_and_board_size(void) {
   Game game;
-  CheckersRules rules = game_rules_international_draughts();
-  game_init_with_rules(&game, &rules);
+  const CheckersRules *rules = checkers_ruleset_get_rules(PLAYER_RULESET_INTERNATIONAL);
+  assert(rules != NULL);
+  game_init_with_rules(&game, rules);
 
-  assert(game.rules.board_size == 10);
+  assert(game.rules->board_size == 10);
 
   for (uint8_t i = 0; i < 20; ++i) {
     assert(board_get(&game.state.board, i) == CHECKERS_PIECE_BLACK_MAN);

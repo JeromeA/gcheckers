@@ -2,6 +2,7 @@
 #include "window.h"
 
 #include "board_view.h"
+#include "rulesets.h"
 #include "sgf_file_actions.h"
 #include "sgf_controller.h"
 #include "style.h"
@@ -120,36 +121,26 @@ static gboolean gcheckers_window_choose_computer_move(GCheckersWindow *self, Che
   return gcheckers_sgf_controller_step_ai_move(self->sgf_controller, effective_depth, move);
 }
 
-static CheckersRules gcheckers_window_rules_from_selection(PlayerRuleset ruleset) {
-  if (ruleset == PLAYER_RULESET_INTERNATIONAL) {
-    return game_rules_international_draughts();
-  }
-
-  return game_rules_american_checkers();
-}
-
 static void gcheckers_window_set_ruleset(GCheckersWindow *self, PlayerRuleset ruleset) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
   g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
   g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self->sgf_controller));
 
-  if (ruleset != PLAYER_RULESET_AMERICAN && ruleset != PLAYER_RULESET_INTERNATIONAL) {
-    g_debug("Unexpected ruleset value");
+  const CheckersRules *rules = checkers_ruleset_get_rules(ruleset);
+  if (rules == NULL) {
     return;
   }
 
   if (ruleset == self->applied_ruleset) {
     const GameState *state = gcheckers_model_peek_state(self->model);
     if (state != NULL) {
-      guint expected_board_size = ruleset == PLAYER_RULESET_INTERNATIONAL ? 10u : 8u;
-      if (state->board.board_size == expected_board_size) {
+      if (state->board.board_size == rules->board_size) {
         return;
       }
     }
   }
 
-  CheckersRules rules = gcheckers_window_rules_from_selection(ruleset);
-  gcheckers_model_set_rules(self->model, &rules);
+  gcheckers_model_set_rules(self->model, rules);
   board_view_clear_selection(self->board_view);
   gcheckers_sgf_controller_new_game(self->sgf_controller);
   self->applied_ruleset = ruleset;

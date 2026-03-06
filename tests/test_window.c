@@ -167,6 +167,33 @@ static GtkWidget *test_gcheckers_window_find_widget_for_action(GtkWidget *root, 
   return NULL;
 }
 
+static GtkDropDown *test_gcheckers_window_find_ruleset_dropdown(GtkWidget *root) {
+  g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
+
+  if (GTK_IS_DROP_DOWN(root)) {
+    GListModel *model = gtk_drop_down_get_model(GTK_DROP_DOWN(root));
+    if (GTK_IS_STRING_LIST(model) && g_list_model_get_n_items(model) == 3) {
+      const char *first = gtk_string_list_get_string(GTK_STRING_LIST(model), 0);
+      const char *second = gtk_string_list_get_string(GTK_STRING_LIST(model), 1);
+      const char *third = gtk_string_list_get_string(GTK_STRING_LIST(model), 2);
+      if (g_strcmp0(first, "American (8x8)") == 0 && g_strcmp0(second, "International (10x10)") == 0 &&
+          g_strcmp0(third, "Russian (8x8)") == 0) {
+        return GTK_DROP_DOWN(root);
+      }
+    }
+  }
+
+  for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
+       child = gtk_widget_get_next_sibling(child)) {
+    GtkDropDown *match = test_gcheckers_window_find_ruleset_dropdown(child);
+    if (match != NULL) {
+      return match;
+    }
+  }
+
+  return NULL;
+}
+
 static GtkWindow *test_gcheckers_window_find_toplevel_by_title(const char *title) {
   g_return_val_if_fail(title != NULL, NULL);
 
@@ -555,6 +582,54 @@ static void test_gcheckers_window_ruleset_switch_resets_model(void) {
   g_clear_object(&app);
 }
 
+static void test_gcheckers_window_new_game_dialog_ruleset_options_and_russian_apply(void) {
+  GtkApplication *app = test_gcheckers_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersWindow *window = gcheckers_window_new(app, model);
+  gtk_window_present(GTK_WINDOW(window));
+  test_gcheckers_window_drain_main_context(16);
+
+  g_action_group_activate_action(G_ACTION_GROUP(app), "new-game", NULL);
+  test_gcheckers_window_drain_main_context(16);
+
+  GtkWindow *dialog = test_gcheckers_window_find_toplevel_by_title("New game");
+  g_assert_nonnull(dialog);
+
+  const char *international_summary =
+      "10x10 board, mandatory longest captures, flying kings, and backward captures for men.";
+  GtkLabel *summary_label = test_gcheckers_window_find_label_with_text(GTK_WIDGET(dialog), international_summary);
+  g_assert_nonnull(summary_label);
+
+  GtkDropDown *ruleset_dropdown = test_gcheckers_window_find_ruleset_dropdown(GTK_WIDGET(dialog));
+  g_assert_nonnull(ruleset_dropdown);
+  gtk_drop_down_set_selected(ruleset_dropdown, PLAYER_RULESET_RUSSIAN);
+  test_gcheckers_window_drain_main_context(16);
+
+  const char *russian_summary =
+      "8x8 board, mandatory longest captures, flying kings, and backward captures for men.";
+  summary_label = test_gcheckers_window_find_label_with_text(GTK_WIDGET(dialog), russian_summary);
+  g_assert_nonnull(summary_label);
+
+  GtkButton *confirm_button = test_gcheckers_window_find_button_with_label(GTK_WIDGET(dialog), "New Game");
+  g_assert_nonnull(confirm_button);
+  g_signal_emit_by_name(confirm_button, "clicked");
+  test_gcheckers_window_drain_main_context(16);
+
+  g_assert_cmpuint(gcheckers_window_get_ruleset(window), ==, PLAYER_RULESET_RUSSIAN);
+  Game game = {0};
+  g_assert_true(gcheckers_model_copy_game(model, &game));
+  g_assert_cmpuint(game.rules->board_size, ==, 8);
+  g_assert_true(game.rules->capture_mandatory);
+  g_assert_true(game.rules->longest_capture_mandatory);
+  g_assert_true(game.rules->kings_can_fly);
+  g_assert_true(game.rules->men_can_jump_backwards);
+
+  g_clear_object(&dialog);
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   if (!gtk_init_check()) {
@@ -570,6 +645,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/gcheckers-window/analysis-toggle", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/import-wizard-flow", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/ruleset-switch", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/new-game-ruleset-options-russian", test_gcheckers_window_skip);
     return g_test_run();
   }
 
@@ -606,5 +682,7 @@ int main(int argc, char **argv) {
   g_test_add_func("/gcheckers-window/analysis-toggle", test_gcheckers_window_analysis_toggle);
   g_test_add_func("/gcheckers-window/import-wizard-flow", test_gcheckers_window_import_wizard_flow);
   g_test_add_func("/gcheckers-window/ruleset-switch", test_gcheckers_window_ruleset_switch_resets_model);
+  g_test_add_func("/gcheckers-window/new-game-ruleset-options-russian",
+                  test_gcheckers_window_new_game_dialog_ruleset_options_and_russian_apply);
   return g_test_run();
 }

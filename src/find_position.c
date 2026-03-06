@@ -1,6 +1,7 @@
 #include "position_format.h"
 #include "position_predicate.h"
 #include "position_search.h"
+#include "rulesets.h"
 
 #include <glib.h>
 #include <stdio.h>
@@ -65,7 +66,9 @@ static void on_match_found(const Game */*position*/,
 
 int main(int /*argc*/, char **/*argv*/) {
   Game game;
-  game_init(&game);
+  const CheckersRules *rules = checkers_ruleset_get_rules(PLAYER_RULESET_AMERICAN);
+  g_return_val_if_fail(rules != NULL, 1);
+  game_init_with_rules(&game, rules);
 
   CheckersPositionSearchOptions options = {
       .min_ply = 4,
