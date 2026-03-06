@@ -83,6 +83,7 @@ void gcheckers_window_present_new_game_dialog(GCheckersWindow *self) {
   gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
   gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(self));
   gtk_window_set_destroy_with_parent(GTK_WINDOW(dialog), TRUE);
+  gtk_window_set_resizable(GTK_WINDOW(dialog), FALSE);
 
   GtkWidget *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
   gtk_widget_set_margin_top(content, 12);
@@ -120,7 +121,8 @@ void gcheckers_window_present_new_game_dialog(GCheckersWindow *self) {
   GtkWidget *ruleset_summary = gtk_label_new(NULL);
   gtk_widget_set_halign(ruleset_summary, GTK_ALIGN_START);
   gtk_label_set_xalign(GTK_LABEL(ruleset_summary), 0.0f);
-  gtk_label_set_wrap(GTK_LABEL(ruleset_summary), TRUE);
+  gtk_label_set_wrap(GTK_LABEL(ruleset_summary), FALSE);
+  gtk_label_set_ellipsize(GTK_LABEL(ruleset_summary), PANGO_ELLIPSIZE_END);
   gtk_widget_set_hexpand(ruleset_summary, TRUE);
 
   GtkDropDown *ruleset = GTK_DROP_DOWN(

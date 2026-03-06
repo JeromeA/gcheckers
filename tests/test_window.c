@@ -586,6 +586,14 @@ static void test_gcheckers_window_new_game_dialog_ruleset_options_and_russian_ap
   GtkApplication *app = test_gcheckers_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
   GCheckersWindow *window = gcheckers_window_new(app, model);
+
+  gcheckers_window_apply_new_game_settings(window,
+                                           PLAYER_RULESET_AMERICAN,
+                                           PLAYER_CONTROL_MODE_USER,
+                                           PLAYER_CONTROL_MODE_USER,
+                                           0);
+  test_gcheckers_window_drain_main_context(16);
+
   gtk_window_present(GTK_WINDOW(window));
   test_gcheckers_window_drain_main_context(16);
 
@@ -595,13 +603,24 @@ static void test_gcheckers_window_new_game_dialog_ruleset_options_and_russian_ap
   GtkWindow *dialog = test_gcheckers_window_find_toplevel_by_title("New game");
   g_assert_nonnull(dialog);
 
-  const char *international_summary =
-      "10x10 board, mandatory longest captures, flying kings, and backward captures for men.";
-  GtkLabel *summary_label = test_gcheckers_window_find_label_with_text(GTK_WIDGET(dialog), international_summary);
+  const char *american_summary =
+      "8x8 board, mandatory captures, short kings, and no backward captures for men.";
+  GtkLabel *summary_label = test_gcheckers_window_find_label_with_text(GTK_WIDGET(dialog), american_summary);
   g_assert_nonnull(summary_label);
+  int initial_height = gtk_widget_get_height(GTK_WIDGET(dialog));
+  g_assert_cmpint(initial_height, >, 0);
 
   GtkDropDown *ruleset_dropdown = test_gcheckers_window_find_ruleset_dropdown(GTK_WIDGET(dialog));
   g_assert_nonnull(ruleset_dropdown);
+  gtk_drop_down_set_selected(ruleset_dropdown, PLAYER_RULESET_INTERNATIONAL);
+  test_gcheckers_window_drain_main_context(16);
+
+  const char *international_summary =
+      "10x10 board, mandatory longest captures, flying kings, and backward captures for men.";
+  summary_label = test_gcheckers_window_find_label_with_text(GTK_WIDGET(dialog), international_summary);
+  g_assert_nonnull(summary_label);
+  g_assert_cmpint(gtk_widget_get_height(GTK_WIDGET(dialog)), ==, initial_height);
+
   gtk_drop_down_set_selected(ruleset_dropdown, PLAYER_RULESET_RUSSIAN);
   test_gcheckers_window_drain_main_context(16);
 
@@ -609,6 +628,7 @@ static void test_gcheckers_window_new_game_dialog_ruleset_options_and_russian_ap
       "8x8 board, mandatory longest captures, flying kings, and backward captures for men.";
   summary_label = test_gcheckers_window_find_label_with_text(GTK_WIDGET(dialog), russian_summary);
   g_assert_nonnull(summary_label);
+  g_assert_cmpint(gtk_widget_get_height(GTK_WIDGET(dialog)), ==, initial_height);
 
   GtkButton *confirm_button = test_gcheckers_window_find_button_with_label(GTK_WIDGET(dialog), "New Game");
   g_assert_nonnull(confirm_button);

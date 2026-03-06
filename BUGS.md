@@ -137,3 +137,13 @@ the best-to-worst scored move list until a depth completed and published the fin
 
 The fix keeps a copy of the last completed depth report and includes its scored move section in in-progress snapshots,
 while still updating `Nodes` live for the currently searching depth.
+
+## New game dialog added extra blank space and kept growing when ruleset summary changed
+
+The `New game` modal should keep a stable compact height when switching rulesets.
+
+After adding the ruleset summary label, changing selection to longer summaries made the dialog grow taller and it did
+not shrink back, which left visible blank space below the action buttons.
+
+The fix keeps the dialog non-resizable and makes the summary a single-line ellipsized label, removing wrap-driven
+height-for-width changes when the summary text changes.

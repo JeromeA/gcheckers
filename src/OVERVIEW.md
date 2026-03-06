@@ -21,6 +21,8 @@ also exposed in a toolbar
 Owns modal flows for `New game` and `Import games` wizards.
 `New game` shows a ruleset dropdown (American/International/Russian) with a concise summary label below it.
 Ruleset names, summaries, and `CheckersRules` construction are defined in one shared catalog (`rulesets.c`).
+The modal is non-resizable and renders the ruleset summary as a single-line ellipsized label so switching rulesets
+does not trigger dialog height growth or leave extra blank space below action buttons.
 Import wizard persists BoardGameArena email/password and remember flag with `GSettings` when fetching history, and
 prefills credentials on the credentials step from stored values. Parsed login responses drive in-memory result
 handling; status/error responses trigger an error dialog and close the wizard. Successful login advances to a history
