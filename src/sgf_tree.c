@@ -1,13 +1,11 @@
 #include "sgf_tree.h"
 
-#include <string.h>
-
 struct _SgfNode {
   SgfColor color;
   guint move_number;
   SgfNode *parent;
   GPtrArray *children;
-  GBytes *payload;
+  GHashTable *properties;
 };
 
 struct _SgfTree {
@@ -18,16 +16,32 @@ struct _SgfTree {
 
 G_DEFINE_TYPE(SgfTree, sgf_tree, G_TYPE_OBJECT)
 
-static SgfNode *sgf_node_new(SgfNode *parent, SgfColor color, guint move_number, GBytes *payload) {
+static gint sgf_tree_sort_strings(gconstpointer left, gconstpointer right) {
+  g_return_val_if_fail(left != NULL, 0);
+  g_return_val_if_fail(right != NULL, 0);
+  return g_strcmp0((const char *)left, (const char *)right);
+}
+
+static const char *sgf_tree_move_ident_for_color(SgfColor color) {
+  if (color == SGF_COLOR_BLACK) {
+    return "B";
+  }
+
+  if (color == SGF_COLOR_WHITE) {
+    return "W";
+  }
+
+  return NULL;
+}
+
+static SgfNode *sgf_node_new(SgfNode *parent, SgfColor color, guint move_number) {
   SgfNode *node = g_new0(SgfNode, 1);
 
   node->color = color;
   node->move_number = move_number;
   node->parent = parent;
   node->children = g_ptr_array_new();
-  if (payload) {
-    node->payload = g_bytes_ref(payload);
-  }
+  node->properties = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)g_ptr_array_unref);
 
   return node;
 }
@@ -45,9 +59,9 @@ static void sgf_node_free(SgfNode *node) {
     node->children = NULL;
   }
 
-  if (node->payload) {
-    g_bytes_unref(node->payload);
-    node->payload = NULL;
+  if (node->properties) {
+    g_hash_table_unref(node->properties);
+    node->properties = NULL;
   }
 
   g_free(node);
@@ -66,19 +80,7 @@ static gboolean sgf_node_is_descendant(const SgfNode *node, const SgfNode *root)
   return FALSE;
 }
 
-static gboolean sgf_node_payload_matches(GBytes *payload, GBytes *candidate) {
-  if (!payload && !candidate) {
-    return TRUE;
-  }
-
-  if (!payload || !candidate) {
-    return FALSE;
-  }
-
-  return g_bytes_equal(payload, candidate);
-}
-
-static gboolean sgf_node_matches_move(const SgfNode *node, SgfColor color, GBytes *payload) {
+static gboolean sgf_node_matches_move(const SgfNode *node, SgfColor color, const char *move_value) {
   if (!node) {
     return FALSE;
   }
@@ -87,7 +89,13 @@ static gboolean sgf_node_matches_move(const SgfNode *node, SgfColor color, GByte
     return FALSE;
   }
 
-  return sgf_node_payload_matches(node->payload, payload);
+  const char *ident = sgf_tree_move_ident_for_color(color);
+  if (ident == NULL) {
+    return move_value == NULL;
+  }
+
+  const char *candidate_value = sgf_node_get_property_first(node, ident);
+  return g_strcmp0(candidate_value, move_value) == 0;
 }
 
 static void sgf_tree_clear_internal(SgfTree *self) {
@@ -100,7 +108,7 @@ static void sgf_tree_clear_internal(SgfTree *self) {
 
 static void sgf_tree_reset_internal(SgfTree *self) {
   sgf_tree_clear_internal(self);
-  self->root = sgf_node_new(NULL, SGF_COLOR_NONE, 0, NULL);
+  self->root = sgf_node_new(NULL, SGF_COLOR_NONE, 0);
   self->current = self->root;
 }
 
@@ -144,14 +152,15 @@ const SgfNode *sgf_tree_get_current(SgfTree *self) {
   return self->current;
 }
 
-const SgfNode *sgf_tree_append_move(SgfTree *self, SgfColor color, GBytes *payload) {
+const SgfNode *sgf_tree_append_move(SgfTree *self, SgfColor color, const char *move_value) {
   g_return_val_if_fail(SGF_IS_TREE(self), NULL);
   g_return_val_if_fail(self->current != NULL, NULL);
+  g_return_val_if_fail(color == SGF_COLOR_BLACK || color == SGF_COLOR_WHITE, NULL);
 
   if (self->current->children) {
     for (guint i = 0; i < self->current->children->len; ++i) {
       SgfNode *candidate = g_ptr_array_index(self->current->children, i);
-      if (sgf_node_matches_move(candidate, color, payload)) {
+      if (sgf_node_matches_move(candidate, color, move_value)) {
         self->current = candidate;
         return candidate;
       }
@@ -159,7 +168,14 @@ const SgfNode *sgf_tree_append_move(SgfTree *self, SgfColor color, GBytes *paylo
   }
 
   guint move_number = self->current->move_number + 1;
-  SgfNode *node = sgf_node_new(self->current, color, move_number, payload);
+  SgfNode *node = sgf_node_new(self->current, color, move_number);
+  if (move_value != NULL) {
+    const char *ident = sgf_tree_move_ident_for_color(color);
+    if (!sgf_node_add_property(node, ident, move_value)) {
+      sgf_node_free(node);
+      return NULL;
+    }
+  }
   g_ptr_array_add(self->current->children, node);
   self->current = node;
 
@@ -220,12 +236,64 @@ const GPtrArray *sgf_node_get_children(const SgfNode *node) {
   return node->children;
 }
 
-GBytes *sgf_node_get_payload(const SgfNode *node) {
-  g_return_val_if_fail(node != NULL, NULL);
+gboolean sgf_node_add_property(SgfNode *node, const char *ident, const char *value) {
+  g_return_val_if_fail(node != NULL, FALSE);
+  g_return_val_if_fail(node->properties != NULL, FALSE);
+  g_return_val_if_fail(ident != NULL, FALSE);
+  g_return_val_if_fail(value != NULL, FALSE);
 
-  if (!node->payload) {
+  GPtrArray *values = g_hash_table_lookup(node->properties, ident);
+  if (values == NULL) {
+    values = g_ptr_array_new_with_free_func(g_free);
+    g_hash_table_insert(node->properties, g_strdup(ident), values);
+  }
+
+  g_ptr_array_add(values, g_strdup(value));
+  return TRUE;
+}
+
+gboolean sgf_node_clear_property(SgfNode *node, const char *ident) {
+  g_return_val_if_fail(node != NULL, FALSE);
+  g_return_val_if_fail(node->properties != NULL, FALSE);
+  g_return_val_if_fail(ident != NULL, FALSE);
+
+  return g_hash_table_remove(node->properties, ident);
+}
+
+const GPtrArray *sgf_node_get_property_values(const SgfNode *node, const char *ident) {
+  g_return_val_if_fail(node != NULL, NULL);
+  g_return_val_if_fail(node->properties != NULL, NULL);
+  g_return_val_if_fail(ident != NULL, NULL);
+
+  return g_hash_table_lookup(node->properties, ident);
+}
+
+const char *sgf_node_get_property_first(const SgfNode *node, const char *ident) {
+  g_return_val_if_fail(node != NULL, NULL);
+  g_return_val_if_fail(node->properties != NULL, NULL);
+  g_return_val_if_fail(ident != NULL, NULL);
+
+  const GPtrArray *values = sgf_node_get_property_values(node, ident);
+  if (values == NULL || values->len == 0) {
     return NULL;
   }
 
-  return g_bytes_ref(node->payload);
+  return g_ptr_array_index((GPtrArray *)values, 0);
+}
+
+GPtrArray *sgf_node_copy_property_idents(const SgfNode *node) {
+  g_return_val_if_fail(node != NULL, NULL);
+  g_return_val_if_fail(node->properties != NULL, NULL);
+
+  GPtrArray *idents = g_ptr_array_new_with_free_func(g_free);
+  GList *keys = g_hash_table_get_keys(node->properties);
+  if (keys != NULL) {
+    keys = g_list_sort(keys, sgf_tree_sort_strings);
+    for (GList *cursor = keys; cursor != NULL; cursor = cursor->next) {
+      g_ptr_array_add(idents, g_strdup((const char *)cursor->data));
+    }
+    g_list_free(keys);
+  }
+
+  return idents;
 }

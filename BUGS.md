@@ -147,3 +147,16 @@ not shrink back, which left visible blank space below the action buttons.
 
 The fix keeps the dialog non-resizable and makes the summary a single-line ellipsized label, removing wrap-driven
 height-for-width changes when the summary text changes.
+
+## SGF nodes stored opaque payload bytes instead of SGF properties
+
+The SGF in-memory model should mirror SGF file semantics by storing named properties per node (for example `B[...]`,
+`W[...]`, `FF[...]`) rather than an opaque binary blob.
+
+Move nodes stored `CheckersMove` data in `GBytes` payloads, and SGF save/load converted between payload bytes and SGF
+text on every boundary. This made the tree representation diverge from SGF structure and dropped repeated property
+values during parsing.
+
+The fix replaces payload storage with per-node property maps (`ident -> values[]`), adds typed move-property helpers,
+migrates SGF IO and controller paths to property-based access, and preserves repeated values during parse/save
+roundtrips.

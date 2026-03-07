@@ -1,4 +1,4 @@
-# Make SGF Tree The Timeline Source Of Truth
+# Replace SGF Node Payload With SGF Properties
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
@@ -7,134 +7,161 @@ This plan is maintained according to PLANS.md at the repository root (`PLANS.md`
 
 ## Purpose / Big Picture
 
-After this change, move chronology and navigation are owned by `SgfTree` rather than inferred from `Game` history. A
-played move is now processed in SGF-first order: validate, append under SGF current, advance SGF current, then project
-that SGF transition to the game model. When SGF selection jumps to a non-child node, the model resets and replays from
-root to the selected SGF node. This is observable by running SGF controller and window tests and seeing consistent SGF
-branching/replay behavior without history-size polling.
+After this change, SGF nodes store SGF properties directly instead of an opaque payload byte blob. This makes the
+in-memory model match SGF structure (`PROP[value]`) and allows round-tripping metadata and move text through a single
+representation.
+You can observe this by loading SGF files, navigating and saving them, and seeing that node properties (including move
+properties `B[...]`/`W[...]`) are preserved while controller replay still applies typed `CheckersMove` values.
 
 ## Progress
 
-- [x] (2026-02-20 08:18Z) Replaced SGF scroller API surface with one public scroll function and internal retry path.
-- [x] (2026-02-20 08:42Z) Added SGF scroller diagnostics for node-widget map snapshots at rebuild and selection-miss
-  points.
-- [x] (2026-02-20 08:56Z) Removed `Game` move history storage and moved last-move overlay dependency to model-level
-  cached last move.
-- [x] (2026-02-20 09:00Z) Refactored `GCheckersSgfController` to SGF-first move application and SGF->model transition
-  syncing (single-step parent->child vs reset+replay).
-- [x] (2026-02-20 09:02Z) Rewired board/window move paths to call SGF controller APIs instead of mutating model/game
-  directly.
-- [x] (2026-02-20 09:03Z) Updated tests, docs (`BUGS.md`, `src/OVERVIEW.md`), and validated with `make -j$(nproc)` and
-  `make test`.
+- [x] (2026-03-07 20:22Z) Reviewed current SGF payload usage in `sgf_tree`, `sgf_io`, `sgf_controller`, and tests.
+- [x] (2026-03-07 20:28Z) Implemented SGF node property storage and APIs in `src/sgf_tree.[ch]`; removed payload API.
+- [x] (2026-03-07 20:28Z) Added `src/sgf_move_props.[ch]` to convert move properties <-> `CheckersMove`.
+- [x] (2026-03-07 20:30Z) Migrated `src/sgf_io.c` to property-backed parse/save with repeated property values
+  retained.
+- [x] (2026-03-07 20:29Z) Migrated `src/sgf_controller.c` replay/append paths to property-based move
+  extraction/formatting.
+- [x] (2026-03-07 20:31Z) Updated SGF tests and documentation (`src/OVERVIEW.md`, `BUGS.md`) for payload removal.
+- [x] (2026-03-07 20:32Z) Validated with `make -j$(nproc)` and `make test`.
+- [x] (2026-03-07 20:33Z) Added SGF IO coverage for repeated property values and re-ran `make test`.
 
 ## Surprises & Discoveries
 
-- Observation: `sgf_view_set_tree()` had a same-pointer fast path that rebuilt view widgets without refreshing selected
-  raw pointer from the tree current node.
-  Evidence: Debug logs showed root node pointer changes after reset with immediate `selected widget missing` lookups.
+- Observation: `sgf_io_parse_node_properties()` currently discards repeated values after the first and only keeps one
+  string per property key.
+  Evidence: `src/sgf_io.c` inserts one `g_hash_table` entry and parses extra `[...]` values into a variable named
+  `ignored`.
 
-- Observation: GTK test commands still report Chromium crashpad socket warnings in this environment.
-  Evidence: `make test` printed crashpad `setsockopt` warnings while still completing and returning success.
+- Observation: `make test` still prints crashpad/socket warnings from the screenshot/browser path in this environment,
+  but test targets continue and exit successfully.
+  Evidence: `make test` emitted `setsockopt: Operation not permitted` from Chromium and still returned success.
 
 ## Decision Log
 
-- Decision: Keep `GCheckersModel::gcheckers_model_peek_last_move()` but back it with model-level cached move, not
-  `Game` history.
-  Rationale: Board overlay needs last-move rendering, but full game timeline ownership moved to SGF.
-  Date/Author: 2026-02-20 / Codex
+- Decision: Keep `SgfColor` and `move_number` fields on `SgfNode` while replacing payload storage with SGF
+  properties.
+  Rationale: UI rendering and navigation already depend on color/move-number accessors; removing both in the
+  same refactor adds migration risk without helping the payload->properties goal.
+  Date/Author: 2026-03-07 / Codex
 
-- Decision: Route board input through a move callback into `GCheckersSgfController` (`board_view_set_move_handler`) so
-  board clicks no longer call `gcheckers_model_apply_move()` directly.
-  Rationale: Enforces SGF-first transition order at the UI boundary.
-  Date/Author: 2026-02-20 / Codex
+- Decision: Introduce a focused helper module (`sgf_move_props`) rather than spreading move-notation parse/format logic
+  across controller and IO.
+  Rationale: This keeps typed move behavior centralized while SGF tree remains generic-property oriented.
+  Date/Author: 2026-03-07 / Codex
 
-- Decision: Remove SGF append-from-history polling (`last_history_size`) and model state-change coupling in SGF
-  controller.
-  Rationale: Polling inverted ownership and caused SGF/game drift risks; SGF must be explicit timeline authority.
-  Date/Author: 2026-02-20 / Codex
+- Decision: Keep `sgf_tree_append_move()` as a move-specialized API (`color`, `move_value`) while adding generic
+  node-property APIs separately.
+  Rationale: Existing callers and SGF view tests rely on append+dedupe move semantics; keeping this API limited avoids
+  broader tree construction churn during payload removal.
+  Date/Author: 2026-03-07 / Codex
 
 ## Outcomes & Retrospective
 
-- Outcome: SGF timeline is now authoritative and explicit. Move application, random AI stepping, and SGF navigation all
-  flow through SGF controller transition logic.
-- Outcome: `Game` no longer stores historical move arrays; model overlay behavior remains intact through cached last
-  move.
-- Remaining gap: GTK display-dependent assertions are still skipped in this CI-like environment.
+The SGF tree no longer stores opaque payload bytes. Nodes now own SGF property maps with ordered identifier
+retrieval and multi-value support, and all payload APIs have been removed.
+
+Move conversion logic now lives in `src/sgf_move_props.[ch]`, which the SGF controller and SGF IO both use. Controller
+replay and apply continue to operate on typed `CheckersMove` values while SGF storage remains property-native.
+
+SGF IO now parses and preserves repeated property values, applies parsed properties to root and move nodes, and
+serializes nodes from stored properties. Root metadata defaults are ensured through root properties.
+
+`make -j$(nproc)` and `make test` pass after the migration. GTK-dependent tests remain skipped in this headless
+environment as before.
 
 ## Context and Orientation
 
-Relevant modules:
+`src/sgf_tree.[ch]` now stores SGF properties per node (`ident -> values[]`) and exposes property add/get/clear APIs.
+`src/sgf_controller.c` uses `sgf_move_props` to convert node move properties to/from typed `CheckersMove` values.
+`src/sgf_io.c` parses SGF text into node properties and serializes directly from those properties. SGF view modules
+(`src/sgf_view*.c`) still only depend on structure (`color`, children, move number). SGF tests now assert property
+behavior (`tests/test_sgf_tree.c`, `tests/test_sgf_io.c`, `tests/test_sgf_controller.c`).
 
-- `src/sgf_tree.c`, `src/sgf_tree.h`: SGF node graph and current-node pointer.
-- `src/sgf_controller.c`, `src/sgf_controller.h`: SGF authority and SGF<->model projection logic.
-- `src/checkers_model.c`, `src/checkers_model.h`: model API and state-change emission.
-- `src/game.c`, `src/game.h`: core game state transitions (now without history buffer).
-- `src/board_selection_controller.c`, `src/board_view.c`, `src/window.c`: board and window input/control
-  paths.
-- `tests/test_sgf_controller.c`, `tests/test_window.c`, `tests/test_checkers_model.c`,
-  `tests/test_game.c`: regression and behavior tests for the refactor.
+In this repository, an SGF property means an uppercase identifier like `B`, `W`, `FF`, `CA` with one or more bracketed
+values. Nodes can legally have multiple values per property key, so storage must represent repeated values.
 
 ## Plan of Work
 
-First, remove game-history ownership and ensure model still exposes last move for overlay rendering. Next, rewrite SGF
-controller so SGF selection/move operations directly drive model transitions, including optimized parent-child one-step
-application and fallback full replay. Then route board clicks and auto-move requests through SGF controller APIs to
-enforce SGF-first move order. Finally, update tests and architecture docs to reflect new ownership.
+First, refactor tree storage so each node owns a property map and expose APIs to add and read properties
+(including multi-value properties). Keep append semantics for move nodes by passing move text and color;
+deduplicate sibling nodes by color plus move text.
+
+Next, add `sgf_move_props` as the typed boundary between SGF properties and `CheckersMove`. It will parse move
+notation from `B`/`W` properties and format `CheckersMove` back to move property values.
+
+Then migrate SGF I/O to use properties as the source of truth: parser writes all properties into each node;
+serializer emits properties from each node rather than reconstructing from payload. Root metadata handling
+moves to root node properties.
+
+After that, migrate SGF controller: when appending a move, format and store SGF move properties; when
+replaying, parse move properties from selected nodes.
+
+Finally, update tests and docs, add a BUGS entry for the fixed architectural mismatch, and validate full
+build and tests.
 
 ## Concrete Steps
 
-From repository root:
+From repository root (`/home/jerome/Data/gcheckers`):
 
-1) Build all binaries:
+1. Edit `src/sgf_tree.[ch]` to replace payload with property storage and new APIs.
+2. Add `src/sgf_move_props.[ch]` and wire it into SGF IO/controller build targets in `Makefile`.
+3. Refactor `src/sgf_io.c` parse/save flow to populate and emit node properties directly.
+4. Refactor `src/sgf_controller.c` move extraction and append code to use `sgf_move_props`.
+5. Update tests in `tests/test_sgf_tree.c`, `tests/test_sgf_io.c`, `tests/test_sgf_controller.c`.
+6. Update docs: `src/OVERVIEW.md` and `BUGS.md`.
+7. Validate with:
 
    make -j$(nproc)
-
-2) Run test suite:
-
    make test
 
 Expected outcomes:
 
-- Build completes with `-Werror` and no compilation warnings.
-- Test binaries pass; GTK display-dependent tests may report SKIP in headless mode.
+- Compilation succeeds under `-Werror` with no warnings.
+- SGF tests pass with no references to payload APIs.
+- SGF save/load roundtrip preserves node properties and move behavior.
 
 ## Validation and Acceptance
 
 Acceptance criteria:
 
-- A legal move applied through SGF controller appears as a payloaded SGF child of current and advances SGF current.
-- SGF navigation to non-child nodes replays model state from root path.
-- Window and board paths use SGF controller apply/step APIs (no direct model move application in those paths).
-- `make -j$(nproc)` and `make test` succeed.
+- No SGF node payload API remains in `src/sgf_tree.h`.
+- SGF nodes expose add/get property functions and can hold repeated property values.
+- SGF controller replay and apply paths still function using `CheckersMove` conversions from properties.
+- SGF IO load/save roundtrips move trees and properties.
+- `make -j$(nproc)` and `make test` pass.
 
 ## Idempotence and Recovery
 
-This refactor is source-only and idempotent: rerunning builds/tests is safe. If SGF/model synchronization fails during
-future edits, restore invariants by checking that every move entry point calls SGF controller APIs and that
-`gcheckers_sgf_controller_sync_model_for_transition()` still handles both transition modes.
+All edits are source-only and safe to rerun. If migration is interrupted, recovery path is to keep tree API
+and call sites in sync before compiling: any payload reference after API removal will fail fast at compile
+time. Re-running build/tests is idempotent.
 
 ## Artifacts and Notes
 
-Observed validation commands:
+Validation transcript entries:
 
   make -j$(nproc)
   make test
 
-Both commands completed successfully after the refactor.
+Both commands completed successfully in this run.
 
 ## Interfaces and Dependencies
 
-Key resulting interfaces:
+Target interfaces after migration:
 
-- `gboolean gcheckers_sgf_controller_apply_move(GCheckersSgfController *self, const CheckersMove *move);`
-- `gboolean gcheckers_sgf_controller_step_random_move(GCheckersSgfController *self, CheckersMove *out_move);`
-- `void board_view_set_move_handler(BoardView *self, BoardViewMoveHandler handler, gpointer user_data);`
-- `void board_selection_controller_set_move_handler(BoardSelectionController *self, BoardSelectionControllerMoveHandler
-  handler, gpointer user_data);`
+- `const SgfNode *sgf_tree_append_move(SgfTree *self, SgfColor color, const char *move_value);`
+- `gboolean sgf_node_add_property(SgfNode *node, const char *ident, const char *value);`
+- `const GPtrArray *sgf_node_get_property_values(const SgfNode *node, const char *ident);`
+- `const char *sgf_node_get_property_first(const SgfNode *node, const char *ident);`
+- `gboolean sgf_move_props_set_move(SgfNode *node, SgfColor color, const CheckersMove *move, GError **error);`
+- `gboolean sgf_move_props_parse_node(const SgfNode *node, SgfColor *out_color, CheckersMove *out_move,
+  GError **error);`
+
+Dependencies remain GLib/GObject/GTK as currently configured in `Makefile`.
 
 Plan updates:
-- 2026-02-20: Replaced prior board-view refactor plan with SGF-source-of-truth execution record to match implemented
-  architecture changes requested in this task.
-- 2026-03-01: Added SGF load/save architecture split: GTK-free `sgf_io` core module (`src/sgf_io.c`) plus GTK window
-  action integration (`win.sgf-load`, `win.sgf-save-as`) in `src/sgf_file_actions.c`, with menu wiring in
-  `src/application.c` and roundtrip coverage in `tests/test_sgf_io.c`.
+- 2026-03-07: Replaced prior SGF timeline ExecPlan content with this payload-to-properties migration plan
+  requested by the user.
+- 2026-03-07: Updated progress, decisions, discoveries, outcomes, and validation evidence after
+  completing implementation and running build/tests.

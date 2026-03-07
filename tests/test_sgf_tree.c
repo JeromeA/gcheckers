@@ -1,13 +1,7 @@
 #include <assert.h>
-#include <string.h>
-
 #include <glib.h>
 
 #include "../src/sgf_tree.h"
-
-typedef struct {
-  int value;
-} DummyPayload;
 
 static void test_sgf_tree_append_and_select(void) {
   SgfTree *tree = sgf_tree_new();
@@ -17,10 +11,7 @@ static void test_sgf_tree_append_and_select(void) {
   assert(sgf_node_get_move_number(root) == 0);
   assert(sgf_tree_get_current(tree) == root);
 
-  DummyPayload payload = {.value = 42};
-  GBytes *bytes = g_bytes_new(&payload, sizeof(payload));
-  const SgfNode *node = sgf_tree_append_move(tree, SGF_COLOR_BLACK, bytes);
-  g_bytes_unref(bytes);
+  const SgfNode *node = sgf_tree_append_move(tree, SGF_COLOR_BLACK, "12-16");
 
   assert(node != NULL);
   assert(sgf_tree_get_current(tree) == node);
@@ -28,13 +19,9 @@ static void test_sgf_tree_append_and_select(void) {
   assert(sgf_node_get_color(node) == SGF_COLOR_BLACK);
   assert(sgf_node_get_parent(node) == root);
 
-  GBytes *stored = sgf_node_get_payload(node);
-  assert(stored != NULL);
-  gsize size = 0;
-  const DummyPayload *stored_data = g_bytes_get_data(stored, &size);
-  assert(size == sizeof(DummyPayload));
-  assert(stored_data->value == 42);
-  g_bytes_unref(stored);
+  const char *move = sgf_node_get_property_first(node, "B");
+  assert(move != NULL);
+  assert(g_strcmp0(move, "12-16") == 0);
 
   assert(sgf_tree_set_current(tree, root));
   assert(sgf_tree_get_current(tree) == root);
@@ -44,13 +31,10 @@ static void test_sgf_tree_append_and_select(void) {
 
 static void test_sgf_tree_main_line(void) {
   SgfTree *tree = sgf_tree_new();
-  GBytes *bytes = g_bytes_new("X", 1);
-
-  const SgfNode *first = sgf_tree_append_move(tree, SGF_COLOR_WHITE, bytes);
+  const SgfNode *first = sgf_tree_append_move(tree, SGF_COLOR_WHITE, "21-17");
   assert(first != NULL);
-  const SgfNode *second = sgf_tree_append_move(tree, SGF_COLOR_BLACK, bytes);
+  const SgfNode *second = sgf_tree_append_move(tree, SGF_COLOR_BLACK, "9-13");
   assert(second != NULL);
-  g_bytes_unref(bytes);
 
   GPtrArray *line = sgf_tree_build_main_line(tree);
   assert(line != NULL);
@@ -66,21 +50,18 @@ static void test_sgf_tree_main_line(void) {
 static void test_sgf_tree_append_existing_child(void) {
   SgfTree *tree = sgf_tree_new();
   const SgfNode *root = sgf_tree_get_root(tree);
-  DummyPayload payload = {.value = 99};
-  GBytes *bytes = g_bytes_new(&payload, sizeof(payload));
 
-  const SgfNode *first = sgf_tree_append_move(tree, SGF_COLOR_WHITE, bytes);
+  const SgfNode *first = sgf_tree_append_move(tree, SGF_COLOR_WHITE, "21-17");
   assert(first != NULL);
   assert(sgf_tree_set_current(tree, root));
 
-  const SgfNode *second = sgf_tree_append_move(tree, SGF_COLOR_WHITE, bytes);
+  const SgfNode *second = sgf_tree_append_move(tree, SGF_COLOR_WHITE, "21-17");
   assert(second == first);
 
   const GPtrArray *children = sgf_node_get_children(root);
   assert(children != NULL);
   assert(children->len == 1);
 
-  g_bytes_unref(bytes);
   g_object_unref(tree);
 }
 

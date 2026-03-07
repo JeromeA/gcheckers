@@ -309,15 +309,11 @@ static void test_sgf_view_tree_box_is_measured_overlay(void) {
 
 static void test_sgf_view_branch_columns(void) {
   SgfTree *tree = sgf_tree_new();
-  g_autoptr(GBytes) move_1_payload = g_bytes_new_static("m1", sizeof("m1") - 1);
-  const SgfNode *move_1 = sgf_tree_append_move(tree, SGF_COLOR_BLACK, move_1_payload);
-  g_autoptr(GBytes) move_2_payload = g_bytes_new_static("m2a", sizeof("m2a") - 1);
-  const SgfNode *move_2 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, move_2_payload);
-  g_autoptr(GBytes) move_3_payload = g_bytes_new_static("m3", sizeof("m3") - 1);
-  sgf_tree_append_move(tree, SGF_COLOR_BLACK, move_3_payload);
+  const SgfNode *move_1 = sgf_tree_append_move(tree, SGF_COLOR_BLACK, "m1");
+  const SgfNode *move_2 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, "m2a");
+  sgf_tree_append_move(tree, SGF_COLOR_BLACK, "m3");
   g_assert_true(sgf_tree_set_current(tree, move_1));
-  g_autoptr(GBytes) branch_2_payload = g_bytes_new_static("m2b", sizeof("m2b") - 1);
-  const SgfNode *branch_2 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, branch_2_payload);
+  const SgfNode *branch_2 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, "m2b");
 
   SgfView *view = sgf_view_new();
   sgf_view_set_tree(view, tree);
@@ -551,15 +547,11 @@ static void test_sgf_view_scrolls_selected_disc_fully_into_view(void) {
 
 static void test_sgf_view_navigation(void) {
   SgfTree *tree = sgf_tree_new();
-  g_autoptr(GBytes) move_1_payload = g_bytes_new_static("n1", sizeof("n1") - 1);
-  const SgfNode *move_1 = sgf_tree_append_move(tree, SGF_COLOR_BLACK, move_1_payload);
-  g_autoptr(GBytes) move_2_payload = g_bytes_new_static("n2a", sizeof("n2a") - 1);
-  const SgfNode *move_2 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, move_2_payload);
-  g_autoptr(GBytes) move_3_payload = g_bytes_new_static("n3", sizeof("n3") - 1);
-  sgf_tree_append_move(tree, SGF_COLOR_BLACK, move_3_payload);
+  const SgfNode *move_1 = sgf_tree_append_move(tree, SGF_COLOR_BLACK, "n1");
+  const SgfNode *move_2 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, "n2a");
+  sgf_tree_append_move(tree, SGF_COLOR_BLACK, "n3");
   g_assert_true(sgf_tree_set_current(tree, move_1));
-  g_autoptr(GBytes) branch_2_payload = g_bytes_new_static("n2b", sizeof("n2b") - 1);
-  const SgfNode *branch_2 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, branch_2_payload);
+  const SgfNode *branch_2 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, "n2b");
 
   SgfView *view = sgf_view_new();
   sgf_view_set_tree(view, tree);

@@ -1,5 +1,6 @@
 #include "sgf_controller.h"
 #include "sgf_io.h"
+#include "sgf_move_props.h"
 
 #include <string.h>
 
@@ -53,26 +54,19 @@ static void gcheckers_sgf_controller_disconnect_model(GCheckersSgfController *se
   g_clear_object(&self->model);
 }
 
-static gboolean gcheckers_sgf_controller_extract_payload_move(const SgfNode *node, CheckersMove *move) {
+static gboolean gcheckers_sgf_controller_extract_node_move(const SgfNode *node, CheckersMove *move) {
   g_return_val_if_fail(node != NULL, FALSE);
   g_return_val_if_fail(move != NULL, FALSE);
 
-  GBytes *payload = sgf_node_get_payload(node);
-  if (!payload) {
-    g_debug("Missing payload for SGF node %u", sgf_node_get_move_number(node));
+  SgfColor color = SGF_COLOR_NONE;
+  g_autoptr(GError) error = NULL;
+  if (!sgf_move_props_parse_node(node, &color, move, &error)) {
+    g_debug("Failed to extract SGF move for node %u: %s",
+            sgf_node_get_move_number(node),
+            error != NULL ? error->message : "unknown error");
     return FALSE;
   }
 
-  gsize size = 0;
-  const void *data = g_bytes_get_data(payload, &size);
-  if (size != sizeof(*move)) {
-    g_debug("Unexpected SGF payload size %zu", size);
-    g_bytes_unref(payload);
-    return FALSE;
-  }
-
-  memcpy(move, data, sizeof(*move));
-  g_bytes_unref(payload);
   return TRUE;
 }
 
@@ -119,7 +113,7 @@ static gboolean gcheckers_sgf_controller_replay_to_node(GCheckersSgfController *
     }
 
     CheckersMove move;
-    if (!gcheckers_sgf_controller_extract_payload_move(step, &move)) {
+    if (!gcheckers_sgf_controller_extract_node_move(step, &move)) {
       success = FALSE;
       break;
     }
@@ -149,7 +143,7 @@ static gboolean gcheckers_sgf_controller_sync_model_for_transition(GCheckersSgfC
 
   if (previous && sgf_node_get_parent(target) == previous) {
     CheckersMove move;
-    if (!gcheckers_sgf_controller_extract_payload_move(target, &move)) {
+    if (!gcheckers_sgf_controller_extract_node_move(target, &move)) {
       return FALSE;
     }
 
@@ -308,10 +302,17 @@ gboolean gcheckers_sgf_controller_apply_move(GCheckersSgfController *self, const
   }
 
   const SgfNode *previous = sgf_tree_get_current(self->sgf_tree);
-  GBytes *payload = g_bytes_new(move, sizeof(*move));
-  const SgfNode *node =
-      sgf_tree_append_move(self->sgf_tree, gcheckers_sgf_controller_color_from_turn(state->turn), payload);
-  g_bytes_unref(payload);
+  char notation[128] = {0};
+  g_autoptr(GError) error = NULL;
+  if (!sgf_move_props_format_notation(move, notation, sizeof(notation), &error)) {
+    g_debug("Failed to format SGF move notation: %s", error != NULL ? error->message : "unknown error");
+    movelist_free(&moves);
+    return FALSE;
+  }
+
+  const SgfNode *node = sgf_tree_append_move(self->sgf_tree,
+                                             gcheckers_sgf_controller_color_from_turn(state->turn),
+                                             notation);
   movelist_free(&moves);
 
   if (!node) {

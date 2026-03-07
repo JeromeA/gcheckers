@@ -1,6 +1,7 @@
 #include "sgf_io.h"
 
 #include "game.h"
+#include "sgf_move_props.h"
 
 #include <string.h>
 
@@ -31,9 +32,50 @@ typedef struct {
   GString *text;
 } SgfIoWriter;
 
+typedef struct {
+  GHashTable *props;
+  GPtrArray *idents;
+} SgfIoPropertyBag;
+
 static GQuark sgf_io_error_quark(void) {
   return g_quark_from_static_string("sgf-io-error");
 }
+
+static void sgf_io_destroy_property_values(gpointer data) {
+  GPtrArray *values = data;
+  if (values != NULL) {
+    g_ptr_array_unref(values);
+  }
+}
+
+static gint sgf_io_sort_strings(gconstpointer left, gconstpointer right) {
+  return g_strcmp0((const char *)left, (const char *)right);
+}
+
+static SgfIoPropertyBag *sgf_io_property_bag_new(void) {
+  SgfIoPropertyBag *bag = g_new0(SgfIoPropertyBag, 1);
+  bag->props = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, sgf_io_destroy_property_values);
+  bag->idents = g_ptr_array_new_with_free_func(g_free);
+  return bag;
+}
+
+static void sgf_io_property_bag_free(SgfIoPropertyBag *bag) {
+  if (bag == NULL) {
+    return;
+  }
+
+  if (bag->props != NULL) {
+    g_hash_table_unref(bag->props);
+    bag->props = NULL;
+  }
+  if (bag->idents != NULL) {
+    g_ptr_array_unref(bag->idents);
+    bag->idents = NULL;
+  }
+  g_free(bag);
+}
+
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(SgfIoPropertyBag, sgf_io_property_bag_free)
 
 static gboolean sgf_io_is_upper_alpha(char c) {
   return c >= 'A' && c <= 'Z';
@@ -121,9 +163,11 @@ static char *sgf_io_parse_prop_value(SgfIoParser *p, GError **error) {
   return NULL;
 }
 
-static gboolean sgf_io_parse_node_properties(SgfIoParser *p, GHashTable *props, GError **error) {
+static gboolean sgf_io_parse_node_properties(SgfIoParser *p, SgfIoPropertyBag *bag, GError **error) {
   g_return_val_if_fail(p != NULL, FALSE);
-  g_return_val_if_fail(props != NULL, FALSE);
+  g_return_val_if_fail(bag != NULL, FALSE);
+  g_return_val_if_fail(bag->props != NULL, FALSE);
+  g_return_val_if_fail(bag->idents != NULL, FALSE);
 
   while (TRUE) {
     char next = '\0';
@@ -136,21 +180,29 @@ static gboolean sgf_io_parse_node_properties(SgfIoParser *p, GHashTable *props, 
       return FALSE;
     }
 
+    GPtrArray *values = g_hash_table_lookup(bag->props, ident);
+    if (values == NULL) {
+      values = g_ptr_array_new_with_free_func(g_free);
+      g_hash_table_insert(bag->props, g_strdup(ident), values);
+      g_ptr_array_add(bag->idents, g_strdup(ident));
+    }
+
     g_autofree char *first_value = sgf_io_parse_prop_value(p, error);
     if (first_value == NULL) {
       return FALSE;
     }
-    g_hash_table_insert(props, g_strdup(ident), g_strdup(first_value));
+    g_ptr_array_add(values, g_strdup(first_value));
 
     while (TRUE) {
       char maybe_more = '\0';
       if (!sgf_io_peek_char(p, &maybe_more) || maybe_more != '[') {
         break;
       }
-      g_autofree char *ignored = sgf_io_parse_prop_value(p, error);
-      if (ignored == NULL) {
+      g_autofree char *next_value = sgf_io_parse_prop_value(p, error);
+      if (next_value == NULL) {
         return FALSE;
       }
+      g_ptr_array_add(values, g_strdup(next_value));
     }
   }
 }
@@ -169,96 +221,66 @@ static char *sgf_io_escape_prop_value(const char *value) {
   return g_string_free(g_steal_pointer(&escaped), FALSE);
 }
 
-static gboolean sgf_io_parse_move_notation(const char *notation, CheckersMove *out_move, GError **error) {
-  g_return_val_if_fail(notation != NULL, FALSE);
-  g_return_val_if_fail(out_move != NULL, FALSE);
+static const GPtrArray *sgf_io_property_bag_get_values(const SgfIoPropertyBag *bag, const char *ident) {
+  g_return_val_if_fail(bag != NULL, NULL);
+  g_return_val_if_fail(bag->props != NULL, NULL);
+  g_return_val_if_fail(ident != NULL, NULL);
+  return g_hash_table_lookup(bag->props, ident);
+}
 
-  gsize len = strlen(notation);
-  if (len == 0) {
-    g_set_error_literal(error, sgf_io_error_quark(), 4, "Empty SGF move value");
-    return FALSE;
+static const char *sgf_io_property_bag_get_first(const SgfIoPropertyBag *bag, const char *ident) {
+  const GPtrArray *values = sgf_io_property_bag_get_values(bag, ident);
+  if (values == NULL || values->len == 0) {
+    return NULL;
   }
 
-  CheckersMove move = {0};
-  gboolean captures = FALSE;
-  char separator = '\0';
-  gsize pos = 0;
+  return g_ptr_array_index((GPtrArray *)values, 0);
+}
 
-  while (pos < len) {
-    gsize start = pos;
-    while (pos < len && g_ascii_isdigit(notation[pos])) {
-      pos++;
-    }
-    if (start == pos) {
-      g_set_error(error, sgf_io_error_quark(), 5, "Invalid SGF move token near: %s", notation + pos);
-      return FALSE;
-    }
+static gboolean sgf_io_node_apply_property_values(SgfNode *node, const char *ident, const GPtrArray *values) {
+  g_return_val_if_fail(node != NULL, FALSE);
+  g_return_val_if_fail(ident != NULL, FALSE);
+  g_return_val_if_fail(values != NULL, FALSE);
 
-    g_autofree char *square_text = g_strndup(notation + start, pos - start);
-    char *end_ptr = NULL;
-    guint64 square_1based = g_ascii_strtoull(square_text, &end_ptr, 10);
-    if (end_ptr == square_text || (end_ptr != NULL && *end_ptr != '\0') || square_1based == 0 ||
-        square_1based > CHECKERS_MAX_SQUARES) {
-      g_set_error(error, sgf_io_error_quark(), 6, "Invalid SGF move square: %.*s", (int)(pos - start),
-                  notation + start);
+  sgf_node_clear_property(node, ident);
+  for (guint i = 0; i < values->len; ++i) {
+    const char *value = g_ptr_array_index((GPtrArray *)values, i);
+    if (!sgf_node_add_property(node, ident, value)) {
       return FALSE;
     }
-    if (move.length >= CHECKERS_MAX_MOVE_LENGTH) {
-      g_set_error(error, sgf_io_error_quark(), 7, "SGF move exceeds max path length");
-      return FALSE;
-    }
-    move.path[move.length++] = (uint8_t)(square_1based - 1);
-
-    if (pos >= len) {
-      break;
-    }
-    if (notation[pos] != '-' && notation[pos] != 'x') {
-      g_set_error(error, sgf_io_error_quark(), 8, "Invalid SGF move separator: %c", notation[pos]);
-      return FALSE;
-    }
-    if (separator == '\0') {
-      separator = notation[pos];
-      captures = separator == 'x';
-    } else if (separator != notation[pos]) {
-      g_set_error_literal(error, sgf_io_error_quark(), 9, "Mixed SGF move separators are not supported");
-      return FALSE;
-    }
-    pos++;
   }
 
-  if (move.length < 2) {
-    g_set_error_literal(error, sgf_io_error_quark(), 10, "SGF move needs at least 2 squares");
-    return FALSE;
-  }
-
-  move.captures = captures ? (uint8_t)(move.length - 1) : 0;
-  *out_move = move;
   return TRUE;
 }
 
-static gboolean sgf_io_move_notation_from_node(const SgfNode *node, char *buffer, size_t size, GError **error) {
+static gboolean sgf_io_append_node_properties(SgfIoWriter *writer, const SgfNode *node, GError **error) {
+  g_return_val_if_fail(writer != NULL, FALSE);
+  g_return_val_if_fail(writer->text != NULL, FALSE);
   g_return_val_if_fail(node != NULL, FALSE);
-  g_return_val_if_fail(buffer != NULL, FALSE);
-  g_return_val_if_fail(size > 0, FALSE);
 
-  g_autoptr(GBytes) payload = sgf_node_get_payload(node);
-  if (payload == NULL) {
-    g_set_error_literal(error, sgf_io_error_quark(), 11, "Missing move payload for SGF node");
+  g_autoptr(GPtrArray) idents = sgf_node_copy_property_idents(node);
+  if (idents == NULL) {
+    g_set_error_literal(error, sgf_io_error_quark(), 11, "Missing SGF node property map");
     return FALSE;
   }
 
-  gsize payload_size = 0;
-  const void *payload_data = g_bytes_get_data(payload, &payload_size);
-  if (payload_data == NULL || payload_size != sizeof(CheckersMove)) {
-    g_set_error(error, sgf_io_error_quark(), 12, "Unexpected SGF node payload size: %zu", payload_size);
-    return FALSE;
-  }
+  for (guint i = 0; i < idents->len; ++i) {
+    const char *ident = g_ptr_array_index(idents, i);
+    const GPtrArray *values = sgf_node_get_property_values(node, ident);
+    if (values == NULL || values->len == 0) {
+      continue;
+    }
 
-  CheckersMove move = {0};
-  memcpy(&move, payload_data, sizeof(move));
-  if (!game_format_move_notation(&move, buffer, size)) {
-    g_set_error_literal(error, sgf_io_error_quark(), 13, "Unable to format SGF move notation");
-    return FALSE;
+    g_string_append(writer->text, ident);
+    for (guint j = 0; j < values->len; ++j) {
+      const char *value = g_ptr_array_index((GPtrArray *)values, j);
+      g_autofree char *escaped_value = sgf_io_escape_prop_value(value);
+      if (escaped_value == NULL) {
+        g_set_error_literal(error, sgf_io_error_quark(), 12, "Unable to escape SGF property value");
+        return FALSE;
+      }
+      g_string_append_printf(writer->text, "[%s]", escaped_value);
+    }
   }
 
   return TRUE;
@@ -266,36 +288,15 @@ static gboolean sgf_io_move_notation_from_node(const SgfNode *node, char *buffer
 
 static gboolean sgf_io_append_node(SgfIoWriter *writer,
                                    const SgfNode *node,
-                                   gboolean is_root,
+                                   gboolean /*is_root*/,
                                    GError **error) {
   g_return_val_if_fail(writer != NULL, FALSE);
   g_return_val_if_fail(writer->text != NULL, FALSE);
   g_return_val_if_fail(node != NULL, FALSE);
 
   g_string_append_c(writer->text, ';');
-  if (is_root) {
-    g_string_append(writer->text, "FF[4]CA[UTF-8]AP[gcheckers]GM[40]");
-  } else {
-    char move_text[128] = {0};
-    if (!sgf_io_move_notation_from_node(node, move_text, sizeof(move_text), error)) {
-      return FALSE;
-    }
-
-    g_autofree char *escaped_move = sgf_io_escape_prop_value(move_text);
-    if (escaped_move == NULL) {
-      g_set_error_literal(error, sgf_io_error_quark(), 14, "Unable to escape SGF move text");
-      return FALSE;
-    }
-
-    SgfColor color = sgf_node_get_color(node);
-    if (color == SGF_COLOR_BLACK) {
-      g_string_append_printf(writer->text, "B[%s]", escaped_move);
-    } else if (color == SGF_COLOR_WHITE) {
-      g_string_append_printf(writer->text, "W[%s]", escaped_move);
-    } else {
-      g_set_error_literal(error, sgf_io_error_quark(), 15, "Only black/white nodes can be serialized as SGF moves");
-      return FALSE;
-    }
+  if (!sgf_io_append_node_properties(writer, node, error)) {
+    return FALSE;
   }
 
   const GPtrArray *children = sgf_node_get_children(node);
@@ -326,10 +327,24 @@ static gboolean sgf_io_append_node(SgfIoWriter *writer,
 char *sgf_io_save_data(SgfTree *tree, GError **error) {
   g_return_val_if_fail(SGF_IS_TREE(tree), NULL);
 
-  const SgfNode *root = sgf_tree_get_root(tree);
+  const SgfNode *root_const = sgf_tree_get_root(tree);
+  SgfNode *root = (SgfNode *)root_const;
   if (root == NULL) {
-    g_set_error_literal(error, sgf_io_error_quark(), 16, "Missing SGF root node");
+    g_set_error_literal(error, sgf_io_error_quark(), 13, "Missing SGF root node");
     return NULL;
+  }
+
+  if (sgf_node_get_property_first(root, "FF") == NULL) {
+    sgf_node_add_property(root, "FF", "4");
+  }
+  if (sgf_node_get_property_first(root, "CA") == NULL) {
+    sgf_node_add_property(root, "CA", "UTF-8");
+  }
+  if (sgf_node_get_property_first(root, "AP") == NULL) {
+    sgf_node_add_property(root, "AP", "gcheckers");
+  }
+  if (sgf_node_get_property_first(root, "GM") == NULL) {
+    sgf_node_add_property(root, "GM", "40");
   }
 
   SgfIoWriter writer = {
@@ -337,7 +352,7 @@ char *sgf_io_save_data(SgfTree *tree, GError **error) {
   };
 
   g_string_append_c(writer.text, '(');
-  if (!sgf_io_append_node(&writer, root, TRUE, error)) {
+  if (!sgf_io_append_node(&writer, root_const, TRUE, error)) {
     g_string_free(writer.text, TRUE);
     return NULL;
   }
@@ -385,7 +400,7 @@ static gboolean sgf_io_parse_tree(SgfIoParser *p,
       p->pos++;
       has_sequence_node = TRUE;
 
-      g_autoptr(GHashTable) props = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+      g_autoptr(SgfIoPropertyBag) props = sgf_io_property_bag_new();
       if (!sgf_io_parse_node_properties(p, props, error)) {
         return FALSE;
       }
@@ -393,32 +408,58 @@ static gboolean sgf_io_parse_tree(SgfIoParser *p,
       if (!(*seen_root)) {
         *seen_root = TRUE;
         cursor = sgf_tree_get_root(tree);
+        SgfNode *root_node = (SgfNode *)cursor;
+        g_ptr_array_sort(props->idents, sgf_io_sort_strings);
+        for (guint i = 0; i < props->idents->len; ++i) {
+          const char *ident = g_ptr_array_index(props->idents, i);
+          const GPtrArray *values = sgf_io_property_bag_get_values(props, ident);
+          g_return_val_if_fail(values != NULL, FALSE);
+          if (!sgf_io_node_apply_property_values(root_node, ident, values)) {
+            g_set_error_literal(error, sgf_io_error_quark(), 14, "Unable to apply SGF root property");
+            return FALSE;
+          }
+        }
         continue;
       }
 
-      const char *black_move = g_hash_table_lookup(props, "B");
-      const char *white_move = g_hash_table_lookup(props, "W");
+      const char *black_move = sgf_io_property_bag_get_first(props, "B");
+      const char *white_move = sgf_io_property_bag_get_first(props, "W");
       if ((black_move == NULL) == (white_move == NULL)) {
-        g_set_error_literal(error, sgf_io_error_quark(), 18, "SGF move node must contain exactly one of B[] or W[]");
+        g_set_error_literal(error, sgf_io_error_quark(), 15, "SGF move node must contain exactly one of B[] or W[]");
         return FALSE;
       }
 
       CheckersMove move = {0};
-      if (!sgf_io_parse_move_notation(black_move != NULL ? black_move : white_move, &move, error)) {
+      if (!sgf_move_props_parse_notation(black_move != NULL ? black_move : white_move, &move, error)) {
         return FALSE;
       }
 
       if (!sgf_tree_set_current(tree, cursor)) {
-        g_set_error_literal(error, sgf_io_error_quark(), 19, "Unable to select SGF parent node");
+        g_set_error_literal(error, sgf_io_error_quark(), 16, "Unable to select SGF parent node");
         return FALSE;
       }
 
-      g_autoptr(GBytes) payload = g_bytes_new(&move, sizeof(move));
-      SgfColor color = black_move != NULL ? SGF_COLOR_BLACK : SGF_COLOR_WHITE;
-      const SgfNode *node = sgf_tree_append_move(tree, color, payload);
-      if (node == NULL) {
-        g_set_error_literal(error, sgf_io_error_quark(), 20, "Unable to append SGF move node");
+      char move_text[128] = {0};
+      if (!sgf_move_props_format_notation(&move, move_text, sizeof(move_text), error)) {
         return FALSE;
+      }
+      SgfColor color = black_move != NULL ? SGF_COLOR_BLACK : SGF_COLOR_WHITE;
+      const SgfNode *node = sgf_tree_append_move(tree, color, move_text);
+      if (node == NULL) {
+        g_set_error_literal(error, sgf_io_error_quark(), 17, "Unable to append SGF move node");
+        return FALSE;
+      }
+
+      g_ptr_array_sort(props->idents, sgf_io_sort_strings);
+      SgfNode *node_mut = (SgfNode *)node;
+      for (guint i = 0; i < props->idents->len; ++i) {
+        const char *ident = g_ptr_array_index(props->idents, i);
+        const GPtrArray *values = sgf_io_property_bag_get_values(props, ident);
+        g_return_val_if_fail(values != NULL, FALSE);
+        if (!sgf_io_node_apply_property_values(node_mut, ident, values)) {
+          g_set_error_literal(error, sgf_io_error_quark(), 18, "Unable to apply SGF move-node property");
+          return FALSE;
+        }
       }
 
       cursor = node;
@@ -427,7 +468,7 @@ static gboolean sgf_io_parse_tree(SgfIoParser *p,
 
     if (next == '(') {
       if (!has_sequence_node) {
-        g_set_error_literal(error, sgf_io_error_quark(), 21, "SGF variation without node sequence");
+        g_set_error_literal(error, sgf_io_error_quark(), 19, "SGF variation without node sequence");
         return FALSE;
       }
       if (!sgf_io_parse_tree(p, tree, cursor, seen_root, error)) {
@@ -441,7 +482,7 @@ static gboolean sgf_io_parse_tree(SgfIoParser *p,
       return TRUE;
     }
 
-    g_set_error(error, sgf_io_error_quark(), 22, "Unexpected SGF token '%c' at offset %zu", next, p->pos);
+    g_set_error(error, sgf_io_error_quark(), 20, "Unexpected SGF token '%c' at offset %zu", next, p->pos);
     return FALSE;
   }
 }
@@ -453,7 +494,7 @@ gboolean sgf_io_load_data(const char *content, SgfTree **out_tree, GError **erro
   g_autoptr(SgfTree) tree = sgf_tree_new();
   const SgfNode *root = sgf_tree_get_root(tree);
   if (root == NULL) {
-    g_set_error_literal(error, sgf_io_error_quark(), 23, "Unable to initialize SGF tree");
+    g_set_error_literal(error, sgf_io_error_quark(), 21, "Unable to initialize SGF tree");
     return FALSE;
   }
 
@@ -468,12 +509,12 @@ gboolean sgf_io_load_data(const char *content, SgfTree **out_tree, GError **erro
     return FALSE;
   }
   if (!seen_root) {
-    g_set_error_literal(error, sgf_io_error_quark(), 24, "Missing SGF root node");
+    g_set_error_literal(error, sgf_io_error_quark(), 22, "Missing SGF root node");
     return FALSE;
   }
 
   if (!sgf_tree_set_current(tree, root)) {
-    g_set_error_literal(error, sgf_io_error_quark(), 25, "Unable to select SGF root after load");
+    g_set_error_literal(error, sgf_io_error_quark(), 23, "Unable to select SGF root after load");
     return FALSE;
   }
 
@@ -492,7 +533,7 @@ gboolean sgf_io_load_file(const char *path, SgfTree **out_tree, GError **error) 
     return FALSE;
   }
   if (len == 0) {
-    g_set_error(error, sgf_io_error_quark(), 26, "Empty SGF file: %s", path);
+    g_set_error(error, sgf_io_error_quark(), 24, "Empty SGF file: %s", path);
     return FALSE;
   }
 

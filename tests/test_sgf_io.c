@@ -2,6 +2,7 @@
 
 #include "../src/game.h"
 #include "../src/sgf_io.h"
+#include "../src/sgf_move_props.h"
 
 static CheckersMove test_sgf_io_make_move(const guint8 *path, guint8 length, guint8 captures) {
   g_return_val_if_fail(path != NULL, (CheckersMove){0});
@@ -26,15 +27,37 @@ static gboolean test_sgf_io_nodes_equal(const SgfNode *left, const SgfNode *righ
     return FALSE;
   }
 
-  g_autoptr(GBytes) left_payload = sgf_node_get_payload(left);
-  g_autoptr(GBytes) right_payload = sgf_node_get_payload(right);
-  if (left_payload == NULL && right_payload != NULL) {
+  g_autoptr(GPtrArray) left_idents = sgf_node_copy_property_idents(left);
+  g_autoptr(GPtrArray) right_idents = sgf_node_copy_property_idents(right);
+  if (left_idents == NULL || right_idents == NULL) {
     return FALSE;
   }
-  if (left_payload != NULL && right_payload == NULL) {
+  if (left_idents->len != right_idents->len) {
     return FALSE;
   }
-  if (left_payload != NULL && !g_bytes_equal(left_payload, right_payload)) {
+  for (guint i = 0; i < left_idents->len; ++i) {
+    const char *left_ident = g_ptr_array_index(left_idents, i);
+    const char *right_ident = g_ptr_array_index(right_idents, i);
+    if (g_strcmp0(left_ident, right_ident) != 0) {
+      return FALSE;
+    }
+
+    const GPtrArray *left_values = sgf_node_get_property_values(left, left_ident);
+    const GPtrArray *right_values = sgf_node_get_property_values(right, right_ident);
+    if (left_values == NULL || right_values == NULL || left_values->len != right_values->len) {
+      return FALSE;
+    }
+
+    for (guint j = 0; j < left_values->len; ++j) {
+      const char *left_value = g_ptr_array_index((GPtrArray *)left_values, j);
+      const char *right_value = g_ptr_array_index((GPtrArray *)right_values, j);
+      if (g_strcmp0(left_value, right_value) != 0) {
+        return FALSE;
+      }
+    }
+  }
+
+  if (sgf_node_get_move_number(left) != sgf_node_get_move_number(right)) {
     return FALSE;
   }
 
@@ -61,8 +84,12 @@ static const SgfNode *test_sgf_io_append_move(SgfTree *tree, SgfColor color, con
   g_return_val_if_fail(SGF_IS_TREE(tree), NULL);
   g_return_val_if_fail(move != NULL, NULL);
 
-  g_autoptr(GBytes) payload = g_bytes_new(move, sizeof(*move));
-  return sgf_tree_append_move(tree, color, payload);
+  char notation[128] = {0};
+  g_autoptr(GError) error = NULL;
+  if (!sgf_move_props_format_notation(move, notation, sizeof(notation), &error)) {
+    return NULL;
+  }
+  return sgf_tree_append_move(tree, color, notation);
 }
 
 static void test_sgf_io_assert_roundtrip(SgfTree *source) {
@@ -194,6 +221,51 @@ static void test_sgf_io_load_rejects_invalid_header(void) {
   g_assert_error(error, g_quark_from_static_string("sgf-io-error"), 1);
 }
 
+static void test_sgf_io_preserves_repeated_property_values(void) {
+  const char *content = "(;FF[4]CA[UTF-8]AP[gcheckers]GM[40]C[root-a][root-b];B[12-16]N[line-a][line-b])";
+
+  g_autoptr(SgfTree) loaded = NULL;
+  g_autoptr(GError) error = NULL;
+  g_assert_true(sgf_io_load_data(content, &loaded, &error));
+  g_assert_no_error(error);
+  g_assert_nonnull(loaded);
+
+  const SgfNode *root = sgf_tree_get_root(loaded);
+  g_assert_nonnull(root);
+  const GPtrArray *root_comments = sgf_node_get_property_values(root, "C");
+  g_assert_nonnull(root_comments);
+  g_assert_cmpuint(root_comments->len, ==, 2);
+  g_assert_cmpstr(g_ptr_array_index((GPtrArray *)root_comments, 0), ==, "root-a");
+  g_assert_cmpstr(g_ptr_array_index((GPtrArray *)root_comments, 1), ==, "root-b");
+
+  const GPtrArray *root_children = sgf_node_get_children(root);
+  g_assert_nonnull(root_children);
+  g_assert_cmpuint(root_children->len, ==, 1);
+  const SgfNode *move = g_ptr_array_index((GPtrArray *)root_children, 0);
+  g_assert_nonnull(move);
+  const GPtrArray *names = sgf_node_get_property_values(move, "N");
+  g_assert_nonnull(names);
+  g_assert_cmpuint(names->len, ==, 2);
+  g_assert_cmpstr(g_ptr_array_index((GPtrArray *)names, 0), ==, "line-a");
+  g_assert_cmpstr(g_ptr_array_index((GPtrArray *)names, 1), ==, "line-b");
+
+  g_autofree char *saved = sgf_io_save_data(loaded, &error);
+  g_assert_no_error(error);
+  g_assert_nonnull(saved);
+
+  g_autoptr(SgfTree) roundtrip = NULL;
+  g_assert_true(sgf_io_load_data(saved, &roundtrip, &error));
+  g_assert_no_error(error);
+  g_assert_nonnull(roundtrip);
+
+  const SgfNode *roundtrip_root = sgf_tree_get_root(roundtrip);
+  const GPtrArray *roundtrip_comments = sgf_node_get_property_values(roundtrip_root, "C");
+  g_assert_nonnull(roundtrip_comments);
+  g_assert_cmpuint(roundtrip_comments->len, ==, 2);
+  g_assert_cmpstr(g_ptr_array_index((GPtrArray *)roundtrip_comments, 0), ==, "root-a");
+  g_assert_cmpstr(g_ptr_array_index((GPtrArray *)roundtrip_comments, 1), ==, "root-b");
+}
+
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
 
@@ -203,5 +275,6 @@ int main(int argc, char **argv) {
   g_test_add_func("/sgf-io/roundtrip-multi-capture", test_sgf_io_roundtrip_multi_capture);
   g_test_add_func("/sgf-io/roundtrip-branches", test_sgf_io_roundtrip_branches);
   g_test_add_func("/sgf-io/load-invalid-header", test_sgf_io_load_rejects_invalid_header);
+  g_test_add_func("/sgf-io/repeated-property-values", test_sgf_io_preserves_repeated_property_values);
   return g_test_run();
 }

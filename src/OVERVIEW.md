@@ -223,9 +223,15 @@ Collaborates with: `PiecePalette` and board rendering.
 
 ### SGF tree (`src/sgf_tree.c`, `src/sgf_tree.h`)
 Module: SGF tree storage.
-Role: manage move nodes, parent/child links, payload access, traversal helpers, and the SGF current-node timeline
+Role: manage move nodes, parent/child links, SGF property access, traversal helpers, and the SGF current-node timeline
 used as the source of truth for move chronology/navigation.
 Collaborates with: SGF view and controller modules.
+
+### SGF move properties (`src/sgf_move_props.c`, `src/sgf_move_props.h`)
+Module: SGF move property helpers.
+Role: convert between SGF move properties (`B[...]`/`W[...]`) and typed `CheckersMove` values used by controller/model
+paths.
+Collaborates with: `sgf_io` and `GCheckersSgfController`.
 
 ### SGF IO (`src/sgf_io.c`, `src/sgf_io.h`)
 Module: SGF load/save core.

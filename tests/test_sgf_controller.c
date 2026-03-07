@@ -103,7 +103,7 @@ static const SgfNode *sgf_node_get_nth_child(const SgfNode *node, guint index) {
   return g_ptr_array_index((GPtrArray *)children, index);
 }
 
-static void test_gcheckers_sgf_controller_appends_payload(void) {
+static void test_gcheckers_sgf_controller_appends_move_property(void) {
   BoardView *board_view = board_view_new();
   GCheckersModel *model = gcheckers_model_new();
   GCheckersSgfController *controller = gcheckers_sgf_controller_new(board_view);
@@ -116,15 +116,14 @@ static void test_gcheckers_sgf_controller_appends_payload(void) {
   const SgfNode *node = sgf_tree_get_first_child(tree);
   g_assert_nonnull(node);
 
-  GBytes *payload = sgf_node_get_payload(node);
-  g_assert_nonnull(payload);
+  char expected[128] = {0};
+  g_assert_true(game_format_move_notation(&move, expected, sizeof(expected)));
 
-  gsize size = 0;
-  const void *data = g_bytes_get_data(payload, &size);
-  g_assert_cmpuint(size, ==, sizeof(CheckersMove));
-  g_assert_cmpint(memcmp(data, &move, sizeof(move)), ==, 0);
+  const char *black = sgf_node_get_property_first(node, "B");
+  const char *white = sgf_node_get_property_first(node, "W");
+  g_assert_true((black == NULL) != (white == NULL));
+  g_assert_cmpstr(black != NULL ? black : white, ==, expected);
 
-  g_bytes_unref(payload);
   g_clear_object(&controller);
   g_clear_object(&model);
   g_clear_object(&board_view);
@@ -296,7 +295,7 @@ static void test_gcheckers_sgf_controller_navigation_forward_to_branch_and_end(v
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   if (!gtk_init_check()) {
-    g_test_add_func("/sgf-controller/appends-payload", test_gcheckers_sgf_controller_skip);
+    g_test_add_func("/sgf-controller/appends-move-property", test_gcheckers_sgf_controller_skip);
     g_test_add_func("/sgf-controller/replay-branching", test_gcheckers_sgf_controller_skip);
     g_test_add_func("/sgf-controller/new-game", test_gcheckers_sgf_controller_skip);
     g_test_add_func("/sgf-controller/step-ai-move", test_gcheckers_sgf_controller_skip);
@@ -305,7 +304,7 @@ int main(int argc, char **argv) {
     return g_test_run();
   }
 
-  g_test_add_func("/sgf-controller/appends-payload", test_gcheckers_sgf_controller_appends_payload);
+  g_test_add_func("/sgf-controller/appends-move-property", test_gcheckers_sgf_controller_appends_move_property);
   g_test_add_func("/sgf-controller/replay-branching", test_gcheckers_sgf_controller_replay_branching);
   g_test_add_func("/sgf-controller/new-game", test_gcheckers_sgf_controller_new_game_clears_tree);
   g_test_add_func("/sgf-controller/step-ai-move", test_gcheckers_sgf_controller_step_ai_move);
