@@ -170,46 +170,25 @@ gboolean gcheckers_model_choose_best_move(GCheckersModel *self, guint max_depth,
   return checkers_ai_alpha_beta_choose_move(&self->game, max_depth, out_move);
 }
 
-char *gcheckers_model_analyze_moves_text(GCheckersModel *self, guint max_depth) {
-  g_return_val_if_fail(GCHECKERS_IS_MODEL(self), NULL);
-  g_return_val_if_fail(max_depth > 0, NULL);
+gboolean gcheckers_model_analyze_moves(GCheckersModel *self,
+                                       guint max_depth,
+                                       CheckersScoredMoveList *out_moves,
+                                       CheckersAiSearchStats *out_stats) {
+  g_return_val_if_fail(GCHECKERS_IS_MODEL(self), FALSE);
+  g_return_val_if_fail(max_depth > 0, FALSE);
+  g_return_val_if_fail(out_moves != NULL, FALSE);
+  g_return_val_if_fail(out_stats != NULL, FALSE);
 
-  CheckersScoredMoveList scored_moves = {0};
-  CheckersAiSearchStats stats = {0};
-  checkers_ai_search_stats_clear(&stats);
-  gboolean ok = checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(&self->game,
-                                                                          max_depth,
-                                                                          &scored_moves,
-                                                                          NULL,
-                                                                          NULL,
-                                                                          NULL,
-                                                                          NULL,
-                                                                          self->analysis_tt,
-                                                                          &stats);
-  if (!ok) {
-    return g_strdup("No legal moves to analyze.");
-  }
-
-  GString *text = g_string_new(NULL);
-  g_string_append_printf(text, "Analysis depth: %u\n", max_depth);
-  g_string_append_printf(text, "Nodes: %" G_GUINT64_FORMAT "\n", stats.nodes);
-  g_string_append_printf(text, "TT hits: %" G_GUINT64_FORMAT "\n", stats.tt_hits);
-  g_string_append_printf(text, "TT probes: %" G_GUINT64_FORMAT "\n", stats.tt_probes);
-  gdouble ratio = stats.tt_probes == 0 ? 0.0 : (100.0 * (gdouble)stats.tt_hits) / (gdouble)stats.tt_probes;
-  g_string_append_printf(text, "TT hit ratio: %.2f%%\n", ratio);
-  g_string_append_printf(text, "TT cutoffs: %" G_GUINT64_FORMAT "\n", stats.tt_cutoffs);
-  g_string_append(text, "Best to worst:\n");
-
-  for (size_t i = 0; i < scored_moves.count; ++i) {
-    char notation[128];
-    if (!game_format_move_notation(&scored_moves.moves[i].move, notation, sizeof(notation))) {
-      g_strlcpy(notation, "?", sizeof(notation));
-    }
-    g_string_append_printf(text, "%zu. %s : %d\n", i + 1, notation, scored_moves.moves[i].score);
-  }
-
-  checkers_scored_move_list_free(&scored_moves);
-  return g_string_free(text, FALSE);
+  checkers_ai_search_stats_clear(out_stats);
+  return checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(&self->game,
+                                                                   max_depth,
+                                                                   out_moves,
+                                                                   NULL,
+                                                                   NULL,
+                                                                   NULL,
+                                                                   NULL,
+                                                                   self->analysis_tt,
+                                                                   out_stats);
 }
 
 gboolean gcheckers_model_copy_game(GCheckersModel *self, Game *out_game) {

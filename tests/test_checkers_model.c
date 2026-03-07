@@ -163,17 +163,17 @@ static void test_model_choose_best_move_randomized_within_best_ties(void) {
   g_object_unref(model);
 }
 
-static void test_model_analyze_moves_text(void) {
+static void test_model_analyze_moves_structured(void) {
   GCheckersModel *model = gcheckers_model_new();
 
-  char *analysis = gcheckers_model_analyze_moves_text(model, 4);
-  assert(analysis != NULL);
-  const char *nodes_line = strstr(analysis, "Nodes: ");
-  assert(nodes_line != NULL);
-  guint64 nodes = g_ascii_strtoull(nodes_line + strlen("Nodes: "), NULL, 10);
-  assert(nodes > 0);
-  assert(strstr(analysis, "Best to worst:") != NULL);
-  g_free(analysis);
+  CheckersScoredMoveList moves = {0};
+  CheckersAiSearchStats stats = {0};
+  gboolean ok = gcheckers_model_analyze_moves(model, 4, &moves, &stats);
+  assert(ok);
+  assert(moves.count > 0);
+  assert(stats.nodes > 0);
+  assert(stats.tt_probes >= stats.tt_hits);
+  checkers_scored_move_list_free(&moves);
 
   g_object_unref(model);
 }
@@ -425,7 +425,7 @@ int main(void) {
   test_model_rejects_invalid_move();
   test_model_choose_best_move_returns_legal_move();
   test_model_choose_best_move_randomized_within_best_ties();
-  test_model_analyze_moves_text();
+  test_model_analyze_moves_structured();
   test_model_analyze_moves_progress_callback();
   test_model_analyze_moves_reuses_tt_across_depths();
   test_model_analyze_moves_stats_can_accumulate_across_calls();

@@ -6,6 +6,7 @@ struct _SgfNode {
   SgfNode *parent;
   GPtrArray *children;
   GHashTable *properties;
+  SgfNodeAnalysis *analysis;
 };
 
 struct _SgfTree {
@@ -42,8 +43,71 @@ static SgfNode *sgf_node_new(SgfNode *parent, SgfColor color, guint move_number)
   node->parent = parent;
   node->children = g_ptr_array_new();
   node->properties = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)g_ptr_array_unref);
+  node->analysis = NULL;
 
   return node;
+}
+
+static void sgf_node_scored_move_free(gpointer data) {
+  SgfNodeScoredMove *scored = data;
+  g_free(scored);
+}
+
+SgfNodeAnalysis *sgf_node_analysis_new(void) {
+  SgfNodeAnalysis *analysis = g_new0(SgfNodeAnalysis, 1);
+  analysis->moves = g_ptr_array_new_with_free_func(sgf_node_scored_move_free);
+  return analysis;
+}
+
+void sgf_node_analysis_free(SgfNodeAnalysis *analysis) {
+  if (analysis == NULL) {
+    return;
+  }
+
+  if (analysis->moves != NULL) {
+    g_ptr_array_unref(analysis->moves);
+    analysis->moves = NULL;
+  }
+
+  g_free(analysis);
+}
+
+gboolean sgf_node_analysis_add_scored_move(SgfNodeAnalysis *analysis, const CheckersMove *move, gint score) {
+  g_return_val_if_fail(analysis != NULL, FALSE);
+  g_return_val_if_fail(analysis->moves != NULL, FALSE);
+  g_return_val_if_fail(move != NULL, FALSE);
+  g_return_val_if_fail(move->length >= 2, FALSE);
+
+  SgfNodeScoredMove *entry = g_new0(SgfNodeScoredMove, 1);
+  entry->move = *move;
+  entry->score = score;
+  g_ptr_array_add(analysis->moves, entry);
+  return TRUE;
+}
+
+SgfNodeAnalysis *sgf_node_analysis_copy(const SgfNodeAnalysis *analysis) {
+  g_return_val_if_fail(analysis != NULL, NULL);
+  g_return_val_if_fail(analysis->moves != NULL, NULL);
+
+  SgfNodeAnalysis *copy = sgf_node_analysis_new();
+  copy->depth = analysis->depth;
+  copy->nodes = analysis->nodes;
+  copy->tt_probes = analysis->tt_probes;
+  copy->tt_hits = analysis->tt_hits;
+  copy->tt_cutoffs = analysis->tt_cutoffs;
+  for (guint i = 0; i < analysis->moves->len; ++i) {
+    const SgfNodeScoredMove *entry = g_ptr_array_index(analysis->moves, i);
+    if (entry == NULL) {
+      g_debug("Missing scored move entry while copying SGF analysis");
+      sgf_node_analysis_free(copy);
+      return NULL;
+    }
+    if (!sgf_node_analysis_add_scored_move(copy, &entry->move, entry->score)) {
+      sgf_node_analysis_free(copy);
+      return NULL;
+    }
+  }
+  return copy;
 }
 
 static void sgf_node_free(SgfNode *node) {
@@ -62,6 +126,10 @@ static void sgf_node_free(SgfNode *node) {
   if (node->properties) {
     g_hash_table_unref(node->properties);
     node->properties = NULL;
+  }
+  if (node->analysis != NULL) {
+    sgf_node_analysis_free(node->analysis);
+    node->analysis = NULL;
   }
 
   g_free(node);
@@ -296,4 +364,42 @@ GPtrArray *sgf_node_copy_property_idents(const SgfNode *node) {
   }
 
   return idents;
+}
+
+gboolean sgf_node_set_analysis(SgfNode *node, const SgfNodeAnalysis *analysis) {
+  g_return_val_if_fail(node != NULL, FALSE);
+  g_return_val_if_fail(analysis != NULL, FALSE);
+  g_return_val_if_fail(analysis->moves != NULL, FALSE);
+
+  SgfNodeAnalysis *copy = sgf_node_analysis_copy(analysis);
+  if (copy == NULL) {
+    g_debug("Failed to copy SGF node analysis");
+    return FALSE;
+  }
+
+  sgf_node_analysis_free(node->analysis);
+  node->analysis = copy;
+  return TRUE;
+}
+
+SgfNodeAnalysis *sgf_node_get_analysis(const SgfNode *node) {
+  g_return_val_if_fail(node != NULL, NULL);
+
+  if (node->analysis == NULL) {
+    return NULL;
+  }
+
+  return sgf_node_analysis_copy(node->analysis);
+}
+
+gboolean sgf_node_clear_analysis(SgfNode *node) {
+  g_return_val_if_fail(node != NULL, FALSE);
+
+  if (node->analysis == NULL) {
+    return FALSE;
+  }
+
+  sgf_node_analysis_free(node->analysis);
+  node->analysis = NULL;
+  return TRUE;
 }

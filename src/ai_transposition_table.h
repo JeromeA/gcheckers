@@ -11,6 +11,11 @@ typedef enum {
   CHECKERS_AI_TT_BOUND_UPPER = 2,
 } CheckersAiTtBound;
 
+/*
+ * Transposition-table entries are ephemeral search cache data.
+ * They are valid only for pruning/move-ordering during in-progress search and
+ * must never be treated as authoritative persisted analysis results.
+ */
 typedef struct {
   guint64 key;
   CheckersMove best_move;

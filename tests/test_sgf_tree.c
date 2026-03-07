@@ -65,10 +65,65 @@ static void test_sgf_tree_append_existing_child(void) {
   g_object_unref(tree);
 }
 
+static CheckersMove test_sgf_tree_make_move(guint8 from, guint8 to) {
+  CheckersMove move = {0};
+  move.length = 2;
+  move.captures = 0;
+  move.path[0] = from;
+  move.path[1] = to;
+  return move;
+}
+
+static void test_sgf_tree_node_analysis_set_get_clear(void) {
+  SgfTree *tree = sgf_tree_new();
+  SgfNode *root = (SgfNode *)sgf_tree_get_root(tree);
+  assert(root != NULL);
+
+  SgfNodeAnalysis *analysis = sgf_node_analysis_new();
+  assert(analysis != NULL);
+  analysis->depth = 6;
+  analysis->nodes = 456;
+  analysis->tt_probes = 321;
+  analysis->tt_hits = 123;
+  analysis->tt_cutoffs = 78;
+
+  CheckersMove move_a = test_sgf_tree_make_move(11, 15);
+  CheckersMove move_b = test_sgf_tree_make_move(10, 14);
+  assert(sgf_node_analysis_add_scored_move(analysis, &move_a, 42));
+  assert(sgf_node_analysis_add_scored_move(analysis, &move_b, 12));
+
+  assert(sgf_node_set_analysis(root, analysis));
+  sgf_node_analysis_free(analysis);
+
+  SgfNodeAnalysis *saved = sgf_node_get_analysis(root);
+  assert(saved != NULL);
+  assert(saved->depth == 6);
+  assert(saved->nodes == 456);
+  assert(saved->tt_probes == 321);
+  assert(saved->tt_hits == 123);
+  assert(saved->tt_cutoffs == 78);
+  assert(saved->moves != NULL);
+  assert(saved->moves->len == 2);
+
+  SgfNodeScoredMove *first = g_ptr_array_index(saved->moves, 0);
+  assert(first != NULL);
+  assert(first->score == 42);
+  assert(first->move.length == 2);
+  assert(first->move.path[0] == 11);
+  assert(first->move.path[1] == 15);
+
+  assert(sgf_node_clear_analysis(root));
+  assert(sgf_node_get_analysis(root) == NULL);
+
+  sgf_node_analysis_free(saved);
+  g_object_unref(tree);
+}
+
 int main(void) {
   test_sgf_tree_append_and_select();
   test_sgf_tree_main_line();
   test_sgf_tree_append_existing_child();
+  test_sgf_tree_node_analysis_set_get_clear();
 
   return 0;
 }

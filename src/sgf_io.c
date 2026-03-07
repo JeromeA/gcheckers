@@ -37,6 +37,16 @@ typedef struct {
   GPtrArray *idents;
 } SgfIoPropertyBag;
 
+enum {
+  SGF_IO_ANALYSIS_PROP_DEPTH = 1,
+  SGF_IO_ANALYSIS_PROP_STATS = 2,
+  SGF_IO_ANALYSIS_PROP_MOVE = 3,
+};
+
+static const char *SGF_IO_PROP_ANALYSIS_DEPTH = "GCAD";
+static const char *SGF_IO_PROP_ANALYSIS_STATS = "GCAS";
+static const char *SGF_IO_PROP_ANALYSIS_MOVE = "GCAN";
+
 static GQuark sgf_io_error_quark(void) {
   return g_quark_from_static_string("sgf-io-error");
 }
@@ -79,6 +89,48 @@ G_DEFINE_AUTOPTR_CLEANUP_FUNC(SgfIoPropertyBag, sgf_io_property_bag_free)
 
 static gboolean sgf_io_is_upper_alpha(char c) {
   return c >= 'A' && c <= 'Z';
+}
+
+static gboolean sgf_io_parse_uint(const char *text, guint *out_value) {
+  g_return_val_if_fail(text != NULL, FALSE);
+  g_return_val_if_fail(out_value != NULL, FALSE);
+
+  char *end_ptr = NULL;
+  guint64 value = g_ascii_strtoull(text, &end_ptr, 10);
+  if (end_ptr == text || (end_ptr != NULL && *end_ptr != '\0') || value > G_MAXUINT) {
+    return FALSE;
+  }
+
+  *out_value = (guint)value;
+  return TRUE;
+}
+
+static gboolean sgf_io_parse_uint64(const char *text, guint64 *out_value) {
+  g_return_val_if_fail(text != NULL, FALSE);
+  g_return_val_if_fail(out_value != NULL, FALSE);
+
+  char *end_ptr = NULL;
+  guint64 value = g_ascii_strtoull(text, &end_ptr, 10);
+  if (end_ptr == text || (end_ptr != NULL && *end_ptr != '\0')) {
+    return FALSE;
+  }
+
+  *out_value = value;
+  return TRUE;
+}
+
+static gboolean sgf_io_parse_int(const char *text, gint *out_value) {
+  g_return_val_if_fail(text != NULL, FALSE);
+  g_return_val_if_fail(out_value != NULL, FALSE);
+
+  char *end_ptr = NULL;
+  gint64 value = g_ascii_strtoll(text, &end_ptr, 10);
+  if (end_ptr == text || (end_ptr != NULL && *end_ptr != '\0') || value < G_MININT || value > G_MAXINT) {
+    return FALSE;
+  }
+
+  *out_value = (gint)value;
+  return TRUE;
 }
 
 static void sgf_io_skip_ws(SgfIoParser *p) {
@@ -253,6 +305,189 @@ static gboolean sgf_io_node_apply_property_values(SgfNode *node, const char *ide
   return TRUE;
 }
 
+static gboolean sgf_io_parse_analysis_stats(const char *stats_text, SgfNodeAnalysis *analysis) {
+  g_return_val_if_fail(stats_text != NULL, FALSE);
+  g_return_val_if_fail(analysis != NULL, FALSE);
+
+  g_auto(GStrv) fields = g_strsplit(stats_text, ";", -1);
+  for (guint i = 0; fields[i] != NULL; ++i) {
+    if (fields[i][0] == '\0') {
+      continue;
+    }
+
+    g_auto(GStrv) pair = g_strsplit(fields[i], "=", 2);
+    if (pair[0] == NULL || pair[1] == NULL) {
+      return FALSE;
+    }
+
+    guint64 value = 0;
+    if (!sgf_io_parse_uint64(pair[1], &value)) {
+      return FALSE;
+    }
+
+    if (g_strcmp0(pair[0], "nodes") == 0) {
+      analysis->nodes = value;
+    } else if (g_strcmp0(pair[0], "tt_probes") == 0) {
+      analysis->tt_probes = value;
+    } else if (g_strcmp0(pair[0], "tt_hits") == 0) {
+      analysis->tt_hits = value;
+    } else if (g_strcmp0(pair[0], "tt_cutoffs") == 0) {
+      analysis->tt_cutoffs = value;
+    } else {
+      return FALSE;
+    }
+  }
+
+  return TRUE;
+}
+
+static gboolean sgf_io_parse_analysis_move(const char *value, CheckersMove *out_move, gint *out_score) {
+  g_return_val_if_fail(value != NULL, FALSE);
+  g_return_val_if_fail(out_move != NULL, FALSE);
+  g_return_val_if_fail(out_score != NULL, FALSE);
+
+  const char *sep = strrchr(value, ':');
+  if (sep == NULL || sep == value || sep[1] == '\0') {
+    return FALSE;
+  }
+
+  g_autofree char *notation = g_strndup(value, (gsize)(sep - value));
+  if (!sgf_move_props_parse_notation(notation, out_move, NULL)) {
+    return FALSE;
+  }
+  if (!sgf_io_parse_int(sep + 1, out_score)) {
+    return FALSE;
+  }
+  return TRUE;
+}
+
+static gboolean sgf_io_attach_analysis_from_properties(SgfNode *node, GError **error) {
+  g_return_val_if_fail(node != NULL, FALSE);
+
+  const char *depth_text = sgf_node_get_property_first(node, SGF_IO_PROP_ANALYSIS_DEPTH);
+  const char *stats_text = sgf_node_get_property_first(node, SGF_IO_PROP_ANALYSIS_STATS);
+  const GPtrArray *move_values = sgf_node_get_property_values(node, SGF_IO_PROP_ANALYSIS_MOVE);
+
+  if (depth_text == NULL && stats_text == NULL && (move_values == NULL || move_values->len == 0)) {
+    sgf_node_clear_analysis(node);
+    return TRUE;
+  }
+
+  g_autoptr(SgfNodeAnalysis) analysis = sgf_node_analysis_new();
+  if (analysis == NULL) {
+    g_set_error_literal(error, sgf_io_error_quark(), SGF_IO_ANALYSIS_PROP_DEPTH, "Unable to allocate SGF analysis");
+    return FALSE;
+  }
+
+  if (depth_text != NULL && !sgf_io_parse_uint(depth_text, &analysis->depth)) {
+    g_set_error(error, sgf_io_error_quark(), SGF_IO_ANALYSIS_PROP_DEPTH, "Invalid GCAD depth: %s", depth_text);
+    return FALSE;
+  }
+  if (stats_text != NULL && !sgf_io_parse_analysis_stats(stats_text, analysis)) {
+    g_set_error(error, sgf_io_error_quark(), SGF_IO_ANALYSIS_PROP_STATS, "Invalid GCAS stats: %s", stats_text);
+    return FALSE;
+  }
+
+  if (move_values != NULL) {
+    for (guint i = 0; i < move_values->len; ++i) {
+      const char *entry = g_ptr_array_index((GPtrArray *)move_values, i);
+      CheckersMove move = {0};
+      gint score = 0;
+      if (!sgf_io_parse_analysis_move(entry, &move, &score)) {
+        g_set_error(error, sgf_io_error_quark(), SGF_IO_ANALYSIS_PROP_MOVE, "Invalid GCAN move entry: %s", entry);
+        return FALSE;
+      }
+      if (!sgf_node_analysis_add_scored_move(analysis, &move, score)) {
+        g_set_error_literal(error, sgf_io_error_quark(), SGF_IO_ANALYSIS_PROP_MOVE, "Unable to append GCAN move");
+        return FALSE;
+      }
+    }
+  }
+
+  if (!sgf_node_set_analysis(node, analysis)) {
+    g_set_error_literal(error, sgf_io_error_quark(), SGF_IO_ANALYSIS_PROP_DEPTH, "Unable to attach node analysis");
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
+static gboolean sgf_io_sync_analysis_properties(SgfNode *node, GError **error) {
+  g_return_val_if_fail(node != NULL, FALSE);
+
+  sgf_node_clear_property(node, SGF_IO_PROP_ANALYSIS_DEPTH);
+  sgf_node_clear_property(node, SGF_IO_PROP_ANALYSIS_STATS);
+  sgf_node_clear_property(node, SGF_IO_PROP_ANALYSIS_MOVE);
+
+  g_autoptr(SgfNodeAnalysis) analysis = sgf_node_get_analysis(node);
+  if (analysis == NULL) {
+    return TRUE;
+  }
+
+  char depth_text[32] = {0};
+  g_snprintf(depth_text, sizeof(depth_text), "%u", analysis->depth);
+  if (!sgf_node_add_property(node, SGF_IO_PROP_ANALYSIS_DEPTH, depth_text)) {
+    g_set_error_literal(error, sgf_io_error_quark(), SGF_IO_ANALYSIS_PROP_DEPTH, "Unable to write GCAD");
+    return FALSE;
+  }
+
+  char stats_text[256] = {0};
+  g_snprintf(stats_text,
+             sizeof(stats_text),
+             "nodes=%" G_GUINT64_FORMAT ";tt_probes=%" G_GUINT64_FORMAT ";tt_hits=%" G_GUINT64_FORMAT
+             ";tt_cutoffs=%" G_GUINT64_FORMAT,
+             analysis->nodes,
+             analysis->tt_probes,
+             analysis->tt_hits,
+             analysis->tt_cutoffs);
+  if (!sgf_node_add_property(node, SGF_IO_PROP_ANALYSIS_STATS, stats_text)) {
+    g_set_error_literal(error, sgf_io_error_quark(), SGF_IO_ANALYSIS_PROP_STATS, "Unable to write GCAS");
+    return FALSE;
+  }
+
+  for (guint i = 0; i < analysis->moves->len; ++i) {
+    const SgfNodeScoredMove *entry = g_ptr_array_index(analysis->moves, i);
+    g_return_val_if_fail(entry != NULL, FALSE);
+
+    char notation[128] = {0};
+    if (!sgf_move_props_format_notation(&entry->move, notation, sizeof(notation), error)) {
+      return FALSE;
+    }
+
+    char encoded[192] = {0};
+    g_snprintf(encoded, sizeof(encoded), "%s:%d", notation, entry->score);
+    if (!sgf_node_add_property(node, SGF_IO_PROP_ANALYSIS_MOVE, encoded)) {
+      g_set_error_literal(error, sgf_io_error_quark(), SGF_IO_ANALYSIS_PROP_MOVE, "Unable to write GCAN");
+      return FALSE;
+    }
+  }
+
+  return TRUE;
+}
+
+static gboolean sgf_io_sync_analysis_properties_recursive(SgfNode *node, GError **error) {
+  g_return_val_if_fail(node != NULL, FALSE);
+
+  if (!sgf_io_sync_analysis_properties(node, error)) {
+    return FALSE;
+  }
+
+  const GPtrArray *children = sgf_node_get_children(node);
+  if (children == NULL) {
+    return TRUE;
+  }
+
+  for (guint i = 0; i < children->len; ++i) {
+    SgfNode *child = g_ptr_array_index((GPtrArray *)children, i);
+    g_return_val_if_fail(child != NULL, FALSE);
+    if (!sgf_io_sync_analysis_properties_recursive(child, error)) {
+      return FALSE;
+    }
+  }
+
+  return TRUE;
+}
+
 static gboolean sgf_io_append_node_properties(SgfIoWriter *writer, const SgfNode *node, GError **error) {
   g_return_val_if_fail(writer != NULL, FALSE);
   g_return_val_if_fail(writer->text != NULL, FALSE);
@@ -346,6 +581,9 @@ char *sgf_io_save_data(SgfTree *tree, GError **error) {
   if (sgf_node_get_property_first(root, "GM") == NULL) {
     sgf_node_add_property(root, "GM", "40");
   }
+  if (!sgf_io_sync_analysis_properties_recursive(root, error)) {
+    return NULL;
+  }
 
   SgfIoWriter writer = {
     .text = g_string_new(NULL),
@@ -419,6 +657,9 @@ static gboolean sgf_io_parse_tree(SgfIoParser *p,
             return FALSE;
           }
         }
+        if (!sgf_io_attach_analysis_from_properties(root_node, error)) {
+          return FALSE;
+        }
         continue;
       }
 
@@ -460,6 +701,9 @@ static gboolean sgf_io_parse_tree(SgfIoParser *p,
           g_set_error_literal(error, sgf_io_error_quark(), 18, "Unable to apply SGF move-node property");
           return FALSE;
         }
+      }
+      if (!sgf_io_attach_analysis_from_properties(node_mut, error)) {
+        return FALSE;
       }
 
       cursor = node;

@@ -61,6 +61,39 @@ static gboolean test_sgf_io_nodes_equal(const SgfNode *left, const SgfNode *righ
     return FALSE;
   }
 
+  g_autoptr(SgfNodeAnalysis) left_analysis = sgf_node_get_analysis(left);
+  g_autoptr(SgfNodeAnalysis) right_analysis = sgf_node_get_analysis(right);
+  if ((left_analysis == NULL) != (right_analysis == NULL)) {
+    return FALSE;
+  }
+  if (left_analysis != NULL) {
+    if (left_analysis->depth != right_analysis->depth || left_analysis->nodes != right_analysis->nodes ||
+        left_analysis->tt_probes != right_analysis->tt_probes || left_analysis->tt_hits != right_analysis->tt_hits ||
+        left_analysis->tt_cutoffs != right_analysis->tt_cutoffs) {
+      return FALSE;
+    }
+    if (left_analysis->moves == NULL || right_analysis->moves == NULL ||
+        left_analysis->moves->len != right_analysis->moves->len) {
+      return FALSE;
+    }
+    for (guint i = 0; i < left_analysis->moves->len; ++i) {
+      const SgfNodeScoredMove *left_move = g_ptr_array_index(left_analysis->moves, i);
+      const SgfNodeScoredMove *right_move = g_ptr_array_index(right_analysis->moves, i);
+      if (left_move == NULL || right_move == NULL) {
+        return FALSE;
+      }
+      if (left_move->score != right_move->score || left_move->move.length != right_move->move.length ||
+          left_move->move.captures != right_move->move.captures) {
+        return FALSE;
+      }
+      if (memcmp(left_move->move.path,
+                 right_move->move.path,
+                 left_move->move.length * sizeof(left_move->move.path[0])) != 0) {
+        return FALSE;
+      }
+    }
+  }
+
   const GPtrArray *left_children = sgf_node_get_children(left);
   const GPtrArray *right_children = sgf_node_get_children(right);
   guint left_count = left_children != NULL ? left_children->len : 0;
@@ -266,6 +299,49 @@ static void test_sgf_io_preserves_repeated_property_values(void) {
   g_assert_cmpstr(g_ptr_array_index((GPtrArray *)roundtrip_comments, 1), ==, "root-b");
 }
 
+static void test_sgf_io_roundtrip_node_analysis_properties(void) {
+  g_autoptr(SgfTree) source = sgf_tree_new();
+  const guint8 path[] = {12, 16};
+  CheckersMove move = test_sgf_io_make_move(path, 2, 0);
+  SgfNode *node = (SgfNode *)test_sgf_io_append_move(source, SGF_COLOR_WHITE, &move);
+  g_assert_nonnull(node);
+
+  g_autoptr(SgfNodeAnalysis) analysis = sgf_node_analysis_new();
+  g_assert_nonnull(analysis);
+  analysis->depth = 7;
+  analysis->nodes = 1500;
+  analysis->tt_probes = 700;
+  analysis->tt_hits = 250;
+  analysis->tt_cutoffs = 90;
+  g_assert_true(sgf_node_analysis_add_scored_move(analysis, &move, 12));
+  g_assert_true(sgf_node_set_analysis(node, analysis));
+
+  g_autoptr(GError) error = NULL;
+  g_autofree char *serialized = sgf_io_save_data(source, &error);
+  g_assert_no_error(error);
+  g_assert_nonnull(serialized);
+  g_assert_nonnull(strstr(serialized, "GCAD[7]"));
+  g_assert_nonnull(strstr(serialized, "GCAS[nodes=1500;tt_probes=700;tt_hits=250;tt_cutoffs=90]"));
+  g_assert_nonnull(strstr(serialized, "GCAN[13-17:12]"));
+
+  g_autoptr(SgfTree) loaded = NULL;
+  g_assert_true(sgf_io_load_data(serialized, &loaded, &error));
+  g_assert_no_error(error);
+  g_assert_nonnull(loaded);
+
+  const SgfNode *root = sgf_tree_get_root(loaded);
+  const GPtrArray *children = sgf_node_get_children(root);
+  g_assert_nonnull(children);
+  g_assert_cmpuint(children->len, ==, 1);
+  const SgfNode *loaded_node = g_ptr_array_index((GPtrArray *)children, 0);
+  g_assert_nonnull(loaded_node);
+
+  g_autoptr(SgfNodeAnalysis) loaded_analysis = sgf_node_get_analysis(loaded_node);
+  g_assert_nonnull(loaded_analysis);
+  g_assert_cmpuint(loaded_analysis->depth, ==, 7);
+  g_assert_cmpuint(loaded_analysis->moves->len, ==, 1);
+}
+
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
 
@@ -276,5 +352,6 @@ int main(int argc, char **argv) {
   g_test_add_func("/sgf-io/roundtrip-branches", test_sgf_io_roundtrip_branches);
   g_test_add_func("/sgf-io/load-invalid-header", test_sgf_io_load_rejects_invalid_header);
   g_test_add_func("/sgf-io/repeated-property-values", test_sgf_io_preserves_repeated_property_values);
+  g_test_add_func("/sgf-io/analysis-roundtrip", test_sgf_io_roundtrip_node_analysis_properties);
   return g_test_run();
 }

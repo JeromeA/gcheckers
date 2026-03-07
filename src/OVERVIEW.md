@@ -12,9 +12,10 @@ and publishes best-to-worst move scores plus cumulative searched node counts aft
 off.
 Worker output is staged through a mutex-protected shared report buffer, and the GTK text view is refreshed from the
 main thread every 100ms while analysis is active. During a depth search, intermediate node-count snapshots are
-published and shown with a temporary `(searching...)` marker. Analysis now also reports cumulative TT
-hit/probe/cutoff counters and cumulative hit ratio across iterative-deepening passes, while reusing a single TT
-allocation across depths (8, 9, 10, ...).
+published and shown with a temporary `(searching...)` marker. Completed depth results are converted to
+`SgfNodeAnalysis` and attached to the selected `SgfNode` on the main thread, while text in the panel is formatted from
+that structured node analysis. Analysis now also reports cumulative TT hit/probe/cutoff counters and cumulative hit
+ratio across iterative-deepening passes, while reusing a single TT allocation across depths (8, 9, 10, ...).
 Top-level menu actions are
 also exposed in a toolbar
 (`New game...`, `Force move`, SGF timeline rewind/step/skip actions) via GTK actions.
@@ -106,7 +107,8 @@ Collaborates with: `game.c` to validate and apply generated moves.
 ## GTK model wrapper (`src/checkers_model.c`, `src/checkers_model.h`)
 Class: `GCheckersModel` (`GObject`).
 Role: wrap the engine for GTK, including move validation, alpha-beta move selection, state-change signals, and
-last-move caching for board overlay rendering.
+last-move caching for board overlay rendering. Exposes structured move-analysis API
+(`gcheckers_model_analyze_moves`) returning scored moves plus search stats.
 Collaborates with: `GCheckersWindow` and SGF controllers via signals and high-level move APIs.
 
 ## AI alpha-beta search (`src/ai_alpha_beta.c`, `src/ai_alpha_beta.h`)
@@ -119,12 +121,14 @@ and TT stats accumulate when callers reuse the same `CheckersAiSearchStats` acro
 independent runs.
 Search integrates zobrist hashing + a depth/bound/age transposition table and uses stored best moves for local move
 ordering. Also exposes direct position scoring for tooling predicates.
-Collaborates with: `checkers_model.c` for model-facing AI move selection and analysis text generation.
+Collaborates with: `checkers_model.c` for model-facing AI move selection and structured analysis APIs.
 
 ## Transposition table (`src/ai_transposition_table.c`, `src/ai_transposition_table.h`)
 Module: transposition cache.
 Role: fixed-size direct-mapped TT keyed by zobrist hash entries, storing depth, score, bound type, age generation, and
 best move. Replacement prefers deeper entries and replaces old generations to keep iterative-deepening searches fresh.
+TT entries are ephemeral search-cache data only (pruning and move ordering), not authoritative user-visible analysis
+storage.
 Collaborates with: `ai_alpha_beta.c`.
 
 ## Zobrist hashing (`src/ai_zobrist.c`, `src/ai_zobrist.h`)
@@ -224,7 +228,8 @@ Collaborates with: `PiecePalette` and board rendering.
 ### SGF tree (`src/sgf_tree.c`, `src/sgf_tree.h`)
 Module: SGF tree storage.
 Role: manage move nodes, parent/child links, SGF property access, traversal helpers, and the SGF current-node timeline
-used as the source of truth for move chronology/navigation.
+used as the source of truth for move chronology/navigation. Nodes also carry optional structured analysis
+(`SgfNodeAnalysis`) containing depth, search stats, and best-to-worst scored legal moves.
 Collaborates with: SGF view and controller modules.
 
 ### SGF move properties (`src/sgf_move_props.c`, `src/sgf_move_props.h`)
@@ -237,8 +242,9 @@ Collaborates with: `sgf_io` and `GCheckersSgfController`.
 Module: SGF load/save core.
 Role: serialize and deserialize SGF trees using SGF syntax (`(`, `)`, `;`, `PROP[...]`) with move properties
 `B[...]`/`W[...]` and standard SGF variation nesting for branches. gcheckers writes SGF metadata (`FF`, `CA`, `AP`,
-`GM`) and does not persist current UI selection. This layer is GTK-free so it can be reused by both GUI actions and
-future CLI commands.
+`GM`) and does not persist current UI selection. Node analysis persists through custom properties:
+`GCAD[depth]`, `GCAS[nodes=...;tt_probes=...;tt_hits=...;tt_cutoffs=...]`, and repeated
+`GCAN[move:score]`. This layer is GTK-free so it can be reused by both GUI actions and future CLI commands.
 Collaborates with: `GCheckersSgfController` load/save entry points and `tests/test_sgf_io.c`.
 
 ### SGF view (`src/sgf_view.c`, `src/sgf_view.h`)
