@@ -134,6 +134,7 @@ static void analysis_graph_draw(GtkDrawingArea * /*area*/,
     cairo_set_line_width(cr, 2.0);
 
     gboolean line_open = FALSE;
+    guint drawn_segments = 0;
     for (guint i = 0; i < node_count; ++i) {
       const SgfNode *node = g_ptr_array_index(self->nodes, i);
       if (node == NULL) {
@@ -161,6 +162,7 @@ static void analysis_graph_draw(GtkDrawingArea * /*area*/,
         line_open = TRUE;
       } else {
         cairo_line_to(cr, x, y);
+        drawn_segments++;
       }
     }
     if (line_open) {
@@ -168,6 +170,8 @@ static void analysis_graph_draw(GtkDrawingArea * /*area*/,
     }
 
     cairo_set_source_rgba(cr, 0.13, 0.48, 0.75, 1.0);
+    guint drawn_points = 0;
+    guint points_on_bottom = 0;
     for (guint i = 0; i < node_count; ++i) {
       const SgfNode *node = g_ptr_array_index(self->nodes, i);
       if (node == NULL) {
@@ -185,11 +189,24 @@ static void analysis_graph_draw(GtkDrawingArea * /*area*/,
 
       cairo_arc(cr, x, y, 2.5, 0.0, 2.0 * G_PI);
       cairo_fill(cr);
+      drawn_points++;
+      if (fabs(y - bottom) < 0.5) {
+        points_on_bottom++;
+      }
     }
+
+    (void)drawn_points;
+    (void)drawn_segments;
+    (void)points_on_bottom;
   }
 
   guint selected_index = analysis_graph_clamp_selected_index(self, self->selected_index);
   double bar_x = analysis_graph_node_x(node_count, selected_index, left, chart_width);
+  (void)bar_x;
+  (void)left;
+  (void)right;
+  (void)top;
+  (void)bottom;
   cairo_set_source_rgba(cr, 0.9, 0.2, 0.2, 0.95);
   cairo_set_line_width(cr, 1.0);
   cairo_move_to(cr, bar_x, top);
