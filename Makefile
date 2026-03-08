@@ -218,6 +218,7 @@ test_window: $(GSETTINGS_SCHEMA_COMPILED) tests/test_window.c src/window.c \
 	src/bga_client.c src/bga_client.h \
 	src/window.h \
 	src/style.c src/style.h src/player_controls_panel.c src/player_controls_panel.h \
+	src/analysis_graph.c src/analysis_graph.h \
 	src/sgf_controller.c src/sgf_controller.h src/board_view.c src/board_view.h \
 	src/board_grid.c src/board_grid.h src/board_square.c src/board_square.h src/board_move_overlay.c \
 	src/board_move_overlay.h src/board_selection_controller.c src/board_selection_controller.h \
@@ -235,6 +236,7 @@ test_window: $(GSETTINGS_SCHEMA_COMPILED) tests/test_window.c src/window.c \
 		src/sgf_file_actions.c \
 		src/bga_client.c \
 	src/style.c src/player_controls_panel.c src/sgf_controller.c \
+	src/analysis_graph.c \
 	src/board_view.c src/board_grid.c src/board_square.c src/board_move_overlay.c \
 	src/board_selection_controller.c src/piece_palette.c src/man_paintable.c \
 	src/sgf_io.c src/sgf_move_props.c src/sgf_tree.c src/sgf_view.c src/sgf_view_disc_factory.c src/sgf_view_layout.c \
@@ -264,6 +266,7 @@ gcheckers: $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c src/application.c src/wi
 	src/bga_client.c src/bga_client.h \
 	src/window.h \
 	src/style.c src/style.h src/player_controls_panel.c src/player_controls_panel.h \
+	src/analysis_graph.c src/analysis_graph.h \
 	src/sgf_controller.c src/sgf_controller.h src/board_view.c src/board_view.h \
 	src/board_grid.c src/board_grid.h src/board_square.c src/board_square.h src/board_move_overlay.c \
 	src/board_move_overlay.h src/board_selection_controller.c src/board_selection_controller.h \
@@ -277,7 +280,7 @@ gcheckers: $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c src/application.c src/wi
 	src/sgf_view_selection_controller.h $(SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/gcheckers.c src/application.c \
 		src/window.c src/new_game_dialog.c src/import_dialog.c src/style.c \
-	src/player_controls_panel.c src/sgf_file_actions.c src/bga_client.c \
+	src/player_controls_panel.c src/analysis_graph.c src/sgf_file_actions.c src/bga_client.c \
 	src/sgf_controller.c src/board_view.c src/board_grid.c src/board_square.c \
 	src/board_move_overlay.c src/board_selection_controller.c src/piece_palette.c \
 	src/man_paintable.c src/sgf_io.c src/sgf_move_props.c src/sgf_tree.c src/sgf_view.c \

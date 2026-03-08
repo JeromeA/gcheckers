@@ -103,6 +103,22 @@ static const SgfNode *sgf_node_get_nth_child(const SgfNode *node, guint index) {
   return g_ptr_array_index((GPtrArray *)children, index);
 }
 
+typedef struct {
+  guint count;
+  const SgfNode *last_node;
+} SgfControllerNodeChangedProbe;
+
+static void test_gcheckers_sgf_controller_on_node_changed(GCheckersSgfController * /*controller*/,
+                                                          const SgfNode *node,
+                                                          gpointer user_data) {
+  SgfControllerNodeChangedProbe *probe = user_data;
+  g_return_if_fail(probe != NULL);
+  g_return_if_fail(node != NULL);
+
+  probe->count++;
+  probe->last_node = node;
+}
+
 static void test_gcheckers_sgf_controller_appends_move_property(void) {
   BoardView *board_view = board_view_new();
   GCheckersModel *model = gcheckers_model_new();
@@ -292,6 +308,37 @@ static void test_gcheckers_sgf_controller_navigation_forward_to_branch_and_end(v
   g_clear_object(&board_view);
 }
 
+static void test_gcheckers_sgf_controller_select_node_emits_node_changed(void) {
+  BoardView *board_view = board_view_new();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersSgfController *controller = gcheckers_sgf_controller_new(board_view);
+  gcheckers_sgf_controller_set_model(controller, model);
+
+  CheckersMove move = {0};
+  g_assert_true(apply_first_move(controller, model, &move));
+  g_assert_true(apply_first_move(controller, model, &move));
+
+  SgfTree *tree = gcheckers_sgf_controller_get_tree(controller);
+  g_assert_nonnull(tree);
+  const SgfNode *root = sgf_tree_get_root(tree);
+  g_assert_nonnull(root);
+
+  SgfControllerNodeChangedProbe probe = {0};
+  g_signal_connect(controller,
+                   "node-changed",
+                   G_CALLBACK(test_gcheckers_sgf_controller_on_node_changed),
+                   &probe);
+
+  g_assert_true(gcheckers_sgf_controller_select_node(controller, root));
+  g_assert_cmpuint(probe.count, ==, 1);
+  g_assert_true(probe.last_node == root);
+  g_assert_true(sgf_tree_get_current(tree) == root);
+
+  g_clear_object(&controller);
+  g_clear_object(&model);
+  g_clear_object(&board_view);
+}
+
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   if (!gtk_init_check()) {
@@ -301,6 +348,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/sgf-controller/step-ai-move", test_gcheckers_sgf_controller_skip);
     g_test_add_func("/sgf-controller/navigation-step-and-rewind", test_gcheckers_sgf_controller_skip);
     g_test_add_func("/sgf-controller/navigation-forward-to-branch-and-end", test_gcheckers_sgf_controller_skip);
+    g_test_add_func("/sgf-controller/select-node-emits-node-changed", test_gcheckers_sgf_controller_skip);
     return g_test_run();
   }
 
@@ -312,5 +360,7 @@ int main(int argc, char **argv) {
                   test_gcheckers_sgf_controller_navigation_step_and_rewind);
   g_test_add_func("/sgf-controller/navigation-forward-to-branch-and-end",
                   test_gcheckers_sgf_controller_navigation_forward_to_branch_and_end);
+  g_test_add_func("/sgf-controller/select-node-emits-node-changed",
+                  test_gcheckers_sgf_controller_select_node_emits_node_changed);
   return g_test_run();
 }

@@ -28,6 +28,7 @@ gboolean gcheckers_sgf_controller_step_backward(GCheckersSgfController *self);
 gboolean gcheckers_sgf_controller_step_forward(GCheckersSgfController *self);
 gboolean gcheckers_sgf_controller_step_forward_to_branch(GCheckersSgfController *self);
 gboolean gcheckers_sgf_controller_step_forward_to_end(GCheckersSgfController *self);
+gboolean gcheckers_sgf_controller_select_node(GCheckersSgfController *self, const SgfNode *node);
 gboolean gcheckers_sgf_controller_load_file(GCheckersSgfController *self, const char *path, GError **error);
 gboolean gcheckers_sgf_controller_save_file(GCheckersSgfController *self, const char *path, GError **error);
 GtkWidget *gcheckers_sgf_controller_get_widget(GCheckersSgfController *self);

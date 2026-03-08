@@ -7,15 +7,15 @@ Owns: `GCheckersModel`, `BoardView`, `PlayerControlsPanel`, and `GCheckersSgfCon
 Collaborates with: `gcheckers_style_init()` for CSS, model signals for refresh, and SGF analysis signals to reset
 player dropdowns. Computer turns are routed by control mode with alpha-beta depth configured from the shared
 `Computer level` slider (`0..16`). Uses a three-pane layout: board and player controls (left), SGF mode selector
-and SGF view (middle), and analysis (right) with an `Analyze` toggle that runs iterative deepening in a worker thread
-and publishes best-to-worst move scores plus cumulative searched node counts after each completed depth until toggled
-off.
+and SGF view (middle), and analysis (right) with both an `Analyze` toggle (iterative deepening on current SGF node)
+and an `Analyze full game` button (fixed-depth analysis of all SGF nodes).
 Worker output is staged through a mutex-protected shared report buffer, and the GTK text view is refreshed from the
-main thread every 100ms while analysis is active. During a depth search, intermediate node-count snapshots are
-published and shown with a temporary `(searching...)` marker. Completed depth results are converted to
-`SgfNodeAnalysis` and attached to the selected `SgfNode` on the main thread, while text in the panel is formatted from
-that structured node analysis. Analysis now also reports cumulative TT hit/probe/cutoff counters and cumulative hit
-ratio across iterative-deepening passes, while reusing a single TT allocation across depths (8, 9, 10, ...).
+main thread every 100ms while analysis is active. During iterative deepening, intermediate node-count snapshots are
+published and shown with a temporary `(searching...)` marker. Completed results are converted to `SgfNodeAnalysis` and
+attached to SGF nodes on the main thread, while text in the panel is formatted from that structured node analysis.
+Analysis reports TT hit/probe/cutoff counters and hit ratio, while reusing a single TT allocation across passes.
+Owns an analysis graph widget that shows branch values for the current SGF branch (root->current plus current->main
+line end), tracks SGF selection with a vertical cursor, and supports click-to-select SGF navigation.
 Top-level menu actions are
 also exposed in a toolbar
 (`New game...`, `Force move`, SGF timeline rewind/step/skip actions) via GTK actions.
@@ -46,8 +46,17 @@ backward, step forward on main line, step to next branch point, and step to main
 Selection-only navigation updates SGF view selection in place (`sgf_view_set_selected`) instead of rebuilding the
 entire SGF layout.
 Owns: `SgfTree` and `SgfView`, plus replay guard (`is_replaying`).
+Signals: `analysis-requested` when analysis panel content should refresh for the selected node, and `node-changed`
+whenever SGF current node changes so other UI (analysis graph) can synchronize cursor state.
 Collaborates with: `GCheckersModel` for move validation/application, `BoardView` to clear selection on replay/reset,
 and `GCheckersWindow` via the `analysis-requested` signal.
+
+## `AnalysisGraph` (`src/analysis_graph.c`, `src/analysis_graph.h`)
+Class: `AnalysisGraph` (`GObject`).
+Role: wraps a `GtkDrawingArea` chart for SGF branch evaluations. Draws best-score points/segments from per-node
+`SgfNodeAnalysis`, renders a vertical selected-node bar, and maps pointer clicks to nearest node index.
+Signals: `node-activated` with the clicked branch node pointer so window code can call SGF controller selection APIs.
+Collaborates with: `GCheckersWindow` (data binding) and `GCheckersSgfController` (selection updates).
 
 ## `PlayerControlsPanel` (`src/player_controls_panel.c`)
 Class: `PlayerControlsPanel` (`GtkBox`).
@@ -230,6 +239,8 @@ Module: SGF tree storage.
 Role: manage move nodes, parent/child links, SGF property access, traversal helpers, and the SGF current-node timeline
 used as the source of truth for move chronology/navigation. Nodes also carry optional structured analysis
 (`SgfNodeAnalysis`) containing depth, search stats, and best-to-worst scored legal moves.
+Traversal helpers include root-to-node path construction, main-line collection from arbitrary nodes, current-branch
+construction for graphing, and deterministic preorder collection for full-tree analysis jobs.
 Collaborates with: SGF view and controller modules.
 
 ### SGF move properties (`src/sgf_move_props.c`, `src/sgf_move_props.h`)

@@ -76,6 +76,10 @@ static const char *gcheckers_style_css =
     "  font-size: 18px;"
     "}"
     ".sgf-disc-selected { box-shadow: 0 0 0 3px #5cc7ff; }"
+    ".analysis-graph {"
+    "  border: 1px solid #c9c9c9;"
+    "  background-color: #fafafa;"
+    "}"
     "scale { padding: 0; }";
 
 void gcheckers_style_init(void) {

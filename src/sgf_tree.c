@@ -280,6 +280,99 @@ GPtrArray *sgf_tree_build_main_line(SgfTree *self) {
   return line;
 }
 
+GPtrArray *sgf_tree_build_path_to_node(SgfTree *self, const SgfNode *node) {
+  g_return_val_if_fail(SGF_IS_TREE(self), NULL);
+  g_return_val_if_fail(node != NULL, NULL);
+
+  if (!sgf_node_is_descendant(node, self->root)) {
+    g_debug("Attempted to build path for SGF node not in tree");
+    return NULL;
+  }
+
+  GPtrArray *path = g_ptr_array_new();
+  const SgfNode *cursor = node;
+  while (cursor != NULL) {
+    g_ptr_array_add(path, (gpointer)cursor);
+    cursor = cursor->parent;
+  }
+
+  for (guint i = 0; i < path->len / 2; ++i) {
+    gpointer tmp = g_ptr_array_index(path, i);
+    g_ptr_array_index(path, i) = g_ptr_array_index(path, path->len - 1 - i);
+    g_ptr_array_index(path, path->len - 1 - i) = tmp;
+  }
+
+  return path;
+}
+
+GPtrArray *sgf_tree_build_main_line_from_node(const SgfNode *node) {
+  g_return_val_if_fail(node != NULL, NULL);
+
+  GPtrArray *line = g_ptr_array_new();
+  const SgfNode *cursor = node;
+  while (cursor != NULL) {
+    g_ptr_array_add(line, (gpointer)cursor);
+    const GPtrArray *children = cursor->children;
+    if (children == NULL || children->len == 0) {
+      break;
+    }
+    cursor = g_ptr_array_index((GPtrArray *)children, 0);
+  }
+
+  return line;
+}
+
+GPtrArray *sgf_tree_build_current_branch(SgfTree *self) {
+  g_return_val_if_fail(SGF_IS_TREE(self), NULL);
+  g_return_val_if_fail(self->current != NULL, NULL);
+
+  g_autoptr(GPtrArray) to_current = sgf_tree_build_path_to_node(self, self->current);
+  if (to_current == NULL) {
+    return NULL;
+  }
+
+  g_autoptr(GPtrArray) main_line = sgf_tree_build_main_line_from_node(self->current);
+  if (main_line == NULL) {
+    return NULL;
+  }
+
+  GPtrArray *branch = g_ptr_array_new();
+  for (guint i = 0; i < to_current->len; ++i) {
+    g_ptr_array_add(branch, g_ptr_array_index(to_current, i));
+  }
+  for (guint i = 1; i < main_line->len; ++i) {
+    g_ptr_array_add(branch, g_ptr_array_index(main_line, i));
+  }
+
+  return branch;
+}
+
+static void sgf_tree_collect_nodes_preorder_from(const SgfNode *node, GPtrArray *nodes) {
+  g_return_if_fail(node != NULL);
+  g_return_if_fail(nodes != NULL);
+
+  g_ptr_array_add(nodes, (gpointer)node);
+  const GPtrArray *children = node->children;
+  if (children == NULL || children->len == 0) {
+    return;
+  }
+
+  for (guint i = 0; i < children->len; ++i) {
+    const SgfNode *child = g_ptr_array_index((GPtrArray *)children, i);
+    g_return_if_fail(child != NULL);
+    sgf_tree_collect_nodes_preorder_from(child, nodes);
+  }
+}
+
+GPtrArray *sgf_tree_collect_nodes_preorder(SgfTree *self) {
+  g_return_val_if_fail(SGF_IS_TREE(self), NULL);
+  g_return_val_if_fail(self->root != NULL, NULL);
+
+  GPtrArray *nodes = g_ptr_array_new();
+  sgf_tree_collect_nodes_preorder_from(self->root, nodes);
+  return nodes;
+}
+
 SgfColor sgf_node_get_color(const SgfNode *node) {
   g_return_val_if_fail(node != NULL, SGF_COLOR_NONE);
 

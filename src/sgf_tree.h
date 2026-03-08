@@ -40,6 +40,10 @@ const SgfNode *sgf_tree_get_current(SgfTree *self);
 const SgfNode *sgf_tree_append_move(SgfTree *self, SgfColor color, const char *move_value);
 gboolean sgf_tree_set_current(SgfTree *self, const SgfNode *node);
 GPtrArray *sgf_tree_build_main_line(SgfTree *self);
+GPtrArray *sgf_tree_build_path_to_node(SgfTree *self, const SgfNode *node);
+GPtrArray *sgf_tree_build_main_line_from_node(const SgfNode *node);
+GPtrArray *sgf_tree_build_current_branch(SgfTree *self);
+GPtrArray *sgf_tree_collect_nodes_preorder(SgfTree *self);
 
 SgfColor sgf_node_get_color(const SgfNode *node);
 guint sgf_node_get_move_number(const SgfNode *node);

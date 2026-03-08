@@ -4,6 +4,7 @@
 #include "sgf_controller.h"
 #include "window.h"
 #include "player_controls_panel.h"
+#include "analysis_graph.h"
 #include "sgf_tree.h"
 
 static void test_gcheckers_window_skip(void) {
@@ -270,6 +271,17 @@ static const SgfNode *sgf_tree_get_first_child(SgfTree *tree) {
   return g_ptr_array_index(children, 0);
 }
 
+static AnalysisGraph *test_gcheckers_window_get_analysis_graph(GCheckersWindow *window) {
+  g_return_val_if_fail(GCHECKERS_IS_WINDOW(window), NULL);
+
+  gpointer data = g_object_get_data(G_OBJECT(window), "analysis-graph");
+  if (data == NULL) {
+    return NULL;
+  }
+
+  return ANALYSIS_GRAPH(data);
+}
+
 static void test_gcheckers_window_unparents_controls_panel_on_dispose(void) {
   GtkApplication *app = test_gcheckers_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
@@ -510,6 +522,87 @@ static void test_gcheckers_window_analysis_toggle(void) {
   g_clear_object(&app);
 }
 
+static void test_gcheckers_window_analysis_full_button_exists(void) {
+  GtkApplication *app = test_gcheckers_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersWindow *window = gcheckers_window_new(app, model);
+
+  GtkButton *full_button =
+      test_gcheckers_window_find_button_with_label(GTK_WIDGET(window), "Analyze full game");
+  g_assert_nonnull(full_button);
+  g_assert_true(gtk_widget_get_sensitive(GTK_WIDGET(full_button)));
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
+static void test_gcheckers_window_graph_selection_tracks_sgf_selection(void) {
+  GtkApplication *app = test_gcheckers_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersWindow *window = gcheckers_window_new(app, model);
+
+  GCheckersSgfController *controller = gcheckers_window_get_sgf_controller(window);
+  g_assert_nonnull(controller);
+
+  CheckersMove move = {0};
+  g_assert_true(apply_first_move(controller, model, &move));
+  g_assert_true(apply_first_move(controller, model, &move));
+  test_gcheckers_window_drain_main_context(16);
+
+  AnalysisGraph *graph = test_gcheckers_window_get_analysis_graph(window);
+  g_assert_nonnull(graph);
+  g_assert_cmpuint(analysis_graph_get_node_count(graph), ==, 3);
+  g_assert_cmpuint(analysis_graph_get_selected_index(graph), ==, 2);
+
+  g_action_group_activate_action(G_ACTION_GROUP(window), "sgf-step-backward", NULL);
+  test_gcheckers_window_drain_main_context(16);
+  g_assert_cmpuint(analysis_graph_get_selected_index(graph), ==, 1);
+
+  g_action_group_activate_action(G_ACTION_GROUP(window), "sgf-rewind", NULL);
+  test_gcheckers_window_drain_main_context(16);
+  g_assert_cmpuint(analysis_graph_get_selected_index(graph), ==, 0);
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
+static void test_gcheckers_window_graph_activation_changes_sgf_selection(void) {
+  GtkApplication *app = test_gcheckers_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersWindow *window = gcheckers_window_new(app, model);
+
+  GCheckersSgfController *controller = gcheckers_window_get_sgf_controller(window);
+  g_assert_nonnull(controller);
+  SgfTree *tree = gcheckers_sgf_controller_get_tree(controller);
+  g_assert_nonnull(tree);
+
+  CheckersMove move = {0};
+  g_assert_true(apply_first_move(controller, model, &move));
+  test_gcheckers_window_drain_main_context(16);
+
+  const SgfNode *first = sgf_tree_get_first_child(tree);
+  g_assert_nonnull(first);
+  const SgfNode *root = sgf_tree_get_root(tree);
+  g_assert_nonnull(root);
+  g_assert_true(sgf_tree_get_current(tree) == first);
+
+  AnalysisGraph *graph = test_gcheckers_window_get_analysis_graph(window);
+  g_assert_nonnull(graph);
+  g_signal_emit_by_name(graph, "node-activated", root);
+  test_gcheckers_window_drain_main_context(16);
+  g_assert_true(sgf_tree_get_current(tree) == root);
+
+  g_signal_emit_by_name(graph, "node-activated", first);
+  test_gcheckers_window_drain_main_context(16);
+  g_assert_true(sgf_tree_get_current(tree) == first);
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
 static void test_gcheckers_window_import_wizard_flow(void) {
   GtkApplication *app = test_gcheckers_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
@@ -663,6 +756,9 @@ int main(int argc, char **argv) {
     g_test_add_func("/gcheckers-window/toolbar-actions", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/sgf-actions-navigate", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/analysis-toggle", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/analysis-full-button", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/graph-selection-sync", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/graph-activation-selects-node", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/import-wizard-flow", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/ruleset-switch", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/new-game-ruleset-options-russian", test_gcheckers_window_skip);
@@ -700,6 +796,11 @@ int main(int argc, char **argv) {
   g_test_add_func("/gcheckers-window/sgf-actions-navigate",
                   test_gcheckers_window_sgf_actions_navigate_timeline);
   g_test_add_func("/gcheckers-window/analysis-toggle", test_gcheckers_window_analysis_toggle);
+  g_test_add_func("/gcheckers-window/analysis-full-button", test_gcheckers_window_analysis_full_button_exists);
+  g_test_add_func("/gcheckers-window/graph-selection-sync",
+                  test_gcheckers_window_graph_selection_tracks_sgf_selection);
+  g_test_add_func("/gcheckers-window/graph-activation-selects-node",
+                  test_gcheckers_window_graph_activation_changes_sgf_selection);
   g_test_add_func("/gcheckers-window/import-wizard-flow", test_gcheckers_window_import_wizard_flow);
   g_test_add_func("/gcheckers-window/ruleset-switch", test_gcheckers_window_ruleset_switch_resets_model);
   g_test_add_func("/gcheckers-window/new-game-ruleset-options-russian",

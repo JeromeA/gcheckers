@@ -65,6 +65,72 @@ static void test_sgf_tree_append_existing_child(void) {
   g_object_unref(tree);
 }
 
+static void test_sgf_tree_current_branch(void) {
+  SgfTree *tree = sgf_tree_new();
+  const SgfNode *root = sgf_tree_get_root(tree);
+  assert(root != NULL);
+
+  const SgfNode *main_1 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, "21-17");
+  assert(main_1 != NULL);
+  const SgfNode *main_2 = sgf_tree_append_move(tree, SGF_COLOR_BLACK, "9-13");
+  assert(main_2 != NULL);
+  const SgfNode *main_3 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, "24-20");
+  assert(main_3 != NULL);
+
+  assert(sgf_tree_set_current(tree, main_1));
+  const SgfNode *branch_2 = sgf_tree_append_move(tree, SGF_COLOR_BLACK, "10-14");
+  assert(branch_2 != NULL);
+  const SgfNode *branch_3 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, "22-18");
+  assert(branch_3 != NULL);
+
+  assert(sgf_tree_set_current(tree, branch_2));
+  GPtrArray *branch = sgf_tree_build_current_branch(tree);
+  assert(branch != NULL);
+  assert(branch->len == 4);
+  assert(g_ptr_array_index(branch, 0) == root);
+  assert(g_ptr_array_index(branch, 1) == main_1);
+  assert(g_ptr_array_index(branch, 2) == branch_2);
+  assert(g_ptr_array_index(branch, 3) == branch_3);
+  g_ptr_array_unref(branch);
+
+  assert(sgf_tree_set_current(tree, main_1));
+  branch = sgf_tree_build_current_branch(tree);
+  assert(branch != NULL);
+  assert(branch->len == 4);
+  assert(g_ptr_array_index(branch, 0) == root);
+  assert(g_ptr_array_index(branch, 1) == main_1);
+  assert(g_ptr_array_index(branch, 2) == main_2);
+  assert(g_ptr_array_index(branch, 3) == main_3);
+  g_ptr_array_unref(branch);
+
+  g_object_unref(tree);
+}
+
+static void test_sgf_tree_collect_nodes_preorder(void) {
+  SgfTree *tree = sgf_tree_new();
+  const SgfNode *root = sgf_tree_get_root(tree);
+  assert(root != NULL);
+
+  const SgfNode *a = sgf_tree_append_move(tree, SGF_COLOR_WHITE, "21-17");
+  assert(a != NULL);
+  const SgfNode *b = sgf_tree_append_move(tree, SGF_COLOR_BLACK, "9-13");
+  assert(b != NULL);
+  assert(sgf_tree_set_current(tree, a));
+  const SgfNode *c = sgf_tree_append_move(tree, SGF_COLOR_BLACK, "10-14");
+  assert(c != NULL);
+
+  GPtrArray *nodes = sgf_tree_collect_nodes_preorder(tree);
+  assert(nodes != NULL);
+  assert(nodes->len == 4);
+  assert(g_ptr_array_index(nodes, 0) == root);
+  assert(g_ptr_array_index(nodes, 1) == a);
+  assert(g_ptr_array_index(nodes, 2) == b);
+  assert(g_ptr_array_index(nodes, 3) == c);
+  g_ptr_array_unref(nodes);
+
+  g_object_unref(tree);
+}
+
 static CheckersMove test_sgf_tree_make_move(guint8 from, guint8 to) {
   CheckersMove move = {0};
   move.length = 2;
@@ -123,6 +189,8 @@ int main(void) {
   test_sgf_tree_append_and_select();
   test_sgf_tree_main_line();
   test_sgf_tree_append_existing_child();
+  test_sgf_tree_current_branch();
+  test_sgf_tree_collect_nodes_preorder();
   test_sgf_tree_node_analysis_set_get_clear();
 
   return 0;
