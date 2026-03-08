@@ -1029,9 +1029,9 @@ static void gcheckers_window_on_control_changed(PlayerControlsPanel * /*panel*/,
   gcheckers_window_update_control_state(self);
 }
 
-static void gcheckers_window_on_analysis_requested(GCheckersSgfController * /*controller*/,
-                                                   gpointer /*node*/,
-                                                   gpointer user_data) {
+static void gcheckers_window_on_manual_requested(GCheckersSgfController * /*controller*/,
+                                                 gpointer /*node*/,
+                                                 gpointer user_data) {
   GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
 
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
@@ -1528,8 +1528,8 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   GtkWidget *sgf_widget = gcheckers_sgf_controller_get_widget(self->sgf_controller);
   g_return_if_fail(sgf_widget != NULL);
   g_signal_connect(self->sgf_controller,
-                   "analysis-requested",
-                   G_CALLBACK(gcheckers_window_on_analysis_requested),
+                   "manual-requested",
+                   G_CALLBACK(gcheckers_window_on_manual_requested),
                    self);
   g_signal_connect(self->sgf_controller,
                    "node-changed",

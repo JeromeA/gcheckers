@@ -46,10 +46,10 @@ backward, step forward on main line, step to next branch point, and step to main
 Selection-only navigation updates SGF view selection in place (`sgf_view_set_selected`) instead of rebuilding the
 entire SGF layout.
 Owns: `SgfTree` and `SgfView`, plus replay guard (`is_replaying`).
-Signals: `analysis-requested` when analysis panel content should refresh for the selected node, and `node-changed`
+Signals: `manual-requested` when analysis panel content should refresh for the selected node, and `node-changed`
 whenever SGF current node changes so other UI (analysis graph) can synchronize cursor state.
 Collaborates with: `GCheckersModel` for move validation/application, `BoardView` to clear selection on replay/reset,
-and `GCheckersWindow` via the `analysis-requested` signal.
+and `GCheckersWindow` via the `manual-requested` signal.
 
 ## `AnalysisGraph` (`src/analysis_graph.c`, `src/analysis_graph.h`)
 Class: `AnalysisGraph` (`GObject`).

@@ -17,7 +17,7 @@ G_DEFINE_TYPE(GCheckersSgfController, gcheckers_sgf_controller, G_TYPE_OBJECT)
 
 enum {
   SIGNAL_NODE_CHANGED,
-  SIGNAL_ANALYSIS_REQUESTED,
+  SIGNAL_MANUAL_REQUESTED,
   SIGNAL_LAST
 };
 
@@ -199,7 +199,7 @@ static gboolean gcheckers_sgf_controller_navigate_to(GCheckersSgfController *sel
     return FALSE;
   }
 
-  g_signal_emit(self, controller_signals[SIGNAL_ANALYSIS_REQUESTED], 0, node);
+  g_signal_emit(self, controller_signals[SIGNAL_MANUAL_REQUESTED], 0, node);
   sgf_view_set_selected(self->sgf_view, node);
   return TRUE;
 }
@@ -216,7 +216,7 @@ static void gcheckers_sgf_controller_on_node_selected(SgfView * /*view*/,
     return;
   }
 
-  g_signal_emit(self, controller_signals[SIGNAL_ANALYSIS_REQUESTED], 0, node);
+  g_signal_emit(self, controller_signals[SIGNAL_MANUAL_REQUESTED], 0, node);
   sgf_view_set_selected(self->sgf_view, node);
 }
 
@@ -247,7 +247,7 @@ static void gcheckers_sgf_controller_class_init(GCheckersSgfControllerClass *kla
                                                          1,
                                                          G_TYPE_POINTER);
 
-  controller_signals[SIGNAL_ANALYSIS_REQUESTED] = g_signal_new("analysis-requested",
+  controller_signals[SIGNAL_MANUAL_REQUESTED] = g_signal_new("manual-requested",
                                                                G_TYPE_FROM_CLASS(klass),
                                                                G_SIGNAL_RUN_LAST,
                                                                0,
@@ -302,7 +302,7 @@ void gcheckers_sgf_controller_new_game(GCheckersSgfController *self) {
   const SgfNode *root = sgf_tree_get_root(self->sgf_tree);
   if (root != NULL) {
     gcheckers_sgf_controller_emit_node_changed(self, root);
-    g_signal_emit(self, controller_signals[SIGNAL_ANALYSIS_REQUESTED], 0, root);
+    g_signal_emit(self, controller_signals[SIGNAL_MANUAL_REQUESTED], 0, root);
   }
 }
 
@@ -362,7 +362,6 @@ gboolean gcheckers_sgf_controller_apply_move(GCheckersSgfController *self, const
   }
 
   gcheckers_sgf_controller_emit_node_changed(self, node);
-  g_signal_emit(self, controller_signals[SIGNAL_ANALYSIS_REQUESTED], 0, node);
   sgf_view_refresh(self->sgf_view);
   return TRUE;
 }
@@ -522,7 +521,7 @@ gboolean gcheckers_sgf_controller_load_file(GCheckersSgfController *self, const 
 
   if (selected != NULL) {
     gcheckers_sgf_controller_emit_node_changed(self, selected);
-    g_signal_emit(self, controller_signals[SIGNAL_ANALYSIS_REQUESTED], 0, selected);
+    g_signal_emit(self, controller_signals[SIGNAL_MANUAL_REQUESTED], 0, selected);
   }
   return TRUE;
 }
