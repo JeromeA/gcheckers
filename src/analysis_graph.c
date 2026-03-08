@@ -61,15 +61,30 @@ static double analysis_graph_node_x(guint node_count, guint index, double left, 
   return left + (t * width);
 }
 
-static void analysis_graph_draw_axis(cairo_t *cr, double left, double top, double width, double height) {
+static void analysis_graph_draw_axis(cairo_t *cr,
+                                     double left,
+                                     double top,
+                                     double width,
+                                     double height,
+                                     double zero_y) {
   g_return_if_fail(cr != NULL);
 
   cairo_set_source_rgba(cr, 0.65, 0.65, 0.65, 1.0);
   cairo_set_line_width(cr, 1.0);
   cairo_move_to(cr, left, top);
   cairo_line_to(cr, left, top + height);
-  cairo_line_to(cr, left + width, top + height);
+  cairo_move_to(cr, left, zero_y);
+  cairo_line_to(cr, left + width, zero_y);
   cairo_stroke(cr);
+}
+
+static double analysis_graph_score_to_y(double score,
+                                        double min_axis_score,
+                                        double score_span,
+                                        double bottom,
+                                        double chart_height) {
+  double normalized = (score - min_axis_score) / score_span;
+  return bottom - (normalized * chart_height);
 }
 
 static void analysis_graph_draw(GtkDrawingArea * /*area*/,
@@ -89,15 +104,6 @@ static void analysis_graph_draw(GtkDrawingArea * /*area*/,
   double bottom = MAX(analysis_graph_margin_top + 1.0, (double)height - analysis_graph_margin_bottom);
   double chart_width = right - left;
   double chart_height = bottom - top;
-
-  cairo_set_source_rgba(cr, 0.98, 0.98, 0.98, 1.0);
-  cairo_paint(cr);
-
-  analysis_graph_draw_axis(cr, left, top, chart_width, chart_height);
-
-  if (node_count == 0) {
-    return;
-  }
 
   double min_score = 0.0;
   double max_score = 0.0;
@@ -124,9 +130,36 @@ static void analysis_graph_draw(GtkDrawingArea * /*area*/,
     max_score = MAX(max_score, score);
   }
 
-  double score_span = max_score - min_score;
-  if (score_span < 1.0) {
+  double min_axis_score = min_score;
+  double max_axis_score = max_score;
+  if (has_score) {
+    if (fabs(max_axis_score - min_axis_score) < 0.000001) {
+      if (fabs(min_axis_score) < 0.000001) {
+        min_axis_score = -1.0;
+        max_axis_score = 1.0;
+      } else {
+        min_axis_score -= 1.0;
+        max_axis_score += 1.0;
+      }
+    } else {
+      min_axis_score = MIN(min_axis_score, 0.0);
+      max_axis_score = MAX(max_axis_score, 0.0);
+    }
+  }
+  double score_span = max_axis_score - min_axis_score;
+  if (score_span < 0.000001) {
     score_span = 1.0;
+  }
+  double zero_y = analysis_graph_score_to_y(0.0, min_axis_score, score_span, bottom, chart_height);
+  zero_y = CLAMP(zero_y, top, bottom);
+
+  cairo_set_source_rgba(cr, 0.98, 0.98, 0.98, 1.0);
+  cairo_paint(cr);
+
+  analysis_graph_draw_axis(cr, left, top, chart_width, chart_height, zero_y);
+
+  if (node_count == 0) {
+    return;
   }
 
   if (has_score) {
@@ -134,7 +167,6 @@ static void analysis_graph_draw(GtkDrawingArea * /*area*/,
     cairo_set_line_width(cr, 2.0);
 
     gboolean line_open = FALSE;
-    guint drawn_segments = 0;
     for (guint i = 0; i < node_count; ++i) {
       const SgfNode *node = g_ptr_array_index(self->nodes, i);
       if (node == NULL) {
@@ -155,14 +187,12 @@ static void analysis_graph_draw(GtkDrawingArea * /*area*/,
       }
 
       double x = analysis_graph_node_x(node_count, i, left, chart_width);
-      double normalized = (score - min_score) / score_span;
-      double y = bottom - (normalized * chart_height);
+      double y = analysis_graph_score_to_y(score, min_axis_score, score_span, bottom, chart_height);
       if (!line_open) {
         cairo_move_to(cr, x, y);
         line_open = TRUE;
       } else {
         cairo_line_to(cr, x, y);
-        drawn_segments++;
       }
     }
     if (line_open) {
@@ -170,8 +200,6 @@ static void analysis_graph_draw(GtkDrawingArea * /*area*/,
     }
 
     cairo_set_source_rgba(cr, 0.13, 0.48, 0.75, 1.0);
-    guint drawn_points = 0;
-    guint points_on_bottom = 0;
     for (guint i = 0; i < node_count; ++i) {
       const SgfNode *node = g_ptr_array_index(self->nodes, i);
       if (node == NULL) {
@@ -184,29 +212,15 @@ static void analysis_graph_draw(GtkDrawingArea * /*area*/,
       }
 
       double x = analysis_graph_node_x(node_count, i, left, chart_width);
-      double normalized = (score - min_score) / score_span;
-      double y = bottom - (normalized * chart_height);
+      double y = analysis_graph_score_to_y(score, min_axis_score, score_span, bottom, chart_height);
 
       cairo_arc(cr, x, y, 2.5, 0.0, 2.0 * G_PI);
       cairo_fill(cr);
-      drawn_points++;
-      if (fabs(y - bottom) < 0.5) {
-        points_on_bottom++;
-      }
     }
-
-    (void)drawn_points;
-    (void)drawn_segments;
-    (void)points_on_bottom;
   }
 
   guint selected_index = analysis_graph_clamp_selected_index(self, self->selected_index);
   double bar_x = analysis_graph_node_x(node_count, selected_index, left, chart_width);
-  (void)bar_x;
-  (void)left;
-  (void)right;
-  (void)top;
-  (void)bottom;
   cairo_set_source_rgba(cr, 0.9, 0.2, 0.2, 0.95);
   cairo_set_line_width(cr, 1.0);
   cairo_move_to(cr, bar_x, top);
