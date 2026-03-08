@@ -7,7 +7,6 @@
 #include <string.h>
 
 typedef struct {
-  CheckersColor perspective;
   CheckersAiCancelFunc should_cancel;
   gpointer cancel_user_data;
   CheckersAiProgressFunc on_progress;
@@ -50,7 +49,7 @@ static gboolean checkers_ai_moves_match(const CheckersMove *left, const Checkers
   return memcmp(left->path, right->path, left->length * sizeof(left->path[0])) == 0;
 }
 
-static gint checkers_ai_material_score(const Game *game, CheckersColor perspective) {
+static gint checkers_ai_material_score(const Game *game) {
   /*
    * Hot-path assumption reminder:
    * The following checks are enforced at API boundaries by callers.
@@ -84,13 +83,13 @@ static gint checkers_ai_material_score(const Game *game, CheckersColor perspecti
     }
 
     CheckersColor color = board_piece_color(piece);
-    score += color == perspective ? value : -value;
+    score += color == CHECKERS_COLOR_WHITE ? value : -value;
   }
 
   return score;
 }
 
-static gint checkers_ai_terminal_score(const Game *game, CheckersColor perspective, guint ply_depth) {
+static gint checkers_ai_terminal_score(const Game *game, guint ply_depth) {
   /*
    * Hot-path assumption reminder:
    * The following checks are enforced at API boundaries by callers.
@@ -99,20 +98,20 @@ static gint checkers_ai_terminal_score(const Game *game, CheckersColor perspecti
   /* g_return_val_if_fail(game != NULL, 0); */
 
   if (game->state.winner == CHECKERS_WINNER_NONE) {
-    return checkers_ai_material_score(game, perspective);
+    return checkers_ai_material_score(game);
   }
 
   gint win_score = 100000 - (gint)ply_depth;
   switch (game->state.winner) {
     case CHECKERS_WINNER_WHITE:
-      return perspective == CHECKERS_COLOR_WHITE ? win_score : -win_score;
+      return win_score;
     case CHECKERS_WINNER_BLACK:
-      return perspective == CHECKERS_COLOR_BLACK ? win_score : -win_score;
+      return -win_score;
     case CHECKERS_WINNER_DRAW:
       return 0;
     case CHECKERS_WINNER_NONE:
     default:
-      return checkers_ai_material_score(game, perspective);
+      return checkers_ai_material_score(game);
   }
 }
 
@@ -260,7 +259,7 @@ static gint checkers_ai_alpha_beta_search(Game *game,
   }
 
   if (depth_remaining == 0 || game->state.winner != CHECKERS_WINNER_NONE) {
-    gint score = checkers_ai_terminal_score(game, ctx->perspective, ply_depth);
+    gint score = checkers_ai_terminal_score(game, ply_depth);
     checkers_ai_tt_store_result(ctx, key, depth_remaining, score, CHECKERS_AI_TT_BOUND_EXACT, NULL);
     return score;
   }
@@ -270,7 +269,7 @@ static gint checkers_ai_alpha_beta_search(Game *game,
     CheckersWinner winner = game->state.turn == CHECKERS_COLOR_WHITE ? CHECKERS_WINNER_BLACK
                                                                      : CHECKERS_WINNER_WHITE;
     game->state.winner = winner;
-    gint score = checkers_ai_terminal_score(game, ctx->perspective, ply_depth);
+    gint score = checkers_ai_terminal_score(game, ply_depth);
     game->state.winner = CHECKERS_WINNER_NONE;
     movelist_free(&moves);
     checkers_ai_tt_store_result(ctx, key, depth_remaining, score, CHECKERS_AI_TT_BOUND_EXACT, NULL);
@@ -290,7 +289,7 @@ static gint checkers_ai_alpha_beta_search(Game *game,
     }
   }
 
-  gboolean maximizing = game->state.turn == ctx->perspective;
+  gboolean maximizing = game->state.turn == CHECKERS_COLOR_WHITE;
   gint best = maximizing ? INT_MIN : INT_MAX;
   CheckersMove best_move = {0};
   gboolean have_best_move = FALSE;
@@ -349,7 +348,7 @@ static gint checkers_ai_alpha_beta_search(Game *game,
   }
 
   if (best == INT_MIN || best == INT_MAX) {
-    best = checkers_ai_terminal_score(game, ctx->perspective, ply_depth);
+    best = checkers_ai_terminal_score(game, ply_depth);
     have_best_move = FALSE;
   }
 
@@ -372,6 +371,18 @@ static int checkers_ai_scored_move_compare_desc(const void *left, const void *ri
   }
   if (a->score > b->score) {
     return -1;
+  }
+  return 0;
+}
+
+static int checkers_ai_scored_move_compare_asc(const void *left, const void *right) {
+  const CheckersScoredMove *a = left;
+  const CheckersScoredMove *b = right;
+  if (a->score < b->score) {
+    return -1;
+  }
+  if (a->score > b->score) {
+    return 1;
   }
   return 0;
 }
@@ -452,7 +463,6 @@ gboolean checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(const Game *ga
   gboolean cancelled = FALSE;
 
   CheckersAiSearchContext ctx = {
-      .perspective = game->state.turn,
       .should_cancel = should_cancel,
       .cancel_user_data = user_data,
       .on_progress = on_progress,
@@ -501,7 +511,11 @@ gboolean checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(const Game *ga
     return FALSE;
   }
 
-  qsort(scored_moves, write, sizeof(scored_moves[0]), checkers_ai_scored_move_compare_desc);
+  if (game->state.turn == CHECKERS_COLOR_WHITE) {
+    qsort(scored_moves, write, sizeof(scored_moves[0]), checkers_ai_scored_move_compare_desc);
+  } else {
+    qsort(scored_moves, write, sizeof(scored_moves[0]), checkers_ai_scored_move_compare_asc);
+  }
   out_moves->moves = scored_moves;
   out_moves->count = write;
   return TRUE;
@@ -522,7 +536,6 @@ gboolean checkers_ai_alpha_beta_evaluate_position(const Game *game, guint max_de
   CheckersAiSearchStats stats = {0};
   checkers_ai_search_stats_clear(&stats);
   CheckersAiSearchContext ctx = {
-      .perspective = game->state.turn,
       .should_cancel = NULL,
       .cancel_user_data = NULL,
       .on_progress = NULL,

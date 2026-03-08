@@ -7,6 +7,8 @@ test_game_print
 test_board
 test_move_gen
 test_checkers_model
+/test_*
+/find_position
 coverage/
 gcheckers.png
 data/schemas/gschemas.compiled

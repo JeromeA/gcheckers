@@ -14,6 +14,15 @@ static gboolean checkers_moves_equal(const CheckersMove *left, const CheckersMov
   return memcmp(left->path, right->path, left->length * sizeof(left->path[0])) == 0;
 }
 
+static gboolean checkers_score_worse_for_turn(gint candidate_score, gint best_score, CheckersColor turn) {
+  g_return_val_if_fail(turn == CHECKERS_COLOR_WHITE || turn == CHECKERS_COLOR_BLACK, FALSE);
+
+  if (turn == CHECKERS_COLOR_WHITE) {
+    return candidate_score < best_score;
+  }
+  return candidate_score > best_score;
+}
+
 static gboolean checkers_score_played_move(const Game *position,
                                            const CheckersMove *played_move,
                                            guint depth,
@@ -200,13 +209,14 @@ gboolean checkers_position_predicate_has_mistake(const Game */*position*/,
   Game current = predicate->root;
   predicate->has_last_mistake = FALSE;
   for (guint ply = 0; ply < predicate->max_checked_plies; ++ply) {
+    CheckersColor turn = current.state.turn;
     gint best_score = 0;
     gint played_score = 0;
     if (!checkers_score_played_move(&current, &line[ply], predicate->depth, &best_score, &played_score)) {
       return FALSE;
     }
 
-    if (played_score < best_score) {
+    if (checkers_score_worse_for_turn(played_score, best_score, turn)) {
       predicate->last_mistake_ply = ply + 1;
       predicate->last_best_score = best_score;
       predicate->last_played_score = played_score;
@@ -240,6 +250,7 @@ gboolean checkers_position_predicate_has_deep_mistake(const Game */*position*/,
   Game current = predicate->root;
   predicate->has_last_mistake = FALSE;
   for (guint ply = 0; ply < predicate->max_checked_plies; ++ply) {
+    CheckersColor turn = current.state.turn;
     gint shallow_best_score = 0;
     gint shallow_played_score = 0;
     if (!checkers_score_played_move(&current,
@@ -260,8 +271,8 @@ gboolean checkers_position_predicate_has_deep_mistake(const Game */*position*/,
       return FALSE;
     }
 
-    gboolean shallow_is_mistake = shallow_played_score < shallow_best_score;
-    gboolean deep_is_mistake = deep_played_score < deep_best_score;
+    gboolean shallow_is_mistake = checkers_score_worse_for_turn(shallow_played_score, shallow_best_score, turn);
+    gboolean deep_is_mistake = checkers_score_worse_for_turn(deep_played_score, deep_best_score, turn);
     if (!shallow_is_mistake && deep_is_mistake) {
       predicate->last_mistake_ply = ply + 1;
       predicate->last_shallow_best_score = shallow_best_score;

@@ -163,6 +163,105 @@ static void test_model_choose_best_move_randomized_within_best_ties(void) {
   g_object_unref(model);
 }
 
+static gboolean test_model_find_black_position_with_non_equal_scores(Game *out_game, guint depth) {
+  g_return_val_if_fail(out_game != NULL, FALSE);
+  g_return_val_if_fail(depth > 0, FALSE);
+
+  const CheckersRules *rules = checkers_ruleset_get_rules(PLAYER_RULESET_AMERICAN);
+  g_return_val_if_fail(rules != NULL, FALSE);
+
+  Game root = {0};
+  game_init_with_rules(&root, rules);
+
+  MoveList root_moves = root.available_moves(&root);
+  for (size_t i = 0; i < root_moves.count; ++i) {
+    Game child = root;
+    if (game_apply_move(&child, &root_moves.moves[i]) != 0) {
+      continue;
+    }
+    if (child.state.turn != CHECKERS_COLOR_BLACK) {
+      continue;
+    }
+
+    CheckersScoredMoveList scored_moves = {0};
+    gboolean ok = checkers_ai_alpha_beta_analyze_moves(&child, depth, &scored_moves);
+    if (!ok || scored_moves.count < 2) {
+      checkers_scored_move_list_free(&scored_moves);
+      continue;
+    }
+
+    gboolean has_non_equal_scores = FALSE;
+    gint first_score = scored_moves.moves[0].score;
+    for (size_t j = 1; j < scored_moves.count; ++j) {
+      if (scored_moves.moves[j].score != first_score) {
+        has_non_equal_scores = TRUE;
+        break;
+      }
+    }
+    checkers_scored_move_list_free(&scored_moves);
+
+    if (!has_non_equal_scores) {
+      continue;
+    }
+
+    *out_game = child;
+    movelist_free(&root_moves);
+    game_destroy(&root);
+    return TRUE;
+  }
+
+  movelist_free(&root_moves);
+  game_destroy(&root);
+  return FALSE;
+}
+
+static void test_model_evaluate_position_uses_white_perspective_signs(void) {
+  const CheckersRules *rules = checkers_ruleset_get_rules(PLAYER_RULESET_AMERICAN);
+  assert(rules != NULL);
+
+  Game game = {0};
+  game_init_with_rules(&game, rules);
+
+  game.state.turn = CHECKERS_COLOR_BLACK;
+  game.state.winner = CHECKERS_WINNER_WHITE;
+  gint white_win_score = 0;
+  gboolean ok = checkers_ai_alpha_beta_evaluate_position(&game, 2, &white_win_score);
+  assert(ok);
+  assert(white_win_score > 0);
+
+  game.state.turn = CHECKERS_COLOR_WHITE;
+  game.state.winner = CHECKERS_WINNER_BLACK;
+  gint black_win_score = 0;
+  ok = checkers_ai_alpha_beta_evaluate_position(&game, 2, &black_win_score);
+  assert(ok);
+  assert(black_win_score < 0);
+
+  game_destroy(&game);
+}
+
+static void test_model_analyze_moves_black_turn_sorts_low_to_high(void) {
+  Game game = {0};
+  gboolean found = test_model_find_black_position_with_non_equal_scores(&game, 4);
+  assert(found);
+
+  CheckersScoredMoveList scored_moves = {0};
+  gboolean ok = checkers_ai_alpha_beta_analyze_moves(&game, 4, &scored_moves);
+  assert(ok);
+  assert(scored_moves.count > 1);
+
+  gboolean has_strict_increase = FALSE;
+  for (size_t i = 1; i < scored_moves.count; ++i) {
+    assert(scored_moves.moves[i - 1].score <= scored_moves.moves[i].score);
+    if (scored_moves.moves[i - 1].score < scored_moves.moves[i].score) {
+      has_strict_increase = TRUE;
+    }
+  }
+  assert(has_strict_increase);
+
+  checkers_scored_move_list_free(&scored_moves);
+  game_destroy(&game);
+}
+
 static void test_model_analyze_moves_structured(void) {
   GCheckersModel *model = gcheckers_model_new();
 
@@ -425,6 +524,8 @@ int main(void) {
   test_model_rejects_invalid_move();
   test_model_choose_best_move_returns_legal_move();
   test_model_choose_best_move_randomized_within_best_ties();
+  test_model_evaluate_position_uses_white_perspective_signs();
+  test_model_analyze_moves_black_turn_sorts_low_to_high();
   test_model_analyze_moves_structured();
   test_model_analyze_moves_progress_callback();
   test_model_analyze_moves_reuses_tt_across_depths();

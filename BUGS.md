@@ -160,3 +160,15 @@ values during parsing.
 The fix replaces payload storage with per-node property maps (`ident -> values[]`), adds typed move-property helpers,
 migrates SGF IO and controller paths to property-based access, and preserves repeated values during parse/save
 roundtrips.
+
+## Analysis scores oscillated by side to move instead of keeping one global sign convention
+
+Analysis scores should use one stable sign convention so graph/report values are directly comparable across plies.
+
+The alpha-beta score was produced from the current player perspective at each analyzed node. That made positive values
+mean "good for the side to move", so branch values naturally flipped sign on alternating turns and appeared to swing
+around zero in graphs and saved reports.
+
+The fix makes scoring white-centric everywhere (`+` good for white, `-` good for black), keeps minimax behavior by
+maximizing on white turns and minimizing on black turns, sorts root move lists by side-to-move preference (white
+descending, black ascending), and updates mistake predicates/tests to compare scores using the mover color.

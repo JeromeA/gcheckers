@@ -55,6 +55,7 @@ and `GCheckersWindow` via the `analysis-requested` signal.
 Class: `AnalysisGraph` (`GObject`).
 Role: wraps a `GtkDrawingArea` chart for SGF branch evaluations. Draws best-score points/segments from per-node
 `SgfNodeAnalysis`, renders a vertical selected-node bar, and maps pointer clicks to nearest node index.
+Score convention: positive means white is better, negative means black is better (independent of side to move).
 Signals: `node-activated` with the clicked branch node pointer so window code can call SGF controller selection APIs.
 Collaborates with: `GCheckersWindow` (data binding) and `GCheckersSgfController` (selection updates).
 
@@ -128,6 +129,9 @@ without lowering evaluation quality. Analysis APIs can report searched node coun
 and TT stats accumulate when callers reuse the same `CheckersAiSearchStats` across calls. Callers can use
 `checkers_ai_search_stats_clear()` for per-call snapshots or `checkers_ai_search_stats_add()` to aggregate
 independent runs.
+Score convention: search scores are white-centric at all plies (`+` good for white, `-` good for black). Root move
+lists are ordered by side to move preference (white: high to low, black: low to high) so index 0 remains the best move
+for the player to act.
 Search integrates zobrist hashing + a depth/bound/age transposition table and uses stored best moves for local move
 ordering. Also exposes direct position scoring for tooling predicates.
 Collaborates with: `checkers_model.c` for model-facing AI move selection and structured analysis APIs.

@@ -231,7 +231,11 @@ static void test_mistake_predicate_detects_mistake_line(void) {
                                                                       &played_score);
   assert(has_details);
   assert(mistake_ply == 1 || mistake_ply == 2);
-  assert(played_score < best_score);
+  if ((mistake_ply % 2) == 1) {
+    assert(played_score < best_score);
+  } else {
+    assert(played_score > best_score);
+  }
 
   game_destroy(&root);
 }
