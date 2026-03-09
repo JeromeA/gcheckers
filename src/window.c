@@ -674,13 +674,17 @@ static GPtrArray *gcheckers_window_build_full_analysis_jobs(SgfTree *tree) {
 
       CheckersMove move = {0};
       SgfColor color = SGF_COLOR_NONE;
+      gboolean has_move = FALSE;
       g_autoptr(GError) error = NULL;
-      if (!sgf_move_props_parse_node(step, &color, &move, &error)) {
+      if (!sgf_move_props_try_parse_node(step, &color, &move, &has_move, &error)) {
         g_debug("Failed to parse SGF path move for full analysis node %u: %s",
                 sgf_node_get_move_number(step),
                 error != NULL ? error->message : "unknown error");
         path_ok = FALSE;
         break;
+      }
+      if (!has_move) {
+        continue;
       }
       g_array_append_val(job->moves, move);
     }

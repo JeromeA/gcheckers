@@ -3,7 +3,9 @@
 #include "board_view.h"
 #include "checkers_model.h"
 #include "sgf_controller.h"
+#include "sgf_io.h"
 
+#include <glib/gstdio.h>
 #include <string.h>
 
 static void test_gcheckers_sgf_controller_skip(void) {
@@ -339,6 +341,128 @@ static void test_gcheckers_sgf_controller_select_node_emits_node_changed(void) {
   g_clear_object(&board_view);
 }
 
+static void test_gcheckers_sgf_controller_load_applies_setup_properties(void) {
+  BoardView *board_view = board_view_new();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersSgfController *controller = gcheckers_sgf_controller_new(board_view);
+  gcheckers_sgf_controller_set_model(controller, model);
+
+  const char *content =
+      "(;FF[4]CA[UTF-8]AP[gcheckers]GM[40]AE[af]AB[af]ABK[af]PL[B];AE[af]AW[af]AWK[af]PL[W])";
+  gchar *path = g_strdup_printf("%s/test-gcheckers-setup-%u.sgf", g_get_tmp_dir(), g_random_int());
+  g_assert_nonnull(path);
+  g_assert_true(g_file_set_contents(path, content, -1, NULL));
+
+  g_autoptr(GError) error = NULL;
+  g_assert_true(gcheckers_sgf_controller_load_file(controller, path, &error));
+  g_assert_no_error(error);
+
+  const GameState *state = gcheckers_model_peek_state(model);
+  g_assert_nonnull(state);
+  gint8 setup_index = board_index_from_coord(5, 0, state->board.board_size);
+  g_assert_cmpint(setup_index, >=, 0);
+  g_assert_cmpuint(state->turn, ==, CHECKERS_COLOR_BLACK);
+  g_assert_cmpint(board_get(&state->board, (guint8)setup_index), ==, CHECKERS_PIECE_BLACK_KING);
+
+  g_assert_true(gcheckers_sgf_controller_step_forward(controller));
+  state = gcheckers_model_peek_state(model);
+  g_assert_nonnull(state);
+  g_assert_cmpuint(state->turn, ==, CHECKERS_COLOR_WHITE);
+  g_assert_cmpint(board_get(&state->board, (guint8)setup_index), ==, CHECKERS_PIECE_WHITE_KING);
+
+  g_remove(path);
+  g_free(path);
+  g_clear_object(&controller);
+  g_clear_object(&model);
+  g_clear_object(&board_view);
+}
+
+static void test_gcheckers_sgf_controller_save_position_file(void) {
+  BoardView *board_view = board_view_new();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersSgfController *controller = gcheckers_sgf_controller_new(board_view);
+  gcheckers_sgf_controller_set_model(controller, model);
+
+  Game game = {0};
+  g_assert_true(gcheckers_model_copy_game(model, &game));
+  guint8 squares = board_playable_squares(game.state.board.board_size);
+  for (guint8 i = 0; i < squares; ++i) {
+    board_set(&game.state.board, i, CHECKERS_PIECE_EMPTY);
+  }
+
+  gint8 black_king_square_i = board_index_from_coord(1, 2, game.state.board.board_size);
+  gint8 black_man_square_i = board_index_from_coord(3, 0, game.state.board.board_size);
+  gint8 white_king_square_i = board_index_from_coord(4, 3, game.state.board.board_size);
+  gint8 white_man_square_i = board_index_from_coord(6, 1, game.state.board.board_size);
+  g_assert_cmpint(black_king_square_i, >=, 0);
+  g_assert_cmpint(black_man_square_i, >=, 0);
+  g_assert_cmpint(white_king_square_i, >=, 0);
+  g_assert_cmpint(white_man_square_i, >=, 0);
+  guint8 black_king_square = (guint8)black_king_square_i;
+  guint8 black_man_square = (guint8)black_man_square_i;
+  guint8 white_king_square = (guint8)white_king_square_i;
+  guint8 white_man_square = (guint8)white_man_square_i;
+  board_set(&game.state.board, black_king_square, CHECKERS_PIECE_BLACK_KING);
+  board_set(&game.state.board, black_man_square, CHECKERS_PIECE_BLACK_MAN);
+  board_set(&game.state.board, white_king_square, CHECKERS_PIECE_WHITE_KING);
+  board_set(&game.state.board, white_man_square, CHECKERS_PIECE_WHITE_MAN);
+  game.state.turn = CHECKERS_COLOR_BLACK;
+  game.state.winner = CHECKERS_WINNER_NONE;
+  g_assert_true(gcheckers_model_set_state(model, &game.state));
+
+  gchar *path = g_strdup_printf("%s/test-gcheckers-save-position-%u.sgf", g_get_tmp_dir(), g_random_int());
+  g_assert_nonnull(path);
+
+  g_autoptr(GError) error = NULL;
+  g_assert_true(gcheckers_sgf_controller_save_position_file(controller, path, &error));
+  g_assert_no_error(error);
+
+  g_autofree char *saved = NULL;
+  gsize saved_len = 0;
+  g_assert_true(g_file_get_contents(path, &saved, &saved_len, &error));
+  g_assert_no_error(error);
+  g_assert_true(saved_len > 0);
+  g_assert_nonnull(strstr(saved, "PL[B]"));
+  g_assert_nonnull(strstr(saved, "ABK["));
+  g_assert_nonnull(strstr(saved, "AWK["));
+  g_assert_null(strstr(saved, ";B["));
+  g_assert_null(strstr(saved, ";W["));
+  const char *ae_pos = strstr(saved, "AE[");
+  const char *ab_pos = strstr(saved, "AB[");
+  g_assert_nonnull(ae_pos);
+  g_assert_nonnull(ab_pos);
+  g_assert_cmpint((gint)(ae_pos - saved), <, (gint)(ab_pos - saved));
+
+  g_autoptr(SgfTree) loaded = NULL;
+  g_assert_true(sgf_io_load_data(saved, &loaded, &error));
+  g_assert_no_error(error);
+  g_assert_nonnull(loaded);
+  const SgfNode *root = sgf_tree_get_root(loaded);
+  g_assert_nonnull(root);
+  const GPtrArray *children = sgf_node_get_children(root);
+  g_assert_nonnull(children);
+  g_assert_cmpuint(children->len, ==, 0);
+  g_assert_nonnull(sgf_node_get_property_values(root, "AB"));
+  g_assert_nonnull(sgf_node_get_property_values(root, "AW"));
+
+  gcheckers_model_reset(model);
+  g_assert_true(gcheckers_sgf_controller_load_file(controller, path, &error));
+  g_assert_no_error(error);
+  const GameState *loaded_state = gcheckers_model_peek_state(model);
+  g_assert_nonnull(loaded_state);
+  g_assert_cmpuint(loaded_state->turn, ==, CHECKERS_COLOR_BLACK);
+  g_assert_cmpint(board_get(&loaded_state->board, black_king_square), ==, CHECKERS_PIECE_BLACK_KING);
+  g_assert_cmpint(board_get(&loaded_state->board, black_man_square), ==, CHECKERS_PIECE_BLACK_MAN);
+  g_assert_cmpint(board_get(&loaded_state->board, white_king_square), ==, CHECKERS_PIECE_WHITE_KING);
+  g_assert_cmpint(board_get(&loaded_state->board, white_man_square), ==, CHECKERS_PIECE_WHITE_MAN);
+
+  g_remove(path);
+  g_free(path);
+  g_clear_object(&controller);
+  g_clear_object(&model);
+  g_clear_object(&board_view);
+}
+
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   if (!gtk_init_check()) {
@@ -349,6 +473,8 @@ int main(int argc, char **argv) {
     g_test_add_func("/sgf-controller/navigation-step-and-rewind", test_gcheckers_sgf_controller_skip);
     g_test_add_func("/sgf-controller/navigation-forward-to-branch-and-end", test_gcheckers_sgf_controller_skip);
     g_test_add_func("/sgf-controller/select-node-emits-node-changed", test_gcheckers_sgf_controller_skip);
+    g_test_add_func("/sgf-controller/load-applies-setup-properties", test_gcheckers_sgf_controller_skip);
+    g_test_add_func("/sgf-controller/save-position-file", test_gcheckers_sgf_controller_skip);
     return g_test_run();
   }
 
@@ -362,5 +488,8 @@ int main(int argc, char **argv) {
                   test_gcheckers_sgf_controller_navigation_forward_to_branch_and_end);
   g_test_add_func("/sgf-controller/select-node-emits-node-changed",
                   test_gcheckers_sgf_controller_select_node_emits_node_changed);
+  g_test_add_func("/sgf-controller/load-applies-setup-properties",
+                  test_gcheckers_sgf_controller_load_applies_setup_properties);
+  g_test_add_func("/sgf-controller/save-position-file", test_gcheckers_sgf_controller_save_position_file);
   return g_test_run();
 }

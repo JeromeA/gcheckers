@@ -342,6 +342,58 @@ static void test_sgf_io_roundtrip_node_analysis_properties(void) {
   g_assert_cmpuint(loaded_analysis->moves->len, ==, 1);
 }
 
+static void test_sgf_io_load_setup_and_player_to_play_properties(void) {
+  const char *content =
+      "(;FF[4]CA[UTF-8]AP[gcheckers]GM[40]AB[ab][cd]AW[bc]ABK[ab]AE[ef]PL[B];AE[ab]AW[ab]AWK[ab]PL[W])";
+
+  g_autoptr(SgfTree) loaded = NULL;
+  g_autoptr(GError) error = NULL;
+  g_assert_true(sgf_io_load_data(content, &loaded, &error));
+  g_assert_no_error(error);
+  g_assert_nonnull(loaded);
+
+  const SgfNode *root = sgf_tree_get_root(loaded);
+  g_assert_nonnull(root);
+  const GPtrArray *ab_root = sgf_node_get_property_values(root, "AB");
+  const GPtrArray *aw_root = sgf_node_get_property_values(root, "AW");
+  const GPtrArray *abk_root = sgf_node_get_property_values(root, "ABK");
+  const GPtrArray *ae_root = sgf_node_get_property_values(root, "AE");
+  g_assert_nonnull(ab_root);
+  g_assert_nonnull(aw_root);
+  g_assert_nonnull(abk_root);
+  g_assert_nonnull(ae_root);
+  g_assert_cmpuint(ab_root->len, ==, 2);
+  g_assert_cmpuint(aw_root->len, ==, 1);
+  g_assert_cmpuint(abk_root->len, ==, 1);
+  g_assert_cmpuint(ae_root->len, ==, 1);
+  g_assert_cmpstr(sgf_node_get_property_first(root, "PL"), ==, "B");
+
+  const GPtrArray *children = sgf_node_get_children(root);
+  g_assert_nonnull(children);
+  g_assert_cmpuint(children->len, ==, 1);
+  const SgfNode *child = g_ptr_array_index((GPtrArray *)children, 0);
+  g_assert_nonnull(child);
+  g_assert_cmpuint(sgf_node_get_move_number(child), ==, 0);
+  g_assert_cmpint((gint)sgf_node_get_color(child), ==, (gint)SGF_COLOR_NONE);
+  g_assert_cmpstr(sgf_node_get_property_first(child, "PL"), ==, "W");
+  const GPtrArray *aw_child = sgf_node_get_property_values(child, "AW");
+  const GPtrArray *awk_child = sgf_node_get_property_values(child, "AWK");
+  g_assert_nonnull(aw_child);
+  g_assert_nonnull(awk_child);
+  g_assert_cmpuint(aw_child->len, ==, 1);
+  g_assert_cmpuint(awk_child->len, ==, 1);
+
+  g_autofree char *saved = sgf_io_save_data(loaded, &error);
+  g_assert_no_error(error);
+  g_assert_nonnull(saved);
+  g_assert_nonnull(strstr(saved, "AB[ab][cd]"));
+  g_assert_nonnull(strstr(saved, "AW[bc]"));
+  g_assert_nonnull(strstr(saved, "ABK[ab]"));
+  g_assert_nonnull(strstr(saved, "AE[ef]"));
+  g_assert_nonnull(strstr(saved, "PL[B]"));
+  g_assert_nonnull(strstr(saved, ";AE[ab]AW[ab]AWK[ab]PL[W]"));
+}
+
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
 
@@ -353,5 +405,6 @@ int main(int argc, char **argv) {
   g_test_add_func("/sgf-io/load-invalid-header", test_sgf_io_load_rejects_invalid_header);
   g_test_add_func("/sgf-io/repeated-property-values", test_sgf_io_preserves_repeated_property_values);
   g_test_add_func("/sgf-io/analysis-roundtrip", test_sgf_io_roundtrip_node_analysis_properties);
+  g_test_add_func("/sgf-io/load-setup-and-pl", test_sgf_io_load_setup_and_player_to_play_properties);
   return g_test_run();
 }

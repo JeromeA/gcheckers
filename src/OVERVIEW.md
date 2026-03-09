@@ -18,7 +18,7 @@ Owns an analysis graph widget that shows branch values for the current SGF branc
 line end), tracks SGF selection with a vertical cursor, and supports click-to-select SGF navigation.
 Top-level menu actions are
 also exposed in a toolbar
-(`New game...`, `Force move`, SGF timeline rewind/step/skip actions) via GTK actions.
+(`New game...`, `Force move`, `Save position...`, SGF timeline rewind/step/skip actions) via GTK actions.
 Owns modal flows for `New game` and `Import games` wizards.
 `New game` shows a ruleset dropdown (American/International/Russian) with a concise summary label below it.
 Ruleset names, summaries, and `CheckersRules` construction are defined in one shared catalog (`rulesets.c`).
@@ -40,6 +40,9 @@ Class: `GCheckersSgfController` (`GObject`).
 Role: SGF timeline authority and synchronization point between SGF current-node transitions and game state updates.
 Move application is SGF-first: validate model move, append under SGF current, set SGF current, then project that
 transition to the model (`single move` if parent->child, otherwise reset+replay from root).
+Replay applies SGF setup properties (`AB`, `AE`, `AW`) and side-to-play (`PL`) on every visited node before move
+replay, so loading/setup-only SGF nodes can drive board state and turn correctly. Custom king markers (`ABK`, `AWK`)
+are validated as subsets of `AB`/`AW` and then applied as kings.
 `gcheckers_sgf_controller_set_model()` only binds/disconnects model references; timeline clearing is explicit via
 `gcheckers_sgf_controller_new_game()`. Exposes SGF navigation helpers used by window actions: rewind to root, step
 backward, step forward on main line, step to next branch point, and step to main-line end.
@@ -119,7 +122,8 @@ Collaborates with: `game.c` to validate and apply generated moves.
 Class: `GCheckersModel` (`GObject`).
 Role: wrap the engine for GTK, including move validation, alpha-beta move selection, state-change signals, and
 last-move caching for board overlay rendering. Exposes structured move-analysis API
-(`gcheckers_model_analyze_moves`) returning scored moves plus search stats.
+(`gcheckers_model_analyze_moves`) returning scored moves plus search stats. Also exposes `gcheckers_model_set_state()`
+to publish replayed SGF positions (for setup/property-driven nodes) into the GTK model.
 Collaborates with: `GCheckersWindow` and SGF controllers via signals and high-level move APIs.
 
 ## AI alpha-beta search (`src/ai_alpha_beta.c`, `src/ai_alpha_beta.h`)
@@ -196,8 +200,8 @@ Collaborates with: `position_search.c`, `position_predicate.c`, and `position_fo
 Class: `GCheckersApplication` (`GtkApplication`).
 Role: define the GTK application type and activation flow that creates the main window and model, installs app actions
 (`app.new-game`, `app.import`, `app.force-move`, `app.quit`), installs window SGF navigation actions, and publishes a
-menubar model (`File` -> `New game...`, `Import...`, `Load...`, `Save as...`, `Quit`; `Game` -> `Force move` + SGF
-navigation section) with keyboard accelerators.
+menubar model (`File` -> `New game...`, `Import...`, `Load...`, `Save as...`, `Save position...`, `Quit`; `Game` ->
+`Force move` + SGF navigation section) with keyboard accelerators.
 Collaborates with: `GCheckersWindow` for UI wiring and new-game dialog presentation.
 
 ## Board view subsystem

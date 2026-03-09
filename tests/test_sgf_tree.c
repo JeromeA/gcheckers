@@ -65,6 +65,21 @@ static void test_sgf_tree_append_existing_child(void) {
   g_object_unref(tree);
 }
 
+static void test_sgf_tree_append_non_move_node(void) {
+  SgfTree *tree = sgf_tree_new();
+  const SgfNode *root = sgf_tree_get_root(tree);
+  assert(root != NULL);
+
+  const SgfNode *node = sgf_tree_append_node(tree);
+  assert(node != NULL);
+  assert(sgf_tree_get_current(tree) == node);
+  assert(sgf_node_get_parent(node) == root);
+  assert(sgf_node_get_move_number(node) == 0);
+  assert(sgf_node_get_color(node) == SGF_COLOR_NONE);
+
+  g_object_unref(tree);
+}
+
 static void test_sgf_tree_current_branch(void) {
   SgfTree *tree = sgf_tree_new();
   const SgfNode *root = sgf_tree_get_root(tree);
@@ -189,6 +204,7 @@ int main(void) {
   test_sgf_tree_append_and_select();
   test_sgf_tree_main_line();
   test_sgf_tree_append_existing_child();
+  test_sgf_tree_append_non_move_node();
   test_sgf_tree_current_branch();
   test_sgf_tree_collect_nodes_preorder();
   test_sgf_tree_node_analysis_set_get_clear();

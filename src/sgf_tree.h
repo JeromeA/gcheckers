@@ -37,6 +37,7 @@ SgfTree *sgf_tree_new(void);
 void sgf_tree_reset(SgfTree *self);
 const SgfNode *sgf_tree_get_root(SgfTree *self);
 const SgfNode *sgf_tree_get_current(SgfTree *self);
+const SgfNode *sgf_tree_append_node(SgfTree *self);
 const SgfNode *sgf_tree_append_move(SgfTree *self, SgfColor color, const char *move_value);
 gboolean sgf_tree_set_current(SgfTree *self, const SgfNode *node);
 GPtrArray *sgf_tree_build_main_line(SgfTree *self);

@@ -199,6 +199,22 @@ gboolean gcheckers_model_copy_game(GCheckersModel *self, Game *out_game) {
   return TRUE;
 }
 
+gboolean gcheckers_model_set_state(GCheckersModel *self, const GameState *state) {
+  g_return_val_if_fail(GCHECKERS_IS_MODEL(self), FALSE);
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(self->game.rules != NULL, FALSE);
+
+  if (state->board.board_size != self->game.rules->board_size) {
+    g_debug("Refused to set model state with mismatched board size");
+    return FALSE;
+  }
+
+  self->game.state = *state;
+  self->has_last_move = FALSE;
+  gcheckers_model_emit_state_changed(self);
+  return TRUE;
+}
+
 char *gcheckers_model_format_status(GCheckersModel *self) {
   g_return_val_if_fail(GCHECKERS_IS_MODEL(self), NULL);
 

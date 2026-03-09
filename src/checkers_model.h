@@ -23,6 +23,7 @@ gboolean gcheckers_model_analyze_moves(GCheckersModel *self,
                                        CheckersScoredMoveList *out_moves,
                                        CheckersAiSearchStats *out_stats);
 gboolean gcheckers_model_copy_game(GCheckersModel *self, Game *out_game);
+gboolean gcheckers_model_set_state(GCheckersModel *self, const GameState *state);
 char *gcheckers_model_format_status(GCheckersModel *self);
 const GameState *gcheckers_model_peek_state(GCheckersModel *self);
 const CheckersMove *gcheckers_model_peek_last_move(GCheckersModel *self);

@@ -120,6 +120,43 @@ static void gcheckers_window_on_sgf_save_dialog_finish(GObject *source_object,
   g_object_unref(self);
 }
 
+static void gcheckers_window_on_sgf_save_position_dialog_finish(GObject *source_object,
+                                                                GAsyncResult *result,
+                                                                gpointer user_data) {
+  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
+  GtkFileDialog *dialog = GTK_FILE_DIALOG(source_object);
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(GTK_IS_FILE_DIALOG(dialog));
+
+  g_autoptr(GError) error = NULL;
+  g_autoptr(GFile) file = gtk_file_dialog_save_finish(dialog, result, &error);
+  if (file == NULL) {
+    if (error != NULL && !g_error_matches(error, GTK_DIALOG_ERROR, GTK_DIALOG_ERROR_DISMISSED)) {
+      g_autofree char *text =
+          g_strdup_printf("Unable to save SGF position.\n%s", error != NULL ? error->message : "Unknown error");
+      gcheckers_window_show_file_error_dialog(self, "Save position failed", text);
+    }
+    g_object_unref(self);
+    return;
+  }
+
+  g_autofree char *path = g_file_get_path(file);
+  if (path == NULL) {
+    gcheckers_window_show_file_error_dialog(self, "Save position failed", "Unable to resolve selected file path.");
+    g_object_unref(self);
+    return;
+  }
+
+  GCheckersSgfController *controller = gcheckers_window_get_sgf_controller(self);
+  if (!gcheckers_sgf_controller_save_position_file(controller, path, &error)) {
+    g_autofree char *text =
+        g_strdup_printf("Unable to save SGF position.\n%s", error != NULL ? error->message : "Unknown error");
+    gcheckers_window_show_file_error_dialog(self, "Save position failed", text);
+  }
+
+  g_object_unref(self);
+}
+
 static void gcheckers_window_on_sgf_load_action(GSimpleAction * /*action*/,
                                                 GVariant * /*parameter*/,
                                                 gpointer user_data) {
@@ -147,6 +184,24 @@ static void gcheckers_window_on_sgf_save_as_action(GSimpleAction * /*action*/,
   g_object_unref(dialog);
 }
 
+static void gcheckers_window_on_sgf_save_position_action(GSimpleAction * /*action*/,
+                                                         GVariant * /*parameter*/,
+                                                         gpointer user_data) {
+  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+
+  GtkFileDialog *dialog = gtk_file_dialog_new();
+  gtk_file_dialog_set_title(dialog, "Save SGF Position As");
+  gtk_file_dialog_set_initial_name(dialog, "position.sgf");
+  gcheckers_window_configure_sgf_filters(dialog);
+  gtk_file_dialog_save(dialog,
+                       GTK_WINDOW(self),
+                       NULL,
+                       gcheckers_window_on_sgf_save_position_dialog_finish,
+                       g_object_ref(self));
+  g_object_unref(dialog);
+}
+
 void gcheckers_window_install_sgf_file_actions(GCheckersWindow *self) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
 
@@ -162,6 +217,14 @@ void gcheckers_window_install_sgf_file_actions(GCheckersWindow *self) {
       {
           .name = "sgf-save-as",
           .activate = gcheckers_window_on_sgf_save_as_action,
+          .parameter_type = NULL,
+          .state = NULL,
+          .change_state = NULL,
+          .padding = {0},
+      },
+      {
+          .name = "sgf-save-position",
+          .activate = gcheckers_window_on_sgf_save_position_action,
           .parameter_type = NULL,
           .state = NULL,
           .change_state = NULL,

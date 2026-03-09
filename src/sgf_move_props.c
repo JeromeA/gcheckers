@@ -92,19 +92,47 @@ gboolean sgf_move_props_format_notation(const CheckersMove *move, char *buffer, 
 }
 
 gboolean sgf_move_props_parse_node(const SgfNode *node, SgfColor *out_color, CheckersMove *out_move, GError **error) {
-  g_return_val_if_fail(node != NULL, FALSE);
-  g_return_val_if_fail(out_color != NULL, FALSE);
-  g_return_val_if_fail(out_move != NULL, FALSE);
+  gboolean has_move = FALSE;
+  if (!sgf_move_props_try_parse_node(node, out_color, out_move, &has_move, error)) {
+    return FALSE;
+  }
 
-  const char *black_move = sgf_node_get_property_first(node, "B");
-  const char *white_move = sgf_node_get_property_first(node, "W");
-
-  if ((black_move == NULL) == (white_move == NULL)) {
+  if (!has_move) {
     g_set_error_literal(error,
                         sgf_move_props_error_quark(),
                         9,
                         "SGF move node must contain exactly one of B[] or W[]");
     return FALSE;
+  }
+
+  return TRUE;
+}
+
+gboolean sgf_move_props_try_parse_node(const SgfNode *node,
+                                       SgfColor *out_color,
+                                       CheckersMove *out_move,
+                                       gboolean *out_has_move,
+                                       GError **error) {
+  g_return_val_if_fail(node != NULL, FALSE);
+  g_return_val_if_fail(out_color != NULL, FALSE);
+  g_return_val_if_fail(out_move != NULL, FALSE);
+  g_return_val_if_fail(out_has_move != NULL, FALSE);
+
+  const char *black_move = sgf_node_get_property_first(node, "B");
+  const char *white_move = sgf_node_get_property_first(node, "W");
+
+  if (black_move != NULL && white_move != NULL) {
+    g_set_error_literal(error,
+                        sgf_move_props_error_quark(),
+                        9,
+                        "SGF move node must contain exactly one of B[] or W[]");
+    return FALSE;
+  }
+  if (black_move == NULL && white_move == NULL) {
+    *out_has_move = FALSE;
+    *out_color = SGF_COLOR_NONE;
+    *out_move = (CheckersMove){0};
+    return TRUE;
   }
 
   const char *notation = black_move != NULL ? black_move : white_move;
@@ -116,6 +144,7 @@ gboolean sgf_move_props_parse_node(const SgfNode *node, SgfColor *out_color, Che
 
   *out_color = color;
   *out_move = move;
+  *out_has_move = TRUE;
   return TRUE;
 }
 

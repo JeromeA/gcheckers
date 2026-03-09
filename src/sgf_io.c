@@ -663,31 +663,35 @@ static gboolean sgf_io_parse_tree(SgfIoParser *p,
         continue;
       }
 
-      const char *black_move = sgf_io_property_bag_get_first(props, "B");
-      const char *white_move = sgf_io_property_bag_get_first(props, "W");
-      if ((black_move == NULL) == (white_move == NULL)) {
-        g_set_error_literal(error, sgf_io_error_quark(), 15, "SGF move node must contain exactly one of B[] or W[]");
-        return FALSE;
-      }
-
-      CheckersMove move = {0};
-      if (!sgf_move_props_parse_notation(black_move != NULL ? black_move : white_move, &move, error)) {
-        return FALSE;
-      }
-
       if (!sgf_tree_set_current(tree, cursor)) {
         g_set_error_literal(error, sgf_io_error_quark(), 16, "Unable to select SGF parent node");
         return FALSE;
       }
 
-      char move_text[128] = {0};
-      if (!sgf_move_props_format_notation(&move, move_text, sizeof(move_text), error)) {
+      const char *black_move = sgf_io_property_bag_get_first(props, "B");
+      const char *white_move = sgf_io_property_bag_get_first(props, "W");
+      const SgfNode *node = NULL;
+      if (black_move != NULL && white_move != NULL) {
+        g_set_error_literal(error, sgf_io_error_quark(), 15, "SGF node cannot contain both B[] and W[]");
         return FALSE;
       }
-      SgfColor color = black_move != NULL ? SGF_COLOR_BLACK : SGF_COLOR_WHITE;
-      const SgfNode *node = sgf_tree_append_move(tree, color, move_text);
+      if (black_move != NULL || white_move != NULL) {
+        CheckersMove move = {0};
+        if (!sgf_move_props_parse_notation(black_move != NULL ? black_move : white_move, &move, error)) {
+          return FALSE;
+        }
+
+        char move_text[128] = {0};
+        if (!sgf_move_props_format_notation(&move, move_text, sizeof(move_text), error)) {
+          return FALSE;
+        }
+        SgfColor color = black_move != NULL ? SGF_COLOR_BLACK : SGF_COLOR_WHITE;
+        node = sgf_tree_append_move(tree, color, move_text);
+      } else {
+        node = sgf_tree_append_node(tree);
+      }
       if (node == NULL) {
-        g_set_error_literal(error, sgf_io_error_quark(), 17, "Unable to append SGF move node");
+        g_set_error_literal(error, sgf_io_error_quark(), 17, "Unable to append SGF node");
         return FALSE;
       }
 

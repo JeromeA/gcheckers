@@ -172,3 +172,24 @@ around zero in graphs and saved reports.
 The fix makes scoring white-centric everywhere (`+` good for white, `-` good for black), keeps minimax behavior by
 maximizing on white turns and minimizing on black turns, sorts root move lists by side-to-move preference (white
 descending, black ascending), and updates mistake predicates/tests to compare scores using the mover color.
+
+## SGF loader rejected setup-only nodes and ignored AB/AE/AW/PL during replay
+
+SGF import should accept non-move nodes and apply setup/turn properties so loaded timelines reproduce board state.
+
+The parser required every non-root node to contain exactly one of `B[]` or `W[]`, and controller replay only applied
+moves. SGFs with setup-only nodes (`AB`, `AE`, `AW`) or side-to-play (`PL`) therefore failed to load or replayed with
+incorrect board/turn state.
+
+The fix allows non-move nodes in SGF parse, adds setup-node replay handling for `AB/AE/AW/PL` on root and child
+nodes, and extends SGF IO/controller tests to cover setup-property load and navigation behavior.
+
+## Save position SGF reloaded on top of initial setup and lost king identities
+
+Saving a standalone position should round-trip exactly when loaded, with no extra pieces and preserved kings.
+
+The first version wrote only `AB/AW/PL`, so loading applied piece additions over the engine's default initial board.
+That produced extra men. It also encoded kings as normal men, so king state was lost on load.
+
+The fix writes full setup snapshots with `AE` (all empties) first, then `AB/AW`, plus custom king markers
+`ABK/AWK`, and updates setup replay to validate and apply `ABK/AWK` as king subsets of `AB/AW`.

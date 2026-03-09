@@ -62,13 +62,318 @@ static void gcheckers_sgf_controller_disconnect_model(GCheckersSgfController *se
   g_clear_object(&self->model);
 }
 
-static gboolean gcheckers_sgf_controller_extract_node_move(const SgfNode *node, CheckersMove *move) {
+static gboolean gcheckers_sgf_controller_parse_setup_point(const char *value,
+                                                           guint8 board_size,
+                                                           guint8 *out_square,
+                                                           GError **error) {
+  g_return_val_if_fail(value != NULL, FALSE);
+  g_return_val_if_fail(board_size > 0, FALSE);
+  g_return_val_if_fail(out_square != NULL, FALSE);
+
+  gsize len = strlen(value);
+  if (len == 2 && g_ascii_isalpha(value[0]) && g_ascii_isalpha(value[1])) {
+    gint col = g_ascii_tolower(value[0]) - 'a';
+    gint row = g_ascii_tolower(value[1]) - 'a';
+    if (row < 0 || col < 0 || row >= board_size || col >= board_size) {
+      g_set_error(error, g_quark_from_static_string("gcheckers-sgf-controller-error"), 2,
+                  "Out-of-range SGF setup point: %s", value);
+      return FALSE;
+    }
+    gint8 square = board_index_from_coord(row, col, board_size);
+    if (square < 0) {
+      g_set_error(error, g_quark_from_static_string("gcheckers-sgf-controller-error"), 3,
+                  "Non-playable SGF setup point: %s", value);
+      return FALSE;
+    }
+    *out_square = (guint8)square;
+    return TRUE;
+  }
+
+  char *end_ptr = NULL;
+  guint64 square_1based = g_ascii_strtoull(value, &end_ptr, 10);
+  if (end_ptr == value || (end_ptr != NULL && *end_ptr != '\0')) {
+    g_set_error(error, g_quark_from_static_string("gcheckers-sgf-controller-error"), 4,
+                "Invalid SGF setup point: %s", value);
+    return FALSE;
+  }
+  guint8 max_square = board_playable_squares(board_size);
+  if (square_1based == 0 || square_1based > max_square) {
+    g_set_error(error, g_quark_from_static_string("gcheckers-sgf-controller-error"), 5,
+                "Out-of-range SGF setup square: %s", value);
+    return FALSE;
+  }
+  *out_square = (guint8)(square_1based - 1);
+  return TRUE;
+}
+
+typedef gboolean (*GCheckersSgfSetupSquareFunc)(GameState *state, guint8 square, gpointer user_data, GError **error);
+
+static gboolean gcheckers_sgf_controller_for_each_setup_square(GameState *state,
+                                                               const char *value,
+                                                               GCheckersSgfSetupSquareFunc func,
+                                                               gpointer user_data,
+                                                               GError **error) {
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(value != NULL, FALSE);
+  g_return_val_if_fail(func != NULL, FALSE);
+
+  const char *range_sep = strchr(value, ':');
+  if (range_sep == NULL) {
+    guint8 square = 0;
+    if (!gcheckers_sgf_controller_parse_setup_point(value, state->board.board_size, &square, error)) {
+      return FALSE;
+    }
+    return func(state, square, user_data, error);
+  }
+
+  g_autofree char *start_text = g_strndup(value, (gsize)(range_sep - value));
+  g_autofree char *end_text = g_strdup(range_sep + 1);
+  guint8 start_square = 0;
+  guint8 end_square = 0;
+  if (!gcheckers_sgf_controller_parse_setup_point(start_text, state->board.board_size, &start_square, error) ||
+      !gcheckers_sgf_controller_parse_setup_point(end_text, state->board.board_size, &end_square, error)) {
+    return FALSE;
+  }
+
+  gint start_row = 0;
+  gint start_col = 0;
+  gint end_row = 0;
+  gint end_col = 0;
+  board_coord_from_index(start_square, &start_row, &start_col, state->board.board_size);
+  board_coord_from_index(end_square, &end_row, &end_col, state->board.board_size);
+  gint row_min = MIN(start_row, end_row);
+  gint row_max = MAX(start_row, end_row);
+  gint col_min = MIN(start_col, end_col);
+  gint col_max = MAX(start_col, end_col);
+  for (gint row = row_min; row <= row_max; ++row) {
+    for (gint col = col_min; col <= col_max; ++col) {
+      gint8 square = board_index_from_coord(row, col, state->board.board_size);
+      if (square < 0) {
+        continue;
+      }
+      if (!func(state, (guint8)square, user_data, error)) {
+        return FALSE;
+      }
+    }
+  }
+
+  return TRUE;
+}
+
+static gboolean gcheckers_sgf_controller_set_square_piece(GameState *state,
+                                                          guint8 square,
+                                                          gpointer user_data,
+                                                          GError ** /*error*/) {
+  CheckersPiece piece = GPOINTER_TO_INT(user_data);
+  board_set(&state->board, square, piece);
+  return TRUE;
+}
+
+static gboolean gcheckers_sgf_controller_apply_setup_values(GameState *state,
+                                                            const GPtrArray *values,
+                                                            CheckersPiece piece,
+                                                            GError **error) {
+  g_return_val_if_fail(state != NULL, FALSE);
+
+  if (values == NULL) {
+    return TRUE;
+  }
+
+  for (guint i = 0; i < values->len; ++i) {
+    const char *value = g_ptr_array_index((GPtrArray *)values, i);
+    g_return_val_if_fail(value != NULL, FALSE);
+    if (!gcheckers_sgf_controller_for_each_setup_square(state,
+                                                        value,
+                                                        gcheckers_sgf_controller_set_square_piece,
+                                                        GINT_TO_POINTER(piece),
+                                                        error)) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+typedef struct {
+  CheckersColor color;
+  CheckersPiece king_piece;
+  const char *ident;
+} GCheckersSgfKingSetupContext;
+
+static gboolean gcheckers_sgf_controller_set_square_king(GameState *state,
+                                                         guint8 square,
+                                                         gpointer user_data,
+                                                         GError **error) {
+  GCheckersSgfKingSetupContext *context = user_data;
+  g_return_val_if_fail(context != NULL, FALSE);
+
+  CheckersPiece piece = board_get(&state->board, square);
+  if (piece == CHECKERS_PIECE_EMPTY || board_piece_color(piece) != context->color) {
+    g_set_error(error,
+                g_quark_from_static_string("gcheckers-sgf-controller-error"),
+                7,
+                "SGF %s square must also be present in %s",
+                context->ident,
+                context->color == CHECKERS_COLOR_BLACK ? "AB" : "AW");
+    return FALSE;
+  }
+
+  board_set(&state->board, square, context->king_piece);
+  return TRUE;
+}
+
+static gboolean gcheckers_sgf_controller_apply_king_setup_values(GameState *state,
+                                                                 const GPtrArray *values,
+                                                                 CheckersColor color,
+                                                                 CheckersPiece king_piece,
+                                                                 const char *ident,
+                                                                 GError **error) {
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(ident != NULL, FALSE);
+
+  if (values == NULL) {
+    return TRUE;
+  }
+
+  GCheckersSgfKingSetupContext context = {
+    .color = color,
+    .king_piece = king_piece,
+    .ident = ident,
+  };
+  for (guint i = 0; i < values->len; ++i) {
+    const char *value = g_ptr_array_index((GPtrArray *)values, i);
+    g_return_val_if_fail(value != NULL, FALSE);
+    if (!gcheckers_sgf_controller_for_each_setup_square(state,
+                                                        value,
+                                                        gcheckers_sgf_controller_set_square_king,
+                                                        &context,
+                                                        error)) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+static gboolean gcheckers_sgf_controller_apply_setup_node(GameState *state, const SgfNode *node, GError **error) {
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(node != NULL, FALSE);
+
+  const GPtrArray *ae_values = sgf_node_get_property_values(node, "AE");
+  const GPtrArray *ab_values = sgf_node_get_property_values(node, "AB");
+  const GPtrArray *aw_values = sgf_node_get_property_values(node, "AW");
+  const GPtrArray *abk_values = sgf_node_get_property_values(node, "ABK");
+  const GPtrArray *awk_values = sgf_node_get_property_values(node, "AWK");
+  const char *pl = sgf_node_get_property_first(node, "PL");
+
+  if (!gcheckers_sgf_controller_apply_setup_values(state, ae_values, CHECKERS_PIECE_EMPTY, error) ||
+      !gcheckers_sgf_controller_apply_setup_values(state, ab_values, CHECKERS_PIECE_BLACK_MAN, error) ||
+      !gcheckers_sgf_controller_apply_setup_values(state, aw_values, CHECKERS_PIECE_WHITE_MAN, error) ||
+      !gcheckers_sgf_controller_apply_king_setup_values(state,
+                                                        abk_values,
+                                                        CHECKERS_COLOR_BLACK,
+                                                        CHECKERS_PIECE_BLACK_KING,
+                                                        "ABK",
+                                                        error) ||
+      !gcheckers_sgf_controller_apply_king_setup_values(state,
+                                                        awk_values,
+                                                        CHECKERS_COLOR_WHITE,
+                                                        CHECKERS_PIECE_WHITE_KING,
+                                                        "AWK",
+                                                        error)) {
+    return FALSE;
+  }
+
+  if (pl != NULL) {
+    if (g_strcmp0(pl, "B") == 0) {
+      state->turn = CHECKERS_COLOR_BLACK;
+    } else if (g_strcmp0(pl, "W") == 0) {
+      state->turn = CHECKERS_COLOR_WHITE;
+    } else {
+      g_set_error(error, g_quark_from_static_string("gcheckers-sgf-controller-error"), 6,
+                  "Invalid SGF PL value: %s", pl);
+      return FALSE;
+    }
+  }
+
+  if (ae_values != NULL || ab_values != NULL || aw_values != NULL || abk_values != NULL || awk_values != NULL ||
+      pl != NULL) {
+    state->winner = CHECKERS_WINNER_NONE;
+  }
+
+  return TRUE;
+}
+
+static gboolean gcheckers_sgf_controller_format_setup_point(uint8_t index,
+                                                            uint8_t board_size,
+                                                            char out_point[3]) {
+  g_return_val_if_fail(out_point != NULL, FALSE);
+
+  gint row = 0;
+  gint col = 0;
+  board_coord_from_index(index, &row, &col, board_size);
+  if (row < 0 || col < 0 || row >= 26 || col >= 26) {
+    g_debug("Unsupported SGF setup coordinate for board size %u", board_size);
+    return FALSE;
+  }
+
+  out_point[0] = (char)('a' + col);
+  out_point[1] = (char)('a' + row);
+  out_point[2] = '\0';
+  return TRUE;
+}
+
+static char *gcheckers_sgf_controller_escape_prop_value(const char *value) {
+  g_return_val_if_fail(value != NULL, NULL);
+
+  GString *escaped = g_string_new(NULL);
+  for (const char *cursor = value; *cursor != '\0'; ++cursor) {
+    if (*cursor == '\\' || *cursor == ']') {
+      g_string_append_c(escaped, '\\');
+    }
+    g_string_append_c(escaped, *cursor);
+  }
+  return g_string_free(escaped, FALSE);
+}
+
+static gboolean gcheckers_sgf_controller_append_prop_values(GString *content,
+                                                            const char *ident,
+                                                            GPtrArray *values,
+                                                            GError **error) {
+  g_return_val_if_fail(content != NULL, FALSE);
+  g_return_val_if_fail(ident != NULL, FALSE);
+  g_return_val_if_fail(values != NULL, FALSE);
+
+  if (values->len == 0) {
+    return TRUE;
+  }
+
+  g_string_append(content, ident);
+  for (guint i = 0; i < values->len; ++i) {
+    const char *value = g_ptr_array_index(values, i);
+    g_return_val_if_fail(value != NULL, FALSE);
+    g_autofree char *escaped = gcheckers_sgf_controller_escape_prop_value(value);
+    if (escaped == NULL) {
+      g_set_error_literal(error,
+                          g_quark_from_static_string("gcheckers-sgf-controller-error"),
+                          8,
+                          "Unable to escape SGF property value");
+      return FALSE;
+    }
+    g_string_append_printf(content, "[%s]", escaped);
+  }
+
+  return TRUE;
+}
+
+static gboolean gcheckers_sgf_controller_extract_node_move(const SgfNode *node,
+                                                           CheckersMove *move,
+                                                           gboolean *has_move) {
   g_return_val_if_fail(node != NULL, FALSE);
   g_return_val_if_fail(move != NULL, FALSE);
+  g_return_val_if_fail(has_move != NULL, FALSE);
 
   SgfColor color = SGF_COLOR_NONE;
   g_autoptr(GError) error = NULL;
-  if (!sgf_move_props_parse_node(node, &color, move, &error)) {
+  if (!sgf_move_props_try_parse_node(node, &color, move, has_move, &error)) {
     g_debug("Failed to extract SGF move for node %u: %s",
             sgf_node_get_move_number(node),
             error != NULL ? error->message : "unknown error");
@@ -114,25 +419,48 @@ static gboolean gcheckers_sgf_controller_replay_to_node(GCheckersSgfController *
   }
 
   gboolean success = TRUE;
+  Game game = {0};
+  if (!gcheckers_model_copy_game(self->model, &game)) {
+    g_debug("Failed to copy model game for SGF replay");
+    g_ptr_array_unref(path);
+    self->is_replaying = FALSE;
+    return FALSE;
+  }
+
   for (guint i = 0; i < path->len; ++i) {
     const SgfNode *step = g_ptr_array_index(path, i);
-    if (sgf_node_get_move_number(step) == 0) {
-      continue;
-    }
-
-    CheckersMove move;
-    if (!gcheckers_sgf_controller_extract_node_move(step, &move)) {
+    g_autoptr(GError) setup_error = NULL;
+    if (!gcheckers_sgf_controller_apply_setup_node(&game.state, step, &setup_error)) {
+      g_debug("Failed to apply SGF setup for node %u: %s",
+              sgf_node_get_move_number(step),
+              setup_error != NULL ? setup_error->message : "unknown error");
       success = FALSE;
       break;
     }
 
-    if (!gcheckers_model_apply_move(self->model, &move)) {
+    CheckersMove move = {0};
+    gboolean has_move = FALSE;
+    if (!gcheckers_sgf_controller_extract_node_move(step, &move, &has_move)) {
+      success = FALSE;
+      break;
+    }
+    if (!has_move) {
+      continue;
+    }
+
+    if (game_apply_move(&game, &move) != 0) {
       g_debug("Failed to replay SGF move %u", sgf_node_get_move_number(step));
       success = FALSE;
       break;
     }
   }
 
+  if (success && !gcheckers_model_set_state(self->model, &game.state)) {
+    g_debug("Failed to publish replayed SGF state into model");
+    success = FALSE;
+  }
+
+  game_destroy(&game);
   g_ptr_array_unref(path);
   self->is_replaying = FALSE;
   return success;
@@ -150,9 +478,13 @@ static gboolean gcheckers_sgf_controller_sync_model_for_transition(GCheckersSgfC
   }
 
   if (previous && sgf_node_get_parent(target) == previous) {
-    CheckersMove move;
-    if (!gcheckers_sgf_controller_extract_node_move(target, &move)) {
+    CheckersMove move = {0};
+    gboolean has_move = FALSE;
+    if (!gcheckers_sgf_controller_extract_node_move(target, &move, &has_move)) {
       return FALSE;
+    }
+    if (!has_move) {
+      return gcheckers_sgf_controller_replay_to_node(self, target);
     }
 
     if (!gcheckers_model_apply_move(self->model, &move)) {
@@ -539,6 +871,82 @@ gboolean gcheckers_sgf_controller_save_file(GCheckersSgfController *self, const 
   g_return_val_if_fail(SGF_IS_TREE(self->sgf_tree), FALSE);
 
   return sgf_io_save_file(path, self->sgf_tree, error);
+}
+
+gboolean gcheckers_sgf_controller_save_position_file(GCheckersSgfController *self, const char *path, GError **error) {
+  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+  g_return_val_if_fail(path != NULL, FALSE);
+  g_return_val_if_fail(GCHECKERS_IS_MODEL(self->model), FALSE);
+
+  const GameState *state = gcheckers_model_peek_state(self->model);
+  if (state == NULL) {
+    g_set_error_literal(error,
+                        g_quark_from_static_string("gcheckers-sgf-controller-error"),
+                        2,
+                        "Missing game state for SGF position save");
+    return FALSE;
+  }
+
+  g_autoptr(GPtrArray) ae_values = g_ptr_array_new_with_free_func(g_free);
+  g_autoptr(GPtrArray) ab_values = g_ptr_array_new_with_free_func(g_free);
+  g_autoptr(GPtrArray) aw_values = g_ptr_array_new_with_free_func(g_free);
+  g_autoptr(GPtrArray) abk_values = g_ptr_array_new_with_free_func(g_free);
+  g_autoptr(GPtrArray) awk_values = g_ptr_array_new_with_free_func(g_free);
+  guint8 squares = board_playable_squares(state->board.board_size);
+  for (guint8 i = 0; i < squares; ++i) {
+    CheckersPiece piece = board_get(&state->board, i);
+    char point[3] = {0};
+    if (!gcheckers_sgf_controller_format_setup_point(i, state->board.board_size, point)) {
+      g_set_error_literal(error,
+                          g_quark_from_static_string("gcheckers-sgf-controller-error"),
+                          4,
+                          "Unable to encode SGF setup point");
+      return FALSE;
+    }
+
+    if (piece == CHECKERS_PIECE_EMPTY) {
+      g_ptr_array_add(ae_values, g_strdup(point));
+      continue;
+    }
+    if (piece == CHECKERS_PIECE_BLACK_MAN) {
+      g_ptr_array_add(ab_values, g_strdup(point));
+      continue;
+    }
+    if (piece == CHECKERS_PIECE_WHITE_MAN) {
+      g_ptr_array_add(aw_values, g_strdup(point));
+      continue;
+    }
+    if (piece == CHECKERS_PIECE_BLACK_KING) {
+      g_ptr_array_add(ab_values, g_strdup(point));
+      g_ptr_array_add(abk_values, g_strdup(point));
+      continue;
+    }
+    if (piece == CHECKERS_PIECE_WHITE_KING) {
+      g_ptr_array_add(aw_values, g_strdup(point));
+      g_ptr_array_add(awk_values, g_strdup(point));
+      continue;
+    }
+
+    g_debug("Skipping unknown piece while saving SGF position");
+  }
+
+  GString *content = g_string_new("(;");
+  g_string_append(content, "FF[4]CA[UTF-8]AP[gcheckers]GM[40]");
+  if (!gcheckers_sgf_controller_append_prop_values(content, "AE", ae_values, error) ||
+      !gcheckers_sgf_controller_append_prop_values(content, "AB", ab_values, error) ||
+      !gcheckers_sgf_controller_append_prop_values(content, "AW", aw_values, error) ||
+      !gcheckers_sgf_controller_append_prop_values(content, "ABK", abk_values, error) ||
+      !gcheckers_sgf_controller_append_prop_values(content, "AWK", awk_values, error)) {
+    g_string_free(content, TRUE);
+    return FALSE;
+  }
+
+  const char *pl_value = state->turn == CHECKERS_COLOR_BLACK ? "B" : "W";
+  g_string_append_printf(content, "PL[%s])", pl_value);
+
+  gboolean written = g_file_set_contents(path, content->str, (gssize)content->len, error);
+  g_string_free(content, TRUE);
+  return written;
 }
 
 GtkWidget *gcheckers_sgf_controller_get_widget(GCheckersSgfController *self) {

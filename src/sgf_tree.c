@@ -220,6 +220,18 @@ const SgfNode *sgf_tree_get_current(SgfTree *self) {
   return self->current;
 }
 
+const SgfNode *sgf_tree_append_node(SgfTree *self) {
+  g_return_val_if_fail(SGF_IS_TREE(self), NULL);
+  g_return_val_if_fail(self->current != NULL, NULL);
+
+  guint move_number = self->current->move_number;
+  SgfNode *node = sgf_node_new(self->current, SGF_COLOR_NONE, move_number);
+  g_ptr_array_add(self->current->children, node);
+  self->current = node;
+
+  return node;
+}
+
 const SgfNode *sgf_tree_append_move(SgfTree *self, SgfColor color, const char *move_value) {
   g_return_val_if_fail(SGF_IS_TREE(self), NULL);
   g_return_val_if_fail(self->current != NULL, NULL);
