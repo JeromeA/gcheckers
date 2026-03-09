@@ -13,6 +13,14 @@ static void test_gcheckers_window_skip(void) {
 
 static GtkApplication *test_app = NULL;
 
+static void test_analysis_graph_score_compression(void) {
+  g_assert_cmpfloat_with_epsilon(analysis_graph_compress_score(0.0), 0.0, 0.000001);
+  g_assert_cmpfloat_with_epsilon(analysis_graph_compress_score(1800.0), 900.0, 0.000001);
+  g_assert_cmpfloat_with_epsilon(analysis_graph_compress_score(-1800.0), -900.0, 0.000001);
+  g_assert_cmpfloat_with_epsilon(analysis_graph_compress_score(3600.0), 1200.0, 0.000001);
+  g_assert_cmpfloat_with_epsilon(analysis_graph_compress_score(-3600.0), -1200.0, 0.000001);
+}
+
 static GtkApplication *test_gcheckers_window_create_app(void) {
   g_return_val_if_fail(GTK_IS_APPLICATION(test_app), NULL);
   return g_object_ref(test_app);
@@ -745,6 +753,8 @@ static void test_gcheckers_window_new_game_dialog_ruleset_options_and_russian_ap
 
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
+  g_test_add_func("/analysis-graph/score-compression", test_analysis_graph_score_compression);
+
   if (!gtk_init_check()) {
     g_test_add_func("/gcheckers-window/dispose-unparents-controls", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/dispose-without-panel-ref", test_gcheckers_window_skip);

@@ -55,6 +55,7 @@ and `GCheckersWindow` via the `manual-requested` signal.
 Class: `AnalysisGraph` (`GObject`).
 Role: wraps a `GtkDrawingArea` chart for SGF branch evaluations. Draws best-score points/segments from per-node
 `SgfNodeAnalysis`, renders a vertical selected-node bar, and maps pointer clicks to nearest node index.
+Display scaling: graph y-values apply score compression `f(x)=x/(1+abs(x)/1800)` before plotting.
 Score convention: positive means white is better, negative means black is better (independent of side to move).
 Signals: `node-activated` with the clicked branch node pointer so window code can call SGF controller selection APIs.
 Collaborates with: `GCheckersWindow` (data binding) and `GCheckersSgfController` (selection updates).

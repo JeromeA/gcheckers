@@ -13,6 +13,7 @@ G_DECLARE_FINAL_TYPE(AnalysisGraph, analysis_graph, ANALYSIS, GRAPH, GObject)
 
 AnalysisGraph *analysis_graph_new(void);
 GtkWidget *analysis_graph_get_widget(AnalysisGraph *self);
+double analysis_graph_compress_score(double score);
 void analysis_graph_set_nodes(AnalysisGraph *self, GPtrArray *nodes, guint selected_index);
 void analysis_graph_set_selected_index(AnalysisGraph *self, guint selected_index);
 guint analysis_graph_get_selected_index(AnalysisGraph *self);

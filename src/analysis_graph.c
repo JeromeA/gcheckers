@@ -23,6 +23,10 @@ static const double analysis_graph_margin_bottom = 14.0;
 static const double analysis_graph_margin_left = 10.0;
 static const double analysis_graph_margin_right = 10.0;
 
+double analysis_graph_compress_score(double score) {
+  return score / (1.0 + (fabs(score) / 1800.0));
+}
+
 static gboolean analysis_graph_get_node_score(const SgfNode *node, double *out_score) {
   g_return_val_if_fail(node != NULL, FALSE);
   g_return_val_if_fail(out_score != NULL, FALSE);
@@ -118,6 +122,7 @@ static void analysis_graph_draw(GtkDrawingArea * /*area*/,
     if (!analysis_graph_get_node_score(node, &score)) {
       continue;
     }
+    score = analysis_graph_compress_score(score);
 
     if (!has_score) {
       min_score = score;
@@ -186,6 +191,7 @@ static void analysis_graph_draw(GtkDrawingArea * /*area*/,
         continue;
       }
 
+      score = analysis_graph_compress_score(score);
       double x = analysis_graph_node_x(node_count, i, left, chart_width);
       double y = analysis_graph_score_to_y(score, min_axis_score, score_span, bottom, chart_height);
       if (!line_open) {
@@ -211,6 +217,7 @@ static void analysis_graph_draw(GtkDrawingArea * /*area*/,
         continue;
       }
 
+      score = analysis_graph_compress_score(score);
       double x = analysis_graph_node_x(node_count, i, left, chart_width);
       double y = analysis_graph_score_to_y(score, min_axis_score, score_span, bottom, chart_height);
 
