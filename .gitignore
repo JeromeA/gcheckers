@@ -12,3 +12,4 @@ test_checkers_model
 coverage/
 gcheckers.png
 data/schemas/gschemas.compiled
+/*.sgf
