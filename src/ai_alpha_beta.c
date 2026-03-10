@@ -101,7 +101,7 @@ static gint checkers_ai_terminal_score(const Game *game, guint ply_depth) {
     return checkers_ai_material_score(game);
   }
 
-  gint win_score = 10000 - (gint)ply_depth;
+  gint win_score = 3000 - (gint)ply_depth;
   switch (game->state.winner) {
     case CHECKERS_WINNER_WHITE:
       return win_score;
