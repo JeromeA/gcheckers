@@ -21,6 +21,26 @@ static void test_analysis_graph_score_compression(void) {
   g_assert_cmpfloat_with_epsilon(analysis_graph_compress_score(-3600.0), -1200.0, 0.000001);
 }
 
+static void test_analysis_graph_axis_range_minimum_window(void) {
+  double min_axis = 0.0;
+  double max_axis = 0.0;
+  analysis_graph_compute_axis_range(-50.0, 120.0, TRUE, &min_axis, &max_axis);
+  g_assert_cmpfloat_with_epsilon(min_axis, -200.0, 0.000001);
+  g_assert_cmpfloat_with_epsilon(max_axis, 200.0, 0.000001);
+}
+
+static void test_analysis_graph_axis_range_expands_for_large_scores(void) {
+  double min_axis = 0.0;
+  double max_axis = 0.0;
+  analysis_graph_compute_axis_range(-420.0, 380.0, TRUE, &min_axis, &max_axis);
+  g_assert_cmpfloat_with_epsilon(min_axis, -420.0, 0.000001);
+  g_assert_cmpfloat_with_epsilon(max_axis, 380.0, 0.000001);
+
+  analysis_graph_compute_axis_range(500.0, 800.0, TRUE, &min_axis, &max_axis);
+  g_assert_cmpfloat_with_epsilon(min_axis, -200.0, 0.000001);
+  g_assert_cmpfloat_with_epsilon(max_axis, 800.0, 0.000001);
+}
+
 static GtkApplication *test_gcheckers_window_create_app(void) {
   g_return_val_if_fail(GTK_IS_APPLICATION(test_app), NULL);
   return g_object_ref(test_app);
@@ -755,6 +775,8 @@ static void test_gcheckers_window_new_game_dialog_ruleset_options_and_russian_ap
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   g_test_add_func("/analysis-graph/score-compression", test_analysis_graph_score_compression);
+  g_test_add_func("/analysis-graph/axis-range-minimum-window", test_analysis_graph_axis_range_minimum_window);
+  g_test_add_func("/analysis-graph/axis-range-expands", test_analysis_graph_axis_range_expands_for_large_scores);
 
   if (!gtk_init_check()) {
     g_test_add_func("/gcheckers-window/dispose-unparents-controls", test_gcheckers_window_skip);

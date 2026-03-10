@@ -59,6 +59,9 @@ Class: `AnalysisGraph` (`GObject`).
 Role: wraps a `GtkDrawingArea` chart for SGF branch evaluations. Draws best-score points/segments from per-node
 `SgfNodeAnalysis`, renders a vertical selected-node bar, and maps pointer clicks to nearest node index.
 Display scaling: graph y-values apply score compression `f(x)=x/(1+abs(x)/1800)` before plotting.
+Y-axis range always includes at least `[-200, +200]` (and expands as needed), with guide ticks at `-200`, `-100`,
+`100`, and `200` shown as scaled labels (`-2`, `-1`, `1`, `2`). Chart background is split at the zero line with a
+slight white tint above and slight black tint below to indicate white/black advantage regions.
 Score convention: positive means white is better, negative means black is better (independent of side to move).
 Signals: `node-activated` with the clicked branch node pointer so window code can call SGF controller selection APIs.
 Collaborates with: `GCheckersWindow` (data binding) and `GCheckersSgfController` (selection updates).

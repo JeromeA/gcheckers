@@ -22,9 +22,32 @@ static const double analysis_graph_margin_top = 10.0;
 static const double analysis_graph_margin_bottom = 14.0;
 static const double analysis_graph_margin_left = 10.0;
 static const double analysis_graph_margin_right = 10.0;
+static const double analysis_graph_min_axis_score = -200.0;
+static const double analysis_graph_max_axis_score = 200.0;
 
 double analysis_graph_compress_score(double score) {
   return score / (1.0 + (fabs(score) / 1800.0));
+}
+
+void analysis_graph_compute_axis_range(double min_score,
+                                       double max_score,
+                                       gboolean has_score,
+                                       double *out_min_axis_score,
+                                       double *out_max_axis_score) {
+  g_return_if_fail(out_min_axis_score != NULL);
+  g_return_if_fail(out_max_axis_score != NULL);
+
+  double min_axis_score = analysis_graph_min_axis_score;
+  double max_axis_score = analysis_graph_max_axis_score;
+  if (has_score) {
+    min_axis_score = MIN(min_score, 0.0);
+    max_axis_score = MAX(max_score, 0.0);
+    min_axis_score = MIN(min_axis_score, analysis_graph_min_axis_score);
+    max_axis_score = MAX(max_axis_score, analysis_graph_max_axis_score);
+  }
+
+  *out_min_axis_score = min_axis_score;
+  *out_max_axis_score = max_axis_score;
 }
 
 static gboolean analysis_graph_get_node_score(const SgfNode *node, double *out_score) {
@@ -65,21 +88,53 @@ static double analysis_graph_node_x(guint node_count, guint index, double left, 
   return left + (t * width);
 }
 
+static double analysis_graph_score_to_y(double score,
+                                        double min_axis_score,
+                                        double score_span,
+                                        double bottom,
+                                        double chart_height);
+
 static void analysis_graph_draw_axis(cairo_t *cr,
                                      double left,
                                      double top,
                                      double width,
                                      double height,
-                                     double zero_y) {
+                                     double zero_y,
+                                     double min_axis_score,
+                                     double score_span,
+                                     double bottom,
+                                     double chart_height) {
   g_return_if_fail(cr != NULL);
 
+  cairo_save(cr);
   cairo_set_source_rgba(cr, 0.65, 0.65, 0.65, 1.0);
   cairo_set_line_width(cr, 1.0);
   cairo_move_to(cr, left, top);
   cairo_line_to(cr, left, top + height);
   cairo_move_to(cr, left, zero_y);
   cairo_line_to(cr, left + width, zero_y);
+  const double tick_values[] = {-200.0, -100.0, 100.0, 200.0};
+  for (guint i = 0; i < G_N_ELEMENTS(tick_values); ++i) {
+    double tick_y = analysis_graph_score_to_y(tick_values[i], min_axis_score, score_span, bottom, chart_height);
+    tick_y = CLAMP(tick_y, top, bottom);
+    cairo_move_to(cr, left - 4.0, tick_y);
+    cairo_line_to(cr, left, tick_y);
+  }
   cairo_stroke(cr);
+
+  cairo_set_font_size(cr, 9.0);
+  for (guint i = 0; i < G_N_ELEMENTS(tick_values); ++i) {
+    double tick_y = analysis_graph_score_to_y(tick_values[i], min_axis_score, score_span, bottom, chart_height);
+    tick_y = CLAMP(tick_y, top, bottom);
+    char label[16] = {0};
+    g_snprintf(label, sizeof(label), "%.0f", tick_values[i] / 100.0);
+    cairo_text_extents_t extents = {0};
+    cairo_text_extents(cr, label, &extents);
+    double baseline_y = tick_y - (extents.height / 2.0) - extents.y_bearing;
+    cairo_move_to(cr, left + 4.0, baseline_y);
+    cairo_show_text(cr, label);
+  }
+  cairo_restore(cr);
 }
 
 static double analysis_graph_score_to_y(double score,
@@ -89,6 +144,27 @@ static double analysis_graph_score_to_y(double score,
                                         double chart_height) {
   double normalized = (score - min_axis_score) / score_span;
   return bottom - (normalized * chart_height);
+}
+
+static void analysis_graph_draw_background(cairo_t *cr,
+                                           double left,
+                                           double top,
+                                           double chart_width,
+                                           double bottom,
+                                           double zero_y) {
+  g_return_if_fail(cr != NULL);
+
+  cairo_save(cr);
+  cairo_set_source_rgba(cr, 0.95, 0.95, 0.95, 1.0);
+  cairo_paint(cr);
+
+  cairo_set_source_rgb(cr, 0.99, 0.99, 0.99);
+  cairo_rectangle(cr, left, top, chart_width, MAX(0.0, zero_y - top));
+  cairo_fill(cr);
+  cairo_set_source_rgb(cr, 0.91, 0.91, 0.91);
+  cairo_rectangle(cr, left, zero_y, chart_width, MAX(0.0, bottom - zero_y));
+  cairo_fill(cr);
+  cairo_restore(cr);
 }
 
 static void analysis_graph_draw(GtkDrawingArea * /*area*/,
@@ -135,22 +211,9 @@ static void analysis_graph_draw(GtkDrawingArea * /*area*/,
     max_score = MAX(max_score, score);
   }
 
-  double min_axis_score = min_score;
-  double max_axis_score = max_score;
-  if (has_score) {
-    if (fabs(max_axis_score - min_axis_score) < 0.000001) {
-      if (fabs(min_axis_score) < 0.000001) {
-        min_axis_score = -1.0;
-        max_axis_score = 1.0;
-      } else {
-        min_axis_score -= 1.0;
-        max_axis_score += 1.0;
-      }
-    } else {
-      min_axis_score = MIN(min_axis_score, 0.0);
-      max_axis_score = MAX(max_axis_score, 0.0);
-    }
-  }
+  double min_axis_score = 0.0;
+  double max_axis_score = 0.0;
+  analysis_graph_compute_axis_range(min_score, max_score, has_score, &min_axis_score, &max_axis_score);
   double score_span = max_axis_score - min_axis_score;
   if (score_span < 0.000001) {
     score_span = 1.0;
@@ -158,10 +221,18 @@ static void analysis_graph_draw(GtkDrawingArea * /*area*/,
   double zero_y = analysis_graph_score_to_y(0.0, min_axis_score, score_span, bottom, chart_height);
   zero_y = CLAMP(zero_y, top, bottom);
 
-  cairo_set_source_rgba(cr, 0.98, 0.98, 0.98, 1.0);
-  cairo_paint(cr);
+  analysis_graph_draw_background(cr, left, top, chart_width, bottom, zero_y);
 
-  analysis_graph_draw_axis(cr, left, top, chart_width, chart_height, zero_y);
+  analysis_graph_draw_axis(cr,
+                           left,
+                           top,
+                           chart_width,
+                           chart_height,
+                           zero_y,
+                           min_axis_score,
+                           score_span,
+                           bottom,
+                           chart_height);
 
   if (node_count == 0) {
     return;
