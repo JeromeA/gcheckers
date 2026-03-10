@@ -20,6 +20,9 @@ void analysis_graph_compute_axis_range(double min_score,
                                        double *out_min_axis_score,
                                        double *out_max_axis_score);
 void analysis_graph_set_nodes(AnalysisGraph *self, GPtrArray *nodes, guint selected_index);
+void analysis_graph_set_progress_node(AnalysisGraph *self, const SgfNode *node);
+void analysis_graph_clear_progress_node(AnalysisGraph *self);
+const SgfNode *analysis_graph_get_progress_node(AnalysisGraph *self);
 void analysis_graph_set_selected_index(AnalysisGraph *self, guint selected_index);
 guint analysis_graph_get_selected_index(AnalysisGraph *self);
 guint analysis_graph_get_node_count(AnalysisGraph *self);

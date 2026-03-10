@@ -7,6 +7,7 @@ struct _AnalysisGraph {
   GtkWidget *area;
   GPtrArray *nodes;
   guint selected_index;
+  const SgfNode *progress_node;
 };
 
 G_DEFINE_TYPE(AnalysisGraph, analysis_graph, G_TYPE_OBJECT)
@@ -276,7 +277,6 @@ static void analysis_graph_draw(GtkDrawingArea * /*area*/,
       cairo_stroke(cr);
     }
 
-    cairo_set_source_rgba(cr, 0.13, 0.48, 0.75, 1.0);
     for (guint i = 0; i < node_count; ++i) {
       const SgfNode *node = g_ptr_array_index(self->nodes, i);
       if (node == NULL) {
@@ -292,6 +292,11 @@ static void analysis_graph_draw(GtkDrawingArea * /*area*/,
       double x = analysis_graph_node_x(node_count, i, left, chart_width);
       double y = analysis_graph_score_to_y(score, min_axis_score, score_span, bottom, chart_height);
 
+      if (node == self->progress_node) {
+        cairo_set_source_rgb(cr, 0.95, 0.8, 0.15);
+      } else {
+        cairo_set_source_rgba(cr, 0.13, 0.48, 0.75, 1.0);
+      }
       cairo_arc(cr, x, y, 2.5, 0.0, 2.0 * G_PI);
       cairo_fill(cr);
     }
@@ -383,6 +388,7 @@ static void analysis_graph_class_init(AnalysisGraphClass *klass) {
 static void analysis_graph_init(AnalysisGraph *self) {
   self->nodes = g_ptr_array_new();
   self->selected_index = 0;
+  self->progress_node = NULL;
 
   self->area = gtk_drawing_area_new();
   gtk_widget_set_hexpand(self->area, TRUE);
@@ -424,6 +430,27 @@ void analysis_graph_set_nodes(AnalysisGraph *self, GPtrArray *nodes, guint selec
 
   self->selected_index = analysis_graph_clamp_selected_index(self, selected_index);
   gtk_widget_queue_draw(self->area);
+}
+
+void analysis_graph_set_progress_node(AnalysisGraph *self, const SgfNode *node) {
+  g_return_if_fail(ANALYSIS_IS_GRAPH(self));
+  g_return_if_fail(node != NULL);
+
+  self->progress_node = node;
+  gtk_widget_queue_draw(self->area);
+}
+
+void analysis_graph_clear_progress_node(AnalysisGraph *self) {
+  g_return_if_fail(ANALYSIS_IS_GRAPH(self));
+
+  self->progress_node = NULL;
+  gtk_widget_queue_draw(self->area);
+}
+
+const SgfNode *analysis_graph_get_progress_node(AnalysisGraph *self) {
+  g_return_val_if_fail(ANALYSIS_IS_GRAPH(self), NULL);
+
+  return self->progress_node;
 }
 
 void analysis_graph_set_selected_index(AnalysisGraph *self, guint selected_index) {

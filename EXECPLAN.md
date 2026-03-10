@@ -34,6 +34,8 @@ move, then clicking graph points and seeing SGF current selection follow.
 - [x] (2026-03-08 11:11Z) Added/updated tests in `test_sgf_tree`, `test_sgf_controller`, and `test_window`.
 - [x] (2026-03-08 11:03Z) Updated `src/OVERVIEW.md`.
 - [x] (2026-03-08 11:03Z) Ran `make -j$(nproc)` and `make test`.
+- [x] (2026-03-10 17:34Z) Refactored `src/window.c` analysis lifecycle into centralized begin/finish/sync helpers to
+  remove duplicated UI/state transitions and ensure graph progress clears on natural full-analysis completion.
 
 ## Surprises & Discoveries
 
@@ -62,6 +64,11 @@ move, then clicking graph points and seeing SGF current selection follow.
   by users. Missing analysis renders as a gap marker.
   Date/Author: 2026-03-08 / Codex
 
+- Decision: Centralize analysis lifecycle transitions in `window.c` (`begin_session`, `finish_session`, `sync_ui`).
+  Rationale: Button state, progress marker visibility, and runtime counters were previously reset in multiple places,
+  which caused drift (for example, yellow progress marker persisting after natural completion).
+  Date/Author: 2026-03-10 / Codex
+
 ## Outcomes & Retrospective
 
 Implementation is complete and matches the requested behavior.
@@ -75,6 +82,9 @@ Graph behavior is bidirectional with SGF selection: SGF current-node changes ref
 controller `node-changed` signal, and graph activation calls the new public SGF controller node-selection API.
 
 Validation succeeded with `make -j$(nproc)` and `make test`.
+
+Follow-up lifecycle cleanup consolidated full-game/current-analysis session transitions so UI and transient state are
+driven by one state machine path rather than duplicated manual resets.
 
 ## Context and Orientation
 
@@ -198,3 +208,5 @@ Plan updates:
 - 2026-03-08: Replaced previous analysis-persistence-only ExecPlan with this feature implementation plan because the
   user requested new full-game analysis and graph behavior.
 - 2026-03-08: Recorded final implementation results, validation evidence, and completed progress state.
+- 2026-03-10: Added lifecycle cleanup milestone to centralize analysis session state transitions and prevent
+  post-completion progress highlight drift.

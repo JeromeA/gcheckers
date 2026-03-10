@@ -35,6 +35,8 @@ struct _GCheckersWindow {
   GQueue *analysis_report_queue;
   guint analysis_expected_nodes;
   guint analysis_attached_nodes;
+  guint analysis_processed_nodes;
+  const SgfNode *analysis_last_updated_node;
   gboolean analysis_done_received;
   gboolean analysis_canceled;
 };
@@ -86,6 +88,13 @@ typedef struct {
   GPtrArray *jobs;
 } GCheckersWindowFullAnalysisTask;
 
+static void gcheckers_window_analysis_sync_ui(GCheckersWindow *self);
+static void gcheckers_window_analysis_reset_runtime_state(GCheckersWindow *self);
+static void gcheckers_window_analysis_begin_session(GCheckersWindow *self,
+                                                    GCheckersWindowAnalysisMode mode,
+                                                    guint expected_nodes);
+static void gcheckers_window_analysis_finish_session(GCheckersWindow *self);
+
 enum {
   GCHECKERS_WINDOW_ANALYSIS_PROGRESS_INTERVAL_MS = 100,
   GCHECKERS_WINDOW_ANALYSIS_TT_SIZE_MB = 256,
@@ -110,6 +119,51 @@ static gboolean gcheckers_window_constrain_main_split_cb(GtkWidget * /*widget*/,
   }
 
   return G_SOURCE_CONTINUE;
+}
+
+static void gcheckers_window_analysis_sync_ui(GCheckersWindow *self) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+
+  gboolean full_game_active = self->analysis_mode == GCHECKERS_WINDOW_ANALYSIS_MODE_FULL_GAME;
+  if (self->analyze_full_button != NULL) {
+    gtk_widget_set_sensitive(self->analyze_full_button, !full_game_active);
+  }
+
+  if (!full_game_active && self->analysis_graph != NULL) {
+    analysis_graph_clear_progress_node(self->analysis_graph);
+  }
+}
+
+static void gcheckers_window_analysis_reset_runtime_state(GCheckersWindow *self) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+
+  self->analysis_expected_nodes = 0;
+  self->analysis_attached_nodes = 0;
+  self->analysis_processed_nodes = 0;
+  self->analysis_last_updated_node = NULL;
+  self->analysis_done_received = FALSE;
+  self->analysis_canceled = FALSE;
+}
+
+static void gcheckers_window_analysis_begin_session(GCheckersWindow *self,
+                                                    GCheckersWindowAnalysisMode mode,
+                                                    guint expected_nodes) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(mode == GCHECKERS_WINDOW_ANALYSIS_MODE_CURRENT ||
+                   mode == GCHECKERS_WINDOW_ANALYSIS_MODE_FULL_GAME);
+
+  self->analysis_mode = mode;
+  gcheckers_window_analysis_reset_runtime_state(self);
+  self->analysis_expected_nodes = expected_nodes;
+  gcheckers_window_analysis_sync_ui(self);
+}
+
+static void gcheckers_window_analysis_finish_session(GCheckersWindow *self) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+
+  self->analysis_mode = GCHECKERS_WINDOW_ANALYSIS_MODE_NONE;
+  gcheckers_window_analysis_reset_runtime_state(self);
+  gcheckers_window_analysis_sync_ui(self);
 }
 
 static void gcheckers_window_start_new_game(GCheckersWindow *self) {
@@ -281,18 +335,11 @@ static void gcheckers_window_maybe_finish_full_analysis(GCheckersWindow *self) {
   if (!self->analysis_done_received) {
     return;
   }
-  if (!self->analysis_canceled && self->analysis_attached_nodes < self->analysis_expected_nodes) {
+  if (!self->analysis_canceled && self->analysis_processed_nodes < self->analysis_expected_nodes) {
     return;
   }
 
-  g_debug("Full analysis completion check: expected=%u attached=%u canceled=%d",
-          self->analysis_expected_nodes,
-          self->analysis_attached_nodes,
-          self->analysis_canceled);
-  self->analysis_mode = GCHECKERS_WINDOW_ANALYSIS_MODE_NONE;
-  if (self->analyze_full_button != NULL) {
-    gtk_widget_set_sensitive(self->analyze_full_button, TRUE);
-  }
+  gcheckers_window_analysis_finish_session(self);
 }
 
 static gboolean gcheckers_window_analysis_dispatch_cb(gpointer user_data) {
@@ -326,6 +373,9 @@ static gboolean gcheckers_window_analysis_dispatch_cb(gpointer user_data) {
 
     if (event->is_status && event->status_text != NULL) {
       gcheckers_window_set_analysis_text(self, event->status_text);
+      if (event->mode == GCHECKERS_WINDOW_ANALYSIS_MODE_FULL_GAME && !event->done) {
+        self->analysis_processed_nodes++;
+      }
     }
 
     if (event->is_payload && event->analysis != NULL && event->node != NULL) {
@@ -334,6 +384,7 @@ static gboolean gcheckers_window_analysis_dispatch_cb(gpointer user_data) {
       } else {
         if (event->mode == GCHECKERS_WINDOW_ANALYSIS_MODE_FULL_GAME) {
           self->analysis_attached_nodes++;
+          self->analysis_last_updated_node = event->node;
         }
         gcheckers_window_refresh_analysis_graph(self);
       }
@@ -413,12 +464,14 @@ static void gcheckers_window_refresh_analysis_graph(GCheckersWindow *self) {
   SgfTree *tree = gcheckers_sgf_controller_get_tree(self->sgf_controller);
   if (tree == NULL) {
     analysis_graph_set_nodes(self->analysis_graph, NULL, 0);
+    analysis_graph_clear_progress_node(self->analysis_graph);
     return;
   }
 
   g_autoptr(GPtrArray) branch = sgf_tree_build_current_branch(tree);
   if (branch == NULL) {
     analysis_graph_set_nodes(self->analysis_graph, NULL, 0);
+    analysis_graph_clear_progress_node(self->analysis_graph);
     return;
   }
 
@@ -448,6 +501,19 @@ static void gcheckers_window_refresh_analysis_graph(GCheckersWindow *self) {
   (void)analyzed_count;
 
   analysis_graph_set_nodes(self->analysis_graph, branch, selected_index);
+  if (self->analysis_mode != GCHECKERS_WINDOW_ANALYSIS_MODE_FULL_GAME || self->analysis_last_updated_node == NULL) {
+    analysis_graph_clear_progress_node(self->analysis_graph);
+    return;
+  }
+
+  for (guint i = 0; i < branch->len; ++i) {
+    const SgfNode *branch_node = g_ptr_array_index(branch, i);
+    if (branch_node == self->analysis_last_updated_node) {
+      analysis_graph_set_progress_node(self->analysis_graph, branch_node);
+      return;
+    }
+  }
+  analysis_graph_clear_progress_node(self->analysis_graph);
 }
 
 
@@ -728,6 +794,15 @@ static gpointer gcheckers_window_full_analysis_thread(gpointer user_data) {
     if (!replay_ok) {
       game_destroy(&game);
       g_debug("Skipping full analysis for SGF node with invalid replay path");
+      g_autofree char *text = g_strdup_printf("Full-game analysis: %u/%u nodes processed (replay skipped).",
+                                              i + 1,
+                                              task->jobs->len);
+      gcheckers_window_analysis_publish_status(task->self,
+                                               task->generation,
+                                               GCHECKERS_WINDOW_ANALYSIS_MODE_FULL_GAME,
+                                               FALSE,
+                                               FALSE,
+                                               text);
       continue;
     }
 
@@ -746,12 +821,31 @@ static gpointer gcheckers_window_full_analysis_thread(gpointer user_data) {
     game_destroy(&game);
     if (!ok) {
       checkers_scored_move_list_free(&moves);
+      g_autofree char *text = g_strdup_printf("Full-game analysis: %u/%u nodes processed (no legal moves).",
+                                              i + 1,
+                                              task->jobs->len);
+      gcheckers_window_analysis_publish_status(task->self,
+                                               task->generation,
+                                               GCHECKERS_WINDOW_ANALYSIS_MODE_FULL_GAME,
+                                               FALSE,
+                                               FALSE,
+                                               text);
       continue;
     }
 
     g_autoptr(SgfNodeAnalysis) analysis = gcheckers_window_analysis_from_scored_moves(&moves, task->depth, &stats);
     checkers_scored_move_list_free(&moves);
     if (analysis == NULL) {
+      g_autofree char *text =
+          g_strdup_printf("Full-game analysis: %u/%u nodes processed (analysis payload failed).",
+                          i + 1,
+                          task->jobs->len);
+      gcheckers_window_analysis_publish_status(task->self,
+                                               task->generation,
+                                               GCHECKERS_WINDOW_ANALYSIS_MODE_FULL_GAME,
+                                               FALSE,
+                                               FALSE,
+                                               text);
       continue;
     }
 
@@ -801,7 +895,11 @@ static gpointer gcheckers_window_full_analysis_thread(gpointer user_data) {
 static void gcheckers_window_stop_analysis(GCheckersWindow *self) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
 
-  self->analysis_mode = GCHECKERS_WINDOW_ANALYSIS_MODE_NONE;
+  if (self->analysis_mode == GCHECKERS_WINDOW_ANALYSIS_MODE_NONE) {
+    gcheckers_window_analysis_finish_session(self);
+    return;
+  }
+
   g_atomic_int_inc(&self->analysis_generation);
 
   g_mutex_lock(&self->analysis_report_mutex);
@@ -809,14 +907,7 @@ static void gcheckers_window_stop_analysis(GCheckersWindow *self) {
     g_queue_clear_full(self->analysis_report_queue, gcheckers_window_analysis_event_free);
   }
   g_mutex_unlock(&self->analysis_report_mutex);
-  self->analysis_expected_nodes = 0;
-  self->analysis_attached_nodes = 0;
-  self->analysis_done_received = FALSE;
-  self->analysis_canceled = FALSE;
-
-  if (self->analyze_full_button != NULL) {
-    gtk_widget_set_sensitive(self->analyze_full_button, TRUE);
-  }
+  gcheckers_window_analysis_finish_session(self);
 }
 
 static void gcheckers_window_start_analysis(GCheckersWindow *self) {
@@ -842,11 +933,7 @@ static void gcheckers_window_start_analysis(GCheckersWindow *self) {
   }
 
   gint generation = g_atomic_int_add(&self->analysis_generation, 1) + 1;
-  self->analysis_mode = GCHECKERS_WINDOW_ANALYSIS_MODE_CURRENT;
-  self->analysis_expected_nodes = 0;
-  self->analysis_attached_nodes = 0;
-  self->analysis_done_received = FALSE;
-  self->analysis_canceled = FALSE;
+  gcheckers_window_analysis_begin_session(self, GCHECKERS_WINDOW_ANALYSIS_MODE_CURRENT, 0);
   gcheckers_window_set_analysis_text(self, "Analyzing...");
 
   GCheckersWindowAnalysisTask *task = g_new0(GCheckersWindowAnalysisTask, 1);
@@ -894,15 +981,8 @@ static void gcheckers_window_start_full_game_analysis(GCheckersWindow *self) {
   guint configured_depth = player_controls_panel_get_computer_depth(self->controls_panel);
   guint depth = configured_depth == 0 ? 1 : configured_depth;
   gint generation = g_atomic_int_add(&self->analysis_generation, 1) + 1;
-  self->analysis_mode = GCHECKERS_WINDOW_ANALYSIS_MODE_FULL_GAME;
-  self->analysis_expected_nodes = jobs->len;
-  self->analysis_attached_nodes = 0;
-  self->analysis_done_received = FALSE;
-  self->analysis_canceled = FALSE;
+  gcheckers_window_analysis_begin_session(self, GCHECKERS_WINDOW_ANALYSIS_MODE_FULL_GAME, jobs->len);
   gcheckers_window_set_analysis_text(self, "Analyzing full game...");
-  if (self->analyze_full_button != NULL) {
-    gtk_widget_set_sensitive(self->analyze_full_button, FALSE);
-  }
 
   GCheckersWindowFullAnalysisTask *task = g_new0(GCheckersWindowFullAnalysisTask, 1);
   task->self = g_object_ref(self);
@@ -1341,10 +1421,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   self->analysis_generation = 1;
   g_mutex_init(&self->analysis_report_mutex);
   self->analysis_report_queue = g_queue_new();
-  self->analysis_expected_nodes = 0;
-  self->analysis_attached_nodes = 0;
-  self->analysis_done_received = FALSE;
-  self->analysis_canceled = FALSE;
+  gcheckers_window_analysis_reset_runtime_state(self);
   self->applied_ruleset = PLAYER_RULESET_INTERNATIONAL;
 
   static const GActionEntry window_actions[] = {
@@ -1580,6 +1657,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_text_view_set_monospace(GTK_TEXT_VIEW(analysis_view), TRUE);
   gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(analysis_scroller), analysis_view);
   self->analysis_buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(analysis_view));
+  gcheckers_window_analysis_sync_ui(self);
   gcheckers_window_set_analysis_text(self, "Toggle Analyze to start/stop iterative analysis.");
   gcheckers_window_refresh_analysis_graph(self);
 }

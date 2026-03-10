@@ -13,9 +13,15 @@ Worker output is staged through a mutex-protected shared report buffer, and the 
 main thread every 100ms while analysis is active. During iterative deepening, intermediate node-count snapshots are
 published and shown with a temporary `(searching...)` marker. Completed results are converted to `SgfNodeAnalysis` and
 attached to SGF nodes on the main thread, while text in the panel is formatted from that structured node analysis.
+Full-game completion gating uses processed-job counts (not only payload-attached counts), so terminal/no-move nodes do
+not leave the Analyze full game button disabled after completion.
+Analysis lifecycle transitions are centralized (begin/finish/sync-ui helpers), so full-game button state, transient
+graph progress highlight, and runtime counters reset from one source of truth.
 Analysis reports TT hit/probe/cutoff counters and hit ratio, while reusing a single TT allocation across passes.
 Owns an analysis graph widget that shows branch values for the current SGF branch (root->current plus current->main
-line end), tracks SGF selection with a vertical cursor, and supports click-to-select SGF navigation.
+line end), tracks SGF selection with a vertical cursor, and supports click-to-select SGF navigation. During
+full-game analysis, the latest node that received analysis is highlighted in yellow when it is visible on the current
+branch.
 Top-level menu actions are
 also exposed in a toolbar
 (`New game...`, `Force move`, `Save position...`, SGF timeline rewind/step/skip actions) via GTK actions.
@@ -57,7 +63,8 @@ and `GCheckersWindow` via the `manual-requested` signal.
 ## `AnalysisGraph` (`src/analysis_graph.c`, `src/analysis_graph.h`)
 Class: `AnalysisGraph` (`GObject`).
 Role: wraps a `GtkDrawingArea` chart for SGF branch evaluations. Draws best-score points/segments from per-node
-`SgfNodeAnalysis`, renders a vertical selected-node bar, and maps pointer clicks to nearest node index.
+`SgfNodeAnalysis`, renders a vertical selected-node bar, highlights a window-provided progress node in yellow, and
+maps pointer clicks to nearest node index.
 Display scaling: graph y-values apply score compression `f(x)=x/(1+abs(x)/1800)` before plotting.
 Y-axis range always includes at least `[-200, +200]` (and expands as needed), with guide ticks at `-200`, `-100`,
 `100`, and `200` shown as scaled labels (`-2`, `-1`, `1`, `2`). Chart background is split at the zero line with a

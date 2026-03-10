@@ -41,6 +41,24 @@ static void test_analysis_graph_axis_range_expands_for_large_scores(void) {
   g_assert_cmpfloat_with_epsilon(max_axis, 800.0, 0.000001);
 }
 
+static void test_analysis_graph_progress_node_accessors(void) {
+  AnalysisGraph *graph = analysis_graph_new();
+  g_assert_nonnull(graph);
+
+  g_autoptr(SgfTree) tree = sgf_tree_new();
+  g_assert_nonnull(tree);
+  const SgfNode *root = sgf_tree_get_root(tree);
+  g_assert_nonnull(root);
+
+  g_assert_null(analysis_graph_get_progress_node(graph));
+  analysis_graph_set_progress_node(graph, root);
+  g_assert_true(analysis_graph_get_progress_node(graph) == root);
+  analysis_graph_clear_progress_node(graph);
+  g_assert_null(analysis_graph_get_progress_node(graph));
+
+  g_clear_object(&graph);
+}
+
 static GtkApplication *test_gcheckers_window_create_app(void) {
   g_return_val_if_fail(GTK_IS_APPLICATION(test_app), NULL);
   return g_object_ref(test_app);
@@ -779,6 +797,7 @@ int main(int argc, char **argv) {
   g_test_add_func("/analysis-graph/axis-range-expands", test_analysis_graph_axis_range_expands_for_large_scores);
 
   if (!gtk_init_check()) {
+    g_test_add_func("/analysis-graph/progress-node-accessors", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/dispose-unparents-controls", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/dispose-without-panel-ref", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/dispose-after-panel-removed", test_gcheckers_window_skip);
@@ -834,6 +853,7 @@ int main(int argc, char **argv) {
                   test_gcheckers_window_graph_selection_tracks_sgf_selection);
   g_test_add_func("/gcheckers-window/graph-activation-selects-node",
                   test_gcheckers_window_graph_activation_changes_sgf_selection);
+  g_test_add_func("/analysis-graph/progress-node-accessors", test_analysis_graph_progress_node_accessors);
   g_test_add_func("/gcheckers-window/import-wizard-flow", test_gcheckers_window_import_wizard_flow);
   g_test_add_func("/gcheckers-window/ruleset-switch", test_gcheckers_window_ruleset_switch_resets_model);
   g_test_add_func("/gcheckers-window/new-game-ruleset-options-russian",
