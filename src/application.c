@@ -158,6 +158,12 @@ static void gcheckers_application_startup(GApplication *app) {
   gtk_application_set_accels_for_action(GTK_APPLICATION(app),
                                         "win.sgf-step-forward",
                                         (const char *[]){"Right", NULL});
+  gtk_application_set_accels_for_action(GTK_APPLICATION(app),
+                                        "win.sgf-rewind",
+                                        (const char *[]){"Home", NULL});
+  gtk_application_set_accels_for_action(GTK_APPLICATION(app),
+                                        "win.sgf-step-forward-to-end",
+                                        (const char *[]){"End", NULL});
 }
 
 static void gcheckers_application_activate(GApplication *app) {
