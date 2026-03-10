@@ -377,44 +377,36 @@ static gboolean checkers_puzzle_emit_candidate(const CheckersPuzzleCandidate *ca
   return TRUE;
 }
 
-static gboolean checkers_puzzle_play_game_and_collect(const CheckersRules *rules,
-                                                      const char *output_dir,
-                                                      guint *inout_index,
-                                                      guint remaining_needed,
-                                                      guint *out_emitted) {
+static gboolean checkers_puzzle_collect_candidates_from_line(const CheckersRules *rules,
+                                                             const GArray *game_line,
+                                                             GPtrArray *out_candidates) {
   g_return_val_if_fail(rules != NULL, FALSE);
-  g_return_val_if_fail(output_dir != NULL, FALSE);
-  g_return_val_if_fail(inout_index != NULL, FALSE);
-  g_return_val_if_fail(out_emitted != NULL, FALSE);
-
-  *out_emitted = 0;
+  g_return_val_if_fail(game_line != NULL, FALSE);
+  g_return_val_if_fail(out_candidates != NULL, FALSE);
 
   Game game = {0};
-  g_autoptr(GArray) game_line = g_array_new(FALSE, FALSE, sizeof(CheckersPuzzleLineMove));
-  g_autoptr(GPtrArray) candidates = g_ptr_array_new_with_free_func(checkers_puzzle_candidate_free);
   game_init_with_rules(&game, rules);
-  while (game.state.winner == CHECKERS_WINNER_NONE) {
+  for (guint i = 0; i < game_line->len; ++i) {
+    const CheckersPuzzleLineMove *played = &g_array_index(game_line, CheckersPuzzleLineMove, i);
     Game before = game;
+
+    if (played->color != before.state.turn) {
+      game_destroy(&game);
+      return FALSE;
+    }
 
     CheckersScoredMoveList deep = {0};
     if (!checkers_ai_alpha_beta_analyze_moves(&before, CHECKERS_PUZZLE_ANALYSIS_DEPTH, &deep)) {
       checkers_scored_move_list_free(&deep);
-      checkers_puzzle_set_winner_for_no_moves(&game);
-      break;
-    }
-
-    CheckersMove played = {0};
-    if (!checkers_ai_alpha_beta_choose_move(&before, CHECKERS_PUZZLE_SELF_PLAY_DEPTH, &played)) {
-      checkers_scored_move_list_free(&deep);
-      checkers_puzzle_set_winner_for_no_moves(&game);
-      break;
+      game_destroy(&game);
+      return FALSE;
     }
 
     gint played_score = 0;
-    if (!checkers_puzzle_find_move_score(&deep, &played, &played_score)) {
+    if (!checkers_puzzle_find_move_score(&deep, &played->move, &played_score)) {
       checkers_scored_move_list_free(&deep);
-      g_debug("Failed to find played move in depth analysis");
-      break;
+      game_destroy(&game);
+      return FALSE;
     }
 
     gint best_score = deep.moves[0].score;
@@ -423,27 +415,13 @@ static gboolean checkers_puzzle_play_game_and_collect(const CheckersRules *rules
     gint mistake_delta = checkers_puzzle_mistake_delta(before.state.turn, best_score, played_score);
     checkers_scored_move_list_free(&deep);
 
-    CheckersPuzzleLineMove game_step = {
-        .move = played,
-        .color = before.state.turn,
-    };
-    g_array_append_val(game_line, game_step);
-
-    if (game_apply_move(&game, &played) != 0) {
-      g_debug("Failed to apply self-play move");
-      break;
+    if (game_apply_move(&game, &played->move) != 0) {
+      game_destroy(&game);
+      return FALSE;
     }
 
     if (is_mistake) {
-      (void)checkers_puzzle_collect_candidate_from_position(&game, mistake_delta, candidates);
-    }
-  }
-
-  for (guint i = 0; i < candidates->len && *out_emitted < remaining_needed; ++i) {
-    const CheckersPuzzleCandidate *candidate = g_ptr_array_index(candidates, i);
-    g_return_val_if_fail(candidate != NULL, FALSE);
-    if (checkers_puzzle_emit_candidate(candidate, game_line, output_dir, inout_index)) {
-      *out_emitted += 1;
+      (void)checkers_puzzle_collect_candidate_from_position(&game, mistake_delta, out_candidates);
     }
   }
 
@@ -451,28 +429,146 @@ static gboolean checkers_puzzle_play_game_and_collect(const CheckersRules *rules
   return TRUE;
 }
 
-static gboolean checkers_puzzle_parse_count_arg(const char *text, guint *out_count) {
-  g_return_val_if_fail(text != NULL, FALSE);
-  g_return_val_if_fail(out_count != NULL, FALSE);
+static gboolean checkers_puzzle_generate_self_play_line(const CheckersRules *rules, GArray *out_line) {
+  g_return_val_if_fail(rules != NULL, FALSE);
+  g_return_val_if_fail(out_line != NULL, FALSE);
 
-  gchar *end = NULL;
-  guint64 value = g_ascii_strtoull(text, &end, 10);
-  if (end == text || end == NULL || *end != '\0' || value == 0 || value > G_MAXUINT) {
+  Game game = {0};
+  game_init_with_rules(&game, rules);
+  while (game.state.winner == CHECKERS_WINNER_NONE) {
+    CheckersMove played = {0};
+    if (!checkers_ai_alpha_beta_choose_move(&game, CHECKERS_PUZZLE_SELF_PLAY_DEPTH, &played)) {
+      checkers_puzzle_set_winner_for_no_moves(&game);
+      break;
+    }
+
+    CheckersPuzzleLineMove step = {
+        .move = played,
+        .color = game.state.turn,
+    };
+    g_array_append_val(out_line, step);
+
+    if (game_apply_move(&game, &played) != 0) {
+      game_destroy(&game);
+      return FALSE;
+    }
+  }
+
+  game_destroy(&game);
+  return TRUE;
+}
+
+static gboolean checkers_puzzle_line_replays_with_rules(const GArray *game_line, const CheckersRules *rules) {
+  g_return_val_if_fail(game_line != NULL, FALSE);
+  g_return_val_if_fail(rules != NULL, FALSE);
+
+  Game game = {0};
+  game_init_with_rules(&game, rules);
+  for (guint i = 0; i < game_line->len; ++i) {
+    const CheckersPuzzleLineMove *step = &g_array_index(game_line, CheckersPuzzleLineMove, i);
+    if (step->color != game.state.turn || game_apply_move(&game, &step->move) != 0) {
+      game_destroy(&game);
+      return FALSE;
+    }
+  }
+  game_destroy(&game);
+  return TRUE;
+}
+
+static const CheckersRules *checkers_puzzle_find_matching_rules(const GArray *game_line) {
+  g_return_val_if_fail(game_line != NULL, NULL);
+
+  guint count = checkers_ruleset_count();
+  for (guint i = 0; i < count; ++i) {
+    const CheckersRules *rules = checkers_ruleset_get_rules((PlayerRuleset)i);
+    if (rules != NULL && checkers_puzzle_line_replays_with_rules(game_line, rules)) {
+      return rules;
+    }
+  }
+  return NULL;
+}
+
+static gboolean checkers_puzzle_load_main_line(const char *path, GArray *out_line) {
+  g_return_val_if_fail(path != NULL, FALSE);
+  g_return_val_if_fail(out_line != NULL, FALSE);
+
+  g_autoptr(SgfTree) tree = NULL;
+  g_autoptr(GError) load_error = NULL;
+  if (!sgf_io_load_file(path, &tree, &load_error)) {
+    g_debug("Failed to load SGF file %s: %s", path, load_error != NULL ? load_error->message : "unknown error");
     return FALSE;
   }
-  *out_count = (guint)value;
+
+  g_autoptr(GPtrArray) line = sgf_tree_build_main_line(tree);
+  if (line == NULL || line->len == 0) {
+    return FALSE;
+  }
+
+  for (guint i = 1; i < line->len; ++i) {
+    const SgfNode *node = g_ptr_array_index(line, i);
+    g_return_val_if_fail(node != NULL, FALSE);
+
+    SgfColor color = SGF_COLOR_NONE;
+    CheckersMove move = {0};
+    gboolean has_move = FALSE;
+    g_autoptr(GError) move_error = NULL;
+    if (!sgf_move_props_try_parse_node(node, &color, &move, &has_move, &move_error)) {
+      g_debug("Failed to parse SGF node move: %s", move_error != NULL ? move_error->message : "unknown error");
+      return FALSE;
+    }
+    if (!has_move) {
+      continue;
+    }
+
+    CheckersPuzzleLineMove step = {
+        .move = move,
+        .color = color == SGF_COLOR_WHITE ? CHECKERS_COLOR_WHITE : CHECKERS_COLOR_BLACK,
+    };
+    g_array_append_val(out_line, step);
+  }
+
+  return out_line->len > 0;
+}
+
+static gboolean checkers_puzzle_emit_from_line(const CheckersRules *rules,
+                                               const GArray *game_line,
+                                               const char *output_dir,
+                                               guint *inout_index,
+                                               guint limit,
+                                               guint *out_emitted) {
+  g_return_val_if_fail(rules != NULL, FALSE);
+  g_return_val_if_fail(game_line != NULL, FALSE);
+  g_return_val_if_fail(output_dir != NULL, FALSE);
+  g_return_val_if_fail(inout_index != NULL, FALSE);
+  g_return_val_if_fail(out_emitted != NULL, FALSE);
+
+  *out_emitted = 0;
+  g_autoptr(GPtrArray) candidates = g_ptr_array_new_with_free_func(checkers_puzzle_candidate_free);
+  if (!checkers_puzzle_collect_candidates_from_line(rules, game_line, candidates)) {
+    return FALSE;
+  }
+
+  for (guint i = 0; i < candidates->len && *out_emitted < limit; ++i) {
+    const CheckersPuzzleCandidate *candidate = g_ptr_array_index(candidates, i);
+    g_return_val_if_fail(candidate != NULL, FALSE);
+    if (checkers_puzzle_emit_candidate(candidate, game_line, output_dir, inout_index)) {
+      *out_emitted += 1;
+    }
+  }
   return TRUE;
 }
 
 int main(int argc, char **argv) {
   if (argc != 2) {
-    g_printerr("Usage: %s <puzzle-count>\n", argv[0]);
+    g_printerr("Usage: %s <puzzle-count|sgf-file>\n", argv[0]);
     return 1;
   }
 
+  const char *arg = argv[1];
   guint wanted = 0;
-  if (!checkers_puzzle_parse_count_arg(argv[1], &wanted)) {
-    g_printerr("Invalid puzzle count: %s\n", argv[1]);
+  CheckersPuzzleArgType arg_type = checkers_puzzle_parse_arg(arg, &wanted);
+  if (arg_type == CHECKERS_PUZZLE_ARG_INVALID) {
+    g_printerr("Invalid argument: %s\n", arg);
     return 1;
   }
 
@@ -490,6 +586,28 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  if (arg_type == CHECKERS_PUZZLE_ARG_FILE) {
+    g_autoptr(GArray) game_line = g_array_new(FALSE, FALSE, sizeof(CheckersPuzzleLineMove));
+    if (!checkers_puzzle_load_main_line(arg, game_line)) {
+      g_printerr("Failed to load game line from file: %s\n", arg);
+      return 1;
+    }
+
+    const CheckersRules *rules = checkers_puzzle_find_matching_rules(game_line);
+    if (rules == NULL) {
+      g_printerr("Could not match SGF game line to known rulesets\n");
+      return 1;
+    }
+
+    guint emitted = 0;
+    if (!checkers_puzzle_emit_from_line(rules, game_line, output_dir, &next_index, G_MAXUINT, &emitted)) {
+      g_printerr("Failed to extract puzzles from file\n");
+      return 1;
+    }
+    g_print("file=%s generated=%u\n", arg, emitted);
+    return 0;
+  }
+
   const CheckersRules *rules = checkers_ruleset_get_rules(PLAYER_RULESET_INTERNATIONAL);
   if (rules == NULL) {
     g_printerr("Missing ruleset\n");
@@ -499,11 +617,18 @@ int main(int argc, char **argv) {
   guint generated = 0;
   guint games = 0;
   while (generated < wanted) {
-    guint emitted = 0;
-    if (!checkers_puzzle_play_game_and_collect(rules, output_dir, &next_index, wanted - generated, &emitted)) {
-      g_printerr("Game generation failed\n");
+    g_autoptr(GArray) game_line = g_array_new(FALSE, FALSE, sizeof(CheckersPuzzleLineMove));
+    if (!checkers_puzzle_generate_self_play_line(rules, game_line)) {
+      g_printerr("Self-play generation failed\n");
       return 1;
     }
+
+    guint emitted = 0;
+    if (!checkers_puzzle_emit_from_line(rules, game_line, output_dir, &next_index, wanted - generated, &emitted)) {
+      g_printerr("Puzzle extraction failed\n");
+      return 1;
+    }
+
     generated += emitted;
     games++;
     g_print("games=%u generated=%u/%u\n", games, generated, wanted);

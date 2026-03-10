@@ -129,3 +129,21 @@ char *checkers_puzzle_build_indexed_path(const char *dir_path, const char *prefi
   g_return_val_if_fail(prefix != NULL, NULL);
   return g_strdup_printf("%s/%s-%04u.sgf", dir_path, prefix, index);
 }
+
+CheckersPuzzleArgType checkers_puzzle_parse_arg(const char *arg, guint *out_count) {
+  g_return_val_if_fail(arg != NULL, CHECKERS_PUZZLE_ARG_INVALID);
+
+  gchar *end = NULL;
+  guint64 value = g_ascii_strtoull(arg, &end, 10);
+  if (end != arg && end != NULL && *end == '\0' && value > 0 && value <= G_MAXUINT) {
+    if (out_count != NULL) {
+      *out_count = (guint)value;
+    }
+    return CHECKERS_PUZZLE_ARG_COUNT;
+  }
+
+  if (g_file_test(arg, G_FILE_TEST_IS_REGULAR)) {
+    return CHECKERS_PUZZLE_ARG_FILE;
+  }
+  return CHECKERS_PUZZLE_ARG_INVALID;
+}

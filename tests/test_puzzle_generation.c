@@ -93,11 +93,33 @@ static void test_puzzle_build_indexed_path(void) {
   g_assert_cmpstr(game_path, ==, "puzzles/game-0042.sgf");
 }
 
+static void test_puzzle_parse_arg(void) {
+  guint count = 0;
+  g_assert_cmpuint(checkers_puzzle_parse_arg("12", &count), ==, CHECKERS_PUZZLE_ARG_COUNT);
+  g_assert_cmpuint(count, ==, 12);
+  g_assert_cmpuint(checkers_puzzle_parse_arg("0", &count), ==, CHECKERS_PUZZLE_ARG_INVALID);
+  g_assert_cmpuint(checkers_puzzle_parse_arg("not-a-number", &count), ==, CHECKERS_PUZZLE_ARG_INVALID);
+
+  g_autoptr(GError) error = NULL;
+  g_autofree char *dir_path = g_dir_make_tmp("gcheckers-puzzles-arg-XXXXXX", &error);
+  g_assert_no_error(error);
+  g_assert_nonnull(dir_path);
+
+  g_autofree char *file_path = g_build_filename(dir_path, "input.sgf", NULL);
+  g_assert_true(g_file_set_contents(file_path, "(;)", -1, &error));
+  g_assert_no_error(error);
+  g_assert_cmpuint(checkers_puzzle_parse_arg(file_path, &count), ==, CHECKERS_PUZZLE_ARG_FILE);
+
+  g_assert_cmpint(g_remove(file_path), ==, 0);
+  g_assert_cmpint(g_rmdir(dir_path), ==, 0);
+}
+
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   g_test_add_func("/puzzle-generation/mistake-delta", test_puzzle_mistake_delta_white_and_black);
   g_test_add_func("/puzzle-generation/unique-best", test_puzzle_unique_best_rules);
   g_test_add_func("/puzzle-generation/find-next-index", test_puzzle_find_next_index);
   g_test_add_func("/puzzle-generation/build-indexed-path", test_puzzle_build_indexed_path);
+  g_test_add_func("/puzzle-generation/parse-arg", test_puzzle_parse_arg);
   return g_test_run();
 }
