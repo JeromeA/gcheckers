@@ -165,7 +165,6 @@ gboolean gcheckers_model_apply_move(GCheckersModel *self, const CheckersMove *mo
 gboolean gcheckers_model_choose_best_move(GCheckersModel *self, guint max_depth, CheckersMove *out_move) {
   g_return_val_if_fail(GCHECKERS_IS_MODEL(self), FALSE);
   g_return_val_if_fail(out_move != NULL, FALSE);
-  g_return_val_if_fail(max_depth > 0, FALSE);
 
   return checkers_ai_alpha_beta_choose_move(&self->game, max_depth, out_move);
 }
@@ -175,7 +174,6 @@ gboolean gcheckers_model_analyze_moves(GCheckersModel *self,
                                        CheckersScoredMoveList *out_moves,
                                        CheckersAiSearchStats *out_stats) {
   g_return_val_if_fail(GCHECKERS_IS_MODEL(self), FALSE);
-  g_return_val_if_fail(max_depth > 0, FALSE);
   g_return_val_if_fail(out_moves != NULL, FALSE);
   g_return_val_if_fail(out_stats != NULL, FALSE);
 

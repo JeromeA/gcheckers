@@ -451,8 +451,7 @@ static gboolean gcheckers_window_choose_computer_move(GCheckersWindow *self, Che
   g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self->sgf_controller), FALSE);
 
   guint configured_depth = player_controls_panel_get_computer_depth(self->controls_panel);
-  guint effective_depth = configured_depth == 0 ? 1 : configured_depth;
-  return gcheckers_sgf_controller_step_ai_move(self->sgf_controller, effective_depth, move);
+  return gcheckers_sgf_controller_step_ai_move(self->sgf_controller, configured_depth, move);
 }
 
 static void gcheckers_window_set_ruleset(GCheckersWindow *self, PlayerRuleset ruleset) {
@@ -859,7 +858,7 @@ static gpointer gcheckers_window_analysis_thread(gpointer user_data) {
   GCheckersWindowAnalysisTask *task = user_data;
   g_return_val_if_fail(task != NULL, NULL);
 
-  guint depth = 10;
+  guint depth = 8;
   while (!gcheckers_window_should_cancel_analysis(task)) {
     task->current_depth = depth;
     task->last_progress_publish_us = 0;
@@ -1217,7 +1216,7 @@ static void gcheckers_window_start_full_game_analysis(GCheckersWindow *self) {
   }
 
   guint configured_depth = player_controls_panel_get_computer_depth(self->controls_panel);
-  guint depth = configured_depth == 0 ? 1 : configured_depth;
+  guint depth = configured_depth;
   gint generation = g_atomic_int_add(&self->analysis_generation, 1) + 1;
   gcheckers_window_analysis_begin_session(self, GCHECKERS_WINDOW_ANALYSIS_MODE_FULL_GAME, jobs->len);
   gcheckers_window_set_analysis_text(self, "Analyzing full game...");

@@ -701,7 +701,6 @@ gboolean gcheckers_sgf_controller_apply_move(GCheckersSgfController *self, const
 gboolean gcheckers_sgf_controller_step_ai_move(GCheckersSgfController *self, guint depth, CheckersMove *out_move) {
   g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(GCHECKERS_IS_MODEL(self->model), FALSE);
-  g_return_val_if_fail(depth > 0, FALSE);
 
   CheckersMove move = {0};
   if (!gcheckers_model_choose_best_move(self->model, depth, &move)) {

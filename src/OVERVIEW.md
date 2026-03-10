@@ -215,7 +215,7 @@ Collaborates with: `position_search.c`, `position_predicate.c`, and `position_fo
 
 ## Puzzle generator CLI (`src/create_puzzles.c`)
 Module: CLI front end.
-Role: repeatedly self-play games at effective depth 0 (`depth=1`), detect mistake positions with depth-10 analysis,
+Role: repeatedly self-play games at depth 0, detect mistake positions with depth-8 analysis,
 filter candidates where the opponent has at least four legal moves and exactly one top response, then save puzzles as
 SGF files under `puzzles/puzzle-####.sgf` with root setup (`AE/AB/AW/ABK/AWK/PL`) and a tactical continuation line.
 For each emitted puzzle index, also saves the originating full self-play game as `puzzles/game-####.sgf`.

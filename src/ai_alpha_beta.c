@@ -450,7 +450,6 @@ gboolean checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(const Game *ga
                                                                   CheckersAiSearchStats *out_stats) {
   g_return_val_if_fail(game != NULL, FALSE);
   g_return_val_if_fail(game->available_moves != NULL, FALSE);
-  g_return_val_if_fail(max_depth > 0, FALSE);
   g_return_val_if_fail(out_moves != NULL, FALSE);
   g_return_val_if_fail(out_stats != NULL, FALSE);
 
@@ -493,7 +492,7 @@ gboolean checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(const Game *ga
       continue;
     }
 
-    guint next_depth = moves.count == 1 ? max_depth : max_depth - 1;
+    guint next_depth = (moves.count == 1 || max_depth == 0) ? max_depth : max_depth - 1;
     gint score = checkers_ai_alpha_beta_search(&child,
                                                next_depth,
                                                1,
@@ -539,7 +538,6 @@ gboolean checkers_ai_alpha_beta_analyze_moves(const Game *game, guint max_depth,
 gboolean checkers_ai_alpha_beta_evaluate_position(const Game *game, guint max_depth, gint *out_score) {
   g_return_val_if_fail(game != NULL, FALSE);
   g_return_val_if_fail(game->available_moves != NULL, FALSE);
-  g_return_val_if_fail(max_depth > 0, FALSE);
   g_return_val_if_fail(out_score != NULL, FALSE);
 
   Game root = *game;
@@ -568,7 +566,6 @@ gboolean checkers_ai_alpha_beta_evaluate_position(const Game *game, guint max_de
 gboolean checkers_ai_alpha_beta_choose_move(const Game *game, guint max_depth, CheckersMove *out_move) {
   g_return_val_if_fail(game != NULL, FALSE);
   g_return_val_if_fail(out_move != NULL, FALSE);
-  g_return_val_if_fail(max_depth > 0, FALSE);
 
   CheckersScoredMoveList scored_moves = {0};
   if (!checkers_ai_alpha_beta_analyze_moves(game, max_depth, &scored_moves)) {

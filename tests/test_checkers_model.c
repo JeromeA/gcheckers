@@ -201,18 +201,23 @@ static void test_model_choose_best_move_returns_legal_move(void) {
   MoveList moves = gcheckers_model_list_moves(model);
   assert(moves.count > 0);
 
+  CheckersMove depth0 = {0};
   CheckersMove depth1 = {0};
   CheckersMove depth4 = {0};
   CheckersMove depth8 = {0};
+  bool selected_0 = gcheckers_model_choose_best_move(model, 0, &depth0);
   bool selected_1 = gcheckers_model_choose_best_move(model, 1, &depth1);
   bool selected_4 = gcheckers_model_choose_best_move(model, 4, &depth4);
   bool selected_8 = gcheckers_model_choose_best_move(model, 8, &depth8);
+  assert(selected_0);
   assert(selected_1);
   assert(selected_4);
   assert(selected_8);
+  assert(depth0.length >= 2);
   assert(depth1.length >= 2);
   assert(depth4.length >= 2);
   assert(depth8.length >= 2);
+  assert(test_checkers_model_move_in_list(&moves, &depth0));
   assert(test_checkers_model_move_in_list(&moves, &depth1));
   assert(test_checkers_model_move_in_list(&moves, &depth4));
   assert(test_checkers_model_move_in_list(&moves, &depth8));
@@ -330,6 +335,20 @@ static void test_model_evaluate_position_uses_white_perspective_signs(void) {
   game_destroy(&game);
 }
 
+static void test_model_evaluate_position_depth0_allowed(void) {
+  const CheckersRules *rules = checkers_ruleset_get_rules(PLAYER_RULESET_AMERICAN);
+  assert(rules != NULL);
+
+  Game game = {0};
+  game_init_with_rules(&game, rules);
+
+  gint score = 0;
+  gboolean ok = checkers_ai_alpha_beta_evaluate_position(&game, 0, &score);
+  assert(ok);
+
+  game_destroy(&game);
+}
+
 static void test_model_analyze_moves_black_turn_sorts_low_to_high(void) {
   Game game = {0};
   gboolean found = test_model_find_black_position_with_non_equal_scores(&game, 4);
@@ -355,6 +374,15 @@ static void test_model_analyze_moves_black_turn_sorts_low_to_high(void) {
 
 static void test_model_analyze_moves_structured(void) {
   GCheckersModel *model = gcheckers_model_new();
+
+  CheckersScoredMoveList moves_depth0 = {0};
+  CheckersAiSearchStats stats_depth0 = {0};
+  gboolean ok0 = gcheckers_model_analyze_moves(model, 0, &moves_depth0, &stats_depth0);
+  assert(ok0);
+  assert(moves_depth0.count > 0);
+  assert(stats_depth0.nodes > 0);
+  assert(stats_depth0.tt_probes >= stats_depth0.tt_hits);
+  checkers_scored_move_list_free(&moves_depth0);
 
   CheckersScoredMoveList moves = {0};
   CheckersAiSearchStats stats = {0};
@@ -640,6 +668,7 @@ int main(void) {
   test_model_rejects_invalid_move();
   test_model_choose_best_move_returns_legal_move();
   test_model_choose_best_move_randomized_within_best_ties();
+  test_model_evaluate_position_depth0_allowed();
   test_model_evaluate_position_uses_white_perspective_signs();
   test_model_analyze_moves_black_turn_sorts_low_to_high();
   test_model_analyze_moves_structured();
