@@ -233,6 +233,32 @@ static gint checkers_ai_alpha_beta_search(Game *game,
   }
 
   guint64 key = checkers_ai_zobrist_key(game);
+  if (game->state.winner != CHECKERS_WINNER_NONE) {
+    gint score = checkers_ai_terminal_score(game, ply_depth);
+    checkers_ai_tt_store_result(ctx, key, depth_remaining, score, CHECKERS_AI_TT_BOUND_EXACT, NULL);
+    return score;
+  }
+
+  MoveList moves = game->available_moves(game);
+  if (moves.count == 0) {
+    CheckersWinner winner = game->state.turn == CHECKERS_COLOR_WHITE ? CHECKERS_WINNER_BLACK
+                                                                     : CHECKERS_WINNER_WHITE;
+    game->state.winner = winner;
+    gint score = checkers_ai_terminal_score(game, ply_depth);
+    game->state.winner = CHECKERS_WINNER_NONE;
+    movelist_free(&moves);
+    checkers_ai_tt_store_result(ctx, key, depth_remaining, score, CHECKERS_AI_TT_BOUND_EXACT, NULL);
+    return score;
+  }
+
+  gboolean is_forced = moves.count == 1;
+  if (depth_remaining == 0 && !is_forced) {
+    gint score = checkers_ai_terminal_score(game, ply_depth);
+    movelist_free(&moves);
+    checkers_ai_tt_store_result(ctx, key, depth_remaining, score, CHECKERS_AI_TT_BOUND_EXACT, NULL);
+    return score;
+  }
+
   gint original_alpha = alpha;
   gint original_beta = beta;
 
@@ -252,28 +278,11 @@ static gint checkers_ai_alpha_beta_search(Game *game,
     g_debug("Failed to probe TT entry");
   }
   if (tt_cutoff) {
+    movelist_free(&moves);
     if (ctx->stats != NULL) {
       ctx->stats->tt_cutoffs++;
     }
     return tt_cutoff_score;
-  }
-
-  if (depth_remaining == 0 || game->state.winner != CHECKERS_WINNER_NONE) {
-    gint score = checkers_ai_terminal_score(game, ply_depth);
-    checkers_ai_tt_store_result(ctx, key, depth_remaining, score, CHECKERS_AI_TT_BOUND_EXACT, NULL);
-    return score;
-  }
-
-  MoveList moves = game->available_moves(game);
-  if (moves.count == 0) {
-    CheckersWinner winner = game->state.turn == CHECKERS_COLOR_WHITE ? CHECKERS_WINNER_BLACK
-                                                                     : CHECKERS_WINNER_WHITE;
-    game->state.winner = winner;
-    gint score = checkers_ai_terminal_score(game, ply_depth);
-    game->state.winner = CHECKERS_WINNER_NONE;
-    movelist_free(&moves);
-    checkers_ai_tt_store_result(ctx, key, depth_remaining, score, CHECKERS_AI_TT_BOUND_EXACT, NULL);
-    return score;
   }
 
   if (has_tt_entry && tt_entry.best_move.length >= 2) {
@@ -306,8 +315,9 @@ static gint checkers_ai_alpha_beta_search(Game *game,
       continue;
     }
 
+    guint next_depth = is_forced ? depth_remaining : depth_remaining - 1;
     gint score = checkers_ai_alpha_beta_search(&child,
-                                               depth_remaining - 1,
+                                               next_depth,
                                                ply_depth + 1,
                                                alpha,
                                                beta,
@@ -483,8 +493,9 @@ gboolean checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(const Game *ga
       continue;
     }
 
+    guint next_depth = moves.count == 1 ? max_depth : max_depth - 1;
     gint score = checkers_ai_alpha_beta_search(&child,
-                                               max_depth - 1,
+                                               next_depth,
                                                1,
                                                INT_MIN,
                                                INT_MAX,

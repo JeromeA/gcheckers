@@ -206,3 +206,14 @@ click.
 The fix routes primary clicks through `GtkButton::clicked` and keeps only a dedicated secondary-button gesture for
 right-click handling, eliminating the competing primary click gesture path. A board-view regression test now asserts
 that repeated primary clicks are processed.
+
+## Forced move plies consumed alpha-beta depth budget
+
+Analysis depth should count only decision points, so mandatory single-move plies should not reduce remaining depth.
+
+The search decremented `depth_remaining` on every recursive ply, including forced plies with exactly one legal move.
+This reduced effective lookahead in tactical forcing lines and made configured depth inconsistent with user intent.
+
+The fix keeps `depth_remaining` unchanged when `moves.count == 1`, applies cutoff only when depth is zero on
+non-forced nodes, and also updates root move analysis so a forced root move does not consume depth before recursion.
+Regression coverage was added in `test_checkers_model`.

@@ -149,6 +149,8 @@ without lowering evaluation quality. Analysis APIs can report searched node coun
 and TT stats accumulate when callers reuse the same `CheckersAiSearchStats` across calls. Callers can use
 `checkers_ai_search_stats_clear()` for per-call snapshots or `checkers_ai_search_stats_add()` to aggregate
 independent runs.
+Depth accounting treats forced plies (`exactly one legal move`) as free extensions: depth is consumed only on
+decision nodes with multiple legal moves.
 Score convention: search scores are white-centric at all plies (`+` good for white, `-` good for black). Root move
 lists are ordered by side to move preference (white: high to low, black: low to high) so index 0 remains the best move
 for the player to act.

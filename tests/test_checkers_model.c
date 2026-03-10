@@ -37,6 +37,97 @@ static gboolean test_checkers_model_move_equals(const CheckersMove *left, const 
   return memcmp(left->path, right->path, left->length * sizeof(left->path[0])) == 0;
 }
 
+static gint test_checkers_model_material_score(const Game *game) {
+  g_return_val_if_fail(game != NULL, 0);
+
+  const CheckersBoard *board = &game->state.board;
+  uint8_t squares = board_playable_squares(board->board_size);
+  gint score = 0;
+  for (uint8_t i = 0; i < squares; ++i) {
+    CheckersPiece piece = board_get(board, i);
+    gint value = 0;
+    switch (piece) {
+      case CHECKERS_PIECE_WHITE_MAN:
+      case CHECKERS_PIECE_BLACK_MAN:
+        value = 100;
+        break;
+      case CHECKERS_PIECE_WHITE_KING:
+      case CHECKERS_PIECE_BLACK_KING:
+        value = 200;
+        break;
+      case CHECKERS_PIECE_EMPTY:
+      default:
+        value = 0;
+        break;
+    }
+    if (value == 0) {
+      continue;
+    }
+
+    score += board_piece_color(piece) == CHECKERS_COLOR_WHITE ? value : -value;
+  }
+  return score;
+}
+
+static gboolean test_model_find_forced_root_candidate_recursive(const Game *position,
+                                                                guint remaining_plies,
+                                                                Game *out_forced_position) {
+  g_return_val_if_fail(position != NULL, FALSE);
+  g_return_val_if_fail(out_forced_position != NULL, FALSE);
+
+  MoveList moves = position->available_moves(position);
+  if (moves.count == 1) {
+    Game after_forced = *position;
+    if (game_apply_move(&after_forced, &moves.moves[0]) == 0) {
+      MoveList after_moves = after_forced.available_moves(&after_forced);
+      if (after_moves.count > 1) {
+        gint child_depth1_score = 0;
+        gboolean ok = checkers_ai_alpha_beta_evaluate_position(&after_forced, 1, &child_depth1_score);
+        gint child_material = test_checkers_model_material_score(&after_forced);
+        if (ok && child_depth1_score != child_material) {
+          *out_forced_position = *position;
+          movelist_free(&after_moves);
+          movelist_free(&moves);
+          return TRUE;
+        }
+      }
+      movelist_free(&after_moves);
+    }
+  }
+
+  if (remaining_plies == 0) {
+    movelist_free(&moves);
+    return FALSE;
+  }
+
+  for (size_t i = 0; i < moves.count; ++i) {
+    Game child = *position;
+    if (game_apply_move(&child, &moves.moves[i]) != 0) {
+      continue;
+    }
+    if (test_model_find_forced_root_candidate_recursive(&child, remaining_plies - 1, out_forced_position)) {
+      movelist_free(&moves);
+      return TRUE;
+    }
+  }
+
+  movelist_free(&moves);
+  return FALSE;
+}
+
+static gboolean test_model_find_forced_root_candidate(Game *out_forced_position) {
+  g_return_val_if_fail(out_forced_position != NULL, FALSE);
+
+  const CheckersRules *rules = checkers_ruleset_get_rules(PLAYER_RULESET_AMERICAN);
+  g_return_val_if_fail(rules != NULL, FALSE);
+
+  Game root = {0};
+  game_init_with_rules(&root, rules);
+  gboolean found = test_model_find_forced_root_candidate_recursive(&root, 14, out_forced_position);
+  game_destroy(&root);
+  return found;
+}
+
 typedef struct {
   guint calls;
   guint64 last_nodes;
@@ -452,6 +543,31 @@ static void test_model_analyze_moves_stats_can_be_per_call(void) {
   g_object_unref(model);
 }
 
+static void test_model_forced_move_does_not_consume_depth(void) {
+  Game forced_position = {0};
+  gboolean found = test_model_find_forced_root_candidate(&forced_position);
+  assert(found);
+
+  MoveList forced_moves = forced_position.available_moves(&forced_position);
+  assert(forced_moves.count == 1);
+
+  CheckersScoredMoveList root_analysis = {0};
+  gboolean ok = checkers_ai_alpha_beta_analyze_moves(&forced_position, 1, &root_analysis);
+  assert(ok);
+  assert(root_analysis.count == 1);
+
+  Game child = forced_position;
+  assert(game_apply_move(&child, &forced_moves.moves[0]) == 0);
+  gint child_depth1_score = 0;
+  ok = checkers_ai_alpha_beta_evaluate_position(&child, 1, &child_depth1_score);
+  assert(ok);
+
+  assert(root_analysis.moves[0].score == child_depth1_score);
+
+  checkers_scored_move_list_free(&root_analysis);
+  movelist_free(&forced_moves);
+}
+
 static void test_model_set_rules(void) {
   GCheckersModel *model = gcheckers_model_new();
   const GameState *state = gcheckers_model_peek_state(model);
@@ -531,6 +647,7 @@ int main(void) {
   test_model_analyze_moves_reuses_tt_across_depths();
   test_model_analyze_moves_stats_can_accumulate_across_calls();
   test_model_analyze_moves_stats_can_be_per_call();
+  test_model_forced_move_does_not_consume_depth();
   test_model_set_rules();
   test_model_peek_last_move();
   test_model_reset_clears_last_move();
