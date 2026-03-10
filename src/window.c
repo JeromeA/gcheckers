@@ -201,7 +201,6 @@ static void gcheckers_window_sync_mode_ui(GCheckersWindow *self) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
 
   gboolean allow_navigation = !self->edit_mode_enabled;
-  g_debug("Sync mode UI: edit_mode=%d allow_navigation=%d", self->edit_mode_enabled, allow_navigation);
   gcheckers_window_set_action_enabled(G_ACTION_MAP(self), "sgf-rewind", allow_navigation);
   gcheckers_window_set_action_enabled(G_ACTION_MAP(self), "sgf-step-backward", allow_navigation);
   gcheckers_window_set_action_enabled(G_ACTION_MAP(self), "sgf-step-forward", allow_navigation);
@@ -332,12 +331,10 @@ static gboolean gcheckers_window_on_board_square_action(guint8 index, guint butt
   GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
   g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), FALSE);
   if (button != GDK_BUTTON_PRIMARY && button != GDK_BUTTON_SECONDARY) {
-    g_debug("Edit click ignored unsupported button: index=%u button=%u", index, button);
     return FALSE;
   }
 
   if (!gcheckers_window_is_edit_mode(self)) {
-    g_debug("Edit click ignored because mode is not edit: index=%u button=%u", index, button);
     return FALSE;
   }
 
@@ -358,12 +355,6 @@ static gboolean gcheckers_window_on_board_square_action(guint8 index, guint butt
 
   CheckersPiece current = board_get(&state->board, index);
   CheckersPiece next = CHECKERS_PIECE_EMPTY;
-  g_debug("Edit click start: index=%u button=%u board_size=%u turn=%u current=%s",
-          index,
-          button,
-          state->board.board_size,
-          state->turn,
-          gcheckers_window_piece_label(current));
   if (button == GDK_BUTTON_PRIMARY) {
     if (current == CHECKERS_PIECE_EMPTY) {
       next = CHECKERS_PIECE_WHITE_MAN;
@@ -377,11 +368,6 @@ static gboolean gcheckers_window_on_board_square_action(guint8 index, guint butt
       next = CHECKERS_PIECE_BLACK_KING;
     }
   }
-  g_debug("Edit click transition: index=%u button=%u current=%s next=%s",
-          index,
-          button,
-          gcheckers_window_piece_label(current),
-          gcheckers_window_piece_label(next));
 
   SgfTree *tree = gcheckers_sgf_controller_get_tree(self->sgf_controller);
   if (tree == NULL) {
@@ -399,7 +385,6 @@ static gboolean gcheckers_window_on_board_square_action(guint8 index, guint butt
     g_debug("Edit click failed formatting setup point: index=%u board_size=%u", index, state->board.board_size);
     return TRUE;
   }
-  g_debug("Edit click SGF point: index=%u point=%s", index, point);
   if (!gcheckers_window_update_node_setup_piece(current_node, point, next)) {
     g_debug("Edit click failed SGF setup update: index=%u point=%s", index, point);
     return TRUE;
@@ -414,12 +399,7 @@ static gboolean gcheckers_window_on_board_square_action(guint8 index, guint butt
     g_debug("Edit click missing post-refresh game state: index=%u point=%s", index, point);
     return TRUE;
   }
-  CheckersPiece after_piece = board_get(&after->board, index);
-  g_debug("Edit click end: index=%u point=%s result=%s turn=%u",
-          index,
-          point,
-          gcheckers_window_piece_label(after_piece),
-          after->turn);
+  (void)after;
 
   return TRUE;
 }
@@ -1360,15 +1340,6 @@ static void gcheckers_window_on_state_changed(GCheckersModel *model, gpointer us
   g_return_if_fail(GCHECKERS_IS_MODEL(model));
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
 
-  const GameState *state = gcheckers_model_peek_state(model);
-  if (state != NULL) {
-    g_debug("Window state-changed: turn=%u winner=%u edit_mode=%d board_size=%u",
-            state->turn,
-            state->winner,
-            self->edit_mode_enabled,
-            state->board.board_size);
-  }
-
   gcheckers_window_update_status(self);
   gcheckers_window_update_control_state(self);
   gcheckers_window_maybe_trigger_auto_move(self);
@@ -1392,9 +1363,6 @@ static void gcheckers_window_on_mode_selected_notify(GObject * /*object*/,
   g_return_if_fail(GTK_IS_DROP_DOWN(self->sgf_mode_control));
 
   self->edit_mode_enabled = gtk_drop_down_get_selected(self->sgf_mode_control) == 1;
-  g_debug("Mode changed: selected=%u edit_mode=%d",
-          gtk_drop_down_get_selected(self->sgf_mode_control),
-          self->edit_mode_enabled);
   board_view_clear_selection(self->board_view);
   gcheckers_window_sync_mode_ui(self);
 }
