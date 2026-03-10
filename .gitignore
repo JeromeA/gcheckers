@@ -9,6 +9,7 @@ test_move_gen
 test_checkers_model
 /test_*
 /find_position
+/create_puzzles
 coverage/
 gcheckers.png
 data/schemas/gschemas.compiled

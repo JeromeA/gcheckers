@@ -211,6 +211,21 @@ Current query scans unique positions after exactly four plies from the initial s
 one of those four plies is a deep mistake: not a mistake at depth 8, but a mistake at depth 10.
 Collaborates with: `position_search.c`, `position_predicate.c`, and `position_format.c`.
 
+## Puzzle generator CLI (`src/create_puzzles.c`)
+Module: CLI front end.
+Role: repeatedly self-play games at effective depth 0 (`depth=1`), detect mistake positions with depth-10 analysis,
+filter candidates where the opponent has at least four legal moves and exactly one top response, then save puzzles as
+SGF files under `puzzles/puzzle-####.sgf` with root setup (`AE/AB/AW/ABK/AWK/PL`) and a tactical continuation line.
+For each emitted puzzle index, also saves the originating full self-play game as `puzzles/game-####.sgf`.
+Collaborates with: `ai_alpha_beta.c`, `rulesets.c`, `sgf_tree.c`, `sgf_move_props.c`, `sgf_io.c`,
+and `puzzle_generation.c`.
+
+## Puzzle generation helpers (`src/puzzle_generation.c`, `src/puzzle_generation.h`)
+Module: puzzle-selection and output-index helpers.
+Role: expose pure functions for mistake delta checks, unique-best detection from scored move lists, and next puzzle
+file index discovery from existing `puzzle-####.sgf` files.
+Collaborates with: `create_puzzles.c` and `tests/test_puzzle_generation.c`.
+
 ## GTK application entry (`src/gcheckers.c`, `src/application.c`, `src/application.h`)
 Class: `GCheckersApplication` (`GtkApplication`).
 Role: define the GTK application type and activation flow that creates the main window and model, installs app actions

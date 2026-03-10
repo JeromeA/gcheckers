@@ -1,0 +1,103 @@
+#include "../src/puzzle_generation.h"
+
+#include <glib.h>
+#include <glib/gstdio.h>
+
+static void test_puzzle_mistake_delta_white_and_black(void) {
+  g_assert_cmpint(checkers_puzzle_mistake_delta(CHECKERS_COLOR_WHITE, 300, 200), ==, 100);
+  g_assert_cmpint(checkers_puzzle_mistake_delta(CHECKERS_COLOR_BLACK, -300, -200), ==, 100);
+  g_assert_true(checkers_puzzle_is_mistake(CHECKERS_COLOR_WHITE, 300, 200, 100));
+  g_assert_true(checkers_puzzle_is_mistake(CHECKERS_COLOR_BLACK, -300, -200, 100));
+  g_assert_false(checkers_puzzle_is_mistake(CHECKERS_COLOR_WHITE, 300, 300, 100));
+}
+
+static void test_puzzle_unique_best_rules(void) {
+  CheckersScoredMove unique_moves[] = {
+      {.score = 200},
+      {.score = 100},
+      {.score = 0},
+      {.score = -100},
+  };
+  CheckersScoredMoveList unique_list = {
+      .moves = unique_moves,
+      .count = G_N_ELEMENTS(unique_moves),
+  };
+  gint best_score = 0;
+  guint best_count = 0;
+  g_assert_true(checkers_puzzle_has_unique_best(&unique_list, 4, &best_score, &best_count));
+  g_assert_cmpint(best_score, ==, 200);
+  g_assert_cmpuint(best_count, ==, 1);
+
+  CheckersScoredMove tied_moves[] = {
+      {.score = 200},
+      {.score = 200},
+      {.score = 100},
+      {.score = 0},
+  };
+  CheckersScoredMoveList tied_list = {
+      .moves = tied_moves,
+      .count = G_N_ELEMENTS(tied_moves),
+  };
+  g_assert_false(checkers_puzzle_has_unique_best(&tied_list, 4, &best_score, &best_count));
+  g_assert_cmpint(best_score, ==, 200);
+  g_assert_cmpuint(best_count, ==, 2);
+
+  CheckersScoredMove too_few_moves[] = {
+      {.score = 200},
+      {.score = 100},
+      {.score = 0},
+  };
+  CheckersScoredMoveList too_few_list = {
+      .moves = too_few_moves,
+      .count = G_N_ELEMENTS(too_few_moves),
+  };
+  g_assert_false(checkers_puzzle_has_unique_best(&too_few_list, 4, &best_score, &best_count));
+}
+
+static void test_puzzle_find_next_index(void) {
+  guint next = G_MAXUINT;
+  g_assert_true(checkers_puzzle_find_next_index("/tmp/does-not-exist-gcheckers-puzzles", &next, NULL));
+  g_assert_cmpuint(next, ==, 0);
+
+  g_autoptr(GError) error = NULL;
+  g_autofree char *dir_path = g_dir_make_tmp("gcheckers-puzzles-XXXXXX", &error);
+  g_assert_no_error(error);
+  g_assert_nonnull(dir_path);
+
+  g_autofree char *p0 = g_build_filename(dir_path, "puzzle-0000.sgf", NULL);
+  g_autofree char *p9 = g_build_filename(dir_path, "puzzle-0009.sgf", NULL);
+  g_autofree char *junk = g_build_filename(dir_path, "notes.txt", NULL);
+  g_assert_true(g_file_set_contents(p0, "(;)", -1, &error));
+  g_assert_no_error(error);
+  g_assert_true(g_file_set_contents(p9, "(;)", -1, &error));
+  g_assert_no_error(error);
+  g_assert_true(g_file_set_contents(junk, "ignore", -1, &error));
+  g_assert_no_error(error);
+
+  next = G_MAXUINT;
+  g_assert_true(checkers_puzzle_find_next_index(dir_path, &next, &error));
+  g_assert_no_error(error);
+  g_assert_cmpuint(next, ==, 10);
+
+  g_assert_cmpint(g_remove(p0), ==, 0);
+  g_assert_cmpint(g_remove(p9), ==, 0);
+  g_assert_cmpint(g_remove(junk), ==, 0);
+  g_assert_cmpint(g_rmdir(dir_path), ==, 0);
+}
+
+static void test_puzzle_build_indexed_path(void) {
+  g_autofree char *puzzle_path = checkers_puzzle_build_indexed_path("puzzles", "puzzle", 7);
+  g_assert_cmpstr(puzzle_path, ==, "puzzles/puzzle-0007.sgf");
+
+  g_autofree char *game_path = checkers_puzzle_build_indexed_path("puzzles", "game", 42);
+  g_assert_cmpstr(game_path, ==, "puzzles/game-0042.sgf");
+}
+
+int main(int argc, char **argv) {
+  g_test_init(&argc, &argv, NULL);
+  g_test_add_func("/puzzle-generation/mistake-delta", test_puzzle_mistake_delta_white_and_black);
+  g_test_add_func("/puzzle-generation/unique-best", test_puzzle_unique_best_rules);
+  g_test_add_func("/puzzle-generation/find-next-index", test_puzzle_find_next_index);
+  g_test_add_func("/puzzle-generation/build-indexed-path", test_puzzle_build_indexed_path);
+  return g_test_run();
+}

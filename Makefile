@@ -55,7 +55,7 @@ GSETTINGS_SCHEMA_COMPILED := $(GSETTINGS_SCHEMA_DIR)/gschemas.compiled
 
 .PHONY: all clean test coverage screenshot test_screenshot test_sgf_view_broadway
 
-all: $(GSETTINGS_SCHEMA_COMPILED) libgame.a checkers find_position gcheckers
+all: $(GSETTINGS_SCHEMA_COMPILED) libgame.a checkers create_puzzles find_position gcheckers
 
 libgame.a: $(OBJS)
 	ar rcs $@ $^
@@ -66,7 +66,8 @@ libgame.a: $(OBJS)
 test: test_game test_game_print test_board test_move_gen test_checkers_model \
 	test_ai_transposition_table test_position_search \
 	test_position_predicate test_sgf_tree test_sgf_io test_sgf_view test_bga_client \
-	test_board_view test_player_controls_panel test_sgf_controller test_window test_screenshot
+	test_board_view test_player_controls_panel test_sgf_controller test_window \
+	test_puzzle_generation test_screenshot
 	./test_game
 	./test_game_print
 	./test_board
@@ -78,6 +79,7 @@ test: test_game test_game_print test_board test_move_gen test_checkers_model \
 	./test_sgf_tree
 	./test_sgf_io
 	./test_bga_client
+	./test_puzzle_generation
 	$(MAKE) test_sgf_view_broadway
 	$(MAKE) test_gtk_broadway
 
@@ -95,6 +97,12 @@ test_move_gen: tests/test_move_gen.c $(SRCS) src/game.h
 
 checkers: src/checkers_cli.c $(SRCS) src/game.h
 	$(CC) $(CFLAGS) -o $@ src/checkers_cli.c $(SRCS) $(LDLIBS)
+
+create_puzzles: src/create_puzzles.c src/puzzle_generation.c src/puzzle_generation.h \
+	src/sgf_io.c src/sgf_io.h src/sgf_tree.c src/sgf_tree.h src/sgf_move_props.c src/sgf_move_props.h \
+	$(SRCS)
+	$(CC) $(CFLAGS) -o $@ src/create_puzzles.c src/puzzle_generation.c src/sgf_io.c src/sgf_tree.c \
+		src/sgf_move_props.c $(SRCS) $(LDLIBS)
 
 find_position: src/find_position.c $(POSITION_SRCS) $(SRCS) src/position_search.h src/position_predicate.h \
 	src/position_format.h
@@ -242,6 +250,10 @@ test_window: $(GSETTINGS_SCHEMA_COMPILED) tests/test_window.c src/window.c \
 	src/sgf_io.c src/sgf_move_props.c src/sgf_tree.c src/sgf_view.c src/sgf_view_disc_factory.c src/sgf_view_layout.c \
 	src/sgf_view_link_renderer.c src/sgf_view_scroller.c src/sgf_view_selection_controller.c \
 	$(WIDGET_UTILS_SRCS) $(SRCS) $(LDLIBS) $(GTK_LIBS)
+
+test_puzzle_generation: tests/test_puzzle_generation.c src/puzzle_generation.c src/puzzle_generation.h src/ai_alpha_beta.h \
+	src/board.h
+	$(CC) $(CFLAGS) -o $@ tests/test_puzzle_generation.c src/puzzle_generation.c $(LDLIBS)
 
 test_screenshot: gcheckers tools/screenshot_gcheckers.sh
 	@if ! command -v $(BROADWAYD_BIN) >/dev/null 2>&1; then \
