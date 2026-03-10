@@ -11,7 +11,7 @@
 #include <string.h>
 
 enum {
-  CHECKERS_PUZZLE_SELF_PLAY_DEPTH = 1,          /* Depth-0 behavior maps to effective depth 1. */
+  CHECKERS_PUZZLE_SELF_PLAY_DEPTH = 0,
   CHECKERS_PUZZLE_ANALYSIS_DEPTH = 8,
   CHECKERS_PUZZLE_MISTAKE_THRESHOLD = 100,
   CHECKERS_PUZZLE_MIN_LEGAL_MOVES = 4,
@@ -173,6 +173,7 @@ static gboolean checkers_puzzle_build_tactical_line(const Game *start,
   g_return_val_if_fail(out_line != NULL, FALSE);
 
   Game line_game = *start;
+
   CheckersPuzzleLineMove first = {
       .move = *forced_first,
       .color = line_game.state.turn,
@@ -186,21 +187,25 @@ static gboolean checkers_puzzle_build_tactical_line(const Game *start,
   for (guint ply = 1; ply < CHECKERS_PUZZLE_MAX_TACTICAL_PLIES; ++ply) {
     gint eval0 = 0;
     if (!checkers_puzzle_evaluate_depth0(&line_game, &eval0)) {
+      g_debug("Failed depth-0 evaluation while building tactical line at ply %u", ply);
       return FALSE;
     }
     if (eval0 == target_score) {
       return TRUE;
     }
     if (line_game.state.winner != CHECKERS_WINNER_NONE) {
+      g_debug("Tactical line ended before target at ply %u (winner=%u)", ply, line_game.state.winner);
       return FALSE;
     }
     if (!checkers_puzzle_append_best_depth0_move(&line_game, out_line)) {
+      g_debug("Failed to append best depth-0 move while building tactical line at ply %u", ply);
       return FALSE;
     }
   }
 
   gint final_eval = 0;
   if (!checkers_puzzle_evaluate_depth0(&line_game, &final_eval)) {
+    g_debug("Failed final depth-0 evaluation after reaching tactical line max plies");
     return FALSE;
   }
   return final_eval == target_score;
@@ -237,7 +242,7 @@ static gboolean checkers_puzzle_save_sgf(const char *path,
     return FALSE;
   }
 
-  g_autofree char *comment = g_strdup_printf("mistake_delta_d10=%d target_d10=%d solution=%s line_plies=%u",
+  g_autofree char *comment = g_strdup_printf("mistake_delta_d8=%d target_d8=%d solution=%s line_plies=%u",
                                              mistake_delta,
                                              target_score,
                                              solution_text,
