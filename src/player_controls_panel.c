@@ -91,20 +91,20 @@ static void player_controls_panel_init(PlayerControlsPanel *self) {
 
   GtkWidget *white_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
   GtkWidget *black_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
-  GtkWidget *computer_level_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+  GtkWidget *computer_depth_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
   gtk_box_append(GTK_BOX(controls_row), white_box);
   gtk_box_append(GTK_BOX(controls_row), black_box);
-  gtk_box_append(GTK_BOX(controls_row), computer_level_box);
+  gtk_box_append(GTK_BOX(controls_row), computer_depth_box);
 
   GtkWidget *white_label = gtk_label_new("White");
   GtkWidget *black_label = gtk_label_new("Black");
-  GtkWidget *computer_level_label = gtk_label_new("Computer level");
+  GtkWidget *computer_depth_label = gtk_label_new("Computer depth");
   gtk_widget_set_halign(white_label, GTK_ALIGN_START);
   gtk_widget_set_halign(black_label, GTK_ALIGN_START);
-  gtk_widget_set_halign(computer_level_label, GTK_ALIGN_START);
+  gtk_widget_set_halign(computer_depth_label, GTK_ALIGN_START);
   gtk_box_append(GTK_BOX(white_box), white_label);
   gtk_box_append(GTK_BOX(black_box), black_label);
-  gtk_box_append(GTK_BOX(computer_level_box), computer_level_label);
+  gtk_box_append(GTK_BOX(computer_depth_box), computer_depth_label);
 
   static const char *control_options[] = {"User", "Computer", NULL};
   self->white_control = GTK_DROP_DOWN(gtk_drop_down_new_from_strings(control_options));
@@ -122,7 +122,7 @@ static void player_controls_panel_init(PlayerControlsPanel *self) {
   player_controls_panel_set_computer_depth(self, PLAYER_COMPUTER_DEPTH_DEFAULT);
   gtk_box_append(GTK_BOX(white_box), GTK_WIDGET(self->white_control));
   gtk_box_append(GTK_BOX(black_box), GTK_WIDGET(self->black_control));
-  gtk_box_append(GTK_BOX(computer_level_box), GTK_WIDGET(self->computer_depth_scale));
+  gtk_box_append(GTK_BOX(computer_depth_box), GTK_WIDGET(self->computer_depth_scale));
 
   g_signal_connect(self->white_control,
                    "notify::selected",

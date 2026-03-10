@@ -6,7 +6,7 @@ Role: composition root that binds model state to UI updates, keeps board input a
 Owns: `GCheckersModel`, `BoardView`, `PlayerControlsPanel`, and `GCheckersSgfController`.
 Collaborates with: `gcheckers_style_init()` for CSS, model signals for refresh, and SGF analysis signals to reset
 player dropdowns. Computer turns are routed by control mode with alpha-beta depth configured from the shared
-`Computer level` slider (`0..16`). Uses a three-pane layout: board and player controls (left), SGF mode selector
+`Computer depth` slider (`0..16`). Uses a three-pane layout: board and player controls (left), SGF mode selector
 and SGF view (middle), and analysis (right) with both an `Analyze` toggle (iterative deepening on current SGF node)
 and an `Analyze full game` button (fixed-depth analysis of all SGF nodes).
 Worker output is staged through a mutex-protected shared report buffer, and the GTK text view is refreshed from the
@@ -76,7 +76,7 @@ Collaborates with: `GCheckersWindow` (data binding) and `GCheckersSgfController`
 ## `PlayerControlsPanel` (`src/player_controls_panel.c`)
 Class: `PlayerControlsPanel` (`GtkBox`).
 Role: encapsulates player mode controls.
-Modes: white/black each select `User` or `Computer`, plus a shared `Computer level` slider (depth `0..16`).
+Modes: white/black each select `User` or `Computer`, plus a shared `Computer depth` slider (`0..16`).
 Defaults: both white and black controls start as `User`.
 Signals: `control-changed` for window-level coordination.
 Collaborates with: `GCheckersWindow` (signal handlers and `player_controls_panel_set_all_user()`) and GTK widgets
