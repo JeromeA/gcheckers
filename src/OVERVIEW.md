@@ -9,6 +9,9 @@ player dropdowns. Computer turns are routed by control mode with alpha-beta dept
 `Computer depth` slider (`0..16`). Uses a three-pane layout: board and player controls (left), SGF mode selector
 and SGF view (middle), and analysis (right) with both an `Analyze` toggle (iterative deepening on current SGF node)
 and an `Analyze full game` button (fixed-depth analysis of all SGF nodes).
+Mode dropdown supports `Play` and `Edit`. In `Edit`, board clicks mutate SGF setup properties on the current node:
+left click cycles empty->white man->white king->empty (with black pieces and any king clearing to empty), right click
+mirrors this for black. SGF navigation and `Force move` actions are disabled while `Edit` is active.
 Worker output is staged through a mutex-protected shared report buffer, and the GTK text view is refreshed from the
 main thread every 100ms while analysis is active. During iterative deepening, intermediate node-count snapshots are
 published and shown with a temporary `(searching...)` marker. Completed results are converted to `SgfNodeAnalysis` and
@@ -54,6 +57,8 @@ are validated as subsets of `AB`/`AW` and then applied as kings.
 backward, step forward on main line, step to next branch point, and step to main-line end.
 Selection-only navigation updates SGF view selection in place (`sgf_view_set_selected`) instead of rebuilding the
 entire SGF layout.
+Exposes a current-node refresh helper that replays SGF state into the model after setup-property edits on the current
+node.
 Owns: `SgfTree` and `SgfView`, plus replay guard (`is_replaying`).
 Signals: `manual-requested` when analysis panel content should refresh for the selected node, and `node-changed`
 whenever SGF current node changes so other UI (analysis graph) can synchronize cursor state.
@@ -219,11 +224,16 @@ Collaborates with: `GCheckersWindow` for UI wiring and new-game dialog presentat
 ### `BoardView` (`src/board_view.c`, `src/board_view.h`)
 Class: `BoardView` (`GtkWidget`).
 Role: coordinate rendering updates, input handling, and active-turn move highlighting for the board.
+Primary-click input is routed through each square button's `clicked` signal, and right-click input uses a dedicated
+secondary-button `GtkGestureClick`. A button-aware square callback allows window-level edit-mode logic to intercept
+square actions (left/right) before play-mode move-selection handling.
 Collaborates with: selection, overlays, and square/grid helpers.
 
 ### `BoardGrid` (`src/board_grid.c`, `src/board_grid.h`)
 Module: board grid helpers.
 Role: construct the square layout grid and maintain square bookkeeping.
+Dark squares wire primary `clicked` and optional secondary `pressed` callbacks separately to avoid gesture arbitration
+conflicts with `GtkButton` activation.
 Collaborates with: `BoardView` and `BoardSquare`.
 
 ### `BoardSquare` (`src/board_square.c`, `src/board_square.h`)

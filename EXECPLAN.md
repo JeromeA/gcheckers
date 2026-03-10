@@ -36,6 +36,8 @@ move, then clicking graph points and seeing SGF current selection follow.
 - [x] (2026-03-08 11:03Z) Ran `make -j$(nproc)` and `make test`.
 - [x] (2026-03-10 17:34Z) Refactored `src/window.c` analysis lifecycle into centralized begin/finish/sync helpers to
   remove duplicated UI/state transitions and ensure graph progress clears on natural full-analysis completion.
+- [x] (2026-03-10 18:12Z) Added SGF edit mode interactions and mode-gated navigation/force-move behavior across
+  `window.c`, `board_view.c`, and `sgf_controller.c`.
 
 ## Surprises & Discoveries
 
@@ -69,6 +71,12 @@ move, then clicking graph points and seeing SGF current selection follow.
   which caused drift (for example, yellow progress marker persisting after natural completion).
   Date/Author: 2026-03-10 / Codex
 
+- Decision: Keep edit-mode board mutations SGF-driven by writing setup properties on the current node and replaying the
+  current node into the model via a controller refresh helper.
+  Rationale: SGF remains the source of truth, so edits persist in-tree and remain consistent with replay/load/save
+  behavior without introducing a separate model-only editing path.
+  Date/Author: 2026-03-10 / Codex
+
 ## Outcomes & Retrospective
 
 Implementation is complete and matches the requested behavior.
@@ -85,6 +93,8 @@ Validation succeeded with `make -j$(nproc)` and `make test`.
 
 Follow-up lifecycle cleanup consolidated full-game/current-analysis session transitions so UI and transient state are
 driven by one state machine path rather than duplicated manual resets.
+Follow-up edit-mode support now allows direct SGF setup editing on the current node with left/right click piece cycles
+while SGF navigation and force-move actions are suspended.
 
 ## Context and Orientation
 

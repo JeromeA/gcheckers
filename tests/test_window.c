@@ -241,6 +241,31 @@ static GtkDropDown *test_gcheckers_window_find_ruleset_dropdown(GtkWidget *root)
   return NULL;
 }
 
+static GtkDropDown *test_gcheckers_window_find_mode_dropdown(GtkWidget *root) {
+  g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
+
+  if (GTK_IS_DROP_DOWN(root)) {
+    GListModel *model = gtk_drop_down_get_model(GTK_DROP_DOWN(root));
+    if (GTK_IS_STRING_LIST(model) && g_list_model_get_n_items(model) == 2) {
+      const char *first = gtk_string_list_get_string(GTK_STRING_LIST(model), 0);
+      const char *second = gtk_string_list_get_string(GTK_STRING_LIST(model), 1);
+      if (g_strcmp0(first, "Play") == 0 && g_strcmp0(second, "Edit") == 0) {
+        return GTK_DROP_DOWN(root);
+      }
+    }
+  }
+
+  for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
+       child = gtk_widget_get_next_sibling(child)) {
+    GtkDropDown *match = test_gcheckers_window_find_mode_dropdown(child);
+    if (match != NULL) {
+      return match;
+    }
+  }
+
+  return NULL;
+}
+
 static GtkWindow *test_gcheckers_window_find_toplevel_by_title(const char *title) {
   g_return_val_if_fail(title != NULL, NULL);
 
@@ -584,6 +609,55 @@ static void test_gcheckers_window_analysis_full_button_exists(void) {
   g_clear_object(&app);
 }
 
+static void test_gcheckers_window_edit_mode_disables_navigation_and_force_move(void) {
+  GtkApplication *app = test_gcheckers_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersWindow *window = gcheckers_window_new(app, model);
+
+  GtkDropDown *mode_dropdown = test_gcheckers_window_find_mode_dropdown(GTK_WIDGET(window));
+  g_assert_nonnull(mode_dropdown);
+
+  g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "sgf-rewind"));
+  g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "sgf-step-backward"));
+  g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "sgf-step-forward"));
+  g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "sgf-step-forward-to-branch"));
+  g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "sgf-step-forward-to-end"));
+  g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(app), "force-move"));
+
+  gtk_drop_down_set_selected(mode_dropdown, 1);
+  test_gcheckers_window_drain_main_context(16);
+
+  g_assert_false(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "sgf-rewind"));
+  g_assert_false(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "sgf-step-backward"));
+  g_assert_false(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "sgf-step-forward"));
+  g_assert_false(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "sgf-step-forward-to-branch"));
+  g_assert_false(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "sgf-step-forward-to-end"));
+  g_assert_false(g_action_group_get_action_enabled(G_ACTION_GROUP(app), "force-move"));
+
+  const GameState *state = gcheckers_model_peek_state(model);
+  g_assert_nonnull(state);
+  g_assert_cmpuint(state->turn, ==, CHECKERS_COLOR_WHITE);
+  gcheckers_window_force_move(window);
+  test_gcheckers_window_drain_main_context(16);
+  state = gcheckers_model_peek_state(model);
+  g_assert_nonnull(state);
+  g_assert_cmpuint(state->turn, ==, CHECKERS_COLOR_WHITE);
+
+  gtk_drop_down_set_selected(mode_dropdown, 0);
+  test_gcheckers_window_drain_main_context(16);
+
+  g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "sgf-rewind"));
+  g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "sgf-step-backward"));
+  g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "sgf-step-forward"));
+  g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "sgf-step-forward-to-branch"));
+  g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "sgf-step-forward-to-end"));
+  g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(app), "force-move"));
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
 static void test_gcheckers_window_graph_selection_tracks_sgf_selection(void) {
   GtkApplication *app = test_gcheckers_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
@@ -809,6 +883,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/gcheckers-window/sgf-actions-navigate", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/analysis-toggle", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/analysis-full-button", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/edit-mode-disables-navigation", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/graph-selection-sync", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/graph-activation-selects-node", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/import-wizard-flow", test_gcheckers_window_skip);
@@ -849,6 +924,8 @@ int main(int argc, char **argv) {
                   test_gcheckers_window_sgf_actions_navigate_timeline);
   g_test_add_func("/gcheckers-window/analysis-toggle", test_gcheckers_window_analysis_toggle);
   g_test_add_func("/gcheckers-window/analysis-full-button", test_gcheckers_window_analysis_full_button_exists);
+  g_test_add_func("/gcheckers-window/edit-mode-disables-navigation",
+                  test_gcheckers_window_edit_mode_disables_navigation_and_force_move);
   g_test_add_func("/gcheckers-window/graph-selection-sync",
                   test_gcheckers_window_graph_selection_tracks_sgf_selection);
   g_test_add_func("/gcheckers-window/graph-activation-selects-node",

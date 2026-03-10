@@ -29,6 +29,13 @@ static void test_board_view_collect_indexed_buttons(GtkWidget *root, GHashTable 
   }
 }
 
+static gboolean test_board_view_count_square_click(guint8 /*index*/, guint /*button*/, gpointer user_data) {
+  guint *count = user_data;
+  g_return_val_if_fail(count != NULL, FALSE);
+  *count += 1;
+  return TRUE;
+}
+
 static void test_board_view_highlights_black_turn_moves(void) {
   GCheckersModel *model = gcheckers_model_new();
   BoardView *view = board_view_new();
@@ -77,14 +84,44 @@ static void test_board_view_highlights_black_turn_moves(void) {
   g_clear_object(&model);
 }
 
+static void test_board_view_repeated_primary_clicks_are_processed(void) {
+  GCheckersModel *model = gcheckers_model_new();
+  BoardView *view = board_view_new();
+  board_view_set_model(view, model);
+
+  guint click_count = 0;
+  board_view_set_square_handler(view, test_board_view_count_square_click, &click_count);
+
+  GtkWidget *root = board_view_get_widget(view);
+  g_assert_nonnull(root);
+
+  g_autoptr(GHashTable) buttons_by_index = g_hash_table_new(g_direct_hash, g_direct_equal);
+  test_board_view_collect_indexed_buttons(root, buttons_by_index);
+
+  GtkWidget *button = g_hash_table_lookup(buttons_by_index, GINT_TO_POINTER(0));
+  g_assert_nonnull(button);
+  g_assert_true(GTK_IS_BUTTON(button));
+
+  g_signal_emit_by_name(button, "clicked");
+  g_signal_emit_by_name(button, "clicked");
+
+  g_assert_cmpuint(click_count, ==, 2);
+
+  g_clear_object(&view);
+  g_clear_object(&model);
+}
+
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   if (!gtk_init_check()) {
     g_test_add_func("/board-view/highlights-black-turn-moves", test_board_view_skip);
+    g_test_add_func("/board-view/repeated-primary-clicks-are-processed", test_board_view_skip);
     return g_test_run();
   }
 
   g_test_add_func("/board-view/highlights-black-turn-moves",
                   test_board_view_highlights_black_turn_moves);
+  g_test_add_func("/board-view/repeated-primary-clicks-are-processed",
+                  test_board_view_repeated_primary_clicks_are_processed);
   return g_test_run();
 }

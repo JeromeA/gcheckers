@@ -39,6 +39,7 @@ struct _GCheckersWindow {
   const SgfNode *analysis_last_updated_node;
   gboolean analysis_done_received;
   gboolean analysis_canceled;
+  gboolean edit_mode_enabled;
 };
 
 G_DEFINE_TYPE(GCheckersWindow, gcheckers_window, GTK_TYPE_APPLICATION_WINDOW)
@@ -94,6 +95,12 @@ static void gcheckers_window_analysis_begin_session(GCheckersWindow *self,
                                                     GCheckersWindowAnalysisMode mode,
                                                     guint expected_nodes);
 static void gcheckers_window_analysis_finish_session(GCheckersWindow *self);
+static gboolean gcheckers_window_is_edit_mode(GCheckersWindow *self);
+static void gcheckers_window_set_action_enabled(GActionMap *map, const char *name, gboolean enabled);
+static void gcheckers_window_sync_mode_ui(GCheckersWindow *self);
+static gboolean gcheckers_window_format_setup_point(uint8_t index, uint8_t board_size, char out_point[3]);
+static gboolean gcheckers_window_update_node_setup_piece(SgfNode *node, const char *point, CheckersPiece piece);
+static gboolean gcheckers_window_on_board_square_action(guint8 index, guint button, gpointer user_data);
 
 enum {
   GCHECKERS_WINDOW_ANALYSIS_PROGRESS_INTERVAL_MS = 100,
@@ -164,6 +171,257 @@ static void gcheckers_window_analysis_finish_session(GCheckersWindow *self) {
   self->analysis_mode = GCHECKERS_WINDOW_ANALYSIS_MODE_NONE;
   gcheckers_window_analysis_reset_runtime_state(self);
   gcheckers_window_analysis_sync_ui(self);
+}
+
+static gboolean gcheckers_window_is_edit_mode(GCheckersWindow *self) {
+  g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), FALSE);
+
+  return self->edit_mode_enabled;
+}
+
+static void gcheckers_window_set_action_enabled(GActionMap *map, const char *name, gboolean enabled) {
+  g_return_if_fail(map != NULL);
+  g_return_if_fail(name != NULL);
+
+  GAction *action = g_action_map_lookup_action(map, name);
+  if (action == NULL) {
+    g_debug("Missing action while toggling enabled state: %s", name);
+    return;
+  }
+
+  if (!G_IS_SIMPLE_ACTION(action)) {
+    g_debug("Unsupported non-simple action while toggling enabled state: %s", name);
+    return;
+  }
+
+  g_simple_action_set_enabled(G_SIMPLE_ACTION(action), enabled);
+}
+
+static void gcheckers_window_sync_mode_ui(GCheckersWindow *self) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+
+  gboolean allow_navigation = !self->edit_mode_enabled;
+  g_debug("Sync mode UI: edit_mode=%d allow_navigation=%d", self->edit_mode_enabled, allow_navigation);
+  gcheckers_window_set_action_enabled(G_ACTION_MAP(self), "sgf-rewind", allow_navigation);
+  gcheckers_window_set_action_enabled(G_ACTION_MAP(self), "sgf-step-backward", allow_navigation);
+  gcheckers_window_set_action_enabled(G_ACTION_MAP(self), "sgf-step-forward", allow_navigation);
+  gcheckers_window_set_action_enabled(G_ACTION_MAP(self), "sgf-step-forward-to-branch", allow_navigation);
+  gcheckers_window_set_action_enabled(G_ACTION_MAP(self), "sgf-step-forward-to-end", allow_navigation);
+
+  GApplication *app = g_application_get_default();
+  if (app != NULL && G_IS_ACTION_MAP(app)) {
+    gcheckers_window_set_action_enabled(G_ACTION_MAP(app), "force-move", allow_navigation);
+  }
+
+  if (self->analysis_graph != NULL) {
+    GtkWidget *graph_widget = analysis_graph_get_widget(self->analysis_graph);
+    if (graph_widget != NULL) {
+      gtk_widget_set_sensitive(graph_widget, allow_navigation);
+    }
+  }
+
+  if (self->sgf_controller != NULL) {
+    GtkWidget *sgf_widget = gcheckers_sgf_controller_get_widget(self->sgf_controller);
+    if (sgf_widget != NULL) {
+      gtk_widget_set_sensitive(sgf_widget, allow_navigation);
+    }
+  }
+}
+
+static gboolean gcheckers_window_format_setup_point(uint8_t index, uint8_t board_size, char out_point[3]) {
+  g_return_val_if_fail(out_point != NULL, FALSE);
+  g_return_val_if_fail(board_size > 0, FALSE);
+
+  gint row = 0;
+  gint col = 0;
+  board_coord_from_index(index, &row, &col, board_size);
+  if (row < 0 || col < 0 || row >= 26 || col >= 26) {
+    g_debug("Unsupported SGF setup coordinate for board size %u", board_size);
+    return FALSE;
+  }
+
+  out_point[0] = (char)('a' + col);
+  out_point[1] = (char)('a' + row);
+  out_point[2] = '\0';
+  return TRUE;
+}
+
+static const char *gcheckers_window_piece_label(CheckersPiece piece) {
+  switch (piece) {
+    case CHECKERS_PIECE_EMPTY:
+      return "empty";
+    case CHECKERS_PIECE_BLACK_MAN:
+      return "black-man";
+    case CHECKERS_PIECE_BLACK_KING:
+      return "black-king";
+    case CHECKERS_PIECE_WHITE_MAN:
+      return "white-man";
+    case CHECKERS_PIECE_WHITE_KING:
+      return "white-king";
+    default:
+      return "unknown";
+  }
+}
+
+static gboolean gcheckers_window_node_set_prop_has_point(SgfNode *node,
+                                                         const char *ident,
+                                                         const char *point,
+                                                         gboolean has_point) {
+  g_return_val_if_fail(node != NULL, FALSE);
+  g_return_val_if_fail(ident != NULL, FALSE);
+  g_return_val_if_fail(point != NULL, FALSE);
+
+  g_autoptr(GPtrArray) next_values = g_ptr_array_new_with_free_func(g_free);
+  const GPtrArray *existing = sgf_node_get_property_values(node, ident);
+  if (existing != NULL) {
+    for (guint i = 0; i < existing->len; ++i) {
+      const char *value = g_ptr_array_index((GPtrArray *)existing, i);
+      g_return_val_if_fail(value != NULL, FALSE);
+      if (g_strcmp0(value, point) == 0) {
+        continue;
+      }
+      g_ptr_array_add(next_values, g_strdup(value));
+    }
+  }
+  if (has_point) {
+    g_ptr_array_add(next_values, g_strdup(point));
+  }
+
+  sgf_node_clear_property(node, ident);
+  for (guint i = 0; i < next_values->len; ++i) {
+    const char *value = g_ptr_array_index(next_values, i);
+    g_return_val_if_fail(value != NULL, FALSE);
+    if (!sgf_node_add_property(node, ident, value)) {
+      g_debug("Failed to add SGF setup property value");
+      return FALSE;
+    }
+  }
+
+  return TRUE;
+}
+
+static gboolean gcheckers_window_update_node_setup_piece(SgfNode *node, const char *point, CheckersPiece piece) {
+  g_return_val_if_fail(node != NULL, FALSE);
+  g_return_val_if_fail(point != NULL, FALSE);
+
+  gboolean is_empty = piece == CHECKERS_PIECE_EMPTY;
+  gboolean is_black = piece == CHECKERS_PIECE_BLACK_MAN || piece == CHECKERS_PIECE_BLACK_KING;
+  gboolean is_white = piece == CHECKERS_PIECE_WHITE_MAN || piece == CHECKERS_PIECE_WHITE_KING;
+  gboolean is_black_king = piece == CHECKERS_PIECE_BLACK_KING;
+  gboolean is_white_king = piece == CHECKERS_PIECE_WHITE_KING;
+
+  if (!gcheckers_window_node_set_prop_has_point(node, "AE", point, is_empty) ||
+      !gcheckers_window_node_set_prop_has_point(node, "AB", point, is_black) ||
+      !gcheckers_window_node_set_prop_has_point(node, "AW", point, is_white) ||
+      !gcheckers_window_node_set_prop_has_point(node, "ABK", point, is_black_king) ||
+      !gcheckers_window_node_set_prop_has_point(node, "AWK", point, is_white_king)) {
+    g_debug("Edit update failed while setting SGF setup properties at point=%s target=%s",
+            point,
+            gcheckers_window_piece_label(piece));
+    return FALSE;
+  }
+
+  sgf_node_clear_analysis(node);
+  g_debug("Edit update wrote SGF setup properties at point=%s target=%s",
+          point,
+          gcheckers_window_piece_label(piece));
+  return TRUE;
+}
+
+static gboolean gcheckers_window_on_board_square_action(guint8 index, guint button, gpointer user_data) {
+  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
+  g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), FALSE);
+  if (button != GDK_BUTTON_PRIMARY && button != GDK_BUTTON_SECONDARY) {
+    g_debug("Edit click ignored unsupported button: index=%u button=%u", index, button);
+    return FALSE;
+  }
+
+  if (!gcheckers_window_is_edit_mode(self)) {
+    g_debug("Edit click ignored because mode is not edit: index=%u button=%u", index, button);
+    return FALSE;
+  }
+
+  g_return_val_if_fail(GCHECKERS_IS_MODEL(self->model), FALSE);
+  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self->sgf_controller), FALSE);
+
+  const GameState *state = gcheckers_model_peek_state(self->model);
+  if (state == NULL) {
+    g_debug("Missing game state for edit-mode square action");
+    return TRUE;
+  }
+
+  guint8 max_square = board_playable_squares(state->board.board_size);
+  if (index >= max_square) {
+    g_debug("Edit-mode square index out of range");
+    return TRUE;
+  }
+
+  CheckersPiece current = board_get(&state->board, index);
+  CheckersPiece next = CHECKERS_PIECE_EMPTY;
+  g_debug("Edit click start: index=%u button=%u board_size=%u turn=%u current=%s",
+          index,
+          button,
+          state->board.board_size,
+          state->turn,
+          gcheckers_window_piece_label(current));
+  if (button == GDK_BUTTON_PRIMARY) {
+    if (current == CHECKERS_PIECE_EMPTY) {
+      next = CHECKERS_PIECE_WHITE_MAN;
+    } else if (current == CHECKERS_PIECE_WHITE_MAN) {
+      next = CHECKERS_PIECE_WHITE_KING;
+    }
+  } else {
+    if (current == CHECKERS_PIECE_EMPTY) {
+      next = CHECKERS_PIECE_BLACK_MAN;
+    } else if (current == CHECKERS_PIECE_BLACK_MAN) {
+      next = CHECKERS_PIECE_BLACK_KING;
+    }
+  }
+  g_debug("Edit click transition: index=%u button=%u current=%s next=%s",
+          index,
+          button,
+          gcheckers_window_piece_label(current),
+          gcheckers_window_piece_label(next));
+
+  SgfTree *tree = gcheckers_sgf_controller_get_tree(self->sgf_controller);
+  if (tree == NULL) {
+    g_debug("Missing SGF tree for edit-mode square action");
+    return TRUE;
+  }
+  SgfNode *current_node = (SgfNode *)sgf_tree_get_current(tree);
+  if (current_node == NULL) {
+    g_debug("Missing SGF current node for edit-mode square action");
+    return TRUE;
+  }
+
+  char point[3] = {0};
+  if (!gcheckers_window_format_setup_point(index, state->board.board_size, point)) {
+    g_debug("Edit click failed formatting setup point: index=%u board_size=%u", index, state->board.board_size);
+    return TRUE;
+  }
+  g_debug("Edit click SGF point: index=%u point=%s", index, point);
+  if (!gcheckers_window_update_node_setup_piece(current_node, point, next)) {
+    g_debug("Edit click failed SGF setup update: index=%u point=%s", index, point);
+    return TRUE;
+  }
+  if (!gcheckers_sgf_controller_refresh_current_node(self->sgf_controller)) {
+    g_debug("Failed to refresh model from edited SGF current node");
+    return TRUE;
+  }
+
+  const GameState *after = gcheckers_model_peek_state(self->model);
+  if (after == NULL) {
+    g_debug("Edit click missing post-refresh game state: index=%u point=%s", index, point);
+    return TRUE;
+  }
+  CheckersPiece after_piece = board_get(&after->board, index);
+  g_debug("Edit click end: index=%u point=%s result=%s turn=%u",
+          index,
+          point,
+          gcheckers_window_piece_label(after_piece),
+          after->turn);
+
+  return TRUE;
 }
 
 static void gcheckers_window_start_new_game(GCheckersWindow *self) {
@@ -1069,6 +1327,10 @@ static void gcheckers_window_maybe_trigger_auto_move(GCheckersWindow *self) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
   g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
 
+  if (gcheckers_window_is_edit_mode(self)) {
+    return;
+  }
+
   if (!self->sgf_controller) {
     g_debug("Missing SGF controller for auto move\n");
     return;
@@ -1098,6 +1360,15 @@ static void gcheckers_window_on_state_changed(GCheckersModel *model, gpointer us
   g_return_if_fail(GCHECKERS_IS_MODEL(model));
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
 
+  const GameState *state = gcheckers_model_peek_state(model);
+  if (state != NULL) {
+    g_debug("Window state-changed: turn=%u winner=%u edit_mode=%d board_size=%u",
+            state->turn,
+            state->winner,
+            self->edit_mode_enabled,
+            state->board.board_size);
+  }
+
   gcheckers_window_update_status(self);
   gcheckers_window_update_control_state(self);
   gcheckers_window_maybe_trigger_auto_move(self);
@@ -1111,6 +1382,21 @@ static void gcheckers_window_on_control_changed(PlayerControlsPanel * /*panel*/,
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
 
   gcheckers_window_update_control_state(self);
+}
+
+static void gcheckers_window_on_mode_selected_notify(GObject * /*object*/,
+                                                     GParamSpec * /*pspec*/,
+                                                     gpointer user_data) {
+  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(GTK_IS_DROP_DOWN(self->sgf_mode_control));
+
+  self->edit_mode_enabled = gtk_drop_down_get_selected(self->sgf_mode_control) == 1;
+  g_debug("Mode changed: selected=%u edit_mode=%d",
+          gtk_drop_down_get_selected(self->sgf_mode_control),
+          self->edit_mode_enabled);
+  board_view_clear_selection(self->board_view);
+  gcheckers_window_sync_mode_ui(self);
 }
 
 static void gcheckers_window_on_manual_requested(GCheckersSgfController * /*controller*/,
@@ -1159,6 +1445,10 @@ static void gcheckers_window_on_analysis_graph_node_activated(AnalysisGraph * /*
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
   g_return_if_fail(node != NULL);
 
+  if (gcheckers_window_is_edit_mode(self)) {
+    return;
+  }
+
   if (!gcheckers_sgf_controller_select_node(self->sgf_controller, node)) {
     g_debug("Failed to select SGF node from analysis graph");
   }
@@ -1201,6 +1491,9 @@ static void gcheckers_window_on_sgf_rewind(GSimpleAction * /*action*/,
 
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
   g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self->sgf_controller));
+  if (gcheckers_window_is_edit_mode(self)) {
+    return;
+  }
 
   if (!gcheckers_sgf_controller_rewind_to_start(self->sgf_controller)) {
     g_debug("SGF rewind ignored");
@@ -1214,6 +1507,9 @@ static void gcheckers_window_on_sgf_step_backward(GSimpleAction * /*action*/,
 
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
   g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self->sgf_controller));
+  if (gcheckers_window_is_edit_mode(self)) {
+    return;
+  }
 
   if (!gcheckers_sgf_controller_step_backward(self->sgf_controller)) {
     g_debug("SGF step backward ignored");
@@ -1227,6 +1523,9 @@ static void gcheckers_window_on_sgf_step_forward(GSimpleAction * /*action*/,
 
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
   g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self->sgf_controller));
+  if (gcheckers_window_is_edit_mode(self)) {
+    return;
+  }
 
   if (!gcheckers_sgf_controller_step_forward(self->sgf_controller)) {
     g_debug("SGF step forward ignored");
@@ -1240,6 +1539,9 @@ static void gcheckers_window_on_sgf_step_forward_to_branch(GSimpleAction * /*act
 
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
   g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self->sgf_controller));
+  if (gcheckers_window_is_edit_mode(self)) {
+    return;
+  }
 
   if (!gcheckers_sgf_controller_step_forward_to_branch(self->sgf_controller)) {
     g_debug("SGF step forward to branch ignored");
@@ -1253,6 +1555,9 @@ static void gcheckers_window_on_sgf_step_forward_to_end(GSimpleAction * /*action
 
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
   g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self->sgf_controller));
+  if (gcheckers_window_is_edit_mode(self)) {
+    return;
+  }
 
   if (!gcheckers_sgf_controller_step_forward_to_end(self->sgf_controller)) {
     g_debug("SGF step forward to end ignored");
@@ -1275,6 +1580,10 @@ static GtkWidget *gcheckers_window_new_toolbar_action_button(const char *icon_na
 void gcheckers_window_force_move(GCheckersWindow *self) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
   g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
+
+  if (gcheckers_window_is_edit_mode(self)) {
+    return;
+  }
 
   const GameState *state = gcheckers_model_peek_state(self->model);
   if (!state) {
@@ -1362,6 +1671,9 @@ static gboolean gcheckers_window_unparent_controls_panel(GCheckersWindow *self) 
 
 static void gcheckers_window_dispose(GObject *object) {
   GCheckersWindow *self = GCHECKERS_WINDOW(object);
+
+  self->edit_mode_enabled = FALSE;
+  gcheckers_window_sync_mode_ui(self);
 
   if (self->model && self->state_handler_id != 0) {
     g_signal_handler_disconnect(self->model, self->state_handler_id);
@@ -1600,11 +1912,16 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   self->sgf_mode_control = GTK_DROP_DOWN(gtk_drop_down_new_from_strings(
       (const char *[]){"Play", "Edit", NULL}));
   gtk_drop_down_set_selected(self->sgf_mode_control, 0);
+  g_signal_connect(self->sgf_mode_control,
+                   "notify::selected",
+                   G_CALLBACK(gcheckers_window_on_mode_selected_notify),
+                   self);
   gtk_box_append(GTK_BOX(sgf_mode_row), GTK_WIDGET(self->sgf_mode_control));
   gtk_box_append(GTK_BOX(middle_panel), sgf_mode_row);
 
   self->sgf_controller = gcheckers_sgf_controller_new(self->board_view);
   board_view_set_move_handler(self->board_view, gcheckers_window_apply_player_move, self);
+  board_view_set_square_handler(self->board_view, gcheckers_window_on_board_square_action, self);
   self->analysis_graph = analysis_graph_new();
   GtkWidget *sgf_widget = gcheckers_sgf_controller_get_widget(self->sgf_controller);
   g_return_if_fail(sgf_widget != NULL);
@@ -1657,6 +1974,8 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_text_view_set_monospace(GTK_TEXT_VIEW(analysis_view), TRUE);
   gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(analysis_scroller), analysis_view);
   self->analysis_buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(analysis_view));
+  self->edit_mode_enabled = FALSE;
+  gcheckers_window_sync_mode_ui(self);
   gcheckers_window_analysis_sync_ui(self);
   gcheckers_window_set_analysis_text(self, "Toggle Analyze to start/stop iterative analysis.");
   gcheckers_window_refresh_analysis_graph(self);

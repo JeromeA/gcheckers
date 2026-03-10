@@ -865,6 +865,25 @@ gboolean gcheckers_sgf_controller_select_node(GCheckersSgfController *self, cons
   return gcheckers_sgf_controller_navigate_to(self, node);
 }
 
+gboolean gcheckers_sgf_controller_refresh_current_node(GCheckersSgfController *self) {
+  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+  g_return_val_if_fail(SGF_IS_TREE(self->sgf_tree), FALSE);
+  g_return_val_if_fail(GCHECKERS_IS_MODEL(self->model), FALSE);
+
+  const SgfNode *current = sgf_tree_get_current(self->sgf_tree);
+  if (current == NULL) {
+    g_debug("Missing SGF current node");
+    return FALSE;
+  }
+
+  if (!gcheckers_sgf_controller_replay_to_node(self, current)) {
+    return FALSE;
+  }
+
+  sgf_view_refresh(self->sgf_view);
+  return TRUE;
+}
+
 gboolean gcheckers_sgf_controller_save_file(GCheckersSgfController *self, const char *path, GError **error) {
   g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(path != NULL, FALSE);

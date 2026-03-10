@@ -193,3 +193,16 @@ That produced extra men. It also encoded kings as normal men, so king state was 
 
 The fix writes full setup snapshots with `AE` (all empties) first, then `AB/AW`, plus custom king markers
 `ABK/AWK`, and updates setup replay to validate and apply `ABK/AWK` as king subsets of `AB/AW`.
+
+## Board edit/play clicks were intermittently ignored after one successful click
+
+Board square input should be processed consistently on every click, including repeated clicks on the same square.
+
+Dark squares are `GtkButton` widgets. The board wired square actions to an additional generic `GtkGestureClick`
+(`button=0`) on the same button, while the button itself handled activation internally. In failing cases, GTK still
+delivered and activated the button (`clicked`), but the custom gesture callback path did not run, so board logic saw no
+click.
+
+The fix routes primary clicks through `GtkButton::clicked` and keeps only a dedicated secondary-button gesture for
+right-click handling, eliminating the competing primary click gesture path. A board-view regression test now asserts
+that repeated primary clicks are processed.

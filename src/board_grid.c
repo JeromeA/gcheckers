@@ -88,7 +88,11 @@ void board_grid_clear(BoardGrid *self) {
   }
 }
 
-void board_grid_build(BoardGrid *self, guint board_size, GCallback clicked, gpointer user_data) {
+void board_grid_build(BoardGrid *self,
+                      guint board_size,
+                      BoardGridPrimaryClickHandler primary_clicked,
+                      BoardGridSecondaryPressHandler secondary_pressed,
+                      gpointer user_data) {
   g_return_if_fail(BOARD_IS_GRID(self));
   g_return_if_fail(board_size > 0);
 
@@ -128,8 +132,14 @@ void board_grid_build(BoardGrid *self, guint board_size, GCallback clicked, gpoi
         } else {
           board_square_set_index(board_square, (guint)index);
         }
-        if (clicked != NULL) {
-          g_signal_connect(button, "clicked", clicked, user_data);
+        if (primary_clicked != NULL) {
+          g_signal_connect(button, "clicked", G_CALLBACK(primary_clicked), user_data);
+        }
+        if (secondary_pressed != NULL) {
+          GtkGesture *gesture = gtk_gesture_click_new();
+          gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(gesture), GDK_BUTTON_SECONDARY);
+          gtk_widget_add_controller(button, GTK_EVENT_CONTROLLER(gesture));
+          g_signal_connect(gesture, "pressed", G_CALLBACK(secondary_pressed), user_data);
         }
         square = button;
         if (index >= 0 && index < CHECKERS_MAX_SQUARES) {

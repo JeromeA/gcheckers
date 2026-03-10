@@ -20,6 +20,8 @@ struct _BoardView {
   PiecePalette *piece_palette;
   BoardViewMoveHandler move_handler;
   gpointer move_handler_data;
+  BoardViewSquareHandler square_handler;
+  gpointer square_handler_data;
   gboolean input_enabled;
 };
 
@@ -88,41 +90,80 @@ static void board_view_update_sensitivity(BoardView *self, const GameState *stat
   }
 }
 
-static void board_view_on_square_clicked(GtkButton *button, gpointer user_data) {
-  BoardView *self = BOARD_VIEW(user_data);
-
-  g_return_if_fail(BOARD_IS_VIEW(self));
-  g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
-  g_return_if_fail(GTK_IS_BUTTON(button));
+static gboolean board_view_handle_square_action(BoardView *self, GtkWidget *square_widget, guint button) {
+  g_return_val_if_fail(BOARD_IS_VIEW(self), FALSE);
+  g_return_val_if_fail(GCHECKERS_IS_MODEL(self->model), FALSE);
+  g_return_val_if_fail(GTK_IS_WIDGET(square_widget), FALSE);
 
   const GameState *state = gcheckers_model_peek_state(self->model);
   if (!state) {
-    g_debug("Failed to fetch game state for click\n");
-    return;
-  }
-  if (state->winner != CHECKERS_WINNER_NONE) {
-    g_debug("Ignoring click after game end\n");
-    return;
-  }
-  if (!self->input_enabled) {
-    g_debug("Ignoring click while input is disabled\n");
-    return;
+    g_debug("Failed to fetch game state for square action\n");
+    return FALSE;
   }
 
-  gpointer data = g_object_get_data(G_OBJECT(button), "board-index");
+  gpointer data = g_object_get_data(G_OBJECT(square_widget), "board-index");
   if (!data) {
-    g_debug("Missing board index for clicked square\n");
-    return;
+    g_debug("Missing board index for square action\n");
+    return FALSE;
   }
   int index = GPOINTER_TO_INT(data) - 1;
   if (index < 0) {
-    g_debug("Invalid board index for clicked square\n");
-    return;
+    g_debug("Invalid board index for square action\n");
+    return FALSE;
+  }
+
+  if (self->square_handler != NULL &&
+      self->square_handler((guint8)index, button, self->square_handler_data)) {
+    board_selection_controller_clear(self->selection_controller);
+    board_view_update(self);
+    return TRUE;
+  }
+
+  if (button != GDK_BUTTON_PRIMARY) {
+    return FALSE;
+  }
+
+  if (state->winner != CHECKERS_WINNER_NONE) {
+    return FALSE;
+  }
+  if (!self->input_enabled) {
+    return FALSE;
   }
 
   if (board_selection_controller_handle_click(self->selection_controller, (uint8_t)index)) {
     board_view_update(self);
+    return TRUE;
   }
+  return FALSE;
+}
+
+static void board_view_on_square_clicked(GtkButton *button, gpointer user_data) {
+  BoardView *self = BOARD_VIEW(user_data);
+
+  g_return_if_fail(BOARD_IS_VIEW(self));
+  g_return_if_fail(GTK_IS_BUTTON(button));
+
+  board_view_handle_square_action(self, GTK_WIDGET(button), GDK_BUTTON_PRIMARY);
+}
+
+static void board_view_on_square_secondary_pressed(GtkGestureClick *gesture,
+                                                   gint n_press,
+                                                   gdouble /*x*/,
+                                                   gdouble /*y*/,
+                                                   gpointer user_data) {
+  BoardView *self = BOARD_VIEW(user_data);
+
+  g_return_if_fail(BOARD_IS_VIEW(self));
+  g_return_if_fail(GTK_IS_GESTURE_CLICK(gesture));
+
+  if (n_press != 1) {
+    return;
+  }
+
+  GtkWidget *square_widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture));
+  g_return_if_fail(GTK_IS_WIDGET(square_widget));
+
+  board_view_handle_square_action(self, square_widget, GDK_BUTTON_SECONDARY);
 }
 
 static void board_view_build_board(BoardView *self) {
@@ -141,7 +182,11 @@ static void board_view_build_board(BoardView *self) {
     return;
   }
 
-  board_grid_build(self->board_grid, board_size, G_CALLBACK(board_view_on_square_clicked), self);
+  board_grid_build(self->board_grid,
+                   board_size,
+                   board_view_on_square_clicked,
+                   board_view_on_square_secondary_pressed,
+                   self);
 }
 
 GtkWidget *board_view_get_widget(BoardView *self) {
@@ -173,6 +218,13 @@ void board_view_set_move_handler(BoardView *self, BoardViewMoveHandler handler, 
   board_selection_controller_set_move_handler(self->selection_controller,
                                               self->move_handler,
                                               self->move_handler_data);
+}
+
+void board_view_set_square_handler(BoardView *self, BoardViewSquareHandler handler, gpointer user_data) {
+  g_return_if_fail(BOARD_IS_VIEW(self));
+
+  self->square_handler = handler;
+  self->square_handler_data = user_data;
 }
 
 void board_view_update(BoardView *self) {
@@ -265,7 +317,8 @@ static void board_view_init(BoardView *self) {
   gtk_widget_set_vexpand(self->root, TRUE);
 
   self->board_grid = board_grid_new(board_view_square_size);
-  gtk_overlay_set_child(GTK_OVERLAY(self->root), board_grid_get_widget(self->board_grid));
+  GtkWidget *grid_widget = board_grid_get_widget(self->board_grid);
+  gtk_overlay_set_child(GTK_OVERLAY(self->root), grid_widget);
 
   self->board_overlay = board_move_overlay_new();
   gtk_overlay_add_overlay(GTK_OVERLAY(self->root), board_move_overlay_get_widget(self->board_overlay));
@@ -274,6 +327,8 @@ static void board_view_init(BoardView *self) {
   self->piece_palette = piece_palette_new_default();
   self->move_handler = NULL;
   self->move_handler_data = NULL;
+  self->square_handler = NULL;
+  self->square_handler_data = NULL;
   self->input_enabled = TRUE;
 }
 
