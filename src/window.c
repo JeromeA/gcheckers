@@ -941,9 +941,6 @@ static void gcheckers_window_refresh_analysis_graph(GCheckersWindow *self) {
   analysis_graph_clear_progress_node(self->analysis_graph);
 }
 
-
-static void gcheckers_window_analysis_append_tt_stats(GString *text, const CheckersAiSearchStats *stats);
-
 char *gcheckers_window_format_analysis_score(gint score) {
   gint abs_score = ABS(score);
   if (abs_score >= 2900 && abs_score <= 3000) {
@@ -984,30 +981,11 @@ static char *gcheckers_window_analysis_format_complete(const SgfNodeAnalysis *an
   g_return_val_if_fail(analysis != NULL, NULL);
   g_return_val_if_fail(analysis->moves != NULL, NULL);
 
-  CheckersAiSearchStats stats = {
-    .nodes = analysis->nodes,
-    .tt_probes = analysis->tt_probes,
-    .tt_hits = analysis->tt_hits,
-    .tt_cutoffs = analysis->tt_cutoffs,
-  };
-
   GString *text = g_string_new(NULL);
   g_string_append_printf(text, "Analysis depth: %u\n", analysis->depth);
   g_string_append_printf(text, "Nodes: %" G_GUINT64_FORMAT "\n", analysis->nodes);
-  gcheckers_window_analysis_append_tt_stats(text, &stats);
   gcheckers_window_analysis_append_scored_moves(text, analysis);
   return g_string_free(text, FALSE);
-}
-
-static void gcheckers_window_analysis_append_tt_stats(GString *text, const CheckersAiSearchStats *stats) {
-  g_return_if_fail(text != NULL);
-  g_return_if_fail(stats != NULL);
-
-  gdouble ratio = stats->tt_probes == 0 ? 0.0 : (100.0 * (gdouble)stats->tt_hits) / (gdouble)stats->tt_probes;
-  g_string_append_printf(text, "TT hits: %" G_GUINT64_FORMAT "\n", stats->tt_hits);
-  g_string_append_printf(text, "TT probes: %" G_GUINT64_FORMAT "\n", stats->tt_probes);
-  g_string_append_printf(text, "TT hit ratio: %.2f%%\n", ratio);
-  g_string_append_printf(text, "TT cutoffs: %" G_GUINT64_FORMAT "\n", stats->tt_cutoffs);
 }
 
 static char *gcheckers_window_analysis_format_progress(const GCheckersWindowAnalysisTask *task,
@@ -1018,7 +996,6 @@ static char *gcheckers_window_analysis_format_progress(const GCheckersWindowAnal
   GString *text = g_string_new(NULL);
   g_string_append_printf(text, "Analysis depth: %u (searching)\n", task->current_depth);
   g_string_append_printf(text, "Nodes: %" G_GUINT64_FORMAT "\n", stats->nodes);
-  gcheckers_window_analysis_append_tt_stats(text, stats);
 
   if (task->last_completed_analysis == NULL) {
     g_string_append(text, "Best to worst:\n");

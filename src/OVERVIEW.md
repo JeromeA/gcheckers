@@ -21,12 +21,12 @@ main thread every 100ms while analysis is active. During iterative deepening, in
 published and shown with a temporary `(searching...)` marker. Completed results are converted to `SgfNodeAnalysis` and
 attached to SGF nodes on the main thread, while text in the panel is formatted from that structured node analysis.
 Analysis score text always shows an explicit `+` sign for positive centipawn-style values and converts terminal
-`2900..3000` magnitudes into `Win in X moves` / `Loss in X moves`.
+`2900..3000` magnitudes into `White win in X` / `Black win in X`.
 Full-game completion gating uses processed-job counts (not only payload-attached counts), so terminal/no-move nodes do
 not leave the Analyze full game button disabled after completion.
 Analysis lifecycle transitions are centralized (begin/finish/sync-ui helpers), so full-game button state, transient
 graph progress highlight, and runtime counters reset from one source of truth.
-Analysis reports TT hit/probe/cutoff counters and hit ratio, while reusing a single TT allocation across passes.
+Analysis text reports depth, node count, and scored moves, while reusing a single TT allocation across passes.
 Owns an analysis graph widget that shows branch values for the current SGF branch (root->current plus current->main
 line end), tracks SGF selection with a vertical cursor, and supports click-to-select SGF navigation. During
 full-game analysis, the latest node that received analysis is highlighted in yellow when it is visible on the current
