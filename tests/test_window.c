@@ -382,6 +382,14 @@ static GtkWidget *test_gcheckers_window_get_named_widget(GCheckersWindow *window
   return GTK_WIDGET(data);
 }
 
+static gint test_gcheckers_window_get_size_request_width(GtkWidget *widget) {
+  g_return_val_if_fail(GTK_IS_WIDGET(widget), -1);
+
+  gint width = -1;
+  gtk_widget_get_size_request(widget, &width, NULL);
+  return width;
+}
+
 static void test_gcheckers_window_unparents_controls_panel_on_dispose(void) {
   GtkApplication *app = test_gcheckers_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
@@ -650,41 +658,99 @@ static void test_gcheckers_window_drawer_visibility_actions(void) {
   g_assert_nonnull(analysis_panel);
   g_assert_nonnull(drawer_split);
 
-  g_assert_true(gtk_widget_get_visible(navigation_panel));
-  g_assert_true(gtk_widget_get_visible(analysis_panel));
-  g_assert_true(gtk_widget_get_visible(drawer_split));
+  g_assert_nonnull(gtk_widget_get_parent(navigation_panel));
+  g_assert_nonnull(gtk_widget_get_parent(analysis_panel));
+  g_assert_nonnull(gtk_widget_get_parent(drawer_split));
 
   g_action_group_change_action_state(G_ACTION_GROUP(window),
                                      "show-navigation-drawer",
                                      g_variant_new_boolean(FALSE));
   test_gcheckers_window_drain_main_context(8);
-  g_assert_false(gtk_widget_get_visible(navigation_panel));
-  g_assert_true(gtk_widget_get_visible(analysis_panel));
-  g_assert_true(gtk_widget_get_visible(drawer_split));
+  g_assert_null(gtk_widget_get_parent(navigation_panel));
+  g_assert_nonnull(gtk_widget_get_parent(analysis_panel));
+  g_assert_null(gtk_widget_get_parent(drawer_split));
 
   g_action_group_change_action_state(G_ACTION_GROUP(window),
                                      "show-analysis-drawer",
                                      g_variant_new_boolean(FALSE));
   test_gcheckers_window_drain_main_context(8);
-  g_assert_false(gtk_widget_get_visible(navigation_panel));
-  g_assert_false(gtk_widget_get_visible(analysis_panel));
-  g_assert_false(gtk_widget_get_visible(drawer_split));
+  g_assert_null(gtk_widget_get_parent(navigation_panel));
+  g_assert_null(gtk_widget_get_parent(analysis_panel));
+  g_assert_null(gtk_widget_get_parent(drawer_split));
 
   g_action_group_change_action_state(G_ACTION_GROUP(window),
                                      "show-navigation-drawer",
                                      g_variant_new_boolean(TRUE));
   test_gcheckers_window_drain_main_context(8);
-  g_assert_true(gtk_widget_get_visible(navigation_panel));
-  g_assert_false(gtk_widget_get_visible(analysis_panel));
-  g_assert_true(gtk_widget_get_visible(drawer_split));
+  g_assert_nonnull(gtk_widget_get_parent(navigation_panel));
+  g_assert_null(gtk_widget_get_parent(analysis_panel));
+  g_assert_null(gtk_widget_get_parent(drawer_split));
 
   g_action_group_change_action_state(G_ACTION_GROUP(window),
                                      "show-analysis-drawer",
                                      g_variant_new_boolean(TRUE));
   test_gcheckers_window_drain_main_context(8);
-  g_assert_true(gtk_widget_get_visible(navigation_panel));
-  g_assert_true(gtk_widget_get_visible(analysis_panel));
-  g_assert_true(gtk_widget_get_visible(drawer_split));
+  g_assert_nonnull(gtk_widget_get_parent(navigation_panel));
+  g_assert_nonnull(gtk_widget_get_parent(analysis_panel));
+  g_assert_nonnull(gtk_widget_get_parent(drawer_split));
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
+static void test_gcheckers_window_drawer_visibility_preserves_panel_widths(void) {
+  GtkApplication *app = test_gcheckers_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersWindow *window = gcheckers_window_new(app, model);
+  gtk_window_present(GTK_WINDOW(window));
+  test_gcheckers_window_drain_main_context(24);
+
+  GtkWidget *board_panel = test_gcheckers_window_get_named_widget(window, "board-panel");
+  GtkWidget *drawer_host = test_gcheckers_window_get_named_widget(window, "drawer-host");
+  GtkWidget *drawer_split = test_gcheckers_window_get_named_widget(window, "drawer-split");
+  GtkWidget *navigation_panel = test_gcheckers_window_get_named_widget(window, "navigation-panel");
+  GtkWidget *analysis_panel = test_gcheckers_window_get_named_widget(window, "analysis-panel");
+  g_assert_nonnull(board_panel);
+  g_assert_nonnull(drawer_host);
+  g_assert_nonnull(drawer_split);
+  g_assert_nonnull(navigation_panel);
+  g_assert_nonnull(analysis_panel);
+
+  gint board_width = gtk_widget_get_width(board_panel);
+  gint navigation_width = gtk_widget_get_width(navigation_panel);
+  gint analysis_width = gtk_widget_get_width(analysis_panel);
+  g_assert_cmpint(board_width, >, 0);
+  g_assert_cmpint(navigation_width, >, 0);
+  g_assert_cmpint(analysis_width, >, 0);
+
+  g_action_group_change_action_state(G_ACTION_GROUP(window),
+                                     "show-navigation-drawer",
+                                     g_variant_new_boolean(FALSE));
+  test_gcheckers_window_drain_main_context(96);
+  g_assert_cmpint(test_gcheckers_window_get_size_request_width(board_panel), ==, board_width);
+  g_assert_cmpint(test_gcheckers_window_get_size_request_width(drawer_host), ==, analysis_width);
+
+  g_action_group_change_action_state(G_ACTION_GROUP(window),
+                                     "show-navigation-drawer",
+                                     g_variant_new_boolean(TRUE));
+  test_gcheckers_window_drain_main_context(96);
+  g_assert_cmpint(test_gcheckers_window_get_size_request_width(board_panel), ==, board_width);
+  g_assert_cmpint(gtk_paned_get_position(GTK_PANED(drawer_split)), ==, navigation_width);
+
+  g_action_group_change_action_state(G_ACTION_GROUP(window),
+                                     "show-analysis-drawer",
+                                     g_variant_new_boolean(FALSE));
+  test_gcheckers_window_drain_main_context(96);
+  g_assert_cmpint(test_gcheckers_window_get_size_request_width(board_panel), ==, board_width);
+  g_assert_cmpint(test_gcheckers_window_get_size_request_width(drawer_host), ==, navigation_width);
+
+  g_action_group_change_action_state(G_ACTION_GROUP(window),
+                                     "show-analysis-drawer",
+                                     g_variant_new_boolean(TRUE));
+  test_gcheckers_window_drain_main_context(96);
+  g_assert_cmpint(test_gcheckers_window_get_size_request_width(board_panel), ==, board_width);
+  g_assert_cmpint(gtk_paned_get_position(GTK_PANED(drawer_split)), ==, navigation_width);
 
   g_clear_object(&window);
   g_clear_object(&model);
@@ -967,6 +1033,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/gcheckers-window/analysis-toggle", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/analysis-full-button", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/drawer-visibility-actions", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/drawer-width-preservation", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/edit-mode-disables-navigation", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/graph-selection-sync", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/graph-activation-selects-node", test_gcheckers_window_skip);
@@ -1010,6 +1077,8 @@ int main(int argc, char **argv) {
   g_test_add_func("/gcheckers-window/analysis-full-button", test_gcheckers_window_analysis_full_button_exists);
   g_test_add_func("/gcheckers-window/drawer-visibility-actions",
                   test_gcheckers_window_drawer_visibility_actions);
+  g_test_add_func("/gcheckers-window/drawer-width-preservation",
+                  test_gcheckers_window_drawer_visibility_preserves_panel_widths);
   g_test_add_func("/gcheckers-window/edit-mode-disables-navigation",
                   test_gcheckers_window_edit_mode_disables_navigation_and_force_move);
   g_test_add_func("/gcheckers-window/graph-selection-sync",

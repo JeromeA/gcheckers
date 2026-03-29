@@ -17,6 +17,8 @@ struct _GCheckersWindow {
   GtkApplicationWindow parent_instance;
   GCheckersModel *model;
   GtkWidget *main_paned;
+  GtkWidget *board_panel;
+  GtkWidget *drawer_host;
   GtkWidget *drawer_split;
   GtkWidget *navigation_panel;
   GtkWidget *analysis_panel;
@@ -45,6 +47,9 @@ struct _GCheckersWindow {
   gboolean edit_mode_enabled;
   gboolean show_navigation_drawer;
   gboolean show_analysis_drawer;
+  gint board_panel_width;
+  gint navigation_panel_width;
+  gint analysis_panel_width;
 };
 
 G_DEFINE_TYPE(GCheckersWindow, gcheckers_window, GTK_TYPE_APPLICATION_WINDOW)
@@ -104,11 +109,18 @@ static gboolean gcheckers_window_is_edit_mode(GCheckersWindow *self);
 static void gcheckers_window_set_action_enabled(GActionMap *map, const char *name, gboolean enabled);
 static void gcheckers_window_sync_mode_ui(GCheckersWindow *self);
 static void gcheckers_window_sync_drawer_ui(GCheckersWindow *self);
+static void gcheckers_window_capture_panel_widths(GCheckersWindow *self);
+static gint gcheckers_window_current_extra_width(GCheckersWindow *self);
+static void gcheckers_window_apply_saved_panel_widths(GCheckersWindow *self, gint extra_width);
 static gboolean gcheckers_window_format_setup_point(uint8_t index, uint8_t board_size, char out_point[3]);
 static gboolean gcheckers_window_update_node_setup_piece(SgfNode *node, const char *point, CheckersPiece piece);
 static gboolean gcheckers_window_on_board_square_action(guint8 index, guint button, gpointer user_data);
 
 enum {
+  GCHECKERS_WINDOW_DEFAULT_BOARD_PANEL_WIDTH = 500,
+  GCHECKERS_WINDOW_DEFAULT_NAVIGATION_PANEL_WIDTH = 300,
+  GCHECKERS_WINDOW_DEFAULT_ANALYSIS_PANEL_WIDTH = 300,
+  GCHECKERS_WINDOW_DEFAULT_HEIGHT = 700,
   GCHECKERS_WINDOW_ANALYSIS_PROGRESS_INTERVAL_MS = 100,
   GCHECKERS_WINDOW_ANALYSIS_TT_SIZE_MB = 256,
 };
@@ -147,18 +159,148 @@ static void gcheckers_window_analysis_sync_ui(GCheckersWindow *self) {
   }
 }
 
+static void gcheckers_window_capture_panel_widths(GCheckersWindow *self) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+
+  if (self->board_panel != NULL && gtk_widget_get_visible(self->board_panel)) {
+    gint width = gtk_widget_get_width(self->board_panel);
+    if (width > 0) {
+      self->board_panel_width = width;
+    }
+  }
+
+  if (self->navigation_panel != NULL && gtk_widget_get_parent(self->navigation_panel) != NULL) {
+    gint width = gtk_widget_get_width(self->navigation_panel);
+    if (width > 0) {
+      self->navigation_panel_width = width;
+    }
+  }
+
+  if (self->analysis_panel != NULL && gtk_widget_get_parent(self->analysis_panel) != NULL) {
+    gint width = gtk_widget_get_width(self->analysis_panel);
+    if (width > 0) {
+      self->analysis_panel_width = width;
+    }
+  }
+}
+
+static gint gcheckers_window_current_extra_width(GCheckersWindow *self) {
+  g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), 0);
+
+  gint window_width = gtk_widget_get_width(GTK_WIDGET(self));
+  if (window_width <= 0) {
+    return 0;
+  }
+
+  gint panel_width = 0;
+  if (self->board_panel != NULL) {
+    panel_width += MAX(0, gtk_widget_get_width(self->board_panel));
+  }
+  if (self->navigation_panel != NULL && gtk_widget_get_parent(self->navigation_panel) != NULL) {
+    panel_width += MAX(0, gtk_widget_get_width(self->navigation_panel));
+  }
+  if (self->analysis_panel != NULL && gtk_widget_get_parent(self->analysis_panel) != NULL) {
+    panel_width += MAX(0, gtk_widget_get_width(self->analysis_panel));
+  }
+
+  return MAX(0, window_width - panel_width);
+}
+
+static void gcheckers_window_apply_saved_panel_widths(GCheckersWindow *self, gint extra_width) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+
+  gint board_width = MAX(1, self->board_panel_width);
+  gint navigation_width = MAX(1, self->navigation_panel_width);
+  gint analysis_width = MAX(1, self->analysis_panel_width);
+  gint drawer_width = 0;
+
+  if (self->show_navigation_drawer) {
+    drawer_width += navigation_width;
+  }
+  if (self->show_analysis_drawer) {
+    drawer_width += analysis_width;
+  }
+
+  gint current_height = gtk_widget_get_height(GTK_WIDGET(self));
+  if (current_height <= 0) {
+    current_height = GCHECKERS_WINDOW_DEFAULT_HEIGHT;
+  }
+
+  gtk_window_set_default_size(GTK_WINDOW(self), board_width + drawer_width + MAX(0, extra_width), current_height);
+
+  if (self->main_paned != NULL && (self->show_navigation_drawer || self->show_analysis_drawer)) {
+    gtk_paned_set_position(GTK_PANED(self->main_paned), board_width);
+  }
+  if (self->drawer_split != NULL && self->show_navigation_drawer && self->show_analysis_drawer) {
+    gtk_paned_set_position(GTK_PANED(self->drawer_split), navigation_width);
+  }
+  if (self->board_panel != NULL) {
+    gtk_widget_set_size_request(self->board_panel, board_width, -1);
+  }
+  if (self->drawer_host != NULL) {
+    gtk_widget_set_size_request(self->drawer_host,
+                                self->show_navigation_drawer || self->show_analysis_drawer ? drawer_width : 0,
+                                -1);
+  }
+  if (self->drawer_split != NULL) {
+    gtk_widget_set_size_request(self->drawer_split,
+                                self->show_navigation_drawer && self->show_analysis_drawer ? drawer_width : -1,
+                                -1);
+  }
+}
+
 static void gcheckers_window_sync_drawer_ui(GCheckersWindow *self) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
 
+  gcheckers_window_capture_panel_widths(self);
+  gint extra_width = gcheckers_window_current_extra_width(self);
+
   if (self->navigation_panel != NULL) {
-    gtk_widget_set_visible(self->navigation_panel, self->show_navigation_drawer);
+    gcheckers_widget_remove_from_parent(self->navigation_panel);
   }
   if (self->analysis_panel != NULL) {
-    gtk_widget_set_visible(self->analysis_panel, self->show_analysis_drawer);
+    gcheckers_widget_remove_from_parent(self->analysis_panel);
+  }
+  if (self->drawer_host != NULL) {
+    gcheckers_widget_remove_from_parent(self->drawer_host);
   }
   if (self->drawer_split != NULL) {
-    gtk_widget_set_visible(self->drawer_split, self->show_navigation_drawer || self->show_analysis_drawer);
+    gcheckers_widget_remove_from_parent(self->drawer_split);
   }
+
+  if (self->show_navigation_drawer && self->show_analysis_drawer) {
+    g_return_if_fail(self->drawer_host != NULL);
+    g_return_if_fail(self->drawer_split != NULL);
+    g_return_if_fail(self->navigation_panel != NULL);
+    g_return_if_fail(self->analysis_panel != NULL);
+    gtk_paned_set_start_child(GTK_PANED(self->drawer_split), self->navigation_panel);
+    gtk_paned_set_end_child(GTK_PANED(self->drawer_split), self->analysis_panel);
+    gtk_box_append(GTK_BOX(self->drawer_host), self->drawer_split);
+    gtk_widget_set_visible(self->navigation_panel, TRUE);
+    gtk_widget_set_visible(self->analysis_panel, TRUE);
+    gtk_widget_set_visible(self->drawer_split, TRUE);
+    gtk_widget_set_visible(self->drawer_host, TRUE);
+    gtk_paned_set_end_child(GTK_PANED(self->main_paned), self->drawer_host);
+  } else if (self->show_navigation_drawer) {
+    g_return_if_fail(self->drawer_host != NULL);
+    g_return_if_fail(self->navigation_panel != NULL);
+    gtk_box_append(GTK_BOX(self->drawer_host), self->navigation_panel);
+    gtk_widget_set_visible(self->navigation_panel, TRUE);
+    gtk_widget_set_visible(self->drawer_host, TRUE);
+    gtk_paned_set_end_child(GTK_PANED(self->main_paned), self->drawer_host);
+  } else if (self->show_analysis_drawer) {
+    g_return_if_fail(self->drawer_host != NULL);
+    g_return_if_fail(self->analysis_panel != NULL);
+    gtk_box_append(GTK_BOX(self->drawer_host), self->analysis_panel);
+    gtk_widget_set_visible(self->analysis_panel, TRUE);
+    gtk_widget_set_visible(self->drawer_host, TRUE);
+    gtk_paned_set_end_child(GTK_PANED(self->main_paned), self->drawer_host);
+  } else {
+    gtk_paned_set_end_child(GTK_PANED(self->main_paned), NULL);
+  }
+
+  gcheckers_window_apply_saved_panel_widths(self, extra_width);
+  gtk_widget_queue_allocate(GTK_WIDGET(self));
 }
 
 static void gcheckers_window_on_show_navigation_drawer_change_state(GSimpleAction *action,
@@ -1726,9 +1868,26 @@ static void gcheckers_window_dispose(GObject *object) {
   } else {
     self->controls_panel = NULL;
   }
+  if (self->navigation_panel != NULL) {
+    gcheckers_widget_remove_from_parent(self->navigation_panel);
+    g_clear_object(&self->navigation_panel);
+  }
+  if (self->analysis_panel != NULL) {
+    gcheckers_widget_remove_from_parent(self->analysis_panel);
+    g_clear_object(&self->analysis_panel);
+  }
+  if (self->drawer_split != NULL) {
+    gcheckers_widget_remove_from_parent(self->drawer_split);
+    g_clear_object(&self->drawer_split);
+  }
+  if (self->drawer_host != NULL) {
+    gcheckers_widget_remove_from_parent(self->drawer_host);
+    g_clear_object(&self->drawer_host);
+  }
   g_clear_object(&self->board_view);
   g_clear_object(&self->model);
   self->main_paned = NULL;
+  self->board_panel = NULL;
   self->analyze_toggle_button = NULL;
   self->analyze_full_button = NULL;
   self->analysis_buffer = NULL;
@@ -1907,6 +2066,8 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_widget_set_margin_end(left_panel, 8);
   gtk_paned_set_start_child(GTK_PANED(paned), left_panel);
   gtk_paned_set_shrink_start_child(GTK_PANED(paned), FALSE);
+  self->board_panel = left_panel;
+  g_object_set_data(G_OBJECT(self), "board-panel", left_panel);
 
   self->controls_panel = g_object_ref_sink(player_controls_panel_new());
   gtk_box_append(GTK_BOX(left_panel), GTK_WIDGET(self->controls_panel));
@@ -1923,14 +2084,23 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_aspect_frame_set_child(GTK_ASPECT_FRAME(board_aspect), board_view_get_widget(self->board_view));
 
   GtkWidget *right_split = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
+  g_object_ref_sink(right_split);
   gtk_widget_set_hexpand(right_split, TRUE);
   gtk_widget_set_vexpand(right_split, TRUE);
-  gtk_paned_set_end_child(GTK_PANED(paned), right_split);
-  gtk_paned_set_shrink_end_child(GTK_PANED(paned), FALSE);
   self->drawer_split = right_split;
   g_object_set_data(G_OBJECT(self), "drawer-split", right_split);
 
+  GtkWidget *drawer_host = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  g_object_ref_sink(drawer_host);
+  gtk_widget_set_hexpand(drawer_host, TRUE);
+  gtk_widget_set_vexpand(drawer_host, TRUE);
+  gtk_paned_set_end_child(GTK_PANED(paned), drawer_host);
+  gtk_paned_set_shrink_end_child(GTK_PANED(paned), FALSE);
+  self->drawer_host = drawer_host;
+  g_object_set_data(G_OBJECT(self), "drawer-host", drawer_host);
+
   GtkWidget *middle_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  g_object_ref_sink(middle_panel);
   gtk_widget_set_hexpand(middle_panel, TRUE);
   gtk_widget_set_vexpand(middle_panel, TRUE);
   gtk_widget_set_margin_top(middle_panel, 8);
@@ -1943,6 +2113,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   g_object_set_data(G_OBJECT(self), "navigation-panel", middle_panel);
 
   GtkWidget *analysis_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  g_object_ref_sink(analysis_panel);
   gtk_widget_set_hexpand(analysis_panel, TRUE);
   gtk_widget_set_vexpand(analysis_panel, TRUE);
   gtk_widget_set_margin_top(analysis_panel, 8);
@@ -2028,6 +2199,9 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   self->edit_mode_enabled = FALSE;
   self->show_navigation_drawer = TRUE;
   self->show_analysis_drawer = TRUE;
+  self->board_panel_width = GCHECKERS_WINDOW_DEFAULT_BOARD_PANEL_WIDTH;
+  self->navigation_panel_width = GCHECKERS_WINDOW_DEFAULT_NAVIGATION_PANEL_WIDTH;
+  self->analysis_panel_width = GCHECKERS_WINDOW_DEFAULT_ANALYSIS_PANEL_WIDTH;
   gcheckers_window_sync_drawer_ui(self);
   gcheckers_window_sync_mode_ui(self);
   gcheckers_window_analysis_sync_ui(self);
