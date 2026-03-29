@@ -1,6 +1,7 @@
 #include <gtk/gtk.h>
 
 #include "board.h"
+#include "board_move_overlay.h"
 #include "board_view.h"
 #include "checkers_model.h"
 #include "game.h"
@@ -34,6 +35,13 @@ static gboolean test_board_view_count_square_click(guint8 /*index*/, guint /*but
   g_return_val_if_fail(count != NULL, FALSE);
   *count += 1;
   return TRUE;
+}
+
+static void test_board_move_overlay_winner_banner_text(void) {
+  g_assert_null(board_move_overlay_get_winner_banner_text(CHECKERS_WINNER_NONE));
+  g_assert_cmpstr(board_move_overlay_get_winner_banner_text(CHECKERS_WINNER_WHITE), ==, "White wins!");
+  g_assert_cmpstr(board_move_overlay_get_winner_banner_text(CHECKERS_WINNER_BLACK), ==, "Black wins!");
+  g_assert_cmpstr(board_move_overlay_get_winner_banner_text(CHECKERS_WINNER_DRAW), ==, "Draw!");
 }
 
 static void test_board_view_highlights_black_turn_moves(void) {
@@ -114,11 +122,13 @@ static void test_board_view_repeated_primary_clicks_are_processed(void) {
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   if (!gtk_init_check()) {
+    g_test_add_func("/board-move-overlay/winner-banner-text", test_board_move_overlay_winner_banner_text);
     g_test_add_func("/board-view/highlights-black-turn-moves", test_board_view_skip);
     g_test_add_func("/board-view/repeated-primary-clicks-are-processed", test_board_view_skip);
     return g_test_run();
   }
 
+  g_test_add_func("/board-move-overlay/winner-banner-text", test_board_move_overlay_winner_banner_text);
   g_test_add_func("/board-view/highlights-black-turn-moves",
                   test_board_view_highlights_black_turn_moves);
   g_test_add_func("/board-view/repeated-primary-clicks-are-processed",

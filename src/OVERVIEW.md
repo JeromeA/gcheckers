@@ -265,7 +265,8 @@ Collaborates with: `BoardGrid` and `PiecePalette`.
 
 ### Last move overlay (`src/board_move_overlay.c`, `src/board_move_overlay.h`)
 Module: move overlay renderer.
-Role: draw last-move arrows via cairo on top of the board.
+Role: draw last-move arrows via cairo on top of the board and, when the game is over, a centered winner banner
+(`White wins!`, `Black wins!`, or `Draw!`) across the board.
 Collaborates with: `BoardView` to render current move highlights.
 
 ### Selection controller (`src/board_selection_controller.c`, `src/board_selection_controller.h`)

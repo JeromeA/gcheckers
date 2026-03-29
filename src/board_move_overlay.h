@@ -13,6 +13,7 @@ G_DECLARE_FINAL_TYPE(BoardMoveOverlay, board_move_overlay, BOARD, MOVE_OVERLAY, 
 
 BoardMoveOverlay *board_move_overlay_new(void);
 GtkWidget *board_move_overlay_get_widget(BoardMoveOverlay *self);
+const char *board_move_overlay_get_winner_banner_text(CheckersWinner winner);
 void board_move_overlay_set_model(BoardMoveOverlay *self, GCheckersModel *model);
 void board_move_overlay_queue_draw(BoardMoveOverlay *self);
 

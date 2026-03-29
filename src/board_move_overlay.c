@@ -16,6 +16,47 @@ G_DEFINE_TYPE(BoardMoveOverlay, board_move_overlay, G_TYPE_OBJECT)
 static const double board_move_overlay_alpha = 0.5;
 static const double board_move_overlay_stroke_width = 4.0;
 static const double board_move_overlay_arrow_scale = 0.28;
+static const double board_move_overlay_banner_padding_x = 24.0;
+static const double board_move_overlay_banner_padding_y = 14.0;
+static const double board_move_overlay_banner_radius = 18.0;
+
+static void board_move_overlay_draw_rounded_rect(cairo_t *cr,
+                                                 double x,
+                                                 double y,
+                                                 double width,
+                                                 double height,
+                                                 double radius) {
+  g_return_if_fail(cr != NULL);
+
+  double capped_radius = radius;
+  if (capped_radius > width / 2.0) {
+    capped_radius = width / 2.0;
+  }
+  if (capped_radius > height / 2.0) {
+    capped_radius = height / 2.0;
+  }
+
+  cairo_new_sub_path(cr);
+  cairo_arc(cr, x + width - capped_radius, y + capped_radius, capped_radius, -G_PI_2, 0.0);
+  cairo_arc(cr, x + width - capped_radius, y + height - capped_radius, capped_radius, 0.0, G_PI_2);
+  cairo_arc(cr, x + capped_radius, y + height - capped_radius, capped_radius, G_PI_2, G_PI);
+  cairo_arc(cr, x + capped_radius, y + capped_radius, capped_radius, G_PI, 3.0 * G_PI_2);
+  cairo_close_path(cr);
+}
+
+const char *board_move_overlay_get_winner_banner_text(CheckersWinner winner) {
+  switch (winner) {
+    case CHECKERS_WINNER_WHITE:
+      return "White wins!";
+    case CHECKERS_WINNER_BLACK:
+      return "Black wins!";
+    case CHECKERS_WINNER_DRAW:
+      return "Draw!";
+    case CHECKERS_WINNER_NONE:
+    default:
+      return NULL;
+  }
+}
 
 static void board_move_overlay_draw_arrow(cairo_t *cr,
                                           double start_x,
@@ -80,37 +121,69 @@ static void board_move_overlay_draw(GtkDrawingArea * /*area*/,
     return;
   }
 
+  const char *winner_banner = board_move_overlay_get_winner_banner_text(state->winner);
+
   const CheckersMove *last_move = gcheckers_model_peek_last_move(self->model);
-  if (!last_move || last_move->length < 2) {
+  if (last_move != NULL && last_move->length >= 2) {
+    double cell_width = (double)width / state->board.board_size;
+    double cell_height = (double)height / state->board.board_size;
+    double arrow_size = fmin(cell_width, cell_height) * board_move_overlay_arrow_scale;
+
+    cairo_save(cr);
+    cairo_set_line_width(cr, board_move_overlay_stroke_width);
+    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+    cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+    cairo_set_source_rgba(cr, 0.2, 0.85, 0.2, board_move_overlay_alpha);
+
+    for (uint8_t i = 1; i < last_move->length; ++i) {
+      int start_row = 0;
+      int start_col = 0;
+      int end_row = 0;
+      int end_col = 0;
+      board_coord_from_index(last_move->path[i - 1], &start_row, &start_col, state->board.board_size);
+      board_coord_from_index(last_move->path[i], &end_row, &end_col, state->board.board_size);
+
+      double start_x = ((double)start_col + 0.5) * cell_width;
+      double start_y = ((double)start_row + 0.5) * cell_height;
+      double end_x = ((double)end_col + 0.5) * cell_width;
+      double end_y = ((double)end_row + 0.5) * cell_height;
+
+      board_move_overlay_draw_arrow(cr, start_x, start_y, end_x, end_y, arrow_size);
+    }
+
+    cairo_restore(cr);
+  }
+
+  if (winner_banner == NULL) {
     return;
   }
 
-  double cell_width = (double)width / state->board.board_size;
-  double cell_height = (double)height / state->board.board_size;
-  double arrow_size = fmin(cell_width, cell_height) * board_move_overlay_arrow_scale;
-
   cairo_save(cr);
-  cairo_set_line_width(cr, board_move_overlay_stroke_width);
-  cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
-  cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
-  cairo_set_source_rgba(cr, 0.2, 0.85, 0.2, board_move_overlay_alpha);
+  cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+  cairo_set_font_size(cr, MAX(24.0, MIN(width, height) * 0.14));
 
-  for (uint8_t i = 1; i < last_move->length; ++i) {
-    int start_row = 0;
-    int start_col = 0;
-    int end_row = 0;
-    int end_col = 0;
-    board_coord_from_index(last_move->path[i - 1], &start_row, &start_col, state->board.board_size);
-    board_coord_from_index(last_move->path[i], &end_row, &end_col, state->board.board_size);
+  cairo_text_extents_t extents = {0};
+  cairo_text_extents(cr, winner_banner, &extents);
 
-    double start_x = ((double)start_col + 0.5) * cell_width;
-    double start_y = ((double)start_row + 0.5) * cell_height;
-    double end_x = ((double)end_col + 0.5) * cell_width;
-    double end_y = ((double)end_row + 0.5) * cell_height;
+  double banner_width = extents.width + board_move_overlay_banner_padding_x * 2.0;
+  double banner_height = extents.height + board_move_overlay_banner_padding_y * 2.0;
+  double banner_x = ((double)width - banner_width) / 2.0;
+  double banner_y = ((double)height - banner_height) / 2.0;
 
-    board_move_overlay_draw_arrow(cr, start_x, start_y, end_x, end_y, arrow_size);
-  }
+  cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.68);
+  board_move_overlay_draw_rounded_rect(cr,
+                                       banner_x,
+                                       banner_y,
+                                       banner_width,
+                                       banner_height,
+                                       board_move_overlay_banner_radius);
+  cairo_fill(cr);
 
+  double text_x = banner_x + board_move_overlay_banner_padding_x - extents.x_bearing;
+  double text_y = banner_y + board_move_overlay_banner_padding_y - extents.y_bearing;
+  cairo_move_to(cr, text_x, text_y);
+  cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+  cairo_show_text(cr, winner_banner);
   cairo_restore(cr);
 }
 
