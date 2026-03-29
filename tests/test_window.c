@@ -594,7 +594,7 @@ static void test_gcheckers_window_analysis_toggle(void) {
   GCheckersWindow *window = gcheckers_window_new(app, model);
 
   GtkToggleButton *analyze_toggle =
-      test_gcheckers_window_find_toggle_button_with_label(GTK_WIDGET(window), "Analyze");
+      test_gcheckers_window_find_toggle_button_with_label(GTK_WIDGET(window), "Analyze this position");
   g_assert_nonnull(analyze_toggle);
   g_assert_false(gtk_toggle_button_get_active(analyze_toggle));
 

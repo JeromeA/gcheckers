@@ -7,8 +7,8 @@ Owns: `GCheckersModel`, `BoardView`, `PlayerControlsPanel`, and `GCheckersSgfCon
 Collaborates with: `gcheckers_style_init()` for CSS, model signals for refresh, and SGF analysis signals to reset
 player dropdowns. Computer turns are routed by control mode with alpha-beta depth configured from the shared
 `Computer depth` slider (`0..16`). Uses a three-pane layout: board and player controls (left), SGF mode selector
-and SGF view (middle), and analysis (right) with both an `Analyze` toggle (iterative deepening on current SGF node)
-and an `Analyze full game` button (fixed-depth analysis of all SGF nodes).
+and SGF view (middle), and analysis (right) with both an `Analyze this position` toggle (iterative deepening on the
+current SGF node) and an `Analyze full game` button (fixed-depth analysis of all SGF nodes).
 Mode dropdown supports `Play` and `Edit`. In `Edit`, board clicks mutate SGF setup properties on the current node:
 left click cycles empty->white man->white king->empty (with black pieces and any king clearing to empty), right click
 mirrors this for black. SGF navigation and `Force move` actions are disabled while `Edit` is active.

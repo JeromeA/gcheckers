@@ -1919,7 +1919,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_widget_add_css_class(sgf_widget, "sgf-panel");
   gtk_box_append(GTK_BOX(middle_panel), sgf_widget);
 
-  self->analyze_toggle_button = gtk_toggle_button_new_with_label("Analyze");
+  self->analyze_toggle_button = gtk_toggle_button_new_with_label("Analyze this position");
   g_signal_connect(self->analyze_toggle_button,
                    "toggled",
                    G_CALLBACK(gcheckers_window_on_analyze_toggled),
@@ -1960,7 +1960,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   self->edit_mode_enabled = FALSE;
   gcheckers_window_sync_mode_ui(self);
   gcheckers_window_analysis_sync_ui(self);
-  gcheckers_window_set_analysis_text(self, "Toggle Analyze to start/stop iterative analysis.");
+  gcheckers_window_set_analysis_text(self, "Toggle Analyze this position to start/stop iterative analysis.");
   gcheckers_window_refresh_analysis_graph(self);
 }
 
