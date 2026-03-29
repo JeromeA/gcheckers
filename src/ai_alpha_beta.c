@@ -563,6 +563,14 @@ gboolean checkers_ai_alpha_beta_evaluate_position(const Game *game, guint max_de
   return TRUE;
 }
 
+gboolean checkers_ai_evaluate_static_material(const Game *game, gint *out_score) {
+  g_return_val_if_fail(game != NULL, FALSE);
+  g_return_val_if_fail(out_score != NULL, FALSE);
+
+  *out_score = checkers_ai_material_score(game);
+  return TRUE;
+}
+
 gboolean checkers_ai_alpha_beta_choose_move(const Game *game, guint max_depth, CheckersMove *out_move) {
   g_return_val_if_fail(game != NULL, FALSE);
   g_return_val_if_fail(out_move != NULL, FALSE);

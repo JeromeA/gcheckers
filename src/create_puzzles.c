@@ -45,6 +45,16 @@ static gboolean checkers_puzzle_moves_equal(const CheckersMove *left, const Chec
   return memcmp(left, right, sizeof(*left)) == 0;
 }
 
+static gboolean checkers_puzzle_score_better_for_side(CheckersColor side, gint candidate, gint baseline) {
+  g_return_val_if_fail(side == CHECKERS_COLOR_WHITE || side == CHECKERS_COLOR_BLACK, FALSE);
+  return side == CHECKERS_COLOR_WHITE ? candidate > baseline : candidate < baseline;
+}
+
+static gboolean checkers_puzzle_score_reaches_target_for_side(CheckersColor side, gint score, gint target) {
+  g_return_val_if_fail(side == CHECKERS_COLOR_WHITE || side == CHECKERS_COLOR_BLACK, FALSE);
+  return side == CHECKERS_COLOR_WHITE ? score >= target : score <= target;
+}
+
 static gboolean checkers_puzzle_find_move_score(const CheckersScoredMoveList *moves,
                                                 const CheckersMove *move,
                                                 gint *out_score) {
@@ -136,10 +146,10 @@ static gboolean checkers_puzzle_format_move(const CheckersMove *move, char out_t
   return game_format_move_notation(move, out_text, 128);
 }
 
-static gboolean checkers_puzzle_evaluate_depth0(const Game *game, gint *out_score) {
+static gboolean checkers_puzzle_evaluate_static(const Game *game, gint *out_score) {
   g_return_val_if_fail(game != NULL, FALSE);
   g_return_val_if_fail(out_score != NULL, FALSE);
-  return checkers_ai_alpha_beta_evaluate_position(game, CHECKERS_PUZZLE_SELF_PLAY_DEPTH, out_score);
+  return checkers_ai_evaluate_static_material(game, out_score);
 }
 
 static gboolean checkers_puzzle_append_best_depth0_move(Game *game, GArray *line) {
@@ -173,6 +183,12 @@ static gboolean checkers_puzzle_build_tactical_line(const Game *start,
   g_return_val_if_fail(out_line != NULL, FALSE);
 
   Game line_game = *start;
+  CheckersColor puzzle_side = start->state.turn;
+  gint start_static = 0;
+  if (!checkers_puzzle_evaluate_static(start, &start_static)) {
+    g_debug("Failed to evaluate static score at puzzle start");
+    return FALSE;
+  }
 
   CheckersPuzzleLineMove first = {
       .move = *forced_first,
@@ -186,11 +202,12 @@ static gboolean checkers_puzzle_build_tactical_line(const Game *start,
 
   for (guint ply = 1; ply < CHECKERS_PUZZLE_MAX_TACTICAL_PLIES; ++ply) {
     gint eval0 = 0;
-    if (!checkers_puzzle_evaluate_depth0(&line_game, &eval0)) {
-      g_debug("Failed depth-0 evaluation while building tactical line at ply %u", ply);
+    if (!checkers_puzzle_evaluate_static(&line_game, &eval0)) {
+      g_debug("Failed static evaluation while building tactical line at ply %u", ply);
       return FALSE;
     }
-    if (eval0 == target_score) {
+    if (checkers_puzzle_score_reaches_target_for_side(puzzle_side, eval0, target_score) ||
+        checkers_puzzle_score_better_for_side(puzzle_side, eval0, start_static)) {
       return TRUE;
     }
     if (line_game.state.winner != CHECKERS_WINNER_NONE) {
@@ -204,8 +221,8 @@ static gboolean checkers_puzzle_build_tactical_line(const Game *start,
   }
 
   gint final_eval = 0;
-  if (!checkers_puzzle_evaluate_depth0(&line_game, &final_eval)) {
-    g_debug("Failed final depth-0 evaluation after reaching tactical line max plies");
+  if (!checkers_puzzle_evaluate_static(&line_game, &final_eval)) {
+    g_debug("Failed final static evaluation after reaching tactical line max plies");
     return FALSE;
   }
   return final_eval == target_score;
@@ -332,6 +349,19 @@ static gboolean checkers_puzzle_collect_candidate_from_position(const Game *post
     checkers_scored_move_list_free(&start_analysis);
     return FALSE;
   }
+
+  gint static_score = 0;
+  if (!checkers_puzzle_evaluate_static(post_mistake_game, &static_score)) {
+    checkers_scored_move_list_free(&start_analysis);
+    return FALSE;
+  }
+  gboolean is_better_for_side_to_move =
+      post_mistake_game->state.turn == CHECKERS_COLOR_WHITE ? (target_score > static_score) : (target_score < static_score);
+  if (!is_better_for_side_to_move) {
+    checkers_scored_move_list_free(&start_analysis);
+    return FALSE;
+  }
+
   CheckersMove solution_move = start_analysis.moves[0].move;
   checkers_scored_move_list_free(&start_analysis);
 

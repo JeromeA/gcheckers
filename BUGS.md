@@ -217,3 +217,14 @@ This reduced effective lookahead in tactical forcing lines and made configured d
 The fix keeps `depth_remaining` unchanged when `moves.count == 1`, applies cutoff only when depth is zero on
 non-forced nodes, and also updates root move analysis so a forced root move does not consume depth before recursion.
 Regression coverage was added in `test_checkers_model`.
+
+## Puzzle continuation targets used searched depth-0 score instead of static material
+
+Puzzle continuation extraction should stop when pure board material reaches the depth-8 target score for the candidate.
+
+The generator used `checkers_ai_alpha_beta_evaluate_position(..., depth=0)` as its "eval0". After forced-move depth
+extensions were introduced, depth-0 search was no longer purely static material and could change across non-capturing
+moves due to forced tactical continuations.
+
+The fix adds a dedicated public API `checkers_ai_evaluate_static_material()` and updates puzzle continuation building to
+use that static evaluator for target matching.

@@ -54,6 +54,7 @@ gboolean checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(
      */
     CheckersAiSearchStats *out_stats);
 gboolean checkers_ai_alpha_beta_evaluate_position(const Game *game, guint max_depth, gint *out_score);
+gboolean checkers_ai_evaluate_static_material(const Game *game, gint *out_score);
 void checkers_scored_move_list_free(CheckersScoredMoveList *list);
 
 #endif

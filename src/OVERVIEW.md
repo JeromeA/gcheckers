@@ -155,7 +155,8 @@ Score convention: search scores are white-centric at all plies (`+` good for whi
 lists are ordered by side to move preference (white: high to low, black: low to high) so index 0 remains the best move
 for the player to act.
 Search integrates zobrist hashing + a depth/bound/age transposition table and uses stored best moves for local move
-ordering. Also exposes direct position scoring for tooling predicates.
+ordering. Exposes both searched position scoring (`checkers_ai_alpha_beta_evaluate_position`) and pure static
+material scoring (`checkers_ai_evaluate_static_material`) for tooling that must not include forced-ply extensions.
 Collaborates with: `checkers_model.c` for model-facing AI move selection and structured analysis APIs.
 
 ## Transposition table (`src/ai_transposition_table.c`, `src/ai_transposition_table.h`)
@@ -218,6 +219,8 @@ Module: CLI front end.
 Role: repeatedly self-play games at depth 0, detect mistake positions with depth-8 analysis,
 filter candidates where the opponent has at least four legal moves and exactly one top response, then save puzzles as
 SGF files under `puzzles/puzzle-####.sgf` with root setup (`AE/AB/AW/ABK/AWK/PL`) and a tactical continuation line.
+Tactical-line stop conditions use static material evaluation (not searched depth-0 evaluation) so targets are measured
+in pure board material quanta.
 For each emitted puzzle index, also saves the originating full self-play game as `puzzles/game-####.sgf`.
 Collaborates with: `ai_alpha_beta.c`, `rulesets.c`, `sgf_tree.c`, `sgf_move_props.c`, `sgf_io.c`,
 and `puzzle_generation.c`.
