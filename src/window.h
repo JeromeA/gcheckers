@@ -17,6 +17,7 @@ GCheckersWindow *gcheckers_window_new(GtkApplication *app, GCheckersModel *model
 void gcheckers_window_present_new_game_dialog(GCheckersWindow *self);
 void gcheckers_window_present_import_dialog(GCheckersWindow *self);
 void gcheckers_window_force_move(GCheckersWindow *self);
+char *gcheckers_window_format_analysis_score(gint score);
 PlayerRuleset gcheckers_window_get_ruleset(GCheckersWindow *self);
 void gcheckers_window_apply_new_game_settings(GCheckersWindow *self,
                                               PlayerRuleset ruleset,

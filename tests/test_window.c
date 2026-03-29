@@ -21,6 +21,23 @@ static void test_analysis_graph_score_compression(void) {
   g_assert_cmpfloat_with_epsilon(analysis_graph_compress_score(-3600.0), -1200.0, 0.000001);
 }
 
+static void test_analysis_score_formatting(void) {
+  g_autofree char *zero = gcheckers_window_format_analysis_score(0);
+  g_assert_cmpstr(zero, ==, "+0");
+
+  g_autofree char *positive = gcheckers_window_format_analysis_score(200);
+  g_assert_cmpstr(positive, ==, "+200");
+
+  g_autofree char *negative = gcheckers_window_format_analysis_score(-200);
+  g_assert_cmpstr(negative, ==, "-200");
+
+  g_autofree char *white_win = gcheckers_window_format_analysis_score(2997);
+  g_assert_cmpstr(white_win, ==, "Win in 3 moves");
+
+  g_autofree char *black_win = gcheckers_window_format_analysis_score(-2994);
+  g_assert_cmpstr(black_win, ==, "Loss in 6 moves");
+}
+
 static void test_analysis_graph_axis_range_minimum_window(void) {
   double min_axis = 0.0;
   double max_axis = 0.0;
@@ -867,6 +884,7 @@ static void test_gcheckers_window_new_game_dialog_ruleset_options_and_russian_ap
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   g_test_add_func("/analysis-graph/score-compression", test_analysis_graph_score_compression);
+  g_test_add_func("/analysis/score-formatting", test_analysis_score_formatting);
   g_test_add_func("/analysis-graph/axis-range-minimum-window", test_analysis_graph_axis_range_minimum_window);
   g_test_add_func("/analysis-graph/axis-range-expands", test_analysis_graph_axis_range_expands_for_large_scores);
 

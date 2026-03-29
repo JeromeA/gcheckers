@@ -756,6 +756,16 @@ static void gcheckers_window_refresh_analysis_graph(GCheckersWindow *self) {
 
 static void gcheckers_window_analysis_append_tt_stats(GString *text, const CheckersAiSearchStats *stats);
 
+char *gcheckers_window_format_analysis_score(gint score) {
+  gint abs_score = ABS(score);
+  if (abs_score >= 2900 && abs_score <= 3000) {
+    gint distance = 3000 - abs_score;
+    return g_strdup_printf("%s in %d moves", score > 0 ? "Win" : "Loss", distance);
+  }
+
+  return g_strdup_printf("%+d", score);
+}
+
 static void gcheckers_window_analysis_append_scored_moves(GString *text, const SgfNodeAnalysis *analysis) {
   g_return_if_fail(text != NULL);
   g_return_if_fail(analysis != NULL);
@@ -772,7 +782,13 @@ static void gcheckers_window_analysis_append_scored_moves(GString *text, const S
     if (!game_format_move_notation(&entry->move, notation, sizeof(notation))) {
       g_strlcpy(notation, "?", sizeof(notation));
     }
-    g_string_append_printf(text, "%u. %s : %d\n", i + 1, notation, entry->score);
+
+    g_autofree char *score_text = gcheckers_window_format_analysis_score(entry->score);
+    if (score_text == NULL) {
+      g_debug("Failed to format analysis score");
+      continue;
+    }
+    g_string_append_printf(text, "%u. %s : %s\n", i + 1, notation, score_text);
   }
 }
 

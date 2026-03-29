@@ -16,6 +16,8 @@ Worker output is staged through a mutex-protected shared report buffer, and the 
 main thread every 100ms while analysis is active. During iterative deepening, intermediate node-count snapshots are
 published and shown with a temporary `(searching...)` marker. Completed results are converted to `SgfNodeAnalysis` and
 attached to SGF nodes on the main thread, while text in the panel is formatted from that structured node analysis.
+Analysis score text always shows an explicit `+` sign for positive centipawn-style values and converts terminal
+`2900..3000` magnitudes into `Win in X moves` / `Loss in X moves`.
 Full-game completion gating uses processed-job counts (not only payload-attached counts), so terminal/no-move nodes do
 not leave the Analyze full game button disabled after completion.
 Analysis lifecycle transitions are centralized (begin/finish/sync-ui helpers), so full-game button state, transient
