@@ -17,6 +17,9 @@ struct _GCheckersWindow {
   GtkApplicationWindow parent_instance;
   GCheckersModel *model;
   GtkWidget *main_paned;
+  GtkWidget *drawer_split;
+  GtkWidget *navigation_panel;
+  GtkWidget *analysis_panel;
   GtkWidget *analyze_toggle_button;
   GtkWidget *analyze_full_button;
   GtkTextBuffer *analysis_buffer;
@@ -40,6 +43,8 @@ struct _GCheckersWindow {
   gboolean analysis_done_received;
   gboolean analysis_canceled;
   gboolean edit_mode_enabled;
+  gboolean show_navigation_drawer;
+  gboolean show_analysis_drawer;
 };
 
 G_DEFINE_TYPE(GCheckersWindow, gcheckers_window, GTK_TYPE_APPLICATION_WINDOW)
@@ -98,6 +103,7 @@ static void gcheckers_window_analysis_finish_session(GCheckersWindow *self);
 static gboolean gcheckers_window_is_edit_mode(GCheckersWindow *self);
 static void gcheckers_window_set_action_enabled(GActionMap *map, const char *name, gboolean enabled);
 static void gcheckers_window_sync_mode_ui(GCheckersWindow *self);
+static void gcheckers_window_sync_drawer_ui(GCheckersWindow *self);
 static gboolean gcheckers_window_format_setup_point(uint8_t index, uint8_t board_size, char out_point[3]);
 static gboolean gcheckers_window_update_node_setup_piece(SgfNode *node, const char *point, CheckersPiece piece);
 static gboolean gcheckers_window_on_board_square_action(guint8 index, guint button, gpointer user_data);
@@ -139,6 +145,46 @@ static void gcheckers_window_analysis_sync_ui(GCheckersWindow *self) {
   if (!full_game_active && self->analysis_graph != NULL) {
     analysis_graph_clear_progress_node(self->analysis_graph);
   }
+}
+
+static void gcheckers_window_sync_drawer_ui(GCheckersWindow *self) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+
+  if (self->navigation_panel != NULL) {
+    gtk_widget_set_visible(self->navigation_panel, self->show_navigation_drawer);
+  }
+  if (self->analysis_panel != NULL) {
+    gtk_widget_set_visible(self->analysis_panel, self->show_analysis_drawer);
+  }
+  if (self->drawer_split != NULL) {
+    gtk_widget_set_visible(self->drawer_split, self->show_navigation_drawer || self->show_analysis_drawer);
+  }
+}
+
+static void gcheckers_window_on_show_navigation_drawer_change_state(GSimpleAction *action,
+                                                                    GVariant *value,
+                                                                    gpointer user_data) {
+  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(G_IS_SIMPLE_ACTION(action));
+  g_return_if_fail(value != NULL);
+
+  self->show_navigation_drawer = g_variant_get_boolean(value);
+  g_simple_action_set_state(action, value);
+  gcheckers_window_sync_drawer_ui(self);
+}
+
+static void gcheckers_window_on_show_analysis_drawer_change_state(GSimpleAction *action,
+                                                                  GVariant *value,
+                                                                  gpointer user_data) {
+  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(G_IS_SIMPLE_ACTION(action));
+  g_return_if_fail(value != NULL);
+
+  self->show_analysis_drawer = g_variant_get_boolean(value);
+  g_simple_action_set_state(action, value);
+  gcheckers_window_sync_drawer_ui(self);
 }
 
 static void gcheckers_window_analysis_reset_runtime_state(GCheckersWindow *self) {
@@ -1760,6 +1806,22 @@ static void gcheckers_window_init(GCheckersWindow *self) {
           .change_state = NULL,
           .padding = {0},
       },
+      {
+          .name = "show-navigation-drawer",
+          .activate = NULL,
+          .parameter_type = NULL,
+          .state = "true",
+          .change_state = gcheckers_window_on_show_navigation_drawer_change_state,
+          .padding = {0},
+      },
+      {
+          .name = "show-analysis-drawer",
+          .activate = NULL,
+          .parameter_type = NULL,
+          .state = "true",
+          .change_state = gcheckers_window_on_show_analysis_drawer_change_state,
+          .padding = {0},
+      },
   };
   g_action_map_add_action_entries(G_ACTION_MAP(self),
                                   window_actions,
@@ -1865,6 +1927,8 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_widget_set_vexpand(right_split, TRUE);
   gtk_paned_set_end_child(GTK_PANED(paned), right_split);
   gtk_paned_set_shrink_end_child(GTK_PANED(paned), FALSE);
+  self->drawer_split = right_split;
+  g_object_set_data(G_OBJECT(self), "drawer-split", right_split);
 
   GtkWidget *middle_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_widget_set_hexpand(middle_panel, TRUE);
@@ -1875,6 +1939,8 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_widget_set_margin_end(middle_panel, 8);
   gtk_paned_set_start_child(GTK_PANED(right_split), middle_panel);
   gtk_paned_set_shrink_start_child(GTK_PANED(right_split), FALSE);
+  self->navigation_panel = middle_panel;
+  g_object_set_data(G_OBJECT(self), "navigation-panel", middle_panel);
 
   GtkWidget *analysis_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_widget_set_hexpand(analysis_panel, TRUE);
@@ -1885,6 +1951,8 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_widget_set_margin_end(analysis_panel, 8);
   gtk_paned_set_end_child(GTK_PANED(right_split), analysis_panel);
   gtk_paned_set_shrink_end_child(GTK_PANED(right_split), FALSE);
+  self->analysis_panel = analysis_panel;
+  g_object_set_data(G_OBJECT(self), "analysis-panel", analysis_panel);
   gtk_paned_set_position(GTK_PANED(paned), 500);
   gtk_paned_set_position(GTK_PANED(right_split), 300);
 
@@ -1958,6 +2026,9 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(analysis_scroller), analysis_view);
   self->analysis_buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(analysis_view));
   self->edit_mode_enabled = FALSE;
+  self->show_navigation_drawer = TRUE;
+  self->show_analysis_drawer = TRUE;
+  gcheckers_window_sync_drawer_ui(self);
   gcheckers_window_sync_mode_ui(self);
   gcheckers_window_analysis_sync_ui(self);
   gcheckers_window_set_analysis_text(self, "Toggle Analyze this position to start/stop iterative analysis.");

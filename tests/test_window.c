@@ -370,6 +370,18 @@ static AnalysisGraph *test_gcheckers_window_get_analysis_graph(GCheckersWindow *
   return ANALYSIS_GRAPH(data);
 }
 
+static GtkWidget *test_gcheckers_window_get_named_widget(GCheckersWindow *window, const char *key) {
+  g_return_val_if_fail(GCHECKERS_IS_WINDOW(window), NULL);
+  g_return_val_if_fail(key != NULL, NULL);
+
+  gpointer data = g_object_get_data(G_OBJECT(window), key);
+  if (data == NULL) {
+    return NULL;
+  }
+
+  return GTK_WIDGET(data);
+}
+
 static void test_gcheckers_window_unparents_controls_panel_on_dispose(void) {
   GtkApplication *app = test_gcheckers_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
@@ -620,6 +632,59 @@ static void test_gcheckers_window_analysis_full_button_exists(void) {
       test_gcheckers_window_find_button_with_label(GTK_WIDGET(window), "Analyze full game");
   g_assert_nonnull(full_button);
   g_assert_true(gtk_widget_get_sensitive(GTK_WIDGET(full_button)));
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
+static void test_gcheckers_window_drawer_visibility_actions(void) {
+  GtkApplication *app = test_gcheckers_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersWindow *window = gcheckers_window_new(app, model);
+
+  GtkWidget *navigation_panel = test_gcheckers_window_get_named_widget(window, "navigation-panel");
+  GtkWidget *analysis_panel = test_gcheckers_window_get_named_widget(window, "analysis-panel");
+  GtkWidget *drawer_split = test_gcheckers_window_get_named_widget(window, "drawer-split");
+  g_assert_nonnull(navigation_panel);
+  g_assert_nonnull(analysis_panel);
+  g_assert_nonnull(drawer_split);
+
+  g_assert_true(gtk_widget_get_visible(navigation_panel));
+  g_assert_true(gtk_widget_get_visible(analysis_panel));
+  g_assert_true(gtk_widget_get_visible(drawer_split));
+
+  g_action_group_change_action_state(G_ACTION_GROUP(window),
+                                     "show-navigation-drawer",
+                                     g_variant_new_boolean(FALSE));
+  test_gcheckers_window_drain_main_context(8);
+  g_assert_false(gtk_widget_get_visible(navigation_panel));
+  g_assert_true(gtk_widget_get_visible(analysis_panel));
+  g_assert_true(gtk_widget_get_visible(drawer_split));
+
+  g_action_group_change_action_state(G_ACTION_GROUP(window),
+                                     "show-analysis-drawer",
+                                     g_variant_new_boolean(FALSE));
+  test_gcheckers_window_drain_main_context(8);
+  g_assert_false(gtk_widget_get_visible(navigation_panel));
+  g_assert_false(gtk_widget_get_visible(analysis_panel));
+  g_assert_false(gtk_widget_get_visible(drawer_split));
+
+  g_action_group_change_action_state(G_ACTION_GROUP(window),
+                                     "show-navigation-drawer",
+                                     g_variant_new_boolean(TRUE));
+  test_gcheckers_window_drain_main_context(8);
+  g_assert_true(gtk_widget_get_visible(navigation_panel));
+  g_assert_false(gtk_widget_get_visible(analysis_panel));
+  g_assert_true(gtk_widget_get_visible(drawer_split));
+
+  g_action_group_change_action_state(G_ACTION_GROUP(window),
+                                     "show-analysis-drawer",
+                                     g_variant_new_boolean(TRUE));
+  test_gcheckers_window_drain_main_context(8);
+  g_assert_true(gtk_widget_get_visible(navigation_panel));
+  g_assert_true(gtk_widget_get_visible(analysis_panel));
+  g_assert_true(gtk_widget_get_visible(drawer_split));
 
   g_clear_object(&window);
   g_clear_object(&model);
@@ -901,6 +966,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/gcheckers-window/sgf-actions-navigate", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/analysis-toggle", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/analysis-full-button", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/drawer-visibility-actions", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/edit-mode-disables-navigation", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/graph-selection-sync", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/graph-activation-selects-node", test_gcheckers_window_skip);
@@ -942,6 +1008,8 @@ int main(int argc, char **argv) {
                   test_gcheckers_window_sgf_actions_navigate_timeline);
   g_test_add_func("/gcheckers-window/analysis-toggle", test_gcheckers_window_analysis_toggle);
   g_test_add_func("/gcheckers-window/analysis-full-button", test_gcheckers_window_analysis_full_button_exists);
+  g_test_add_func("/gcheckers-window/drawer-visibility-actions",
+                  test_gcheckers_window_drawer_visibility_actions);
   g_test_add_func("/gcheckers-window/edit-mode-disables-navigation",
                   test_gcheckers_window_edit_mode_disables_navigation_and_force_move);
   g_test_add_func("/gcheckers-window/graph-selection-sync",

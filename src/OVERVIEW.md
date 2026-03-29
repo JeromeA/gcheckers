@@ -9,6 +9,8 @@ player dropdowns. Computer turns are routed by control mode with alpha-beta dept
 `Computer depth` slider (`0..16`). Uses a three-pane layout: board and player controls (left), SGF mode selector
 and SGF view (middle), and analysis (right) with both an `Analyze this position` toggle (iterative deepening on the
 current SGF node) and an `Analyze full game` button (fixed-depth analysis of all SGF nodes).
+Adds a `View` menubar submenu with independent toggles for the navigation drawer and analysis drawer; hiding both
+removes the entire right-side drawer split while preserving the board pane.
 Mode dropdown supports `Play` and `Edit`. In `Edit`, board clicks mutate SGF setup properties on the current node:
 left click cycles empty->white man->white king->empty (with black pieces and any king clearing to empty), right click
 mirrors this for black. SGF navigation and `Force move` actions are disabled while `Edit` is active.

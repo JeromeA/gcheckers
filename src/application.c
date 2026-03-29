@@ -120,6 +120,7 @@ static void gcheckers_application_startup(GApplication *app) {
   GMenu *file_quit_menu = g_menu_new();
   GMenu *game_menu = g_menu_new();
   GMenu *game_navigation_menu = g_menu_new();
+  GMenu *view_menu = g_menu_new();
   g_menu_append(file_primary_menu, "New game...", "app.new-game");
   g_menu_append(file_primary_menu, "Import...", "app.import");
   g_menu_append(file_primary_menu, "Load...", "win.sgf-load");
@@ -135,14 +136,18 @@ static void gcheckers_application_startup(GApplication *app) {
   g_menu_append(game_navigation_menu, "Forward to next branch", "win.sgf-step-forward-to-branch");
   g_menu_append(game_navigation_menu, "Forward to main line end", "win.sgf-step-forward-to-end");
   g_menu_append_section(game_menu, NULL, G_MENU_MODEL(game_navigation_menu));
+  g_menu_append(view_menu, "Show navigation drawer", "win.show-navigation-drawer");
+  g_menu_append(view_menu, "Show analysis drawer", "win.show-analysis-drawer");
   g_menu_append_submenu(menubar, "File", G_MENU_MODEL(file_menu));
   g_menu_append_submenu(menubar, "Game", G_MENU_MODEL(game_menu));
+  g_menu_append_submenu(menubar, "View", G_MENU_MODEL(view_menu));
   gtk_application_set_menubar(GTK_APPLICATION(app), G_MENU_MODEL(menubar));
 
   g_object_unref(file_quit_menu);
   g_object_unref(file_primary_menu);
   g_object_unref(game_navigation_menu);
   g_object_unref(game_menu);
+  g_object_unref(view_menu);
   g_object_unref(file_menu);
   g_object_unref(menubar);
 
