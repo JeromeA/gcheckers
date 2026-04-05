@@ -136,8 +136,8 @@ Collaborates with: `window.c`/`new_game_dialog.c` for UI selection + summaries, 
 
 ## Game printing (`src/game_print.c`)
 Module: terminal formatting helpers.
-Role: render board state and move notation for the CLI.
-Collaborates with: `checkers_cli.c` for user-visible output.
+Role: render board state and move notation for tooling and tests.
+Collaborates with: game/SGF formatting callers.
 
 ## Move generation (`src/move_gen.c`)
 Module: move generation.
@@ -212,11 +212,6 @@ History parsing extracts each table's `table_id`, start timestamp (rendered as `
 names.
 Collaborates with: import dialog flow for "Fetch game history" and `tests/test_bga_client.c` (token/login/history
 parsing + live login smoke test with env-provided credentials).
-
-## CLI entry point (`src/checkers_cli.c`)
-Module: CLI front end.
-Role: provide a prompt-driven loop for human vs. AI play in the terminal.
-Collaborates with: `game.c` and `game_print.c`.
 
 ## Position finder CLI (`src/find_position.c`)
 Module: CLI front end.

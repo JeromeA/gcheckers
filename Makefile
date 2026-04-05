@@ -55,7 +55,7 @@ GSETTINGS_SCHEMA_COMPILED := $(GSETTINGS_SCHEMA_DIR)/gschemas.compiled
 
 .PHONY: all clean test coverage screenshot test_screenshot test_sgf_view_broadway
 
-all: $(GSETTINGS_SCHEMA_COMPILED) libgame.a checkers create_puzzles find_position gcheckers
+all: $(GSETTINGS_SCHEMA_COMPILED) libgame.a create_puzzles find_position gcheckers
 
 libgame.a: $(OBJS)
 	ar rcs $@ $^
@@ -94,9 +94,6 @@ test_board: tests/test_board.c $(BOARD_SRCS) src/board.h src/checkers_constants.
 
 test_move_gen: tests/test_move_gen.c $(SRCS) src/game.h
 	$(CC) $(CFLAGS) -o $@ tests/test_move_gen.c $(SRCS) $(LDLIBS)
-
-checkers: src/checkers_cli.c $(SRCS) src/game.h
-	$(CC) $(CFLAGS) -o $@ src/checkers_cli.c $(SRCS) $(LDLIBS)
 
 create_puzzles: src/create_puzzles.c src/puzzle_generation.c src/puzzle_generation.h \
 	src/sgf_io.c src/sgf_io.h src/sgf_tree.c src/sgf_tree.h src/sgf_move_props.c src/sgf_move_props.h \
@@ -307,7 +304,7 @@ clean:
 	rm -f $(OBJS) libgame.a test_game test_game_print test_board test_move_gen test_checkers_model \
 		test_ai_transposition_table test_position_search test_position_predicate test_sgf_tree test_sgf_io test_sgf_view \
 		test_bga_client test_board_view test_player_controls_panel test_sgf_controller \
-		test_window test_screenshot checkers find_position gcheckers
+		test_window test_screenshot find_position gcheckers
 	rm -f $(GSETTINGS_SCHEMA_COMPILED)
 	rm -rf $(COV_DIR)
 
