@@ -1,14 +1,29 @@
 A checkers program.
 
-Dependencies:
+Main features:
 
-  - glib-2.0 development headers (pkg-config is used to locate it)
-  - GTK 4 Broadway daemon and Chromium for screenshot automation (run ./tools/setup.sh on Debian/Ubuntu)
+  - hot-seat play for two human players
+  - play against the computer
+  - computer analysis of the current position or a full recorded game
+  - SGF variation exploration and navigation
 
-Build the library and CLI:
+Build dependencies:
+
+  - pkg-config
+  - glib-2.0 development headers
+  - gobject-2.0 development headers
+  - GTK 4 development headers
+  - libcurl development headers
+  - glib-compile-schemas
+
+Optional test/screenshot dependencies:
+
+  - gtk4-broadwayd for Broadway-based GTK tests and screenshots
+
+Build the project:
 
   make
 
-Run the text-mode game:
+Run the GTK application:
 
-  ./checkers
+  ./gcheckers
