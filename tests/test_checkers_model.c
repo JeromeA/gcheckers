@@ -381,7 +381,7 @@ static void test_model_evaluate_static_material_matches_board(void) {
   game_destroy(&game);
 }
 
-static void test_model_black_root_experimental_static_bonus(void) {
+static void test_model_search_static_bonus_uses_both_king_rows(void) {
   const CheckersRules *rules = checkers_ruleset_get_rules(PLAYER_RULESET_AMERICAN);
   assert(rules != NULL);
 
@@ -413,7 +413,7 @@ static void test_model_black_root_experimental_static_bonus(void) {
   gint white_score = 0;
   ok = checkers_ai_alpha_beta_evaluate_position(&game, 0, &white_score);
   assert(ok);
-  assert(white_score == 0);
+  assert(white_score == 3);
 
   game.state.turn = CHECKERS_COLOR_BLACK;
   MoveList black_moves = game.available_moves(&game);
@@ -745,7 +745,7 @@ int main(void) {
   test_model_choose_best_move_randomized_within_best_ties();
   test_model_evaluate_position_depth0_allowed();
   test_model_evaluate_static_material_matches_board();
-  test_model_black_root_experimental_static_bonus();
+  test_model_search_static_bonus_uses_both_king_rows();
   test_model_evaluate_position_uses_white_perspective_signs();
   test_model_analyze_moves_black_turn_sorts_low_to_high();
   test_model_analyze_moves_structured();

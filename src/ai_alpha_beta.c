@@ -13,7 +13,6 @@ typedef struct {
   gpointer progress_user_data;
   CheckersAiSearchStats *stats;
   CheckersAiTranspositionTable *tt;
-  gboolean use_black_root_experimental_eval;
 } CheckersAiSearchContext;
 
 static void checkers_ai_search_count_node(CheckersAiSearchContext *ctx) {
@@ -96,7 +95,7 @@ static gint checkers_ai_material_score(const Game *game, const CheckersAiSearchC
       continue;
     }
 
-    if (ctx != NULL && ctx->use_black_root_experimental_eval) {
+    if (ctx != NULL) {
       int row = 0;
       int col = 0;
       board_coord_from_index(i, &row, &col, board->board_size);
@@ -500,7 +499,6 @@ gboolean checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(const Game *ga
       .progress_user_data = progress_user_data,
       .stats = out_stats,
       .tt = tt,
-      .use_black_root_experimental_eval = game->state.turn == CHECKERS_COLOR_BLACK,
   };
 
   for (size_t i = 0; i < moves.count; ++i) {
@@ -576,7 +574,6 @@ gboolean checkers_ai_alpha_beta_evaluate_position(const Game *game, guint max_de
       .progress_user_data = NULL,
       .stats = &stats,
       .tt = NULL,
-      .use_black_root_experimental_eval = game->state.turn == CHECKERS_COLOR_BLACK,
   };
 
   gint score = checkers_ai_alpha_beta_search(&root, max_depth, 0, INT_MIN, INT_MAX, &ctx, &cancelled);
