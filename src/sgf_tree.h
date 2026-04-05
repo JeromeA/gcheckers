@@ -18,6 +18,7 @@ typedef struct _SgfNode SgfNode;
 typedef struct {
   CheckersMove move;
   gint score;
+  guint64 nodes;
 } SgfNodeScoredMove;
 
 typedef struct {
@@ -58,7 +59,10 @@ GPtrArray *sgf_node_copy_property_idents(const SgfNode *node);
 SgfNodeAnalysis *sgf_node_analysis_new(void);
 SgfNodeAnalysis *sgf_node_analysis_copy(const SgfNodeAnalysis *analysis);
 void sgf_node_analysis_free(SgfNodeAnalysis *analysis);
-gboolean sgf_node_analysis_add_scored_move(SgfNodeAnalysis *analysis, const CheckersMove *move, gint score);
+gboolean sgf_node_analysis_add_scored_move(SgfNodeAnalysis *analysis,
+                                           const CheckersMove *move,
+                                           gint score,
+                                           guint64 nodes);
 gboolean sgf_node_set_analysis(SgfNode *node, const SgfNodeAnalysis *analysis);
 SgfNodeAnalysis *sgf_node_get_analysis(const SgfNode *node);
 gboolean sgf_node_clear_analysis(SgfNode *node);

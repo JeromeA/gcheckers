@@ -8,7 +8,8 @@ Collaborates with: `gcheckers_style_init()` for CSS, model signals for refresh, 
 player dropdowns. Computer turns are routed by control mode with alpha-beta depth configured from the shared
 `Computer depth` slider (`0..16`). Uses a three-pane layout: board and player controls (left), SGF mode selector
 and SGF view (middle), and analysis (right) with both an `Analyze this position` toggle (iterative deepening on the
-current SGF node) and an `Analyze full game` button (fixed-depth analysis of all SGF nodes).
+current SGF node) plus `Analyze full game` and `Analyze full game in reverse` buttons (fixed-depth analysis of all
+SGF nodes in forward or reverse order, with the reverse pass reusing TT state from later positions first).
 Adds a `View` menubar submenu with independent toggles for the navigation drawer and analysis drawer; hiding both
 removes the entire right-side drawer split while preserving the board pane.
 Panel width state is retained for the board, navigation drawer, and analysis drawer, and drawer show/hide transitions
@@ -22,6 +23,8 @@ published and shown with a temporary `(searching...)` marker. Completed results 
 attached to SGF nodes on the main thread, while text in the panel is formatted from that structured node analysis.
 Analysis score text always shows an explicit `+` sign for positive centipawn-style values and converts terminal
 `2900..3000` magnitudes into `White win in X` / `Black win in X`.
+Per-move analysis lines also include the root-search node count used to score that move, making TT-assisted shortcuts
+visible in the report text.
 Full-game completion gating uses processed-job counts (not only payload-attached counts), so terminal/no-move nodes do
 not leave the Analyze full game button disabled after completion.
 Analysis lifecycle transitions are centralized (begin/finish/sync-ui helpers), so full-game button state, transient
@@ -311,7 +314,8 @@ Role: serialize and deserialize SGF trees using SGF syntax (`(`, `)`, `;`, `PROP
 `B[...]`/`W[...]` and standard SGF variation nesting for branches. gcheckers writes SGF metadata (`FF`, `CA`, `AP`,
 `GM`) and does not persist current UI selection. Node analysis persists through custom properties:
 `GCAD[depth]`, `GCAS[nodes=...;tt_probes=...;tt_hits=...;tt_cutoffs=...]`, and repeated
-`GCAN[move:score]`. This layer is GTK-free so it can be reused by both GUI actions and future CLI commands.
+`GCAN[move:score:nodes]` for scored moves, while still accepting older `GCAN[move:score]` data when loading. This
+layer is GTK-free so it can be reused by both GUI actions and future CLI commands.
 Collaborates with: `GCheckersSgfController` load/save entry points and `tests/test_sgf_io.c`.
 
 ### SGF view (`src/sgf_view.c`, `src/sgf_view.h`)

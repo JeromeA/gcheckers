@@ -493,6 +493,7 @@ gboolean checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(const Game *ga
     }
 
     guint next_depth = (moves.count == 1 || max_depth == 0) ? max_depth : max_depth - 1;
+    guint64 nodes_before = out_stats->nodes;
     gint score = checkers_ai_alpha_beta_search(&child,
                                                next_depth,
                                                1,
@@ -506,6 +507,7 @@ gboolean checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(const Game *ga
 
     scored_moves[write].move = moves.moves[i];
     scored_moves[write].score = score;
+    scored_moves[write].nodes = out_stats->nodes - nodes_before;
     write++;
   }
 

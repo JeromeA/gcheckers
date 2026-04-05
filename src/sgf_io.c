@@ -341,21 +341,46 @@ static gboolean sgf_io_parse_analysis_stats(const char *stats_text, SgfNodeAnaly
   return TRUE;
 }
 
-static gboolean sgf_io_parse_analysis_move(const char *value, CheckersMove *out_move, gint *out_score) {
+static gboolean sgf_io_parse_analysis_move(const char *value,
+                                           CheckersMove *out_move,
+                                           gint *out_score,
+                                           guint64 *out_nodes) {
   g_return_val_if_fail(value != NULL, FALSE);
   g_return_val_if_fail(out_move != NULL, FALSE);
   g_return_val_if_fail(out_score != NULL, FALSE);
+  g_return_val_if_fail(out_nodes != NULL, FALSE);
 
-  const char *sep = strrchr(value, ':');
-  if (sep == NULL || sep == value || sep[1] == '\0') {
+  *out_nodes = 0;
+
+  const char *last_sep = strrchr(value, ':');
+  if (last_sep == NULL || last_sep == value || last_sep[1] == '\0') {
     return FALSE;
   }
 
-  g_autofree char *notation = g_strndup(value, (gsize)(sep - value));
+  const char *score_sep = last_sep;
+  const char *nodes_sep = NULL;
+  for (const char *cursor = last_sep - 1; cursor >= value; --cursor) {
+    if (*cursor == ':') {
+      nodes_sep = last_sep;
+      score_sep = cursor;
+      break;
+    }
+    if (cursor == value) {
+      break;
+    }
+  }
+
+  g_autofree char *notation = g_strndup(value, (gsize)(score_sep - value));
   if (!sgf_move_props_parse_notation(notation, out_move, NULL)) {
     return FALSE;
   }
-  if (!sgf_io_parse_int(sep + 1, out_score)) {
+  const char *score_end = nodes_sep != NULL ? nodes_sep : value + strlen(value);
+  g_autofree char *score_text =
+      g_strndup(score_sep + 1, (gsize)(score_end - score_sep - 1));
+  if (!sgf_io_parse_int(score_text, out_score)) {
+    return FALSE;
+  }
+  if (nodes_sep != NULL && !sgf_io_parse_uint64(nodes_sep + 1, out_nodes)) {
     return FALSE;
   }
   return TRUE;
@@ -393,11 +418,12 @@ static gboolean sgf_io_attach_analysis_from_properties(SgfNode *node, GError **e
       const char *entry = g_ptr_array_index((GPtrArray *)move_values, i);
       CheckersMove move = {0};
       gint score = 0;
-      if (!sgf_io_parse_analysis_move(entry, &move, &score)) {
+      guint64 nodes = 0;
+      if (!sgf_io_parse_analysis_move(entry, &move, &score, &nodes)) {
         g_set_error(error, sgf_io_error_quark(), SGF_IO_ANALYSIS_PROP_MOVE, "Invalid GCAN move entry: %s", entry);
         return FALSE;
       }
-      if (!sgf_node_analysis_add_scored_move(analysis, &move, score)) {
+      if (!sgf_node_analysis_add_scored_move(analysis, &move, score, nodes)) {
         g_set_error_literal(error, sgf_io_error_quark(), SGF_IO_ANALYSIS_PROP_MOVE, "Unable to append GCAN move");
         return FALSE;
       }
@@ -455,7 +481,7 @@ static gboolean sgf_io_sync_analysis_properties(SgfNode *node, GError **error) {
     }
 
     char encoded[192] = {0};
-    g_snprintf(encoded, sizeof(encoded), "%s:%d", notation, entry->score);
+    g_snprintf(encoded, sizeof(encoded), "%s:%d:%" G_GUINT64_FORMAT, notation, entry->score, entry->nodes);
     if (!sgf_node_add_property(node, SGF_IO_PROP_ANALYSIS_MOVE, encoded)) {
       g_set_error_literal(error, sgf_io_error_quark(), SGF_IO_ANALYSIS_PROP_MOVE, "Unable to write GCAN");
       return FALSE;

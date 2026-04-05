@@ -38,6 +38,25 @@ static void test_analysis_score_formatting(void) {
   g_assert_cmpstr(black_win, ==, "Black win in 6");
 }
 
+static void test_analysis_report_includes_per_move_nodes(void) {
+  g_autoptr(SgfNodeAnalysis) analysis = sgf_node_analysis_new();
+  g_assert_nonnull(analysis);
+
+  analysis->depth = 7;
+  analysis->nodes = 123456;
+
+  CheckersMove move = {0};
+  move.length = 2;
+  move.path[0] = 12;
+  move.path[1] = 16;
+  g_assert_true(sgf_node_analysis_add_scored_move(analysis, &move, 42, 10));
+
+  g_autofree char *report = gcheckers_window_format_analysis_report(analysis);
+  g_assert_nonnull(report);
+  g_assert_nonnull(strstr(report, "Nodes: 123456"));
+  g_assert_nonnull(strstr(report, "1. 13-17 : +42 (10 nodes)"));
+}
+
 static void test_analysis_graph_axis_range_minimum_window(void) {
   double min_axis = 0.0;
   double max_axis = 0.0;
@@ -638,8 +657,12 @@ static void test_gcheckers_window_analysis_full_button_exists(void) {
 
   GtkButton *full_button =
       test_gcheckers_window_find_button_with_label(GTK_WIDGET(window), "Analyze full game");
+  GtkButton *full_reverse_button =
+      test_gcheckers_window_find_button_with_label(GTK_WIDGET(window), "Analyze full game in reverse");
   g_assert_nonnull(full_button);
+  g_assert_nonnull(full_reverse_button);
   g_assert_true(gtk_widget_get_sensitive(GTK_WIDGET(full_button)));
+  g_assert_true(gtk_widget_get_sensitive(GTK_WIDGET(full_reverse_button)));
 
   g_clear_object(&window);
   g_clear_object(&model);
@@ -1016,6 +1039,7 @@ int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   g_test_add_func("/analysis-graph/score-compression", test_analysis_graph_score_compression);
   g_test_add_func("/analysis/score-formatting", test_analysis_score_formatting);
+  g_test_add_func("/analysis/report-includes-per-move-nodes", test_analysis_report_includes_per_move_nodes);
   g_test_add_func("/analysis-graph/axis-range-minimum-window", test_analysis_graph_axis_range_minimum_window);
   g_test_add_func("/analysis-graph/axis-range-expands", test_analysis_graph_axis_range_expands_for_large_scores);
 

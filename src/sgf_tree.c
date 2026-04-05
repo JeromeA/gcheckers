@@ -72,7 +72,10 @@ void sgf_node_analysis_free(SgfNodeAnalysis *analysis) {
   g_free(analysis);
 }
 
-gboolean sgf_node_analysis_add_scored_move(SgfNodeAnalysis *analysis, const CheckersMove *move, gint score) {
+gboolean sgf_node_analysis_add_scored_move(SgfNodeAnalysis *analysis,
+                                           const CheckersMove *move,
+                                           gint score,
+                                           guint64 nodes) {
   g_return_val_if_fail(analysis != NULL, FALSE);
   g_return_val_if_fail(analysis->moves != NULL, FALSE);
   g_return_val_if_fail(move != NULL, FALSE);
@@ -81,6 +84,7 @@ gboolean sgf_node_analysis_add_scored_move(SgfNodeAnalysis *analysis, const Chec
   SgfNodeScoredMove *entry = g_new0(SgfNodeScoredMove, 1);
   entry->move = *move;
   entry->score = score;
+  entry->nodes = nodes;
   g_ptr_array_add(analysis->moves, entry);
   return TRUE;
 }
@@ -102,7 +106,7 @@ SgfNodeAnalysis *sgf_node_analysis_copy(const SgfNodeAnalysis *analysis) {
       sgf_node_analysis_free(copy);
       return NULL;
     }
-    if (!sgf_node_analysis_add_scored_move(copy, &entry->move, entry->score)) {
+    if (!sgf_node_analysis_add_scored_move(copy, &entry->move, entry->score, entry->nodes)) {
       sgf_node_analysis_free(copy);
       return NULL;
     }

@@ -9,6 +9,7 @@
 typedef struct {
   CheckersMove move;
   gint score;
+  guint64 nodes;
 } CheckersScoredMove;
 
 typedef struct {

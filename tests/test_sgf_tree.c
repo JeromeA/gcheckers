@@ -170,8 +170,8 @@ static void test_sgf_tree_node_analysis_set_get_clear(void) {
 
   CheckersMove move_a = test_sgf_tree_make_move(11, 15);
   CheckersMove move_b = test_sgf_tree_make_move(10, 14);
-  assert(sgf_node_analysis_add_scored_move(analysis, &move_a, 42));
-  assert(sgf_node_analysis_add_scored_move(analysis, &move_b, 12));
+  assert(sgf_node_analysis_add_scored_move(analysis, &move_a, 42, 1234));
+  assert(sgf_node_analysis_add_scored_move(analysis, &move_b, 12, 56));
 
   assert(sgf_node_set_analysis(root, analysis));
   sgf_node_analysis_free(analysis);
@@ -189,6 +189,7 @@ static void test_sgf_tree_node_analysis_set_get_clear(void) {
   SgfNodeScoredMove *first = g_ptr_array_index(saved->moves, 0);
   assert(first != NULL);
   assert(first->score == 42);
+  assert(first->nodes == 1234);
   assert(first->move.length == 2);
   assert(first->move.path[0] == 11);
   assert(first->move.path[1] == 15);
