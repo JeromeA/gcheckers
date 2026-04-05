@@ -883,6 +883,24 @@ gboolean gcheckers_sgf_controller_refresh_current_node(GCheckersSgfController *s
   return TRUE;
 }
 
+gboolean gcheckers_sgf_controller_get_current_node_move(GCheckersSgfController *self, CheckersMove *out_move) {
+  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+  g_return_val_if_fail(SGF_IS_TREE(self->sgf_tree), FALSE);
+  g_return_val_if_fail(out_move != NULL, FALSE);
+
+  const SgfNode *current = sgf_tree_get_current(self->sgf_tree);
+  if (current == NULL || sgf_node_get_parent(current) == NULL) {
+    return FALSE;
+  }
+
+  gboolean has_move = FALSE;
+  if (!gcheckers_sgf_controller_extract_node_move(current, out_move, &has_move)) {
+    return FALSE;
+  }
+
+  return has_move;
+}
+
 gboolean gcheckers_sgf_controller_save_file(GCheckersSgfController *self, const char *path, GError **error) {
   g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(path != NULL, FALSE);

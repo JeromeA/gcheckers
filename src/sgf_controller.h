@@ -30,6 +30,7 @@ gboolean gcheckers_sgf_controller_step_forward_to_branch(GCheckersSgfController 
 gboolean gcheckers_sgf_controller_step_forward_to_end(GCheckersSgfController *self);
 gboolean gcheckers_sgf_controller_select_node(GCheckersSgfController *self, const SgfNode *node);
 gboolean gcheckers_sgf_controller_refresh_current_node(GCheckersSgfController *self);
+gboolean gcheckers_sgf_controller_get_current_node_move(GCheckersSgfController *self, CheckersMove *out_move);
 gboolean gcheckers_sgf_controller_load_file(GCheckersSgfController *self, const char *path, GError **error);
 gboolean gcheckers_sgf_controller_save_file(GCheckersSgfController *self, const char *path, GError **error);
 gboolean gcheckers_sgf_controller_save_position_file(GCheckersSgfController *self, const char *path, GError **error);

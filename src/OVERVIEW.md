@@ -74,7 +74,8 @@ Owns: `SgfTree` and `SgfView`, plus replay guard (`is_replaying`).
 Signals: `manual-requested` when analysis panel content should refresh for the selected node, and `node-changed`
 whenever SGF current node changes so other UI (analysis graph) can synchronize cursor state.
 Collaborates with: `GCheckersModel` for move validation/application, `BoardView` to clear selection on replay/reset,
-and `GCheckersWindow` via the `manual-requested` signal.
+and `GCheckersWindow` via the `manual-requested` signal. Also exposes the current node's move so board overlays can
+use the same path for step-by-step and replay-based navigation.
 
 ## `AnalysisGraph` (`src/analysis_graph.c`, `src/analysis_graph.h`)
 Class: `AnalysisGraph` (`GObject`).
@@ -269,9 +270,11 @@ Collaborates with: `BoardGrid` and `PiecePalette`.
 
 ### Last move overlay (`src/board_move_overlay.c`, `src/board_move_overlay.h`)
 Module: move overlay renderer.
-Role: draw last-move arrows via cairo on top of the board and, when the game is over, a centered winner banner
+Role: draw the selected SGF node's move arrow via cairo on top of the board and, when the game is over, a centered
+winner banner
 (`White wins!`, `Black wins!`, or `Draw!`) across the board.
-Collaborates with: `BoardView` to render current move highlights.
+Collaborates with: `BoardView`, `GCheckersModel` for board state, and `GCheckersSgfController` for the selected-node
+move.
 
 ### Selection controller (`src/board_selection_controller.c`, `src/board_selection_controller.h`)
 Module: selection path logic.

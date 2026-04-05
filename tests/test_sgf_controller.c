@@ -266,6 +266,33 @@ static void test_gcheckers_sgf_controller_navigation_step_and_rewind(void) {
   g_clear_object(&board_view);
 }
 
+static void test_gcheckers_sgf_controller_current_node_move_accessor(void) {
+  BoardView *board_view = board_view_new();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersSgfController *controller = gcheckers_sgf_controller_new(board_view);
+  gcheckers_sgf_controller_set_model(controller, model);
+  board_view_set_sgf_controller(board_view, controller);
+
+  CheckersMove move = {0};
+  g_assert_false(gcheckers_sgf_controller_get_current_node_move(controller, &move));
+
+  CheckersMove first_move = {0};
+  g_assert_true(apply_first_move(controller, model, &first_move));
+  g_assert_true(gcheckers_sgf_controller_get_current_node_move(controller, &move));
+  g_assert_true(memcmp(&move, &first_move, sizeof(move)) == 0);
+
+  g_assert_true(gcheckers_sgf_controller_rewind_to_start(controller));
+  g_assert_false(gcheckers_sgf_controller_get_current_node_move(controller, &move));
+
+  g_assert_true(gcheckers_sgf_controller_step_forward(controller));
+  g_assert_true(gcheckers_sgf_controller_get_current_node_move(controller, &move));
+  g_assert_true(memcmp(&move, &first_move, sizeof(move)) == 0);
+
+  g_clear_object(&controller);
+  g_clear_object(&model);
+  g_clear_object(&board_view);
+}
+
 static void test_gcheckers_sgf_controller_navigation_forward_to_branch_and_end(void) {
   BoardView *board_view = board_view_new();
   GCheckersModel *model = gcheckers_model_new();
@@ -471,6 +498,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/sgf-controller/new-game", test_gcheckers_sgf_controller_skip);
     g_test_add_func("/sgf-controller/step-ai-move", test_gcheckers_sgf_controller_skip);
     g_test_add_func("/sgf-controller/navigation-step-and-rewind", test_gcheckers_sgf_controller_skip);
+    g_test_add_func("/sgf-controller/current-node-move", test_gcheckers_sgf_controller_skip);
     g_test_add_func("/sgf-controller/navigation-forward-to-branch-and-end", test_gcheckers_sgf_controller_skip);
     g_test_add_func("/sgf-controller/select-node-emits-node-changed", test_gcheckers_sgf_controller_skip);
     g_test_add_func("/sgf-controller/load-applies-setup-properties", test_gcheckers_sgf_controller_skip);
@@ -484,6 +512,8 @@ int main(int argc, char **argv) {
   g_test_add_func("/sgf-controller/step-ai-move", test_gcheckers_sgf_controller_step_ai_move);
   g_test_add_func("/sgf-controller/navigation-step-and-rewind",
                   test_gcheckers_sgf_controller_navigation_step_and_rewind);
+  g_test_add_func("/sgf-controller/current-node-move",
+                  test_gcheckers_sgf_controller_current_node_move_accessor);
   g_test_add_func("/sgf-controller/navigation-forward-to-branch-and-end",
                   test_gcheckers_sgf_controller_navigation_forward_to_branch_and_end);
   g_test_add_func("/sgf-controller/select-node-emits-node-changed",

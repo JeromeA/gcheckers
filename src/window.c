@@ -2160,6 +2160,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_box_append(GTK_BOX(middle_panel), sgf_mode_row);
 
   self->sgf_controller = gcheckers_sgf_controller_new(self->board_view);
+  board_view_set_sgf_controller(self->board_view, self->sgf_controller);
   board_view_set_move_handler(self->board_view, gcheckers_window_apply_player_move, self);
   board_view_set_square_handler(self->board_view, gcheckers_window_on_board_square_action, self);
   self->analysis_graph = analysis_graph_new();

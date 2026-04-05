@@ -4,6 +4,7 @@
 #include "board_move_overlay.h"
 #include "board_selection_controller.h"
 #include "piece_palette.h"
+#include "sgf_controller.h"
 #include "widget_utils.h"
 
 #include "board.h"
@@ -208,6 +209,13 @@ void board_view_set_model(BoardView *self, GCheckersModel *model) {
   board_move_overlay_set_model(self->board_overlay, self->model);
   board_view_build_board(self);
   board_view_update(self);
+}
+
+void board_view_set_sgf_controller(BoardView *self, GCheckersSgfController *controller) {
+  g_return_if_fail(BOARD_IS_VIEW(self));
+  g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(controller));
+
+  board_move_overlay_set_sgf_controller(self->board_overlay, controller);
 }
 
 void board_view_set_move_handler(BoardView *self, BoardViewMoveHandler handler, gpointer user_data) {

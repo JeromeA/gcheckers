@@ -4,6 +4,7 @@
 #include <gtk/gtk.h>
 
 #include "checkers_model.h"
+#include "sgf_controller.h"
 
 G_BEGIN_DECLS
 
@@ -15,6 +16,7 @@ BoardMoveOverlay *board_move_overlay_new(void);
 GtkWidget *board_move_overlay_get_widget(BoardMoveOverlay *self);
 const char *board_move_overlay_get_winner_banner_text(CheckersWinner winner);
 void board_move_overlay_set_model(BoardMoveOverlay *self, GCheckersModel *model);
+void board_move_overlay_set_sgf_controller(BoardMoveOverlay *self, GCheckersSgfController *controller);
 void board_move_overlay_queue_draw(BoardMoveOverlay *self);
 
 G_END_DECLS
