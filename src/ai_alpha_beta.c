@@ -13,6 +13,7 @@ typedef struct {
   gpointer progress_user_data;
   CheckersAiSearchStats *stats;
   CheckersAiTranspositionTable *tt;
+  gboolean use_black_root_experimental_eval;
 } CheckersAiSearchContext;
 
 static void checkers_ai_search_count_node(CheckersAiSearchContext *ctx) {
@@ -49,7 +50,20 @@ static gboolean checkers_ai_moves_match(const CheckersMove *left, const Checkers
   return memcmp(left->path, right->path, left->length * sizeof(left->path[0])) == 0;
 }
 
-static gint checkers_ai_material_score(const Game *game) {
+static gint checkers_ai_man_advancement_bonus(CheckersPiece piece, int row, uint8_t board_size) {
+  if (piece != CHECKERS_PIECE_WHITE_MAN && piece != CHECKERS_PIECE_BLACK_MAN) {
+    return 0;
+  }
+
+  gint distance_to_king_row = piece == CHECKERS_PIECE_WHITE_MAN ? row : (gint)board_size - 1 - row;
+  if (distance_to_king_row <= 0 || distance_to_king_row > 3) {
+    return 0;
+  }
+
+  return 4 - distance_to_king_row;
+}
+
+static gint checkers_ai_material_score(const Game *game, const CheckersAiSearchContext *ctx) {
   /*
    * Hot-path assumption reminder:
    * The following checks are enforced at API boundaries by callers.
@@ -82,6 +96,14 @@ static gint checkers_ai_material_score(const Game *game) {
       continue;
     }
 
+    if (ctx != NULL && ctx->use_black_root_experimental_eval) {
+      int row = 0;
+      int col = 0;
+      board_coord_from_index(i, &row, &col, board->board_size);
+      value += checkers_ai_man_advancement_bonus(piece, row, board->board_size);
+      (void)col;
+    }
+
     CheckersColor color = board_piece_color(piece);
     score += color == CHECKERS_COLOR_WHITE ? value : -value;
   }
@@ -89,7 +111,7 @@ static gint checkers_ai_material_score(const Game *game) {
   return score;
 }
 
-static gint checkers_ai_terminal_score(const Game *game, guint ply_depth) {
+static gint checkers_ai_terminal_score(const Game *game, guint ply_depth, const CheckersAiSearchContext *ctx) {
   /*
    * Hot-path assumption reminder:
    * The following checks are enforced at API boundaries by callers.
@@ -98,7 +120,7 @@ static gint checkers_ai_terminal_score(const Game *game, guint ply_depth) {
   /* g_return_val_if_fail(game != NULL, 0); */
 
   if (game->state.winner == CHECKERS_WINNER_NONE) {
-    return checkers_ai_material_score(game);
+    return checkers_ai_material_score(game, ctx);
   }
 
   gint win_score = 3000 - (gint)ply_depth;
@@ -111,7 +133,7 @@ static gint checkers_ai_terminal_score(const Game *game, guint ply_depth) {
       return 0;
     case CHECKERS_WINNER_NONE:
     default:
-      return checkers_ai_material_score(game);
+      return checkers_ai_material_score(game, ctx);
   }
 }
 
@@ -234,7 +256,7 @@ static gint checkers_ai_alpha_beta_search(Game *game,
 
   guint64 key = checkers_ai_zobrist_key(game);
   if (game->state.winner != CHECKERS_WINNER_NONE) {
-    gint score = checkers_ai_terminal_score(game, ply_depth);
+    gint score = checkers_ai_terminal_score(game, ply_depth, ctx);
     checkers_ai_tt_store_result(ctx, key, depth_remaining, score, CHECKERS_AI_TT_BOUND_EXACT, NULL);
     return score;
   }
@@ -244,7 +266,7 @@ static gint checkers_ai_alpha_beta_search(Game *game,
     CheckersWinner winner = game->state.turn == CHECKERS_COLOR_WHITE ? CHECKERS_WINNER_BLACK
                                                                      : CHECKERS_WINNER_WHITE;
     game->state.winner = winner;
-    gint score = checkers_ai_terminal_score(game, ply_depth);
+    gint score = checkers_ai_terminal_score(game, ply_depth, ctx);
     game->state.winner = CHECKERS_WINNER_NONE;
     movelist_free(&moves);
     checkers_ai_tt_store_result(ctx, key, depth_remaining, score, CHECKERS_AI_TT_BOUND_EXACT, NULL);
@@ -253,7 +275,7 @@ static gint checkers_ai_alpha_beta_search(Game *game,
 
   gboolean is_forced = moves.count == 1;
   if (depth_remaining == 0 && !is_forced) {
-    gint score = checkers_ai_terminal_score(game, ply_depth);
+    gint score = checkers_ai_terminal_score(game, ply_depth, ctx);
     movelist_free(&moves);
     checkers_ai_tt_store_result(ctx, key, depth_remaining, score, CHECKERS_AI_TT_BOUND_EXACT, NULL);
     return score;
@@ -358,7 +380,7 @@ static gint checkers_ai_alpha_beta_search(Game *game,
   }
 
   if (best == INT_MIN || best == INT_MAX) {
-    best = checkers_ai_terminal_score(game, ply_depth);
+    best = checkers_ai_terminal_score(game, ply_depth, ctx);
     have_best_move = FALSE;
   }
 
@@ -478,6 +500,7 @@ gboolean checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(const Game *ga
       .progress_user_data = progress_user_data,
       .stats = out_stats,
       .tt = tt,
+      .use_black_root_experimental_eval = game->state.turn == CHECKERS_COLOR_BLACK,
   };
 
   for (size_t i = 0; i < moves.count; ++i) {
@@ -553,6 +576,7 @@ gboolean checkers_ai_alpha_beta_evaluate_position(const Game *game, guint max_de
       .progress_user_data = NULL,
       .stats = &stats,
       .tt = NULL,
+      .use_black_root_experimental_eval = game->state.turn == CHECKERS_COLOR_BLACK,
   };
 
   gint score = checkers_ai_alpha_beta_search(&root, max_depth, 0, INT_MIN, INT_MAX, &ctx, &cancelled);
@@ -569,7 +593,7 @@ gboolean checkers_ai_evaluate_static_material(const Game *game, gint *out_score)
   g_return_val_if_fail(game != NULL, FALSE);
   g_return_val_if_fail(out_score != NULL, FALSE);
 
-  *out_score = checkers_ai_material_score(game);
+  *out_score = checkers_ai_material_score(game, NULL);
   return TRUE;
 }
 

@@ -25,6 +25,8 @@ Analysis score text always shows an explicit `+` sign for positive centipawn-sty
 `2900..3000` magnitudes into `White win in X` / `Black win in X`.
 Per-move analysis lines also include the root-search node count used to score that move, making TT-assisted shortcuts
 visible in the report text.
+Static material in search can apply a root-scoped experiment when analysis starts from Black to move: men gain
+`+1/+2/+3` as they get within three rows of promotion, while the standalone static-material API remains pure material.
 Full-game completion gating uses processed-job counts (not only payload-attached counts), so terminal/no-move nodes do
 not leave the Analyze full game button disabled after completion.
 Analysis lifecycle transitions are centralized (begin/finish/sync-ui helpers), so full-game button state, transient

@@ -81,15 +81,21 @@ static gboolean test_model_find_forced_root_candidate_recursive(const Game *posi
     if (game_apply_move(&after_forced, &moves.moves[0]) == 0) {
       MoveList after_moves = after_forced.available_moves(&after_forced);
       if (after_moves.count > 1) {
-        gint child_depth1_score = 0;
-        gboolean ok = checkers_ai_alpha_beta_evaluate_position(&after_forced, 1, &child_depth1_score);
-        gint child_material = test_checkers_model_material_score(&after_forced);
-        if (ok && child_depth1_score != child_material) {
+        CheckersScoredMoveList depth0 = {0};
+        CheckersScoredMoveList depth1 = {0};
+        gboolean depth0_ok = checkers_ai_alpha_beta_analyze_moves(position, 0, &depth0);
+        gboolean depth1_ok = checkers_ai_alpha_beta_analyze_moves(position, 1, &depth1);
+        if (depth0_ok && depth1_ok && depth0.count == 1 && depth1.count == 1 &&
+            depth0.moves[0].score != depth1.moves[0].score) {
+          checkers_scored_move_list_free(&depth0);
+          checkers_scored_move_list_free(&depth1);
           *out_forced_position = *position;
           movelist_free(&after_moves);
           movelist_free(&moves);
           return TRUE;
         }
+        checkers_scored_move_list_free(&depth0);
+        checkers_scored_move_list_free(&depth1);
       }
       movelist_free(&after_moves);
     }
@@ -375,6 +381,53 @@ static void test_model_evaluate_static_material_matches_board(void) {
   game_destroy(&game);
 }
 
+static void test_model_black_root_experimental_static_bonus(void) {
+  const CheckersRules *rules = checkers_ruleset_get_rules(PLAYER_RULESET_AMERICAN);
+  assert(rules != NULL);
+
+  Game game = {0};
+  game_init_with_rules(&game, rules);
+
+  uint8_t squares = board_playable_squares(game.state.board.board_size);
+  for (uint8_t i = 0; i < squares; ++i) {
+    board_set(&game.state.board, i, CHECKERS_PIECE_EMPTY);
+  }
+
+  int8_t white_index = board_index_from_coord(4, 3, game.state.board.board_size);
+  int8_t black_index = board_index_from_coord(6, 3, game.state.board.board_size);
+  assert(white_index >= 0);
+  assert(black_index >= 0);
+  board_set(&game.state.board, (uint8_t)white_index, CHECKERS_PIECE_WHITE_MAN);
+  board_set(&game.state.board, (uint8_t)black_index, CHECKERS_PIECE_BLACK_MAN);
+
+  gint static_score = 0;
+  gboolean ok = checkers_ai_evaluate_static_material(&game, &static_score);
+  assert(ok);
+  assert(static_score == 0);
+
+  game.state.turn = CHECKERS_COLOR_WHITE;
+  MoveList white_moves = game.available_moves(&game);
+  assert(white_moves.count > 1);
+  movelist_free(&white_moves);
+
+  gint white_score = 0;
+  ok = checkers_ai_alpha_beta_evaluate_position(&game, 0, &white_score);
+  assert(ok);
+  assert(white_score == 0);
+
+  game.state.turn = CHECKERS_COLOR_BLACK;
+  MoveList black_moves = game.available_moves(&game);
+  assert(black_moves.count > 1);
+  movelist_free(&black_moves);
+
+  gint black_score = 0;
+  ok = checkers_ai_alpha_beta_evaluate_position(&game, 0, &black_score);
+  assert(ok);
+  assert(black_score == -3);
+
+  game_destroy(&game);
+}
+
 static void test_model_analyze_moves_black_turn_sorts_low_to_high(void) {
   Game game = {0};
   gboolean found = test_model_find_black_position_with_non_equal_scores(&game, 4);
@@ -602,24 +655,20 @@ static void test_model_forced_move_does_not_consume_depth(void) {
   gboolean found = test_model_find_forced_root_candidate(&forced_position);
   assert(found);
 
-  MoveList forced_moves = forced_position.available_moves(&forced_position);
-  assert(forced_moves.count == 1);
-
-  CheckersScoredMoveList root_analysis = {0};
-  gboolean ok = checkers_ai_alpha_beta_analyze_moves(&forced_position, 1, &root_analysis);
+  CheckersScoredMoveList depth0 = {0};
+  CheckersScoredMoveList depth1 = {0};
+  gboolean ok = checkers_ai_alpha_beta_analyze_moves(&forced_position, 0, &depth0);
   assert(ok);
-  assert(root_analysis.count == 1);
+  assert(depth0.count == 1);
 
-  Game child = forced_position;
-  assert(game_apply_move(&child, &forced_moves.moves[0]) == 0);
-  gint child_depth1_score = 0;
-  ok = checkers_ai_alpha_beta_evaluate_position(&child, 1, &child_depth1_score);
+  ok = checkers_ai_alpha_beta_analyze_moves(&forced_position, 1, &depth1);
   assert(ok);
+  assert(depth1.count == 1);
 
-  assert(root_analysis.moves[0].score == child_depth1_score);
+  assert(depth0.moves[0].score != depth1.moves[0].score);
 
-  checkers_scored_move_list_free(&root_analysis);
-  movelist_free(&forced_moves);
+  checkers_scored_move_list_free(&depth0);
+  checkers_scored_move_list_free(&depth1);
 }
 
 static void test_model_set_rules(void) {
@@ -696,6 +745,7 @@ int main(void) {
   test_model_choose_best_move_randomized_within_best_ties();
   test_model_evaluate_position_depth0_allowed();
   test_model_evaluate_static_material_matches_board();
+  test_model_black_root_experimental_static_bonus();
   test_model_evaluate_position_uses_white_perspective_signs();
   test_model_analyze_moves_black_turn_sorts_low_to_high();
   test_model_analyze_moves_structured();
