@@ -207,15 +207,81 @@ static gboolean checkers_puzzle_append_best_depth_move(Game *game,
   return checkers_puzzle_append_move_to_line(game, &analysis->best_move, line);
 }
 
+static gboolean checkers_puzzle_solution_is_a_single_move(const GArray *line) {
+  g_return_val_if_fail(line != NULL, FALSE);
+
+  return line->len == 1;
+}
+
+static gboolean checkers_puzzle_solution_is_move_move_jump(const GArray *line) {
+  g_return_val_if_fail(line != NULL, FALSE);
+
+  if (line->len != 3) {
+    return FALSE;
+  }
+
+  const CheckersPuzzleLineMove *first = &g_array_index(line, CheckersPuzzleLineMove, 0);
+  const CheckersPuzzleLineMove *second = &g_array_index(line, CheckersPuzzleLineMove, 1);
+  const CheckersPuzzleLineMove *third = &g_array_index(line, CheckersPuzzleLineMove, 2);
+  return first->move.captures == 0 && second->move.captures == 0 && third->move.captures > 0;
+}
+
+static gboolean checkers_puzzle_solution_is_interesting(const GArray *line) {
+  g_return_val_if_fail(line != NULL, FALSE);
+
+  if (line->len == 0) {
+    return FALSE;
+  }
+
+  g_autofree CheckersMove *moves = g_new(CheckersMove, line->len);
+  for (guint i = 0; i < line->len; ++i) {
+    const CheckersPuzzleLineMove *entry = &g_array_index(line, CheckersPuzzleLineMove, i);
+    moves[i] = entry->move;
+  }
+  return checkers_puzzle_solution_shape_is_interesting(moves, line->len);
+}
+
+static gboolean checkers_puzzle_solution_ends_before_an_immediate_recapture(const Game *after_solution,
+                                                                            const GArray *line,
+                                                                            guint best_move_depth) {
+  g_return_val_if_fail(after_solution != NULL, FALSE);
+  g_return_val_if_fail(line != NULL, FALSE);
+  g_return_val_if_fail(best_move_depth > 0, FALSE);
+
+  if (after_solution->state.winner != CHECKERS_WINNER_NONE) {
+    return TRUE;
+  }
+
+  CheckersPuzzlePositionAnalysis analysis = {0};
+  if (!checkers_puzzle_analyze_resulting_position(after_solution, best_move_depth, &analysis)) {
+    checkers_puzzle_debug_rejection("failed to analyze the move immediately after the solution");
+    return FALSE;
+  }
+
+  g_autofree CheckersMove *moves = g_new(CheckersMove, line->len);
+  for (guint i = 0; i < line->len; ++i) {
+    const CheckersPuzzleLineMove *entry = &g_array_index(line, CheckersPuzzleLineMove, i);
+    moves[i] = entry->move;
+  }
+  gboolean stable = checkers_puzzle_solution_has_no_immediate_recapture(moves, line->len, &analysis.best_move);
+  if (!stable) {
+    checkers_puzzle_debug_rejection("move immediately after the solution is a recapture");
+  }
+  checkers_puzzle_position_analysis_clear(&analysis);
+  return stable;
+}
+
 static gboolean checkers_puzzle_solution_line_of_best_depth_moves_improves_static_evaluation(
     const Game *start,
     guint best_move_depth,
     GArray *out_line,
-    gint *out_final_static) {
+    gint *out_final_static,
+    Game *out_final_game) {
   g_return_val_if_fail(start != NULL, FALSE);
   g_return_val_if_fail(best_move_depth > 0, FALSE);
   g_return_val_if_fail(out_line != NULL, FALSE);
   g_return_val_if_fail(out_final_static != NULL, FALSE);
+  g_return_val_if_fail(out_final_game != NULL, FALSE);
 
   Game line_game = *start;
   CheckersColor attacker = start->state.turn;
@@ -234,6 +300,7 @@ static gboolean checkers_puzzle_solution_line_of_best_depth_moves_improves_stati
 
     if (checkers_puzzle_score_better_for_side(attacker, current_static, start_static)) {
       *out_final_static = current_static;
+      *out_final_game = line_game;
       return TRUE;
     }
 
@@ -284,6 +351,7 @@ static gboolean checkers_puzzle_solution_line_of_best_depth_moves_improves_stati
     return FALSE;
   }
   *out_final_static = final_eval;
+  *out_final_game = line_game;
   checkers_puzzle_debug_rejection("line reached max plies without static improvement (%d vs %d)",
                                   final_eval,
                                   start_static);
@@ -529,10 +597,35 @@ static gboolean checkers_puzzle_try_build_candidate_from_resulting_position(cons
 
   GArray *line = g_array_new(FALSE, FALSE, sizeof(CheckersPuzzleLineMove));
   gint final_static = analysis.static_score;
+  Game final_game = {0};
   if (!checkers_puzzle_solution_line_of_best_depth_moves_improves_static_evaluation(post_mistake_game,
                                                                                     best_move_depth,
                                                                                     line,
-                                                                                    &final_static)) {
+                                                                                    &final_static,
+                                                                                    &final_game)) {
+    checkers_puzzle_position_analysis_clear(&analysis);
+    g_array_unref(line);
+    return FALSE;
+  }
+  if (checkers_puzzle_solution_is_a_single_move(line)) {
+    checkers_puzzle_debug_rejection("solution is only one move");
+    checkers_puzzle_position_analysis_clear(&analysis);
+    g_array_unref(line);
+    return FALSE;
+  }
+  if (checkers_puzzle_solution_is_move_move_jump(line)) {
+    checkers_puzzle_debug_rejection("solution is move, move, jump");
+    checkers_puzzle_position_analysis_clear(&analysis);
+    g_array_unref(line);
+    return FALSE;
+  }
+  if (!checkers_puzzle_solution_is_interesting(line)) {
+    checkers_puzzle_debug_rejection("solution shape is not interesting");
+    checkers_puzzle_position_analysis_clear(&analysis);
+    g_array_unref(line);
+    return FALSE;
+  }
+  if (!checkers_puzzle_solution_ends_before_an_immediate_recapture(&final_game, line, best_move_depth)) {
     checkers_puzzle_position_analysis_clear(&analysis);
     g_array_unref(line);
     return FALSE;

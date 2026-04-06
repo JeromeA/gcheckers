@@ -200,6 +200,63 @@ static void test_puzzle_attacker_move_clarity_is_asymmetric(void) {
                                                                            &second_score));
 }
 
+static void test_puzzle_solution_shape_interest_rules(void) {
+  CheckersMove one_move[] = {
+      {.length = 2, .captures = 0},
+  };
+  g_assert_false(checkers_puzzle_solution_shape_is_interesting(one_move, G_N_ELEMENTS(one_move)));
+
+  CheckersMove move_move_jump[] = {
+      {.length = 2, .captures = 0},
+      {.length = 2, .captures = 0},
+      {.length = 2, .captures = 1},
+  };
+  g_assert_false(checkers_puzzle_solution_shape_is_interesting(move_move_jump, G_N_ELEMENTS(move_move_jump)));
+
+  CheckersMove jump_only[] = {
+      {.length = 2, .captures = 1},
+  };
+  g_assert_false(checkers_puzzle_solution_shape_is_interesting(jump_only, G_N_ELEMENTS(jump_only)));
+
+  CheckersMove move_jump[] = {
+      {.length = 2, .captures = 0},
+      {.length = 2, .captures = 1},
+  };
+  g_assert_true(checkers_puzzle_solution_shape_is_interesting(move_jump, G_N_ELEMENTS(move_jump)));
+
+  CheckersMove move_move_move[] = {
+      {.length = 2, .captures = 0},
+      {.length = 2, .captures = 0},
+      {.length = 2, .captures = 0},
+  };
+  g_assert_true(checkers_puzzle_solution_shape_is_interesting(move_move_move, G_N_ELEMENTS(move_move_move)));
+}
+
+static void test_puzzle_solution_rejects_immediate_recapture(void) {
+  CheckersMove solution_moves[] = {
+      {.length = 2, .captures = 0},
+      {.length = 2, .captures = 1},
+      {.length = 2, .captures = 0},
+  };
+  CheckersMove quiet_reply = {
+      .length = 2,
+      .captures = 0,
+  };
+  CheckersMove recapture = {
+      .length = 2,
+      .captures = 1,
+  };
+
+  g_assert_true(checkers_puzzle_solution_has_no_immediate_recapture(solution_moves,
+                                                                    G_N_ELEMENTS(solution_moves),
+                                                                    &quiet_reply));
+  g_assert_false(checkers_puzzle_solution_has_no_immediate_recapture(solution_moves,
+                                                                     G_N_ELEMENTS(solution_moves),
+                                                                     &recapture));
+  g_assert_true(
+      checkers_puzzle_solution_has_no_immediate_recapture(solution_moves, G_N_ELEMENTS(solution_moves), NULL));
+}
+
 static void test_puzzle_find_next_index(void) {
   guint next = G_MAXUINT;
   g_assert_true(checkers_puzzle_find_next_index("/tmp/does-not-exist-gcheckers-puzzles", &next, NULL));
@@ -266,6 +323,9 @@ int main(int argc, char **argv) {
   g_test_add_func("/puzzle-generation/unique-best", test_puzzle_unique_best_rules);
   g_test_add_func("/puzzle-generation/attacker-move-clarity",
                   test_puzzle_attacker_move_clarity_is_asymmetric);
+  g_test_add_func("/puzzle-generation/solution-shape", test_puzzle_solution_shape_interest_rules);
+  g_test_add_func("/puzzle-generation/immediate-recapture",
+                  test_puzzle_solution_rejects_immediate_recapture);
   g_test_add_func("/puzzle-generation/find-next-index", test_puzzle_find_next_index);
   g_test_add_func("/puzzle-generation/build-indexed-path", test_puzzle_build_indexed_path);
   g_test_add_func("/puzzle-generation/parse-arg", test_puzzle_parse_arg);

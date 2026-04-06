@@ -18,6 +18,8 @@ A generated puzzle is defined as:
   for both sides until the static evaluation is better for the attacker than it was at the puzzle start.
 - On every attacker turn in that continuation, if the attacker has multiple legal moves, the best move must still
   score at least 50 points better than the second-best move. Defender ties for best are allowed.
+- Boring solutions are rejected: a one-move line, or a three-move line of move, move, jump.
+- After the solution line ends, the immediate next best reply must not be a recapture.
 
 The tool stops when it has generated `N` puzzles requested on the CLI and saves files as:
 `puzzles/puzzle-0000.sgf`, starting from the highest existing index + 1.
@@ -39,6 +41,8 @@ The CLI accepts `--depth N` to override the puzzle-analysis depth; otherwise it 
 - [x] (2026-04-06 14:32Z) Switched continuation building to configurable-depth best play with attacker-only move
   clarity.
 - [x] (2026-04-06 14:53Z) Added a `--depth` CLI flag so puzzle-analysis depth is configurable at runtime.
+- [x] (2026-04-06 15:12Z) Filtered out boring one-move and move-move-jump solution shapes.
+- [x] (2026-04-06 15:19Z) Rejected solutions whose immediate next best reply is a recapture.
 
 ## Surprises & Discoveries
 
@@ -78,7 +82,9 @@ Implementation is complete for the requested scope.
 detects mistakes using configurable-depth move-score deltas (currently depth 8, threshold 50), filters puzzle starts
 to post-mistake attacker positions with at least four legal moves and a best move at least 50 points ahead of the
 runner-up, then follows best play at that same depth until the attacker's static evaluation improves. The attacker
-must keep a single good move throughout the line, while defender ties for best are allowed. The tool writes SGF
+must keep a single good move throughout the line, while defender ties for best are allowed. Boring one-move and
+move-move-jump solutions are discarded, and the immediate next best reply after the solution may not be a recapture.
+The tool writes SGF
 puzzles with setup root + tactical line under
 `puzzles/puzzle-####.sgf` using highest-existing-index + 1 naming.
 
@@ -159,7 +165,9 @@ Acceptance criteria:
   - attacker best move is ahead of second-best by >= 50,
   - continuation uses best play at the configured puzzle-analysis depth,
   - attacker keeps a 50-point move gap on every attacker turn with multiple legal moves,
-  - continuation stops when static evaluation is better for the attacker than at puzzle start.
+  - continuation stops when static evaluation is better for the attacker than at puzzle start,
+  - solution is not a one-move line or a move-move-jump line,
+  - move immediately after the solution is not a recapture.
 - `make all` and `make test` pass.
 
 ## Idempotence and Recovery

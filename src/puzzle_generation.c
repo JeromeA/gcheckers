@@ -117,6 +117,33 @@ gboolean checkers_puzzle_has_unique_best(const CheckersScoredMoveList *moves,
                                                                 out_second_score);
 }
 
+static gboolean checkers_puzzle_solution_is_a_single_move(const CheckersMove *moves, guint move_count) {
+  g_return_val_if_fail(moves != NULL || move_count == 0, FALSE);
+
+  return move_count == 1;
+}
+
+static gboolean checkers_puzzle_solution_is_move_move_jump(const CheckersMove *moves, guint move_count) {
+  g_return_val_if_fail(moves != NULL || move_count == 0, FALSE);
+
+  return move_count == 3 && moves[0].captures == 0 && moves[1].captures == 0 && moves[2].captures > 0;
+}
+
+gboolean checkers_puzzle_solution_shape_is_interesting(const CheckersMove *moves, guint move_count) {
+  g_return_val_if_fail(moves != NULL || move_count == 0, FALSE);
+
+  return !checkers_puzzle_solution_is_a_single_move(moves, move_count) &&
+         !checkers_puzzle_solution_is_move_move_jump(moves, move_count);
+}
+
+gboolean checkers_puzzle_solution_has_no_immediate_recapture(const CheckersMove *solution_moves,
+                                                             guint solution_move_count,
+                                                             const CheckersMove *next_move) {
+  g_return_val_if_fail(solution_moves != NULL || solution_move_count == 0, FALSE);
+
+  return next_move == NULL || next_move->captures == 0;
+}
+
 static gboolean checkers_puzzle_parse_index_from_name(const char *name, guint *out_index) {
   g_return_val_if_fail(name != NULL, FALSE);
   g_return_val_if_fail(out_index != NULL, FALSE);
