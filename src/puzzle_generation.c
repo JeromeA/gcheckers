@@ -19,14 +19,20 @@ gboolean checkers_puzzle_is_mistake(CheckersColor turn, gint best_score, gint pl
   return delta >= threshold;
 }
 
-gboolean checkers_puzzle_has_unique_best(const CheckersScoredMoveList *moves,
-                                         guint min_legal_moves,
-                                         gint *out_best_score,
-                                         guint *out_best_count) {
+gboolean checkers_puzzle_side_to_move_has_enough_choice(const CheckersScoredMoveList *moves, guint min_legal_moves) {
   g_return_val_if_fail(moves != NULL, FALSE);
   g_return_val_if_fail(moves->moves != NULL || moves->count == 0, FALSE);
 
-  if (moves->count < min_legal_moves || moves->count == 0) {
+  return moves->count >= min_legal_moves && moves->count > 0;
+}
+
+gboolean checkers_puzzle_side_to_move_has_a_single_correct_move(const CheckersScoredMoveList *moves,
+                                                                gint *out_best_score,
+                                                                guint *out_best_count) {
+  g_return_val_if_fail(moves != NULL, FALSE);
+  g_return_val_if_fail(moves->moves != NULL || moves->count == 0, FALSE);
+
+  if (moves->count == 0) {
     if (out_best_count != NULL) {
       *out_best_count = 0;
     }
@@ -46,6 +52,20 @@ gboolean checkers_puzzle_has_unique_best(const CheckersScoredMoveList *moves,
     *out_best_count = best_count;
   }
   return best_count == 1;
+}
+
+gboolean checkers_puzzle_has_unique_best(const CheckersScoredMoveList *moves,
+                                         guint min_legal_moves,
+                                         gint *out_best_score,
+                                         guint *out_best_count) {
+  if (!checkers_puzzle_side_to_move_has_enough_choice(moves, min_legal_moves)) {
+    if (out_best_count != NULL) {
+      *out_best_count = 0;
+    }
+    return FALSE;
+  }
+
+  return checkers_puzzle_side_to_move_has_a_single_correct_move(moves, out_best_score, out_best_count);
 }
 
 static gboolean checkers_puzzle_parse_index_from_name(const char *name, guint *out_index) {

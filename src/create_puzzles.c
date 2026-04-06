@@ -31,6 +31,14 @@ typedef struct {
   CheckersMove solution_move;
 } CheckersPuzzleCandidate;
 
+typedef struct {
+  CheckersScoredMoveList moves;
+  gint best_score;
+  guint best_count;
+  gint static_score;
+  CheckersMove best_move;
+} CheckersPuzzlePositionAnalysis;
+
 static void checkers_puzzle_set_winner_for_no_moves(Game *game) {
   g_return_if_fail(game != NULL);
 
@@ -152,7 +160,14 @@ static gboolean checkers_puzzle_evaluate_static(const Game *game, gint *out_scor
   return checkers_ai_evaluate_static_material(game, out_score);
 }
 
-static gboolean checkers_puzzle_append_best_depth0_move(Game *game, GArray *line) {
+static void checkers_puzzle_position_analysis_clear(CheckersPuzzlePositionAnalysis *analysis) {
+  g_return_if_fail(analysis != NULL);
+
+  checkers_scored_move_list_free(&analysis->moves);
+  memset(analysis, 0, sizeof(*analysis));
+}
+
+static gboolean checkers_puzzle_append_best_forcing_reply(Game *game, GArray *line) {
   g_return_val_if_fail(game != NULL, FALSE);
   g_return_val_if_fail(line != NULL, FALSE);
 
@@ -174,10 +189,10 @@ static gboolean checkers_puzzle_append_best_depth0_move(Game *game, GArray *line
   return ok;
 }
 
-static gboolean checkers_puzzle_build_tactical_line(const Game *start,
-                                                    const CheckersMove *forced_first,
-                                                    gint target_score,
-                                                    GArray *out_line) {
+static gboolean checkers_puzzle_solution_can_be_shown_as_a_forcing_line(const Game *start,
+                                                                        const CheckersMove *forced_first,
+                                                                        gint target_score,
+                                                                        GArray *out_line) {
   g_return_val_if_fail(start != NULL, FALSE);
   g_return_val_if_fail(forced_first != NULL, FALSE);
   g_return_val_if_fail(out_line != NULL, FALSE);
@@ -214,7 +229,7 @@ static gboolean checkers_puzzle_build_tactical_line(const Game *start,
       g_debug("Tactical line ended before target at ply %u (winner=%u)", ply, line_game.state.winner);
       return FALSE;
     }
-    if (!checkers_puzzle_append_best_depth0_move(&line_game, out_line)) {
+    if (!checkers_puzzle_append_best_forcing_reply(&line_game, out_line)) {
       g_debug("Failed to append best depth-0 move while building tactical line at ply %u", ply);
       return FALSE;
     }
@@ -226,6 +241,91 @@ static gboolean checkers_puzzle_build_tactical_line(const Game *start,
     return FALSE;
   }
   return final_eval == target_score;
+}
+
+static gboolean checkers_puzzle_position_follows_a_serious_mistake(const Game *before_mistake_game,
+                                                                   const CheckersMove *played_move,
+                                                                   gint *out_mistake_delta) {
+  g_return_val_if_fail(before_mistake_game != NULL, FALSE);
+  g_return_val_if_fail(played_move != NULL, FALSE);
+  g_return_val_if_fail(out_mistake_delta != NULL, FALSE);
+
+  CheckersScoredMoveList analysis = {0};
+  if (!checkers_ai_alpha_beta_analyze_moves(before_mistake_game, CHECKERS_PUZZLE_ANALYSIS_DEPTH, &analysis)) {
+    checkers_scored_move_list_free(&analysis);
+    return FALSE;
+  }
+
+  gint played_score = 0;
+  if (!checkers_puzzle_find_move_score(&analysis, played_move, &played_score)) {
+    checkers_scored_move_list_free(&analysis);
+    return FALSE;
+  }
+
+  gint best_score = analysis.moves[0].score;
+  gint mistake_delta =
+      checkers_puzzle_mistake_delta(before_mistake_game->state.turn, best_score, played_score);
+  gboolean is_mistake = checkers_puzzle_is_mistake(before_mistake_game->state.turn,
+                                                   best_score,
+                                                   played_score,
+                                                   CHECKERS_PUZZLE_MISTAKE_THRESHOLD);
+  checkers_scored_move_list_free(&analysis);
+
+  *out_mistake_delta = mistake_delta;
+  return is_mistake;
+}
+
+static gboolean checkers_puzzle_analyze_resulting_position(const Game *game,
+                                                           CheckersPuzzlePositionAnalysis *out_analysis) {
+  g_return_val_if_fail(game != NULL, FALSE);
+  g_return_val_if_fail(out_analysis != NULL, FALSE);
+
+  *out_analysis = (CheckersPuzzlePositionAnalysis) {0};
+  if (!checkers_ai_alpha_beta_analyze_moves(game, CHECKERS_PUZZLE_ANALYSIS_DEPTH, &out_analysis->moves)) {
+    checkers_scored_move_list_free(&out_analysis->moves);
+    return FALSE;
+  }
+  if (!checkers_puzzle_evaluate_static(game, &out_analysis->static_score)) {
+    checkers_puzzle_position_analysis_clear(out_analysis);
+    return FALSE;
+  }
+  if (out_analysis->moves.count == 0) {
+    g_debug("Puzzle candidate analysis found no legal moves");
+    checkers_puzzle_position_analysis_clear(out_analysis);
+    return FALSE;
+  }
+
+  out_analysis->best_move = out_analysis->moves.moves[0].move;
+  out_analysis->best_score = out_analysis->moves.moves[0].score;
+  (void)checkers_puzzle_side_to_move_has_a_single_correct_move(&out_analysis->moves,
+                                                               &out_analysis->best_score,
+                                                               &out_analysis->best_count);
+  return TRUE;
+}
+
+static gboolean checkers_puzzle_best_move_wins_real_material(const Game *game,
+                                                             const CheckersPuzzlePositionAnalysis *analysis) {
+  g_return_val_if_fail(game != NULL, FALSE);
+  g_return_val_if_fail(analysis != NULL, FALSE);
+
+  return checkers_puzzle_score_better_for_side(game->state.turn, analysis->best_score, analysis->static_score);
+}
+
+static gboolean checkers_puzzle_position_is_valid(const Game *game,
+                                                  const CheckersPuzzlePositionAnalysis *analysis) {
+  g_return_val_if_fail(game != NULL, FALSE);
+  g_return_val_if_fail(analysis != NULL, FALSE);
+
+  if (!checkers_puzzle_side_to_move_has_enough_choice(&analysis->moves, CHECKERS_PUZZLE_MIN_LEGAL_MOVES)) {
+    return FALSE;
+  }
+  if (!checkers_puzzle_side_to_move_has_a_single_correct_move(&analysis->moves, NULL, NULL)) {
+    return FALSE;
+  }
+  if (!checkers_puzzle_best_move_wins_real_material(game, analysis)) {
+    return FALSE;
+  }
+  return TRUE;
 }
 
 static SgfColor checkers_puzzle_sgf_color(CheckersColor color) {
@@ -327,46 +427,27 @@ static void checkers_puzzle_candidate_free(gpointer data) {
   g_free(candidate);
 }
 
-static gboolean checkers_puzzle_collect_candidate_from_position(const Game *post_mistake_game,
-                                                                gint mistake_delta,
-                                                                GPtrArray *out_candidates) {
+static gboolean checkers_puzzle_try_build_candidate_from_resulting_position(const Game *post_mistake_game,
+                                                                            gint mistake_delta,
+                                                                            GPtrArray *out_candidates) {
   g_return_val_if_fail(post_mistake_game != NULL, FALSE);
   g_return_val_if_fail(out_candidates != NULL, FALSE);
 
-  CheckersScoredMoveList start_analysis = {0};
-  if (!checkers_ai_alpha_beta_analyze_moves(post_mistake_game, CHECKERS_PUZZLE_ANALYSIS_DEPTH, &start_analysis)) {
-    checkers_scored_move_list_free(&start_analysis);
+  CheckersPuzzlePositionAnalysis analysis = {0};
+  if (!checkers_puzzle_analyze_resulting_position(post_mistake_game, &analysis)) {
     return FALSE;
   }
-
-  gint target_score = 0;
-  guint best_count = 0;
-  gboolean has_unique = checkers_puzzle_has_unique_best(&start_analysis,
-                                                        CHECKERS_PUZZLE_MIN_LEGAL_MOVES,
-                                                        &target_score,
-                                                        &best_count);
-  if (!has_unique) {
-    checkers_scored_move_list_free(&start_analysis);
+  if (!checkers_puzzle_position_is_valid(post_mistake_game, &analysis)) {
+    checkers_puzzle_position_analysis_clear(&analysis);
     return FALSE;
   }
-
-  gint static_score = 0;
-  if (!checkers_puzzle_evaluate_static(post_mistake_game, &static_score)) {
-    checkers_scored_move_list_free(&start_analysis);
-    return FALSE;
-  }
-  gboolean is_better_for_side_to_move =
-      post_mistake_game->state.turn == CHECKERS_COLOR_WHITE ? (target_score > static_score) : (target_score < static_score);
-  if (!is_better_for_side_to_move) {
-    checkers_scored_move_list_free(&start_analysis);
-    return FALSE;
-  }
-
-  CheckersMove solution_move = start_analysis.moves[0].move;
-  checkers_scored_move_list_free(&start_analysis);
 
   GArray *line = g_array_new(FALSE, FALSE, sizeof(CheckersPuzzleLineMove));
-  if (!checkers_puzzle_build_tactical_line(post_mistake_game, &solution_move, target_score, line)) {
+  if (!checkers_puzzle_solution_can_be_shown_as_a_forcing_line(post_mistake_game,
+                                                               &analysis.best_move,
+                                                               analysis.best_score,
+                                                               line)) {
+    checkers_puzzle_position_analysis_clear(&analysis);
     g_array_unref(line);
     return FALSE;
   }
@@ -375,9 +456,10 @@ static gboolean checkers_puzzle_collect_candidate_from_position(const Game *post
   candidate->start_state = post_mistake_game->state;
   candidate->line = line;
   candidate->mistake_delta = mistake_delta;
-  candidate->target_score = target_score;
-  candidate->solution_move = solution_move;
+  candidate->target_score = analysis.best_score;
+  candidate->solution_move = analysis.best_move;
   g_ptr_array_add(out_candidates, candidate);
+  checkers_puzzle_position_analysis_clear(&analysis);
   return TRUE;
 }
 
@@ -430,25 +512,9 @@ static gboolean checkers_puzzle_collect_candidates_from_line(const CheckersRules
       return FALSE;
     }
 
-    CheckersScoredMoveList deep = {0};
-    if (!checkers_ai_alpha_beta_analyze_moves(&before, CHECKERS_PUZZLE_ANALYSIS_DEPTH, &deep)) {
-      checkers_scored_move_list_free(&deep);
-      game_destroy(&game);
-      return FALSE;
-    }
-
-    gint played_score = 0;
-    if (!checkers_puzzle_find_move_score(&deep, &played->move, &played_score)) {
-      checkers_scored_move_list_free(&deep);
-      game_destroy(&game);
-      return FALSE;
-    }
-
-    gint best_score = deep.moves[0].score;
+    gint mistake_delta = 0;
     gboolean is_mistake =
-        checkers_puzzle_is_mistake(before.state.turn, best_score, played_score, CHECKERS_PUZZLE_MISTAKE_THRESHOLD);
-    gint mistake_delta = checkers_puzzle_mistake_delta(before.state.turn, best_score, played_score);
-    checkers_scored_move_list_free(&deep);
+        checkers_puzzle_position_follows_a_serious_mistake(&before, &played->move, &mistake_delta);
 
     if (game_apply_move(&game, &played->move) != 0) {
       game_destroy(&game);
@@ -456,7 +522,7 @@ static gboolean checkers_puzzle_collect_candidates_from_line(const CheckersRules
     }
 
     if (is_mistake) {
-      (void)checkers_puzzle_collect_candidate_from_position(&game, mistake_delta, out_candidates);
+      (void)checkers_puzzle_try_build_candidate_from_resulting_position(&game, mistake_delta, out_candidates);
     }
   }
 

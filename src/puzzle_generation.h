@@ -14,6 +14,10 @@ typedef enum {
 
 gint checkers_puzzle_mistake_delta(CheckersColor turn, gint best_score, gint played_score);
 gboolean checkers_puzzle_is_mistake(CheckersColor turn, gint best_score, gint played_score, gint threshold);
+gboolean checkers_puzzle_side_to_move_has_enough_choice(const CheckersScoredMoveList *moves, guint min_legal_moves);
+gboolean checkers_puzzle_side_to_move_has_a_single_correct_move(const CheckersScoredMoveList *moves,
+                                                                gint *out_best_score,
+                                                                guint *out_best_count);
 gboolean checkers_puzzle_has_unique_best(const CheckersScoredMoveList *moves,
                                          guint min_legal_moves,
                                          gint *out_best_score,

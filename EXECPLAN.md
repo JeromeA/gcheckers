@@ -31,6 +31,8 @@ The tool stops when it has generated `N` puzzles requested on the CLI and saves 
 - [x] (2026-03-10 17:12Z) Added `tests/test_puzzle_generation.c` for uniqueness/mistake/index behavior.
 - [x] (2026-03-10 17:21Z) Updated `src/OVERVIEW.md`.
 - [x] (2026-03-10 17:32Z) Ran required validation (`make all`, `make test`) and targeted new binary smoke run.
+- [x] (2026-04-06 12:45Z) Refactored puzzle validation into English-style predicates and added helper tests for
+  "enough choice" and "single correct move" rules.
 
 ## Surprises & Discoveries
 
@@ -40,6 +42,11 @@ The tool stops when it has generated `N` puzzles requested on the CLI and saves 
 - Observation: `create_puzzles 1` can take longer than a short smoke timeout in this environment because each candidate
   requires repeated depth-10 scans inside a full self-play loop.
   Evidence: `timeout 30s ./create_puzzles 1` exited with code `124` during smoke validation.
+
+- Observation: The original candidate-building flow mixed engine analysis details with puzzle-rule decisions, which made
+  the selection logic harder to compare against a checker player's verbal definition of a puzzle.
+  Evidence: `checkers_puzzle_collect_candidate_from_position()` previously combined depth-8 analysis, min-legal-move
+  checks, unique-best filtering, static-material comparison, and tactical-line building in one block.
 
 ## Decision Log
 
@@ -51,6 +58,11 @@ The tool stops when it has generated `N` puzzles requested on the CLI and saves 
 - Decision: Introduce a small helper module with pure functions for puzzle eligibility math and file-index scanning.
   Rationale: Enables deterministic unit tests for core puzzle selection rules and naming behavior.
   Date/Author: 2026-03-10 / Codex
+
+- Decision: Refactor the candidate validator around English-style predicate names instead of one engine-centric block.
+  Rationale: Keeps the generated-puzzle definition visible in the control flow and makes future rule changes easier to
+  audit against checkers terminology.
+  Date/Author: 2026-04-06 / Codex
 
 ## Outcomes & Retrospective
 
@@ -66,6 +78,11 @@ discovery. Unit tests were added for these helpers.
 
 Validation completed with `make all` and `make test`; all tests pass in this environment (with existing expected
 headless skips and screenshot warning behavior).
+
+The validator has since been reorganized so the candidate path reads like a rules checklist: a position follows a
+serious mistake, the side to move has enough choice, the side to move has a single correct move, the best move wins
+real material, and the solution can be shown as a forcing line. The helper module now exposes the "enough choice" and
+"single correct move" predicates directly.
 
 ## Context and Orientation
 
@@ -168,3 +185,5 @@ New binary:
 Plan updates:
 - 2026-03-10: Created new ExecPlan for `create_puzzles` generator and retired old scope.
 - 2026-03-10: Marked implementation complete after adding `create_puzzles`, helper module/tests, and full validation.
+- 2026-04-06: Updated the plan after refactoring puzzle validation to use English-style predicate names and helper
+  functions that match the verbal puzzle rules more closely.

@@ -24,6 +24,10 @@ static void test_puzzle_unique_best_rules(void) {
   };
   gint best_score = 0;
   guint best_count = 0;
+  g_assert_true(checkers_puzzle_side_to_move_has_enough_choice(&unique_list, 4));
+  g_assert_true(checkers_puzzle_side_to_move_has_a_single_correct_move(&unique_list, &best_score, &best_count));
+  g_assert_cmpint(best_score, ==, 200);
+  g_assert_cmpuint(best_count, ==, 1);
   g_assert_true(checkers_puzzle_has_unique_best(&unique_list, 4, &best_score, &best_count));
   g_assert_cmpint(best_score, ==, 200);
   g_assert_cmpuint(best_count, ==, 1);
@@ -38,6 +42,10 @@ static void test_puzzle_unique_best_rules(void) {
       .moves = tied_moves,
       .count = G_N_ELEMENTS(tied_moves),
   };
+  g_assert_true(checkers_puzzle_side_to_move_has_enough_choice(&tied_list, 4));
+  g_assert_false(checkers_puzzle_side_to_move_has_a_single_correct_move(&tied_list, &best_score, &best_count));
+  g_assert_cmpint(best_score, ==, 200);
+  g_assert_cmpuint(best_count, ==, 2);
   g_assert_false(checkers_puzzle_has_unique_best(&tied_list, 4, &best_score, &best_count));
   g_assert_cmpint(best_score, ==, 200);
   g_assert_cmpuint(best_count, ==, 2);
@@ -51,6 +59,10 @@ static void test_puzzle_unique_best_rules(void) {
       .moves = too_few_moves,
       .count = G_N_ELEMENTS(too_few_moves),
   };
+  g_assert_false(checkers_puzzle_side_to_move_has_enough_choice(&too_few_list, 4));
+  g_assert_true(checkers_puzzle_side_to_move_has_a_single_correct_move(&too_few_list, &best_score, &best_count));
+  g_assert_cmpint(best_score, ==, 200);
+  g_assert_cmpuint(best_count, ==, 1);
   g_assert_false(checkers_puzzle_has_unique_best(&too_few_list, 4, &best_score, &best_count));
 }
 

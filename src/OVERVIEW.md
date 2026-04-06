@@ -226,6 +226,9 @@ Module: CLI front end.
 Role: repeatedly self-play games at depth 0, detect mistake positions with depth-8 analysis,
 filter candidates where the opponent has at least four legal moves and exactly one top response, then save puzzles as
 SGF files under `puzzles/puzzle-####.sgf` with root setup (`AE/AB/AW/ABK/AWK/PL`) and a tactical continuation line.
+The main validation path is organized as puzzle-rule predicates (`position_follows_a_serious_mistake`,
+`position_is_valid`, `best_move_wins_real_material`, `solution_can_be_shown_as_a_forcing_line`) so puzzle selection
+reads close to its checkers-language definition.
 Tactical-line stop conditions use static material evaluation (not searched depth-0 evaluation) so targets are measured
 in pure board material quanta.
 For each emitted puzzle index, also saves the originating full self-play game as `puzzles/game-####.sgf`.
@@ -234,8 +237,8 @@ and `puzzle_generation.c`.
 
 ## Puzzle generation helpers (`src/puzzle_generation.c`, `src/puzzle_generation.h`)
 Module: puzzle-selection and output-index helpers.
-Role: expose pure functions for mistake delta checks, unique-best detection from scored move lists, and next puzzle
-file index discovery from existing `puzzle-####.sgf` files.
+Role: expose pure functions for mistake delta checks, "enough choice" and "single correct move" tests from scored move
+lists, unique-best detection, and next puzzle file index discovery from existing `puzzle-####.sgf` files.
 Collaborates with: `create_puzzles.c` and `tests/test_puzzle_generation.c`.
 
 ## GTK application entry (`src/gcheckers.c`, `src/application.c`, `src/application.h`)
