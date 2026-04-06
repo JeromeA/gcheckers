@@ -6,9 +6,11 @@
 static void test_puzzle_mistake_delta_white_and_black(void) {
   g_assert_cmpint(checkers_puzzle_mistake_delta(CHECKERS_COLOR_WHITE, 300, 200), ==, 100);
   g_assert_cmpint(checkers_puzzle_mistake_delta(CHECKERS_COLOR_BLACK, -300, -200), ==, 100);
-  g_assert_true(checkers_puzzle_is_mistake(CHECKERS_COLOR_WHITE, 300, 200, 100));
-  g_assert_true(checkers_puzzle_is_mistake(CHECKERS_COLOR_BLACK, -300, -200, 100));
-  g_assert_false(checkers_puzzle_is_mistake(CHECKERS_COLOR_WHITE, 300, 300, 100));
+  g_assert_cmpint(checkers_puzzle_score_gap_to_next_best(CHECKERS_COLOR_WHITE, 300, 250), ==, 50);
+  g_assert_cmpint(checkers_puzzle_score_gap_to_next_best(CHECKERS_COLOR_BLACK, -300, -250), ==, 50);
+  g_assert_true(checkers_puzzle_is_mistake(CHECKERS_COLOR_WHITE, 300, 250, 50));
+  g_assert_true(checkers_puzzle_is_mistake(CHECKERS_COLOR_BLACK, -300, -250, 50));
+  g_assert_false(checkers_puzzle_is_mistake(CHECKERS_COLOR_WHITE, 300, 251, 50));
 }
 
 static void test_puzzle_unique_best_rules(void) {
@@ -23,32 +25,66 @@ static void test_puzzle_unique_best_rules(void) {
       .count = G_N_ELEMENTS(unique_moves),
   };
   gint best_score = 0;
-  guint best_count = 0;
+  gint second_score = 0;
   g_assert_true(checkers_puzzle_side_to_move_has_enough_choice(&unique_list, 4));
-  g_assert_true(checkers_puzzle_side_to_move_has_a_single_correct_move(&unique_list, &best_score, &best_count));
+  g_assert_true(
+      checkers_puzzle_side_to_move_has_a_single_correct_move(&unique_list,
+                                                             CHECKERS_COLOR_WHITE,
+                                                             50,
+                                                             &best_score,
+                                                             &second_score));
   g_assert_cmpint(best_score, ==, 200);
-  g_assert_cmpuint(best_count, ==, 1);
-  g_assert_true(checkers_puzzle_has_unique_best(&unique_list, 4, &best_score, &best_count));
+  g_assert_cmpint(second_score, ==, 100);
+  g_assert_true(
+      checkers_puzzle_has_unique_best(&unique_list, 4, CHECKERS_COLOR_WHITE, 50, &best_score, &second_score));
   g_assert_cmpint(best_score, ==, 200);
-  g_assert_cmpuint(best_count, ==, 1);
+  g_assert_cmpint(second_score, ==, 100);
 
-  CheckersScoredMove tied_moves[] = {
+  CheckersScoredMove close_moves[] = {
       {.score = 200},
-      {.score = 200},
+      {.score = 151},
       {.score = 100},
       {.score = 0},
   };
-  CheckersScoredMoveList tied_list = {
-      .moves = tied_moves,
-      .count = G_N_ELEMENTS(tied_moves),
+  CheckersScoredMoveList close_list = {
+      .moves = close_moves,
+      .count = G_N_ELEMENTS(close_moves),
   };
-  g_assert_true(checkers_puzzle_side_to_move_has_enough_choice(&tied_list, 4));
-  g_assert_false(checkers_puzzle_side_to_move_has_a_single_correct_move(&tied_list, &best_score, &best_count));
+  g_assert_true(checkers_puzzle_side_to_move_has_enough_choice(&close_list, 4));
+  g_assert_false(checkers_puzzle_side_to_move_has_a_single_correct_move(&close_list,
+                                                                        CHECKERS_COLOR_WHITE,
+                                                                        50,
+                                                                        &best_score,
+                                                                        &second_score));
   g_assert_cmpint(best_score, ==, 200);
-  g_assert_cmpuint(best_count, ==, 2);
-  g_assert_false(checkers_puzzle_has_unique_best(&tied_list, 4, &best_score, &best_count));
+  g_assert_cmpint(second_score, ==, 151);
+  g_assert_false(
+      checkers_puzzle_has_unique_best(&close_list, 4, CHECKERS_COLOR_WHITE, 50, &best_score, &second_score));
   g_assert_cmpint(best_score, ==, 200);
-  g_assert_cmpuint(best_count, ==, 2);
+  g_assert_cmpint(second_score, ==, 151);
+
+  CheckersScoredMove boundary_moves[] = {
+      {.score = 200},
+      {.score = 150},
+      {.score = 100},
+      {.score = 0},
+  };
+  CheckersScoredMoveList boundary_list = {
+      .moves = boundary_moves,
+      .count = G_N_ELEMENTS(boundary_moves),
+  };
+  g_assert_true(checkers_puzzle_side_to_move_has_enough_choice(&boundary_list, 4));
+  g_assert_true(checkers_puzzle_side_to_move_has_a_single_correct_move(&boundary_list,
+                                                                       CHECKERS_COLOR_WHITE,
+                                                                       50,
+                                                                       &best_score,
+                                                                       &second_score));
+  g_assert_cmpint(best_score, ==, 200);
+  g_assert_cmpint(second_score, ==, 150);
+  g_assert_true(
+      checkers_puzzle_has_unique_best(&boundary_list, 4, CHECKERS_COLOR_WHITE, 50, &best_score, &second_score));
+  g_assert_cmpint(best_score, ==, 200);
+  g_assert_cmpint(second_score, ==, 150);
 
   CheckersScoredMove too_few_moves[] = {
       {.score = 200},
@@ -60,10 +96,108 @@ static void test_puzzle_unique_best_rules(void) {
       .count = G_N_ELEMENTS(too_few_moves),
   };
   g_assert_false(checkers_puzzle_side_to_move_has_enough_choice(&too_few_list, 4));
-  g_assert_true(checkers_puzzle_side_to_move_has_a_single_correct_move(&too_few_list, &best_score, &best_count));
+  g_assert_true(checkers_puzzle_side_to_move_has_a_single_correct_move(&too_few_list,
+                                                                       CHECKERS_COLOR_WHITE,
+                                                                       50,
+                                                                       &best_score,
+                                                                       &second_score));
   g_assert_cmpint(best_score, ==, 200);
-  g_assert_cmpuint(best_count, ==, 1);
-  g_assert_false(checkers_puzzle_has_unique_best(&too_few_list, 4, &best_score, &best_count));
+  g_assert_cmpint(second_score, ==, 100);
+  g_assert_false(
+      checkers_puzzle_has_unique_best(&too_few_list, 4, CHECKERS_COLOR_WHITE, 50, &best_score, &second_score));
+
+  CheckersScoredMove black_boundary_moves[] = {
+      {.score = -200},
+      {.score = -150},
+      {.score = -100},
+      {.score = 0},
+  };
+  CheckersScoredMoveList black_boundary_list = {
+      .moves = black_boundary_moves,
+      .count = G_N_ELEMENTS(black_boundary_moves),
+  };
+  g_assert_true(checkers_puzzle_side_to_move_has_enough_choice(&black_boundary_list, 4));
+  g_assert_true(checkers_puzzle_side_to_move_has_a_single_correct_move(&black_boundary_list,
+                                                                       CHECKERS_COLOR_BLACK,
+                                                                       50,
+                                                                       &best_score,
+                                                                       &second_score));
+  g_assert_cmpint(best_score, ==, -200);
+  g_assert_cmpint(second_score, ==, -150);
+
+  CheckersScoredMove black_close_moves[] = {
+      {.score = -200},
+      {.score = -151},
+      {.score = -100},
+      {.score = 0},
+  };
+  CheckersScoredMoveList black_close_list = {
+      .moves = black_close_moves,
+      .count = G_N_ELEMENTS(black_close_moves),
+  };
+  g_assert_false(checkers_puzzle_side_to_move_has_a_single_correct_move(&black_close_list,
+                                                                        CHECKERS_COLOR_BLACK,
+                                                                        50,
+                                                                        &best_score,
+                                                                        &second_score));
+  g_assert_cmpint(best_score, ==, -200);
+  g_assert_cmpint(second_score, ==, -151);
+}
+
+static void test_puzzle_attacker_move_clarity_is_asymmetric(void) {
+  CheckersScoredMove defender_choice_moves[] = {
+      {.score = 200},
+      {.score = 151},
+      {.score = 100},
+      {.score = 0},
+  };
+  CheckersScoredMoveList defender_choice_list = {
+      .moves = defender_choice_moves,
+      .count = G_N_ELEMENTS(defender_choice_moves),
+  };
+  gint best_score = 0;
+  gint second_score = 0;
+
+  g_assert_true(checkers_puzzle_turn_keeps_attacker_on_a_single_good_move(&defender_choice_list,
+                                                                          CHECKERS_COLOR_WHITE,
+                                                                          CHECKERS_COLOR_BLACK,
+                                                                          50,
+                                                                          &best_score,
+                                                                          &second_score));
+  g_assert_cmpint(best_score, ==, 200);
+  g_assert_cmpint(second_score, ==, 151);
+
+  g_assert_false(checkers_puzzle_turn_keeps_attacker_on_a_single_good_move(&defender_choice_list,
+                                                                           CHECKERS_COLOR_WHITE,
+                                                                           CHECKERS_COLOR_WHITE,
+                                                                           50,
+                                                                           &best_score,
+                                                                           &second_score));
+  g_assert_cmpint(best_score, ==, 200);
+  g_assert_cmpint(second_score, ==, 151);
+
+  CheckersScoredMove black_defender_choice_moves[] = {
+      {.score = -200},
+      {.score = -151},
+      {.score = -100},
+      {.score = 0},
+  };
+  CheckersScoredMoveList black_defender_choice_list = {
+      .moves = black_defender_choice_moves,
+      .count = G_N_ELEMENTS(black_defender_choice_moves),
+  };
+  g_assert_true(checkers_puzzle_turn_keeps_attacker_on_a_single_good_move(&black_defender_choice_list,
+                                                                          CHECKERS_COLOR_BLACK,
+                                                                          CHECKERS_COLOR_WHITE,
+                                                                          50,
+                                                                          &best_score,
+                                                                          &second_score));
+  g_assert_false(checkers_puzzle_turn_keeps_attacker_on_a_single_good_move(&black_defender_choice_list,
+                                                                           CHECKERS_COLOR_BLACK,
+                                                                           CHECKERS_COLOR_BLACK,
+                                                                           50,
+                                                                           &best_score,
+                                                                           &second_score));
 }
 
 static void test_puzzle_find_next_index(void) {
@@ -130,6 +264,8 @@ int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   g_test_add_func("/puzzle-generation/mistake-delta", test_puzzle_mistake_delta_white_and_black);
   g_test_add_func("/puzzle-generation/unique-best", test_puzzle_unique_best_rules);
+  g_test_add_func("/puzzle-generation/attacker-move-clarity",
+                  test_puzzle_attacker_move_clarity_is_asymmetric);
   g_test_add_func("/puzzle-generation/find-next-index", test_puzzle_find_next_index);
   g_test_add_func("/puzzle-generation/build-indexed-path", test_puzzle_build_indexed_path);
   g_test_add_func("/puzzle-generation/parse-arg", test_puzzle_parse_arg);

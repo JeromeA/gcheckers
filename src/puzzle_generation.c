@@ -12,6 +12,10 @@ gint checkers_puzzle_mistake_delta(CheckersColor turn, gint best_score, gint pla
   return played_score - best_score;
 }
 
+gint checkers_puzzle_score_gap_to_next_best(CheckersColor turn, gint best_score, gint second_score) {
+  return checkers_puzzle_mistake_delta(turn, best_score, second_score);
+}
+
 gboolean checkers_puzzle_is_mistake(CheckersColor turn, gint best_score, gint played_score, gint threshold) {
   g_return_val_if_fail(threshold >= 0, FALSE);
 
@@ -27,45 +31,90 @@ gboolean checkers_puzzle_side_to_move_has_enough_choice(const CheckersScoredMove
 }
 
 gboolean checkers_puzzle_side_to_move_has_a_single_correct_move(const CheckersScoredMoveList *moves,
+                                                                CheckersColor turn,
+                                                                gint min_score_gap,
                                                                 gint *out_best_score,
-                                                                guint *out_best_count) {
+                                                                gint *out_second_score) {
   g_return_val_if_fail(moves != NULL, FALSE);
   g_return_val_if_fail(moves->moves != NULL || moves->count == 0, FALSE);
+  g_return_val_if_fail(turn == CHECKERS_COLOR_WHITE || turn == CHECKERS_COLOR_BLACK, FALSE);
+  g_return_val_if_fail(min_score_gap >= 0, FALSE);
 
   if (moves->count == 0) {
-    if (out_best_count != NULL) {
-      *out_best_count = 0;
+    if (out_second_score != NULL) {
+      *out_second_score = 0;
     }
     return FALSE;
   }
 
   gint best_score = moves->moves[0].score;
-  guint best_count = 1;
-  while (best_count < moves->count && moves->moves[best_count].score == best_score) {
-    best_count++;
-  }
+  gint second_score = moves->count > 1 ? moves->moves[1].score : best_score;
 
   if (out_best_score != NULL) {
     *out_best_score = best_score;
   }
-  if (out_best_count != NULL) {
-    *out_best_count = best_count;
+  if (out_second_score != NULL) {
+    *out_second_score = second_score;
   }
-  return best_count == 1;
+  return moves->count == 1 || checkers_puzzle_score_gap_to_next_best(turn, best_score, second_score) >= min_score_gap;
+}
+
+gboolean checkers_puzzle_turn_keeps_attacker_on_a_single_good_move(const CheckersScoredMoveList *moves,
+                                                                   CheckersColor attacker,
+                                                                   CheckersColor turn,
+                                                                   gint min_score_gap,
+                                                                   gint *out_best_score,
+                                                                   gint *out_second_score) {
+  g_return_val_if_fail(moves != NULL, FALSE);
+  g_return_val_if_fail(moves->moves != NULL || moves->count == 0, FALSE);
+  g_return_val_if_fail(attacker == CHECKERS_COLOR_WHITE || attacker == CHECKERS_COLOR_BLACK, FALSE);
+  g_return_val_if_fail(turn == CHECKERS_COLOR_WHITE || turn == CHECKERS_COLOR_BLACK, FALSE);
+  g_return_val_if_fail(min_score_gap >= 0, FALSE);
+
+  if (turn != attacker) {
+    if (moves->count == 0) {
+      if (out_second_score != NULL) {
+        *out_second_score = 0;
+      }
+      return FALSE;
+    }
+
+    gint best_score = moves->moves[0].score;
+    gint second_score = moves->count > 1 ? moves->moves[1].score : best_score;
+    if (out_best_score != NULL) {
+      *out_best_score = best_score;
+    }
+    if (out_second_score != NULL) {
+      *out_second_score = second_score;
+    }
+    return TRUE;
+  }
+
+  return checkers_puzzle_side_to_move_has_a_single_correct_move(moves,
+                                                                turn,
+                                                                min_score_gap,
+                                                                out_best_score,
+                                                                out_second_score);
 }
 
 gboolean checkers_puzzle_has_unique_best(const CheckersScoredMoveList *moves,
                                          guint min_legal_moves,
+                                         CheckersColor turn,
+                                         gint min_score_gap,
                                          gint *out_best_score,
-                                         guint *out_best_count) {
+                                         gint *out_second_score) {
   if (!checkers_puzzle_side_to_move_has_enough_choice(moves, min_legal_moves)) {
-    if (out_best_count != NULL) {
-      *out_best_count = 0;
+    if (out_second_score != NULL) {
+      *out_second_score = 0;
     }
     return FALSE;
   }
 
-  return checkers_puzzle_side_to_move_has_a_single_correct_move(moves, out_best_score, out_best_count);
+  return checkers_puzzle_side_to_move_has_a_single_correct_move(moves,
+                                                                turn,
+                                                                min_score_gap,
+                                                                out_best_score,
+                                                                out_second_score);
 }
 
 static gboolean checkers_puzzle_parse_index_from_name(const char *name, guint *out_index) {

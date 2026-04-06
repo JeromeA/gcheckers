@@ -10,16 +10,18 @@ This plan is maintained according to PLANS.md at the repository root (`PLANS.md`
 Add a new CLI binary `create_puzzles` that repeatedly self-plays games and emits tactical SGF puzzles.
 
 A generated puzzle is defined as:
-- Player A makes a mistake at a node: played move is at least 100 points worse than best at depth 10.
-- Puzzle start is the resulting position after that mistake (Player B to move).
-- At puzzle start, Player B has at least 4 legal moves and exactly one top move (all other moves are at least
-  100 points worse, equivalently not tied with best).
-- Tactical continuation is generated from puzzle start by playing best moves at depth 0 (`effective depth = 1`) for
-  both sides until the position depth-0 evaluation equals the punished target value (the depth-10 best score at puzzle
-  start).
+- Player A makes a mistake at a node: played move is at least 50 points worse than best at depth 8.
+- Puzzle start is the resulting position after that mistake, with Player B becoming the attacker.
+- At puzzle start, the attacker has at least 4 legal moves and one clearly best move: the top move scores at least
+  50 points better than the second-best move.
+- Tactical continuation is generated from puzzle start by playing best moves at the configured puzzle-analysis depth
+  for both sides until the static evaluation is better for the attacker than it was at the puzzle start.
+- On every attacker turn in that continuation, if the attacker has multiple legal moves, the best move must still
+  score at least 50 points better than the second-best move. Defender ties for best are allowed.
 
 The tool stops when it has generated `N` puzzles requested on the CLI and saves files as:
 `puzzles/puzzle-0000.sgf`, starting from the highest existing index + 1.
+The CLI accepts `--depth N` to override the puzzle-analysis depth; otherwise it uses the default depth 8.
 
 ## Progress
 
@@ -33,6 +35,10 @@ The tool stops when it has generated `N` puzzles requested on the CLI and saves 
 - [x] (2026-03-10 17:32Z) Ran required validation (`make all`, `make test`) and targeted new binary smoke run.
 - [x] (2026-04-06 12:45Z) Refactored puzzle validation into English-style predicates and added helper tests for
   "enough choice" and "single correct move" rules.
+- [x] (2026-04-06 14:05Z) Relaxed puzzle thresholds to 50-point blunders and 50-point best-move margins.
+- [x] (2026-04-06 14:32Z) Switched continuation building to configurable-depth best play with attacker-only move
+  clarity.
+- [x] (2026-04-06 14:53Z) Added a `--depth` CLI flag so puzzle-analysis depth is configurable at runtime.
 
 ## Surprises & Discoveries
 
@@ -69,8 +75,11 @@ The tool stops when it has generated `N` puzzles requested on the CLI and saves 
 Implementation is complete for the requested scope.
 
 `create_puzzles` now exists as a standalone CLI generator. It loops through self-play games at effective depth 0,
-detects mistakes using depth-10 move-score deltas (threshold 100), filters puzzle starts to post-mistake positions
-with at least four legal moves and exactly one top move, and writes SGF puzzles with setup root + tactical line under
+detects mistakes using configurable-depth move-score deltas (currently depth 8, threshold 50), filters puzzle starts
+to post-mistake attacker positions with at least four legal moves and a best move at least 50 points ahead of the
+runner-up, then follows best play at that same depth until the attacker's static evaluation improves. The attacker
+must keep a single good move throughout the line, while defender ties for best are allowed. The tool writes SGF
+puzzles with setup root + tactical line under
 `puzzles/puzzle-####.sgf` using highest-existing-index + 1 naming.
 
 A helper module (`puzzle_generation`) encapsulates mistake delta checks, unique-best detection, and next-index
@@ -80,9 +89,9 @@ Validation completed with `make all` and `make test`; all tests pass in this env
 headless skips and screenshot warning behavior).
 
 The validator has since been reorganized so the candidate path reads like a rules checklist: a position follows a
-serious mistake, the side to move has enough choice, the side to move has a single correct move, the best move wins
-real material, and the solution can be shown as a forcing line. The helper module now exposes the "enough choice" and
-"single correct move" predicates directly.
+serious mistake, the attacker has enough choice, the attacker has a single good move, and the solution line of best
+depth moves improves static evaluation. The helper module now exposes the "enough choice", "single correct move", and
+attacker/defender move-clarity predicates directly.
 
 ## Context and Orientation
 
@@ -111,7 +120,7 @@ code (without pulling in GTK controller dependencies).
    - loop games until `count` puzzles emitted,
    - self-play each game using depth-0 mapping (`1`),
    - detect mistakes and candidate puzzle starts,
-   - build tactical line to target value,
+   - build tactical line until the attacker improves static material,
    - serialize SGF per puzzle with root setup + tactical moves + metadata comment.
 4. Wire new binary/test in `Makefile` and update `.gitignore` for `/create_puzzles`.
 5. Update `src/OVERVIEW.md` with the new CLI and helper module.
@@ -144,19 +153,21 @@ Acceptance criteria:
 - `create_puzzles <N>` emits exactly `N` SGF puzzle files under `puzzles/`.
 - Output naming starts from highest existing `puzzle-####.sgf` index + 1.
 - Puzzle eligibility obeys all confirmed rules:
-  - mistake delta >= 100 at depth 10,
+  - mistake delta >= 50 at depth 8,
   - puzzle start is post-mistake,
-  - candidate side has >= 4 legal moves,
-  - exactly one top move (no tie for best),
-  - continuation stops when depth-0 eval reaches target depth-10 punished value.
+  - attacker has >= 4 legal moves,
+  - attacker best move is ahead of second-best by >= 50,
+  - continuation uses best play at the configured puzzle-analysis depth,
+  - attacker keeps a 50-point move gap on every attacker turn with multiple legal moves,
+  - continuation stops when static evaluation is better for the attacker than at puzzle start.
 - `make all` and `make test` pass.
 
 ## Idempotence and Recovery
 
 - Re-running the tool appends new numbered puzzle files without overwriting old files.
 - If a game yields no valid puzzle, generator discards it and continues to next game.
-- Tactical-line generation has a hard ply cap to avoid infinite loops if target cannot be reached in practice; such
-  candidates are discarded.
+- Tactical-line generation has a hard ply cap to avoid infinite loops if static improvement cannot be reached in
+  practice; such candidates are discarded.
 
 ## Artifacts and Notes
 
@@ -172,18 +183,32 @@ New helper interface (`src/puzzle_generation.h`):
 
 - `gint checkers_puzzle_mistake_delta(CheckersColor turn, gint best_score, gint played_score);`
 - `gboolean checkers_puzzle_is_mistake(CheckersColor turn, gint best_score, gint played_score, gint threshold);`
+- `gint checkers_puzzle_score_gap_to_next_best(CheckersColor turn, gint best_score, gint second_score);`
 - `gboolean checkers_puzzle_has_unique_best(const CheckersScoredMoveList *moves,
                                            guint min_legal_moves,
+                                           CheckersColor turn,
+                                           gint min_score_gap,
                                            gint *out_best_score,
-                                           guint *out_best_count);`
+                                           gint *out_second_score);`
+- `gboolean checkers_puzzle_turn_keeps_attacker_on_a_single_good_move(const CheckersScoredMoveList *moves,
+                                                                     CheckersColor attacker,
+                                                                     CheckersColor turn,
+                                                                     gint min_score_gap,
+                                                                     gint *out_best_score,
+                                                                     gint *out_second_score);`
 - `gboolean checkers_puzzle_find_next_index(const char *dir_path, guint *out_next_index, GError **error);`
 
 New binary:
 
-- `create_puzzles` (CLI): `./create_puzzles <puzzle-count>`
+- `create_puzzles` (CLI): `./create_puzzles [--depth N] <puzzle-count|sgf-file>`
 
 Plan updates:
 - 2026-03-10: Created new ExecPlan for `create_puzzles` generator and retired old scope.
 - 2026-03-10: Marked implementation complete after adding `create_puzzles`, helper module/tests, and full validation.
 - 2026-04-06: Updated the plan after refactoring puzzle validation to use English-style predicate names and helper
   functions that match the verbal puzzle rules more closely.
+- 2026-04-06: Updated the documented puzzle thresholds to match the 50-point blunder and 50-point best-move-margin
+  rules implemented in code.
+- 2026-04-06: Updated the continuation description to use configurable-depth best play, attacker terminology, and
+  attacker-only move-clarity checks.
+- 2026-04-06: Added the runtime `--depth` flag so puzzle-analysis depth no longer needs a code change.
