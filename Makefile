@@ -6,13 +6,15 @@ GLIB_CFLAGS := $(shell pkg-config --cflags glib-2.0)
 GLIB_LIBS := $(shell pkg-config --libs glib-2.0)
 GOBJECT_CFLAGS := $(shell pkg-config --cflags gobject-2.0)
 GOBJECT_LIBS := $(shell pkg-config --libs gobject-2.0)
+GIO_CFLAGS := $(shell pkg-config --cflags gio-2.0)
+GIO_LIBS := $(shell pkg-config --libs gio-2.0)
 GTK_CFLAGS := $(shell pkg-config --cflags gtk4)
 GTK_LIBS := $(shell pkg-config --libs gtk4)
 CURL_CFLAGS := $(shell pkg-config --cflags libcurl)
 CURL_LIBS := $(shell pkg-config --libs libcurl)
-LDLIBS := $(GLIB_LIBS) $(GOBJECT_LIBS) $(CURL_LIBS) -lm
+LDLIBS := $(GLIB_LIBS) $(GOBJECT_LIBS) $(GIO_LIBS) $(CURL_LIBS) -lm
 
-CFLAGS += $(GLIB_CFLAGS) $(GOBJECT_CFLAGS) $(CURL_CFLAGS)
+CFLAGS += $(GLIB_CFLAGS) $(GOBJECT_CFLAGS) $(GIO_CFLAGS) $(CURL_CFLAGS)
 
 SRCS := src/board.c src/game.c src/game_print.c src/move_gen.c src/ai_alpha_beta.c \
 	src/rulesets.c \
@@ -66,7 +68,7 @@ libgame.a: $(OBJS)
 test: test_game test_game_print test_board test_move_gen test_checkers_model \
 	test_ai_transposition_table test_position_search \
 	test_position_predicate test_sgf_tree test_sgf_io test_sgf_view test_bga_client \
-	test_board_view test_player_controls_panel test_sgf_controller test_window \
+	test_file_dialog_history test_board_view test_player_controls_panel test_sgf_controller test_window \
 	test_puzzle_generation test_screenshot
 	./test_game
 	./test_game_print
@@ -79,6 +81,7 @@ test: test_game test_game_print test_board test_move_gen test_checkers_model \
 	./test_sgf_tree
 	./test_sgf_io
 	./test_bga_client
+	./test_file_dialog_history
 	./test_puzzle_generation
 	$(MAKE) test_sgf_view_broadway
 	$(MAKE) test_gtk_broadway
@@ -119,6 +122,10 @@ test_position_predicate: tests/test_position_predicate.c $(POSITION_SRCS) $(SRCS
 
 test_bga_client: tests/test_bga_client.c src/bga_client.c src/bga_client.h
 	$(CC) $(CFLAGS) -o $@ tests/test_bga_client.c src/bga_client.c $(LDLIBS)
+
+test_file_dialog_history: $(GSETTINGS_SCHEMA_COMPILED) tests/test_file_dialog_history.c \
+	src/file_dialog_history.c src/file_dialog_history.h
+	$(CC) $(CFLAGS) -o $@ tests/test_file_dialog_history.c src/file_dialog_history.c $(LDLIBS)
 
 test_sgf_tree: tests/test_sgf_tree.c $(SGF_TREE_SRCS) src/sgf_tree.h
 	$(CC) $(CFLAGS) -o $@ tests/test_sgf_tree.c $(SGF_TREE_SRCS) $(LDLIBS)
@@ -219,7 +226,7 @@ test_window: $(GSETTINGS_SCHEMA_COMPILED) tests/test_window.c src/window.c \
 	src/new_game_dialog.c \
 	src/rulesets.c src/rulesets.h \
 	src/import_dialog.c \
-	src/sgf_file_actions.c src/sgf_file_actions.h \
+	src/sgf_file_actions.c src/sgf_file_actions.h src/file_dialog_history.c src/file_dialog_history.h \
 	src/bga_client.c src/bga_client.h \
 	src/window.h \
 	src/style.c src/style.h src/player_controls_panel.c src/player_controls_panel.h \
@@ -237,7 +244,7 @@ test_window: $(GSETTINGS_SCHEMA_COMPILED) tests/test_window.c src/window.c \
 	$(SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_window.c src/window.c \
 		src/new_game_dialog.c \
-		src/import_dialog.c \
+		src/import_dialog.c src/file_dialog_history.c \
 		src/sgf_file_actions.c \
 		src/bga_client.c \
 	src/style.c src/player_controls_panel.c src/sgf_controller.c \
@@ -271,7 +278,7 @@ gcheckers: $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c src/application.c src/wi
 	src/new_game_dialog.c \
 	src/rulesets.c src/rulesets.h \
 	src/import_dialog.c \
-	src/sgf_file_actions.c src/sgf_file_actions.h \
+	src/sgf_file_actions.c src/sgf_file_actions.h src/file_dialog_history.c src/file_dialog_history.h \
 	src/bga_client.c src/bga_client.h \
 	src/window.h \
 	src/style.c src/style.h src/player_controls_panel.c src/player_controls_panel.h \
@@ -288,7 +295,7 @@ gcheckers: $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c src/application.c src/wi
 	src/sgf_view_scroller.c src/sgf_view_scroller.h src/sgf_view_selection_controller.c \
 	src/sgf_view_selection_controller.h $(SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/gcheckers.c src/application.c \
-		src/window.c src/new_game_dialog.c src/import_dialog.c src/style.c \
+		src/window.c src/new_game_dialog.c src/import_dialog.c src/file_dialog_history.c src/style.c \
 	src/player_controls_panel.c src/analysis_graph.c src/sgf_file_actions.c src/bga_client.c \
 	src/sgf_controller.c src/board_view.c src/board_grid.c src/board_square.c \
 	src/board_move_overlay.c src/board_selection_controller.c src/piece_palette.c \
@@ -303,7 +310,7 @@ $(GSETTINGS_SCHEMA_COMPILED): $(GSETTINGS_SCHEMA_XML)
 clean:
 	rm -f $(OBJS) libgame.a test_game test_game_print test_board test_move_gen test_checkers_model \
 		test_ai_transposition_table test_position_search test_position_predicate test_sgf_tree test_sgf_io test_sgf_view \
-		test_bga_client test_board_view test_player_controls_panel test_sgf_controller \
+		test_bga_client test_file_dialog_history test_board_view test_player_controls_panel test_sgf_controller \
 		test_window test_screenshot find_position gcheckers
 	rm -f $(GSETTINGS_SCHEMA_COMPILED)
 	rm -rf $(COV_DIR)

@@ -16,5 +16,10 @@
       <summary>Stored import password</summary>
       <description>Password used for BoardGameArena import when remember is enabled.</description>
     </key>
+    <key name="sgf-last-folder" type="s">
+      <default>""</default>
+      <summary>Last SGF folder</summary>
+      <description>Most recently used folder for loading and saving SGF files.</description>
+    </key>
   </schema>
 </schemalist>

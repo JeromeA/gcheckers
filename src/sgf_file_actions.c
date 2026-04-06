@@ -1,5 +1,9 @@
 #include "sgf_file_actions.h"
 
+#include "file_dialog_history.h"
+
+static const char *gcheckers_sgf_last_folder_key = "sgf-last-folder";
+
 static void gcheckers_window_show_file_error_dialog(GCheckersWindow *self, const char *title, const char *message) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
   g_return_if_fail(title != NULL);
@@ -73,6 +77,11 @@ static void gcheckers_window_on_sgf_load_dialog_finish(GObject *source_object,
     return;
   }
 
+  g_autoptr(GSettings) settings = gcheckers_file_dialog_history_create_settings();
+  if (G_IS_SETTINGS(settings)) {
+    (void)gcheckers_file_dialog_history_remember_parent(settings, gcheckers_sgf_last_folder_key, file);
+  }
+
   GCheckersSgfController *controller = gcheckers_window_get_sgf_controller(self);
   if (!gcheckers_sgf_controller_load_file(controller, path, &error)) {
     g_autofree char *text =
@@ -108,6 +117,11 @@ static void gcheckers_window_on_sgf_save_dialog_finish(GObject *source_object,
     gcheckers_window_show_file_error_dialog(self, "Save failed", "Unable to resolve selected file path.");
     g_object_unref(self);
     return;
+  }
+
+  g_autoptr(GSettings) settings = gcheckers_file_dialog_history_create_settings();
+  if (G_IS_SETTINGS(settings)) {
+    (void)gcheckers_file_dialog_history_remember_parent(settings, gcheckers_sgf_last_folder_key, file);
   }
 
   GCheckersSgfController *controller = gcheckers_window_get_sgf_controller(self);
@@ -147,6 +161,11 @@ static void gcheckers_window_on_sgf_save_position_dialog_finish(GObject *source_
     return;
   }
 
+  g_autoptr(GSettings) settings = gcheckers_file_dialog_history_create_settings();
+  if (G_IS_SETTINGS(settings)) {
+    (void)gcheckers_file_dialog_history_remember_parent(settings, gcheckers_sgf_last_folder_key, file);
+  }
+
   GCheckersSgfController *controller = gcheckers_window_get_sgf_controller(self);
   if (!gcheckers_sgf_controller_save_position_file(controller, path, &error)) {
     g_autofree char *text =
@@ -166,6 +185,14 @@ static void gcheckers_window_on_sgf_load_action(GSimpleAction * /*action*/,
   GtkFileDialog *dialog = gtk_file_dialog_new();
   gtk_file_dialog_set_title(dialog, "Load SGF");
   gcheckers_window_configure_sgf_filters(dialog);
+  g_autoptr(GSettings) settings = gcheckers_file_dialog_history_create_settings();
+  if (G_IS_SETTINGS(settings)) {
+    g_autoptr(GFile) folder =
+        gcheckers_file_dialog_history_get_initial_folder(settings, gcheckers_sgf_last_folder_key);
+    if (folder != NULL) {
+      gtk_file_dialog_set_initial_folder(dialog, folder);
+    }
+  }
   gtk_file_dialog_open(dialog, GTK_WINDOW(self), NULL, gcheckers_window_on_sgf_load_dialog_finish, g_object_ref(self));
   g_object_unref(dialog);
 }
@@ -180,6 +207,14 @@ static void gcheckers_window_on_sgf_save_as_action(GSimpleAction * /*action*/,
   gtk_file_dialog_set_title(dialog, "Save SGF As");
   gtk_file_dialog_set_initial_name(dialog, "game.sgf");
   gcheckers_window_configure_sgf_filters(dialog);
+  g_autoptr(GSettings) settings = gcheckers_file_dialog_history_create_settings();
+  if (G_IS_SETTINGS(settings)) {
+    g_autoptr(GFile) folder =
+        gcheckers_file_dialog_history_get_initial_folder(settings, gcheckers_sgf_last_folder_key);
+    if (folder != NULL) {
+      gtk_file_dialog_set_initial_folder(dialog, folder);
+    }
+  }
   gtk_file_dialog_save(dialog, GTK_WINDOW(self), NULL, gcheckers_window_on_sgf_save_dialog_finish, g_object_ref(self));
   g_object_unref(dialog);
 }
@@ -194,6 +229,14 @@ static void gcheckers_window_on_sgf_save_position_action(GSimpleAction * /*actio
   gtk_file_dialog_set_title(dialog, "Save SGF Position As");
   gtk_file_dialog_set_initial_name(dialog, "position.sgf");
   gcheckers_window_configure_sgf_filters(dialog);
+  g_autoptr(GSettings) settings = gcheckers_file_dialog_history_create_settings();
+  if (G_IS_SETTINGS(settings)) {
+    g_autoptr(GFile) folder =
+        gcheckers_file_dialog_history_get_initial_folder(settings, gcheckers_sgf_last_folder_key);
+    if (folder != NULL) {
+      gtk_file_dialog_set_initial_folder(dialog, folder);
+    }
+  }
   gtk_file_dialog_save(dialog,
                        GTK_WINDOW(self),
                        NULL,

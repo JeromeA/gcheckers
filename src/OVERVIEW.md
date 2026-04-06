@@ -249,6 +249,12 @@ plus an attacker/defender move-clarity helper and next puzzle file index discove
 files.
 Collaborates with: `create_puzzles.c` and `tests/test_puzzle_generation.c`.
 
+## File dialog history helpers (`src/file_dialog_history.c`, `src/file_dialog_history.h`)
+Module: SGF file dialog folder persistence helpers.
+Role: create `GSettings` with the app schema, read the remembered SGF folder as a `GFile`, and store the parent folder
+of a chosen SGF file so future dialogs can reopen there.
+Collaborates with: `sgf_file_actions.c` and `tests/test_file_dialog_history.c`.
+
 ## GTK application entry (`src/gcheckers.c`, `src/application.c`, `src/application.h`)
 Class: `GCheckersApplication` (`GtkApplication`).
 Role: define the GTK application type and activation flow that creates the main window and model, installs app actions
@@ -370,6 +376,6 @@ Collaborates with: `SgfView`, the SGF tree, and the scroller.
 
 ### SGF file actions (`src/sgf_file_actions.c`, `src/sgf_file_actions.h`)
 Module: GTK SGF file action integration.
-Role: register `win.sgf-load` and `win.sgf-save-as` actions, present `GtkFileDialog` file pickers, call SGF
-controller load/save APIs, and show errors as modal dialogs.
-Collaborates with: `GCheckersWindow` action map and `GCheckersSgfController`.
+Role: register `win.sgf-load` and `win.sgf-save-as` actions, present `GtkFileDialog` file pickers, reopen them in the
+last remembered SGF folder, call SGF controller load/save APIs, and show errors as modal dialogs.
+Collaborates with: `GCheckersWindow` action map, `GCheckersSgfController`, and `file_dialog_history.c`.
