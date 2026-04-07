@@ -51,6 +51,8 @@ struct _GCheckersWindow {
   gint board_panel_width;
   gint navigation_panel_width;
   gint analysis_panel_width;
+  GCheckersWindowBoardOrientationMode board_orientation_mode;
+  CheckersColor board_bottom_color;
 };
 
 G_DEFINE_TYPE(GCheckersWindow, gcheckers_window, GTK_TYPE_APPLICATION_WINDOW)
@@ -116,6 +118,7 @@ static void gcheckers_window_apply_saved_panel_widths(GCheckersWindow *self, gin
 static gboolean gcheckers_window_format_setup_point(uint8_t index, uint8_t board_size, char out_point[3]);
 static gboolean gcheckers_window_update_node_setup_piece(SgfNode *node, const char *point, CheckersPiece piece);
 static gboolean gcheckers_window_on_board_square_action(guint8 index, guint button, gpointer user_data);
+static void gcheckers_window_sync_board_orientation(GCheckersWindow *self);
 
 enum {
   GCHECKERS_WINDOW_DEFAULT_BOARD_PANEL_WIDTH = 500,
@@ -127,6 +130,65 @@ enum {
 };
 
 static void gcheckers_window_refresh_analysis_graph(GCheckersWindow *self);
+
+static gboolean gcheckers_window_board_orientation_mode_valid(GCheckersWindowBoardOrientationMode mode) {
+  return mode == GCHECKERS_WINDOW_BOARD_ORIENTATION_FIXED ||
+         mode == GCHECKERS_WINDOW_BOARD_ORIENTATION_FOLLOW_PLAYER ||
+         mode == GCHECKERS_WINDOW_BOARD_ORIENTATION_FOLLOW_TURN;
+}
+
+static gboolean gcheckers_window_try_resolve_follow_player_bottom_color(GCheckersWindow *self,
+                                                                        CheckersColor *out_color) {
+  g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), FALSE);
+  g_return_val_if_fail(out_color != NULL, FALSE);
+  g_return_val_if_fail(self->controls_panel != NULL, FALSE);
+
+  gboolean white_is_user = player_controls_panel_is_user_control(self->controls_panel, CHECKERS_COLOR_WHITE);
+  gboolean black_is_user = player_controls_panel_is_user_control(self->controls_panel, CHECKERS_COLOR_BLACK);
+  if (white_is_user == black_is_user) {
+    return FALSE;
+  }
+
+  *out_color = white_is_user ? CHECKERS_COLOR_WHITE : CHECKERS_COLOR_BLACK;
+  return TRUE;
+}
+
+static CheckersColor gcheckers_window_resolve_board_bottom_color(GCheckersWindow *self) {
+  g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), CHECKERS_COLOR_WHITE);
+
+  switch (self->board_orientation_mode) {
+    case GCHECKERS_WINDOW_BOARD_ORIENTATION_FIXED:
+      return self->board_bottom_color;
+    case GCHECKERS_WINDOW_BOARD_ORIENTATION_FOLLOW_PLAYER: {
+      CheckersColor bottom_color = self->board_bottom_color;
+      if (gcheckers_window_try_resolve_follow_player_bottom_color(self, &bottom_color)) {
+        return bottom_color;
+      }
+      return self->board_bottom_color;
+    }
+    case GCHECKERS_WINDOW_BOARD_ORIENTATION_FOLLOW_TURN: {
+      if (self->model != NULL) {
+        const GameState *state = gcheckers_model_peek_state(self->model);
+        if (state != NULL) {
+          return state->turn;
+        }
+      }
+      return self->board_bottom_color;
+    }
+    default:
+      g_debug("Unexpected board orientation mode %d", self->board_orientation_mode);
+      return self->board_bottom_color;
+  }
+}
+
+static void gcheckers_window_sync_board_orientation(GCheckersWindow *self) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(self->board_view != NULL);
+
+  CheckersColor bottom_color = gcheckers_window_resolve_board_bottom_color(self);
+  self->board_bottom_color = bottom_color;
+  board_view_set_bottom_color(self->board_view, bottom_color);
+}
 
 static gboolean gcheckers_window_constrain_main_split_cb(GtkWidget * /*widget*/,
                                                          GdkFrameClock * /*frame_clock*/,
@@ -1547,6 +1609,7 @@ static void gcheckers_window_on_state_changed(GCheckersModel *model, gpointer us
   g_return_if_fail(GCHECKERS_IS_MODEL(model));
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
 
+  gcheckers_window_sync_board_orientation(self);
   gcheckers_window_update_status(self);
   gcheckers_window_update_control_state(self);
   gcheckers_window_maybe_trigger_auto_move(self);
@@ -1559,6 +1622,7 @@ static void gcheckers_window_on_control_changed(PlayerControlsPanel * /*panel*/,
 
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
 
+  gcheckers_window_sync_board_orientation(self);
   gcheckers_window_update_control_state(self);
 }
 
@@ -1582,6 +1646,7 @@ static void gcheckers_window_on_manual_requested(GCheckersSgfController * /*cont
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
   g_return_if_fail(self->controls_panel != NULL);
 
+  gcheckers_window_set_board_orientation_mode(self, GCHECKERS_WINDOW_BOARD_ORIENTATION_FIXED);
   player_controls_panel_set_all_user(self->controls_panel);
   gcheckers_window_update_control_state(self);
 
@@ -1809,8 +1874,44 @@ void gcheckers_window_apply_new_game_settings(GCheckersWindow *self,
   player_controls_panel_set_mode(self->controls_panel, CHECKERS_COLOR_BLACK, black_mode);
   player_controls_panel_set_computer_depth(self->controls_panel, computer_depth);
 
+  gcheckers_window_set_board_bottom_color(self, CHECKERS_COLOR_WHITE);
+  if (white_mode == PLAYER_CONTROL_MODE_USER && black_mode == PLAYER_CONTROL_MODE_USER) {
+    gcheckers_window_set_board_orientation_mode(self, GCHECKERS_WINDOW_BOARD_ORIENTATION_FOLLOW_TURN);
+  } else if (white_mode != black_mode) {
+    gcheckers_window_set_board_orientation_mode(self, GCHECKERS_WINDOW_BOARD_ORIENTATION_FOLLOW_PLAYER);
+  } else {
+    gcheckers_window_set_board_orientation_mode(self, GCHECKERS_WINDOW_BOARD_ORIENTATION_FIXED);
+  }
+
   gcheckers_window_set_ruleset(self, ruleset);
   gcheckers_window_start_new_game(self);
+}
+
+void gcheckers_window_set_board_orientation_mode(GCheckersWindow *self,
+                                                 GCheckersWindowBoardOrientationMode mode) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(gcheckers_window_board_orientation_mode_valid(mode));
+
+  if (self->board_orientation_mode == mode) {
+    return;
+  }
+
+  self->board_orientation_mode = mode;
+  gcheckers_window_sync_board_orientation(self);
+}
+
+void gcheckers_window_set_board_bottom_color(GCheckersWindow *self, CheckersColor bottom_color) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(bottom_color == CHECKERS_COLOR_WHITE || bottom_color == CHECKERS_COLOR_BLACK);
+
+  self->board_bottom_color = bottom_color;
+  gcheckers_window_sync_board_orientation(self);
+}
+
+CheckersColor gcheckers_window_get_board_bottom_color(GCheckersWindow *self) {
+  g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), CHECKERS_COLOR_WHITE);
+
+  return self->board_bottom_color;
 }
 
 static void gcheckers_window_set_model(GCheckersWindow *self, GCheckersModel *model) {
@@ -1835,6 +1936,7 @@ static void gcheckers_window_set_model(GCheckersWindow *self, GCheckersModel *mo
   board_view_set_model(self->board_view, self->model);
   gcheckers_sgf_controller_set_model(self->sgf_controller, self->model);
   gcheckers_window_set_ruleset(self, self->applied_ruleset);
+  gcheckers_window_sync_board_orientation(self);
   gcheckers_window_update_status(self);
   gcheckers_window_update_control_state(self);
   gcheckers_window_refresh_analysis_graph(self);
@@ -2228,6 +2330,8 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   self->board_panel_width = GCHECKERS_WINDOW_DEFAULT_BOARD_PANEL_WIDTH;
   self->navigation_panel_width = GCHECKERS_WINDOW_DEFAULT_NAVIGATION_PANEL_WIDTH;
   self->analysis_panel_width = GCHECKERS_WINDOW_DEFAULT_ANALYSIS_PANEL_WIDTH;
+  self->board_orientation_mode = GCHECKERS_WINDOW_BOARD_ORIENTATION_FIXED;
+  self->board_bottom_color = CHECKERS_COLOR_WHITE;
   gcheckers_window_sync_drawer_ui(self);
   gcheckers_window_sync_mode_ui(self);
   gcheckers_window_analysis_sync_ui(self);

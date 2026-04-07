@@ -10,6 +10,9 @@ player dropdowns. Computer turns are routed by control mode with alpha-beta dept
 and SGF view (middle), and analysis (right) with both an `Analyze this position` toggle (iterative deepening on the
 current SGF node) plus `Analyze full game` and `Analyze full game in reverse` buttons (fixed-depth analysis of all
 SGF nodes in forward or reverse order, with the reverse pass reusing TT state from later positions first).
+Board orientation is runtime-only window state: live games choose `follow-player`, `follow-turn`, or `fixed`
+orientation based on the new-game player modes, and SGF review/manual navigation switches back to `fixed` so analysis
+navigation does not keep rotating the board.
 Adds a `View` menubar submenu with independent toggles for the navigation drawer and analysis drawer; hiding both
 removes the entire right-side drawer split while preserving the board pane.
 Panel width state is retained for the board, navigation drawer, and analysis drawer, and drawer show/hide transitions
@@ -74,8 +77,9 @@ Owns: `SgfTree` and `SgfView`, plus replay guard (`is_replaying`).
 Signals: `manual-requested` when analysis panel content should refresh for the selected node, and `node-changed`
 whenever SGF current node changes so other UI (analysis graph) can synchronize cursor state.
 Collaborates with: `GCheckersModel` for move validation/application, `BoardView` to clear selection on replay/reset,
-and `GCheckersWindow` via the `manual-requested` signal. Also exposes the current node's move so board overlays can
-use the same path for step-by-step and replay-based navigation.
+and `GCheckersWindow` via the `manual-requested` signal for SGF navigation/edit flows. Starting a fresh game resets
+the SGF tree and emits `node-changed`, but does not force player controls back to user mode. Also exposes the current
+node's move so board overlays can use the same path for step-by-step and replay-based navigation.
 
 ## `AnalysisGraph` (`src/analysis_graph.c`, `src/analysis_graph.h`)
 Class: `AnalysisGraph` (`GObject`).
@@ -273,6 +277,8 @@ Role: coordinate rendering updates, input handling, and active-turn move highlig
 Primary-click input is routed through each square button's `clicked` signal, and right-click input uses a dedicated
 secondary-button `GtkGestureClick`. A button-aware square callback allows window-level edit-mode logic to intercept
 square actions (left/right) before play-mode move-selection handling.
+Board orientation is driven by a bottom-color property; the grid and last-move overlay both use
+`board_coord_transform_for_bottom_color()` so rotated boards keep pieces and arrows aligned.
 Collaborates with: selection, overlays, and square/grid helpers.
 
 ### `BoardGrid` (`src/board_grid.c`, `src/board_grid.h`)

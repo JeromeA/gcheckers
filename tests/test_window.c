@@ -967,6 +967,129 @@ static void test_gcheckers_window_ruleset_switch_resets_model(void) {
   g_clear_object(&app);
 }
 
+static void test_gcheckers_window_new_game_keeps_computer_controls(void) {
+  GtkApplication *app = test_gcheckers_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersWindow *window = gcheckers_window_new(app, model);
+
+  gcheckers_window_apply_new_game_settings(window,
+                                           PLAYER_RULESET_INTERNATIONAL,
+                                           PLAYER_CONTROL_MODE_COMPUTER,
+                                           PLAYER_CONTROL_MODE_COMPUTER,
+                                           4);
+  test_gcheckers_window_drain_main_context(16);
+
+  PlayerControlsPanel *panel = gcheckers_window_get_controls_panel(window);
+  g_assert_nonnull(panel);
+  g_assert_cmpuint(player_controls_panel_get_mode(panel, CHECKERS_COLOR_WHITE), ==, PLAYER_CONTROL_MODE_COMPUTER);
+  g_assert_cmpuint(player_controls_panel_get_mode(panel, CHECKERS_COLOR_BLACK), ==, PLAYER_CONTROL_MODE_COMPUTER);
+  g_assert_cmpuint(player_controls_panel_get_computer_depth(panel), ==, 4);
+
+  gcheckers_window_apply_new_game_settings(window,
+                                           PLAYER_RULESET_AMERICAN,
+                                           PLAYER_CONTROL_MODE_COMPUTER,
+                                           PLAYER_CONTROL_MODE_COMPUTER,
+                                           6);
+  test_gcheckers_window_drain_main_context(16);
+
+  g_assert_cmpuint(gcheckers_window_get_ruleset(window), ==, PLAYER_RULESET_AMERICAN);
+  g_assert_cmpuint(player_controls_panel_get_mode(panel, CHECKERS_COLOR_WHITE), ==, PLAYER_CONTROL_MODE_COMPUTER);
+  g_assert_cmpuint(player_controls_panel_get_mode(panel, CHECKERS_COLOR_BLACK), ==, PLAYER_CONTROL_MODE_COMPUTER);
+  g_assert_cmpuint(player_controls_panel_get_computer_depth(panel), ==, 6);
+
+  const GameState *state = gcheckers_model_peek_state(model);
+  g_assert_nonnull(state);
+  g_assert_cmpuint(state->board.board_size, ==, 8);
+  g_assert_cmpuint(state->turn, ==, CHECKERS_COLOR_WHITE);
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
+static void test_gcheckers_window_new_game_rotates_for_black_player(void) {
+  GtkApplication *app = test_gcheckers_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersWindow *window = gcheckers_window_new(app, model);
+
+  gcheckers_window_apply_new_game_settings(window,
+                                           PLAYER_RULESET_INTERNATIONAL,
+                                           PLAYER_CONTROL_MODE_COMPUTER,
+                                           PLAYER_CONTROL_MODE_USER,
+                                           4);
+  test_gcheckers_window_drain_main_context(16);
+
+  g_assert_cmpuint(gcheckers_window_get_board_bottom_color(window), ==, CHECKERS_COLOR_BLACK);
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
+static void test_gcheckers_window_hotseat_follows_turn(void) {
+  GtkApplication *app = test_gcheckers_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersWindow *window = gcheckers_window_new(app, model);
+
+  gcheckers_window_apply_new_game_settings(window,
+                                           PLAYER_RULESET_INTERNATIONAL,
+                                           PLAYER_CONTROL_MODE_USER,
+                                           PLAYER_CONTROL_MODE_USER,
+                                           0);
+  test_gcheckers_window_drain_main_context(16);
+
+  g_assert_cmpuint(gcheckers_window_get_board_bottom_color(window), ==, CHECKERS_COLOR_WHITE);
+
+  GCheckersSgfController *controller = gcheckers_window_get_sgf_controller(window);
+  g_assert_nonnull(controller);
+
+  CheckersMove move;
+  g_assert_true(apply_first_move(controller, model, &move));
+  test_gcheckers_window_drain_main_context(16);
+
+  g_assert_cmpuint(gcheckers_window_get_board_bottom_color(window), ==, CHECKERS_COLOR_BLACK);
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
+static void test_gcheckers_window_manual_review_keeps_current_orientation(void) {
+  GtkApplication *app = test_gcheckers_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersWindow *window = gcheckers_window_new(app, model);
+
+  gcheckers_window_apply_new_game_settings(window,
+                                           PLAYER_RULESET_INTERNATIONAL,
+                                           PLAYER_CONTROL_MODE_USER,
+                                           PLAYER_CONTROL_MODE_USER,
+                                           0);
+  test_gcheckers_window_drain_main_context(16);
+
+  GCheckersSgfController *controller = gcheckers_window_get_sgf_controller(window);
+  g_assert_nonnull(controller);
+
+  CheckersMove move;
+  g_assert_true(apply_first_move(controller, model, &move));
+  test_gcheckers_window_drain_main_context(16);
+
+  g_assert_cmpuint(gcheckers_window_get_board_bottom_color(window), ==, CHECKERS_COLOR_BLACK);
+
+  SgfTree *tree = gcheckers_sgf_controller_get_tree(controller);
+  const SgfNode *node = sgf_tree_get_first_child(tree);
+  g_assert_nonnull(node);
+
+  SgfView *view = gcheckers_sgf_controller_get_view(controller);
+  g_signal_emit_by_name(view, "node-selected", node);
+  test_gcheckers_window_drain_main_context(16);
+
+  g_assert_cmpuint(gcheckers_window_get_board_bottom_color(window), ==, CHECKERS_COLOR_BLACK);
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
 static void test_gcheckers_window_new_game_dialog_ruleset_options_and_russian_apply(void) {
   GtkApplication *app = test_gcheckers_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
@@ -1063,6 +1186,10 @@ int main(int argc, char **argv) {
     g_test_add_func("/gcheckers-window/graph-activation-selects-node", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/import-wizard-flow", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/ruleset-switch", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/new-game-rotates-for-black-player", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/hotseat-follows-turn", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/new-game-keeps-computer-controls", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/manual-review-keeps-current-orientation", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/new-game-ruleset-options-russian", test_gcheckers_window_skip);
     return g_test_run();
   }
@@ -1112,6 +1239,13 @@ int main(int argc, char **argv) {
   g_test_add_func("/analysis-graph/progress-node-accessors", test_analysis_graph_progress_node_accessors);
   g_test_add_func("/gcheckers-window/import-wizard-flow", test_gcheckers_window_import_wizard_flow);
   g_test_add_func("/gcheckers-window/ruleset-switch", test_gcheckers_window_ruleset_switch_resets_model);
+  g_test_add_func("/gcheckers-window/new-game-rotates-for-black-player",
+                  test_gcheckers_window_new_game_rotates_for_black_player);
+  g_test_add_func("/gcheckers-window/hotseat-follows-turn", test_gcheckers_window_hotseat_follows_turn);
+  g_test_add_func("/gcheckers-window/new-game-keeps-computer-controls",
+                  test_gcheckers_window_new_game_keeps_computer_controls);
+  g_test_add_func("/gcheckers-window/manual-review-keeps-current-orientation",
+                  test_gcheckers_window_manual_review_keeps_current_orientation);
   g_test_add_func("/gcheckers-window/new-game-ruleset-options-russian",
                   test_gcheckers_window_new_game_dialog_ruleset_options_and_russian_apply);
   return g_test_run();

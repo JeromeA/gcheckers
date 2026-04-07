@@ -87,6 +87,8 @@ static void gcheckers_window_on_sgf_load_dialog_finish(GObject *source_object,
     g_autofree char *text =
         g_strdup_printf("Unable to load SGF file.\n%s", error != NULL ? error->message : "Unknown error");
     gcheckers_window_show_file_error_dialog(self, "Load failed", text);
+  } else {
+    gcheckers_window_set_board_orientation_mode(self, GCHECKERS_WINDOW_BOARD_ORIENTATION_FIXED);
   }
 
   g_object_unref(self);

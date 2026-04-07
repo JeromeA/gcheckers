@@ -25,6 +25,8 @@ void board_view_set_square_handler(BoardView *self, BoardViewSquareHandler handl
 void board_view_update(BoardView *self);
 void board_view_clear_selection(BoardView *self);
 void board_view_set_input_enabled(BoardView *self, gboolean enabled);
+void board_view_set_bottom_color(BoardView *self, CheckersColor bottom_color);
+CheckersColor board_view_get_bottom_color(BoardView *self);
 
 G_END_DECLS
 

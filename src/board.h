@@ -34,6 +34,7 @@ void board_set(CheckersBoard *board, uint8_t index, CheckersPiece value);
 
 int8_t board_index_from_coord(int row, int col, uint8_t board_size);
 void board_coord_from_index(uint8_t index, int *row, int *col, uint8_t board_size);
+void board_coord_transform_for_bottom_color(int *row, int *col, uint8_t board_size, CheckersColor bottom_color);
 uint8_t board_playable_squares(uint8_t board_size);
 size_t board_byte_count(uint8_t board_size);
 

@@ -89,6 +89,20 @@ void board_coord_from_index(uint8_t index, int *row, int *col, uint8_t board_siz
   *col = base_col + ((*row + 1) % 2);
 }
 
+void board_coord_transform_for_bottom_color(int *row, int *col, uint8_t board_size, CheckersColor bottom_color) {
+  g_return_if_fail(row != NULL);
+  g_return_if_fail(col != NULL);
+  g_return_if_fail(board_size_valid(board_size));
+  g_return_if_fail(bottom_color == CHECKERS_COLOR_WHITE || bottom_color == CHECKERS_COLOR_BLACK);
+
+  if (bottom_color == CHECKERS_COLOR_WHITE) {
+    return;
+  }
+
+  *row = (int)board_size - 1 - *row;
+  *col = (int)board_size - 1 - *col;
+}
+
 uint8_t board_playable_squares(uint8_t board_size) {
   g_return_val_if_fail(board_size_valid(board_size), 0);
   return (uint8_t)((board_size / 2) * board_size);

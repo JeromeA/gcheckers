@@ -90,11 +90,13 @@ void board_grid_clear(BoardGrid *self) {
 
 void board_grid_build(BoardGrid *self,
                       guint board_size,
+                      CheckersColor bottom_color,
                       BoardGridPrimaryClickHandler primary_clicked,
                       BoardGridSecondaryPressHandler secondary_pressed,
                       gpointer user_data) {
   g_return_if_fail(BOARD_IS_GRID(self));
   g_return_if_fail(board_size > 0);
+  g_return_if_fail(bottom_color == CHECKERS_COLOR_WHITE || bottom_color == CHECKERS_COLOR_BLACK);
 
   if (board_size == 0) {
     g_debug("Board size was zero while building board grid\n");
@@ -146,7 +148,10 @@ void board_grid_build(BoardGrid *self,
           self->squares[index] = board_square;
         }
       }
-      gtk_grid_attach(GTK_GRID(self->grid), square, col, row, 1, 1);
+      int display_row = row;
+      int display_col = col;
+      board_coord_transform_for_bottom_color(&display_row, &display_col, (uint8_t)board_size, bottom_color);
+      gtk_grid_attach(GTK_GRID(self->grid), square, display_col, display_row, 1, 1);
     }
   }
 }

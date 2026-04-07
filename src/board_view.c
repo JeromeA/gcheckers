@@ -24,6 +24,7 @@ struct _BoardView {
   BoardViewSquareHandler square_handler;
   gpointer square_handler_data;
   gboolean input_enabled;
+  CheckersColor bottom_color;
 };
 
 G_DEFINE_TYPE(BoardView, board_view, G_TYPE_OBJECT)
@@ -185,6 +186,7 @@ static void board_view_build_board(BoardView *self) {
 
   board_grid_build(self->board_grid,
                    board_size,
+                   self->bottom_color,
                    board_view_on_square_clicked,
                    board_view_on_square_secondary_pressed,
                    self);
@@ -338,8 +340,32 @@ static void board_view_init(BoardView *self) {
   self->square_handler = NULL;
   self->square_handler_data = NULL;
   self->input_enabled = TRUE;
+  self->bottom_color = CHECKERS_COLOR_WHITE;
 }
 
 BoardView *board_view_new(void) {
   return g_object_new(BOARD_TYPE_VIEW, NULL);
+}
+
+void board_view_set_bottom_color(BoardView *self, CheckersColor bottom_color) {
+  g_return_if_fail(BOARD_IS_VIEW(self));
+  g_return_if_fail(bottom_color == CHECKERS_COLOR_WHITE || bottom_color == CHECKERS_COLOR_BLACK);
+
+  if (self->bottom_color == bottom_color) {
+    return;
+  }
+
+  self->bottom_color = bottom_color;
+  board_move_overlay_set_bottom_color(self->board_overlay, bottom_color);
+
+  if (self->model != NULL) {
+    board_view_build_board(self);
+    board_view_update(self);
+  }
+}
+
+CheckersColor board_view_get_bottom_color(BoardView *self) {
+  g_return_val_if_fail(BOARD_IS_VIEW(self), CHECKERS_COLOR_WHITE);
+
+  return self->bottom_color;
 }

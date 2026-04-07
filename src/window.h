@@ -13,6 +13,12 @@ G_BEGIN_DECLS
 
 G_DECLARE_FINAL_TYPE(GCheckersWindow, gcheckers_window, GCHECKERS, WINDOW, GtkApplicationWindow)
 
+typedef enum {
+  GCHECKERS_WINDOW_BOARD_ORIENTATION_FIXED = 0,
+  GCHECKERS_WINDOW_BOARD_ORIENTATION_FOLLOW_PLAYER,
+  GCHECKERS_WINDOW_BOARD_ORIENTATION_FOLLOW_TURN
+} GCheckersWindowBoardOrientationMode;
+
 GCheckersWindow *gcheckers_window_new(GtkApplication *app, GCheckersModel *model);
 void gcheckers_window_present_new_game_dialog(GCheckersWindow *self);
 void gcheckers_window_present_import_dialog(GCheckersWindow *self);
@@ -25,6 +31,10 @@ void gcheckers_window_apply_new_game_settings(GCheckersWindow *self,
                                               PlayerControlMode white_mode,
                                               PlayerControlMode black_mode,
                                               guint computer_depth);
+void gcheckers_window_set_board_orientation_mode(GCheckersWindow *self,
+                                                 GCheckersWindowBoardOrientationMode mode);
+void gcheckers_window_set_board_bottom_color(GCheckersWindow *self, CheckersColor bottom_color);
+CheckersColor gcheckers_window_get_board_bottom_color(GCheckersWindow *self);
 PlayerControlsPanel *gcheckers_window_get_controls_panel(GCheckersWindow *self);
 GCheckersSgfController *gcheckers_window_get_sgf_controller(GCheckersWindow *self);
 

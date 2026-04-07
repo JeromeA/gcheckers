@@ -17,6 +17,7 @@ GtkWidget *board_move_overlay_get_widget(BoardMoveOverlay *self);
 const char *board_move_overlay_get_winner_banner_text(CheckersWinner winner);
 void board_move_overlay_set_model(BoardMoveOverlay *self, GCheckersModel *model);
 void board_move_overlay_set_sgf_controller(BoardMoveOverlay *self, GCheckersSgfController *controller);
+void board_move_overlay_set_bottom_color(BoardMoveOverlay *self, CheckersColor bottom_color);
 void board_move_overlay_queue_draw(BoardMoveOverlay *self);
 
 G_END_DECLS

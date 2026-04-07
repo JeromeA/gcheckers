@@ -71,11 +71,25 @@ static void test_board_helpers(void) {
   assert(!board_is_opponent(CHECKERS_PIECE_EMPTY, CHECKERS_COLOR_BLACK));
 }
 
+static void test_board_coord_transform_for_bottom_color(void) {
+  int row = 2;
+  int col = 1;
+
+  board_coord_transform_for_bottom_color(&row, &col, 8, CHECKERS_COLOR_WHITE);
+  assert(row == 2);
+  assert(col == 1);
+
+  board_coord_transform_for_bottom_color(&row, &col, 8, CHECKERS_COLOR_BLACK);
+  assert(row == 5);
+  assert(col == 6);
+}
+
 int main(void) {
   test_board_init_and_reset();
   test_board_get_set();
   test_board_coord_roundtrip();
   test_board_helpers();
+  test_board_coord_transform_for_bottom_color();
 
   puts("Board tests passed.");
   return 0;

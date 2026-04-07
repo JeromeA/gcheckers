@@ -22,6 +22,7 @@ BoardGrid *board_grid_new(guint square_size);
 GtkWidget *board_grid_get_widget(BoardGrid *self);
 void board_grid_build(BoardGrid *self,
                       guint board_size,
+                      CheckersColor bottom_color,
                       BoardGridPrimaryClickHandler primary_clicked,
                       BoardGridSecondaryPressHandler secondary_pressed,
                       gpointer user_data);

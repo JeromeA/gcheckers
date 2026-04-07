@@ -10,6 +10,7 @@ struct _BoardMoveOverlay {
   GtkWidget *drawing_area;
   GCheckersModel *model;
   GCheckersSgfController *sgf_controller;
+  CheckersColor bottom_color;
 };
 
 G_DEFINE_TYPE(BoardMoveOverlay, board_move_overlay, G_TYPE_OBJECT)
@@ -145,6 +146,8 @@ static void board_move_overlay_draw(GtkDrawingArea * /*area*/,
       int end_col = 0;
       board_coord_from_index(move.path[i - 1], &start_row, &start_col, state->board.board_size);
       board_coord_from_index(move.path[i], &end_row, &end_col, state->board.board_size);
+      board_coord_transform_for_bottom_color(&start_row, &start_col, state->board.board_size, self->bottom_color);
+      board_coord_transform_for_bottom_color(&end_row, &end_col, state->board.board_size, self->bottom_color);
 
       double start_x = ((double)start_col + 0.5) * cell_width;
       double start_y = ((double)start_row + 0.5) * cell_height;
@@ -228,6 +231,7 @@ static void board_move_overlay_init(BoardMoveOverlay *self) {
                                  board_move_overlay_draw,
                                  self,
                                  NULL);
+  self->bottom_color = CHECKERS_COLOR_WHITE;
 }
 
 BoardMoveOverlay *board_move_overlay_new(void) {
@@ -260,6 +264,18 @@ void board_move_overlay_set_sgf_controller(BoardMoveOverlay *self, GCheckersSgfC
   }
 
   self->sgf_controller = g_object_ref(controller);
+}
+
+void board_move_overlay_set_bottom_color(BoardMoveOverlay *self, CheckersColor bottom_color) {
+  g_return_if_fail(BOARD_IS_MOVE_OVERLAY(self));
+  g_return_if_fail(bottom_color == CHECKERS_COLOR_WHITE || bottom_color == CHECKERS_COLOR_BLACK);
+
+  if (self->bottom_color == bottom_color) {
+    return;
+  }
+
+  self->bottom_color = bottom_color;
+  board_move_overlay_queue_draw(self);
 }
 
 void board_move_overlay_queue_draw(BoardMoveOverlay *self) {
