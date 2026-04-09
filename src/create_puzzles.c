@@ -38,9 +38,10 @@ static gboolean checkers_puzzle_analyze_resulting_position(const Game *game,
                                                            CheckersPuzzlePositionAnalysis *out_analysis);
 static gboolean checkers_puzzle_load_existing_solution_keys(const char *output_dir, GHashTable *out_keys);
 
-static void checkers_puzzle_debug_rejection(const char *format, ...) G_GNUC_PRINTF(1, 2);
+static void checkers_puzzle_log_progress(const char *format, ...) G_GNUC_PRINTF(1, 2);
+static void checkers_puzzle_log_rejection(const char *format, ...) G_GNUC_PRINTF(1, 2);
 
-static void checkers_puzzle_debug_rejection(const char *format, ...) {
+static void checkers_puzzle_log_progress(const char *format, ...) {
   g_return_if_fail(format != NULL);
 
   va_list args;
@@ -48,7 +49,18 @@ static void checkers_puzzle_debug_rejection(const char *format, ...) {
   g_autofree char *message = g_strdup_vprintf(format, args);
   va_end(args);
 
-  g_debug("  -> %s", message);
+  g_print("%s\n", message);
+}
+
+static void checkers_puzzle_log_rejection(const char *format, ...) {
+  g_return_if_fail(format != NULL);
+
+  va_list args;
+  va_start(args, format);
+  g_autofree char *message = g_strdup_vprintf(format, args);
+  va_end(args);
+
+  checkers_puzzle_log_progress("  -> %s", message);
 }
 
 static void checkers_puzzle_set_winner_for_no_moves(Game *game) {
@@ -245,7 +257,7 @@ static gboolean checkers_puzzle_solution_ends_before_an_immediate_recapture(cons
 
   CheckersPuzzlePositionAnalysis analysis = {0};
   if (!checkers_puzzle_analyze_resulting_position(after_solution, best_move_depth, &analysis)) {
-    checkers_puzzle_debug_rejection("failed to analyze the move immediately after the solution");
+    checkers_puzzle_log_rejection("failed to analyze the move immediately after the solution");
     return FALSE;
   }
 
@@ -256,7 +268,7 @@ static gboolean checkers_puzzle_solution_ends_before_an_immediate_recapture(cons
   }
   gboolean stable = checkers_puzzle_solution_has_no_immediate_recapture(moves, line->len, &analysis.best_move);
   if (!stable) {
-    checkers_puzzle_debug_rejection("move immediately after the solution is a recapture");
+    checkers_puzzle_log_rejection("move immediately after the solution is a recapture");
   }
   checkers_puzzle_position_analysis_clear(&analysis);
   return stable;
@@ -293,14 +305,14 @@ static gboolean checkers_puzzle_solution_line_of_best_depth_moves_improves_stati
   CheckersColor attacker = start->state.turn;
   gint start_static = 0;
   if (!checkers_puzzle_evaluate_static(start, &start_static)) {
-    checkers_puzzle_debug_rejection("failed to evaluate static score at puzzle start");
+    checkers_puzzle_log_rejection("failed to evaluate static score at puzzle start");
     return FALSE;
   }
 
   for (guint ply = 0; ply < CHECKERS_PUZZLE_MAX_TACTICAL_PLIES; ++ply) {
     gint current_static = 0;
     if (!checkers_puzzle_evaluate_static(&line_game, &current_static)) {
-      checkers_puzzle_debug_rejection("failed static evaluation while building the line at ply %u", ply);
+      checkers_puzzle_log_rejection("failed static evaluation while building the line at ply %u", ply);
       return FALSE;
     }
 
@@ -311,15 +323,15 @@ static gboolean checkers_puzzle_solution_line_of_best_depth_moves_improves_stati
     }
 
     if (line_game.state.winner != CHECKERS_WINNER_NONE) {
-      checkers_puzzle_debug_rejection("solution line ended before static improvement at ply %u (winner=%u)",
-                                      ply,
-                                      line_game.state.winner);
+      checkers_puzzle_log_rejection("solution line ended before static improvement at ply %u (winner=%s)",
+                                    ply,
+                                    game_winner_label(line_game.state.winner));
       return FALSE;
     }
 
     CheckersPuzzlePositionAnalysis analysis = {0};
     if (!checkers_puzzle_analyze_resulting_position(&line_game, best_move_depth, &analysis)) {
-      checkers_puzzle_debug_rejection("failed to analyze best depth-%u moves while building the line at ply %u",
+      checkers_puzzle_log_rejection("failed to analyze best depth-%u moves while building the line at ply %u",
                                       best_move_depth,
                                       ply);
       return FALSE;
@@ -333,7 +345,7 @@ static gboolean checkers_puzzle_solution_line_of_best_depth_moves_improves_stati
                                                                   &analysis.best_score,
                                                                   &analysis.second_score);
     if (!attacker_has_a_single_good_move) {
-      checkers_puzzle_debug_rejection("attacker lost move clarity at ply %u (%d vs %d)",
+      checkers_puzzle_log_rejection("attacker lost move clarity at ply %u (%d vs %d)",
                                       ply,
                                       analysis.best_score,
                                       analysis.second_score);
@@ -342,7 +354,7 @@ static gboolean checkers_puzzle_solution_line_of_best_depth_moves_improves_stati
     }
 
     if (!checkers_puzzle_append_best_depth_move(&line_game, &analysis, out_line)) {
-      checkers_puzzle_debug_rejection("failed to append best depth-%u move while building the line at ply %u",
+      checkers_puzzle_log_rejection("failed to append best depth-%u move while building the line at ply %u",
                                       best_move_depth,
                                       ply);
       checkers_puzzle_position_analysis_clear(&analysis);
@@ -353,12 +365,12 @@ static gboolean checkers_puzzle_solution_line_of_best_depth_moves_improves_stati
 
   gint final_eval = 0;
   if (!checkers_puzzle_evaluate_static(&line_game, &final_eval)) {
-    checkers_puzzle_debug_rejection("failed final static evaluation after reaching the line max plies");
+    checkers_puzzle_log_rejection("failed final static evaluation after reaching the line max plies");
     return FALSE;
   }
   *out_final_static = final_eval;
   *out_final_game = line_game;
-  checkers_puzzle_debug_rejection("line reached max plies without static improvement (%d vs %d)",
+  checkers_puzzle_log_rejection("line reached max plies without static improvement (%d vs %d)",
                                   final_eval,
                                   start_static);
   return checkers_puzzle_score_better_for_side(attacker, final_eval, start_static);
@@ -415,7 +427,7 @@ static gboolean checkers_puzzle_analyze_resulting_position(const Game *game,
     return FALSE;
   }
   if (out_analysis->moves.count == 0) {
-    checkers_puzzle_debug_rejection("resulting position has no legal moves");
+    checkers_puzzle_log_rejection("resulting position has no legal moves");
     checkers_puzzle_position_analysis_clear(out_analysis);
     return FALSE;
   }
@@ -576,7 +588,7 @@ static gboolean checkers_puzzle_emit_validated_candidate(const GameState *start_
   g_autofree char *solution_key = checkers_puzzle_build_line_solution_key(line);
   g_return_val_if_fail(solution_key != NULL, FALSE);
   if (g_hash_table_contains(existing_solution_keys, solution_key)) {
-    checkers_puzzle_debug_rejection("solution matches an existing puzzle");
+    checkers_puzzle_log_rejection("solution matches an existing puzzle");
     return FALSE;
   }
 
@@ -623,16 +635,16 @@ static gboolean checkers_puzzle_try_build_candidate_from_resulting_position(cons
 
   CheckersPuzzlePositionAnalysis analysis = {0};
   if (!checkers_puzzle_analyze_resulting_position(post_mistake_game, best_move_depth, &analysis)) {
-    checkers_puzzle_debug_rejection("failed to analyze the resulting position");
+    checkers_puzzle_log_rejection("failed to analyze the resulting position");
     return FALSE;
   }
   if (!checkers_puzzle_attacker_has_enough_choice(&analysis)) {
-    checkers_puzzle_debug_rejection("attacker has only %zu legal moves", analysis.moves.count);
+    checkers_puzzle_log_rejection("attacker has only %zu legal moves", analysis.moves.count);
     checkers_puzzle_position_analysis_clear(&analysis);
     return FALSE;
   }
   if (!checkers_puzzle_attacker_has_a_single_good_move(&analysis, post_mistake_game->state.turn)) {
-    checkers_puzzle_debug_rejection("attacker best move is only %d points ahead of second-best (%d vs %d)",
+    checkers_puzzle_log_rejection("attacker best move is only %d points ahead of second-best (%d vs %d)",
                                     checkers_puzzle_score_gap_to_next_best(post_mistake_game->state.turn,
                                                                            analysis.best_score,
                                                                            analysis.second_score),
@@ -642,7 +654,7 @@ static gboolean checkers_puzzle_try_build_candidate_from_resulting_position(cons
     return FALSE;
   }
   if (!checkers_puzzle_position_is_valid(&analysis, post_mistake_game->state.turn)) {
-    checkers_puzzle_debug_rejection("resulting position is not a valid puzzle");
+    checkers_puzzle_log_rejection("resulting position is not a valid puzzle");
     checkers_puzzle_position_analysis_clear(&analysis);
     return FALSE;
   }
@@ -660,19 +672,19 @@ static gboolean checkers_puzzle_try_build_candidate_from_resulting_position(cons
     return FALSE;
   }
   if (checkers_puzzle_solution_is_a_single_move(line)) {
-    checkers_puzzle_debug_rejection("solution is only one move");
+    checkers_puzzle_log_rejection("solution is only one move");
     checkers_puzzle_position_analysis_clear(&analysis);
     g_array_unref(line);
     return FALSE;
   }
   if (checkers_puzzle_solution_is_move_move_jump(line)) {
-    checkers_puzzle_debug_rejection("solution is move, move, jump");
+    checkers_puzzle_log_rejection("solution is move, move, jump");
     checkers_puzzle_position_analysis_clear(&analysis);
     g_array_unref(line);
     return FALSE;
   }
   if (!checkers_puzzle_solution_is_interesting(line)) {
-    checkers_puzzle_debug_rejection("solution shape is not interesting");
+    checkers_puzzle_log_rejection("solution shape is not interesting");
     checkers_puzzle_position_analysis_clear(&analysis);
     g_array_unref(line);
     return FALSE;
@@ -700,7 +712,7 @@ static gboolean checkers_puzzle_try_build_candidate_from_resulting_position(cons
   }
 
   (*out_emitted)++;
-  g_debug("  -> kept: mistake_delta=%d start_static=%d final_static=%d line_plies=%u",
+  checkers_puzzle_log_progress("  -> kept: mistake_delta=%d start_static=%d final_static=%d line_plies=%u",
           mistake_delta,
           analysis.static_score,
           final_static,
@@ -735,13 +747,13 @@ static gboolean checkers_puzzle_emit_from_line(const CheckersRules *rules,
     char move_text[128] = {0};
     gboolean has_move_text = checkers_puzzle_format_move(&played->move, move_text);
 
-    g_debug("Considering move #%u%s%s",
+    checkers_puzzle_log_progress("Considering move #%u%s%s",
             i + 1,
             has_move_text ? " " : "",
             has_move_text ? move_text : "");
 
     if (played->color != before.state.turn) {
-      checkers_puzzle_debug_rejection("move color does not match side to move");
+      checkers_puzzle_log_rejection("move color does not match side to move");
       game_destroy(&game);
       return FALSE;
     }
@@ -753,7 +765,7 @@ static gboolean checkers_puzzle_emit_from_line(const CheckersRules *rules,
                                                                              &mistake_delta);
 
     if (game_apply_move(&game, &played->move) != 0) {
-      checkers_puzzle_debug_rejection("move could not be applied to the game");
+      checkers_puzzle_log_rejection("move could not be applied to the game");
       game_destroy(&game);
       return FALSE;
     }
@@ -768,7 +780,7 @@ static gboolean checkers_puzzle_emit_from_line(const CheckersRules *rules,
                                                                         inout_index,
                                                                         out_emitted);
     } else {
-      checkers_puzzle_debug_rejection("not a serious mistake");
+      checkers_puzzle_log_rejection("not a serious mistake");
     }
   }
 
@@ -801,7 +813,9 @@ static gboolean checkers_puzzle_generate_self_play_line(const CheckersRules *rul
     }
   }
 
-  g_debug("Played game ended after %u moves (winner=%u)", out_line->len, game.state.winner);
+  checkers_puzzle_log_progress("Played game ended after %u moves (winner=%s)",
+                               out_line->len,
+                               game_winner_label(game.state.winner));
   game_destroy(&game);
   return TRUE;
 }
@@ -925,7 +939,7 @@ static gboolean checkers_puzzle_load_existing_solution_keys(const char *output_d
     loaded++;
   }
 
-  g_debug("Loaded %u existing puzzle solution keys", loaded);
+  checkers_puzzle_log_progress("Loaded %u existing puzzle solution keys", loaded);
   return TRUE;
 }
 

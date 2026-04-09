@@ -250,7 +250,7 @@ move throughout the line, allows the defender to use any best reply, and stops o
 the puzzle start. Candidate solutions are also filtered to reject boring shapes: a one-move line, or a three-move
 line of move, move, jump. After the solution line ends, the immediate next best reply must also avoid an instant
 recapture, or the candidate is rejected as unstable.
-When `G_MESSAGES_DEBUG=all` is set, the CLI also traces self-play completion, each move considered as a candidate, and
+The CLI always prints self-play completion, loaded existing solution keys, each move considered as a candidate, and
 indented `->` rejection or keep reasons so puzzle filtering can be followed from the terminal.
 For each emitted puzzle index, also saves the originating full self-play game as `puzzles/game-####.sgf`.
 Collaborates with: `ai_alpha_beta.c`, `rulesets.c`, `sgf_tree.c`, `sgf_move_props.c`, `sgf_io.c`,
