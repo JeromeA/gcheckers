@@ -12,9 +12,15 @@ G_BEGIN_DECLS
 
 G_DECLARE_FINAL_TYPE(BoardMoveOverlay, board_move_overlay, BOARD, MOVE_OVERLAY, GObject)
 
+typedef enum {
+  BOARD_MOVE_OVERLAY_BANNER_COLOR_DEFAULT = 0,
+  BOARD_MOVE_OVERLAY_BANNER_COLOR_RED,
+} BoardMoveOverlayBannerColor;
+
 BoardMoveOverlay *board_move_overlay_new(void);
 GtkWidget *board_move_overlay_get_widget(BoardMoveOverlay *self);
 const char *board_move_overlay_get_winner_banner_text(CheckersWinner winner);
+void board_move_overlay_set_banner(BoardMoveOverlay *self, const char *text, BoardMoveOverlayBannerColor color);
 void board_move_overlay_set_model(BoardMoveOverlay *self, GCheckersModel *model);
 void board_move_overlay_set_sgf_controller(BoardMoveOverlay *self, GCheckersSgfController *controller);
 void board_move_overlay_set_bottom_color(BoardMoveOverlay *self, CheckersColor bottom_color);

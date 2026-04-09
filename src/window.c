@@ -350,6 +350,13 @@ static void gcheckers_window_set_default_puzzle_message(GCheckersWindow *self) {
   gcheckers_window_set_puzzle_message(self, message);
 }
 
+static void gcheckers_window_clear_board_banner(GCheckersWindow *self) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(self->board_view != NULL);
+
+  board_view_set_banner_text(self->board_view, NULL);
+}
+
 static gboolean gcheckers_window_constrain_main_split_cb(GtkWidget * /*widget*/,
                                                          GdkFrameClock * /*frame_clock*/,
                                                          gpointer user_data) {
@@ -867,6 +874,7 @@ static gboolean gcheckers_window_revert_wrong_puzzle_move_cb(gpointer user_data)
     g_debug("Failed to restore puzzle position after wrong move");
   }
   board_view_clear_selection(self->board_view);
+  gcheckers_window_clear_board_banner(self);
   gcheckers_window_set_default_puzzle_message(self);
   gcheckers_window_sync_puzzle_ui(self);
   g_object_unref(self);
@@ -895,8 +903,10 @@ static gboolean gcheckers_window_play_next_puzzle_step_if_needed(GCheckersWindow
 
   if (self->puzzle_expected_step >= self->puzzle_steps->len) {
     self->puzzle_finished = TRUE;
-    gcheckers_window_set_puzzle_message(self, "Puzzle solved. Next puzzle is ready.");
+    gcheckers_window_set_puzzle_message(self, "");
+    board_view_set_banner_text(self->board_view, "Puzzle solved");
   } else {
+    gcheckers_window_clear_board_banner(self);
     gcheckers_window_set_default_puzzle_message(self);
   }
   gcheckers_window_sync_puzzle_ui(self);
@@ -911,6 +921,7 @@ static void gcheckers_window_leave_puzzle_mode(GCheckersWindow *self, gboolean r
   }
 
   g_clear_handle_id(&self->puzzle_wrong_move_source_id, g_source_remove);
+  gcheckers_window_clear_board_banner(self);
   self->puzzle_feedback_locked = FALSE;
   self->puzzle_mode = FALSE;
   self->puzzle_finished = FALSE;
@@ -995,6 +1006,7 @@ static gboolean gcheckers_window_enter_puzzle_mode_with_path(GCheckersWindow *se
     gtk_drop_down_set_selected(self->sgf_mode_control, 0);
   }
   board_view_clear_selection(self->board_view);
+  gcheckers_window_clear_board_banner(self);
   gcheckers_window_set_board_orientation_mode(self, GCHECKERS_WINDOW_BOARD_ORIENTATION_FIXED);
   gcheckers_window_set_board_bottom_color(self, self->puzzle_attacker);
   gcheckers_window_set_default_puzzle_message(self);
@@ -1044,9 +1056,11 @@ static gboolean gcheckers_window_apply_player_move(const CheckersMove *move, gpo
         &g_array_index(self->puzzle_steps, GCheckersWindowPuzzleStep, self->puzzle_expected_step);
     if (!gcheckers_window_moves_equal(move, &expected->move)) {
       self->puzzle_feedback_locked = TRUE;
-      gcheckers_window_set_puzzle_message(self, "Wrong move.");
+      gcheckers_window_set_puzzle_message(self, "");
+      board_view_set_banner_text_red(self->board_view, "Wrong move");
       if (!gcheckers_model_apply_move(self->model, move)) {
         self->puzzle_feedback_locked = FALSE;
+        gcheckers_window_clear_board_banner(self);
         gcheckers_window_set_default_puzzle_message(self);
         return FALSE;
       }

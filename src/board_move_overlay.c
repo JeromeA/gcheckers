@@ -11,6 +11,8 @@ struct _BoardMoveOverlay {
   GCheckersModel *model;
   GCheckersSgfController *sgf_controller;
   CheckersColor bottom_color;
+  char *banner_text;
+  BoardMoveOverlayBannerColor banner_color;
 };
 
 G_DEFINE_TYPE(BoardMoveOverlay, board_move_overlay, G_TYPE_OBJECT)
@@ -123,7 +125,8 @@ static void board_move_overlay_draw(GtkDrawingArea * /*area*/,
     return;
   }
 
-  const char *winner_banner = board_move_overlay_get_winner_banner_text(state->winner);
+  const char *winner_banner = self->banner_text != NULL ? self->banner_text
+                                                        : board_move_overlay_get_winner_banner_text(state->winner);
 
   CheckersMove move = {0};
   if (self->sgf_controller != NULL &&
@@ -188,7 +191,11 @@ static void board_move_overlay_draw(GtkDrawingArea * /*area*/,
   double text_x = banner_x + board_move_overlay_banner_padding_x - extents.x_bearing;
   double text_y = banner_y + board_move_overlay_banner_padding_y - extents.y_bearing;
   cairo_move_to(cr, text_x, text_y);
-  cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+  if (self->banner_text != NULL && self->banner_color == BOARD_MOVE_OVERLAY_BANNER_COLOR_RED) {
+    cairo_set_source_rgb(cr, 0.95, 0.2, 0.2);
+  } else {
+    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+  }
   cairo_show_text(cr, winner_banner);
   cairo_restore(cr);
 }
@@ -206,6 +213,7 @@ static void board_move_overlay_dispose(GObject *object) {
 
   g_clear_object(&self->model);
   g_clear_object(&self->sgf_controller);
+  g_clear_pointer(&self->banner_text, g_free);
   if (drawing_area_removed) {
     g_clear_object(&self->drawing_area);
   } else {
@@ -253,6 +261,21 @@ void board_move_overlay_set_model(BoardMoveOverlay *self, GCheckersModel *model)
   }
 
   self->model = g_object_ref(model);
+}
+
+void board_move_overlay_set_banner(BoardMoveOverlay *self,
+                                   const char *text,
+                                   BoardMoveOverlayBannerColor color) {
+  g_return_if_fail(BOARD_IS_MOVE_OVERLAY(self));
+
+  if (g_strcmp0(self->banner_text, text) == 0 && self->banner_color == color) {
+    return;
+  }
+
+  g_free(self->banner_text);
+  self->banner_text = g_strdup(text);
+  self->banner_color = text != NULL ? color : BOARD_MOVE_OVERLAY_BANNER_COLOR_DEFAULT;
+  board_move_overlay_queue_draw(self);
 }
 
 void board_move_overlay_set_sgf_controller(BoardMoveOverlay *self, GCheckersSgfController *controller) {

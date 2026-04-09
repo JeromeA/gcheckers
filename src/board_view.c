@@ -369,3 +369,17 @@ CheckersColor board_view_get_bottom_color(BoardView *self) {
 
   return self->bottom_color;
 }
+
+void board_view_set_banner_text(BoardView *self, const char *text) {
+  g_return_if_fail(BOARD_IS_VIEW(self));
+  g_return_if_fail(self->board_overlay != NULL);
+
+  board_move_overlay_set_banner(self->board_overlay, text, BOARD_MOVE_OVERLAY_BANNER_COLOR_DEFAULT);
+}
+
+void board_view_set_banner_text_red(BoardView *self, const char *text) {
+  g_return_if_fail(BOARD_IS_VIEW(self));
+  g_return_if_fail(self->board_overlay != NULL);
+
+  board_move_overlay_set_banner(self->board_overlay, text, BOARD_MOVE_OVERLAY_BANNER_COLOR_RED);
+}
