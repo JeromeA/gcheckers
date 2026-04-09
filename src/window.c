@@ -13,6 +13,11 @@
 
 #include <string.h>
 
+typedef enum {
+  GCHECKERS_WINDOW_LAYOUT_MODE_NORMAL = 0,
+  GCHECKERS_WINDOW_LAYOUT_MODE_PUZZLE
+} GCheckersWindowLayoutMode;
+
 struct _GCheckersWindow {
   GtkApplicationWindow parent_instance;
   GCheckersModel *model;
@@ -51,9 +56,16 @@ struct _GCheckersWindow {
   gboolean puzzle_saved_show_analysis_drawer;
   gboolean show_navigation_drawer;
   gboolean show_analysis_drawer;
+  GCheckersWindowLayoutMode layout_mode;
+  gboolean syncing_layout_default_size;
   gint board_panel_width;
   gint navigation_panel_width;
   gint analysis_panel_width;
+  gint extra_width;
+  gint puzzle_board_panel_width;
+  gint puzzle_navigation_panel_width;
+  gint puzzle_analysis_panel_width;
+  gint puzzle_extra_width;
   GCheckersWindowBoardOrientationMode board_orientation_mode;
   GCheckersWindowBoardOrientationMode puzzle_saved_board_orientation_mode;
   CheckersColor board_bottom_color;
@@ -134,7 +146,8 @@ static void gcheckers_window_sync_mode_ui(GCheckersWindow *self);
 static void gcheckers_window_sync_drawer_ui(GCheckersWindow *self);
 static void gcheckers_window_capture_panel_widths(GCheckersWindow *self);
 static gint gcheckers_window_current_extra_width(GCheckersWindow *self);
-static void gcheckers_window_apply_saved_panel_widths(GCheckersWindow *self, gint extra_width);
+static void gcheckers_window_apply_saved_panel_widths(GCheckersWindow *self);
+static gint gcheckers_window_expected_default_width(GCheckersWindow *self);
 static gboolean gcheckers_window_format_setup_point(uint8_t index, uint8_t board_size, char out_point[3]);
 static gboolean gcheckers_window_update_node_setup_piece(SgfNode *node, const char *point, CheckersPiece piece);
 static gboolean gcheckers_window_on_board_square_action(guint8 index, guint button, gpointer user_data);
@@ -142,6 +155,7 @@ static void gcheckers_window_sync_board_orientation(GCheckersWindow *self);
 static void gcheckers_window_sync_puzzle_ui(GCheckersWindow *self);
 static void gcheckers_window_leave_puzzle_mode(GCheckersWindow *self, gboolean restore_drawers);
 static gboolean gcheckers_window_start_random_puzzle_mode(GCheckersWindow *self);
+static void gcheckers_window_sync_drawer_ui_with_capture(GCheckersWindow *self, gboolean capture_current_layout);
 static void gcheckers_window_set_analysis_current_action_state(GCheckersWindow *self, gboolean active);
 static void gcheckers_window_stop_analysis(GCheckersWindow *self);
 
@@ -185,6 +199,41 @@ static const char *gcheckers_window_puzzles_dir(void) {
 
 static gboolean gcheckers_window_analysis_depth_valid(guint depth) {
   return depth >= GCHECKERS_WINDOW_ANALYSIS_DEPTH_MIN && depth <= GCHECKERS_WINDOW_ANALYSIS_DEPTH_MAX;
+}
+
+static gboolean gcheckers_window_layout_mode_valid(GCheckersWindowLayoutMode mode) {
+  return mode == GCHECKERS_WINDOW_LAYOUT_MODE_NORMAL || mode == GCHECKERS_WINDOW_LAYOUT_MODE_PUZZLE;
+}
+
+static gint *gcheckers_window_saved_board_panel_width_ptr(GCheckersWindow *self) {
+  g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), NULL);
+  g_return_val_if_fail(gcheckers_window_layout_mode_valid(self->layout_mode), NULL);
+
+  return self->layout_mode == GCHECKERS_WINDOW_LAYOUT_MODE_PUZZLE ? &self->puzzle_board_panel_width
+                                                                  : &self->board_panel_width;
+}
+
+static gint *gcheckers_window_saved_navigation_panel_width_ptr(GCheckersWindow *self) {
+  g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), NULL);
+  g_return_val_if_fail(gcheckers_window_layout_mode_valid(self->layout_mode), NULL);
+
+  return self->layout_mode == GCHECKERS_WINDOW_LAYOUT_MODE_PUZZLE ? &self->puzzle_navigation_panel_width
+                                                                  : &self->navigation_panel_width;
+}
+
+static gint *gcheckers_window_saved_analysis_panel_width_ptr(GCheckersWindow *self) {
+  g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), NULL);
+  g_return_val_if_fail(gcheckers_window_layout_mode_valid(self->layout_mode), NULL);
+
+  return self->layout_mode == GCHECKERS_WINDOW_LAYOUT_MODE_PUZZLE ? &self->puzzle_analysis_panel_width
+                                                                  : &self->analysis_panel_width;
+}
+
+static gint *gcheckers_window_saved_extra_width_ptr(GCheckersWindow *self) {
+  g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), NULL);
+  g_return_val_if_fail(gcheckers_window_layout_mode_valid(self->layout_mode), NULL);
+
+  return self->layout_mode == GCHECKERS_WINDOW_LAYOUT_MODE_PUZZLE ? &self->puzzle_extra_width : &self->extra_width;
 }
 
 static gboolean gcheckers_window_board_orientation_mode_valid(GCheckersWindowBoardOrientationMode mode) {
@@ -429,26 +478,37 @@ static void gcheckers_window_analysis_sync_ui(GCheckersWindow *self) {
 static void gcheckers_window_capture_panel_widths(GCheckersWindow *self) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
 
+  gint *board_panel_width = gcheckers_window_saved_board_panel_width_ptr(self);
+  gint *navigation_panel_width = gcheckers_window_saved_navigation_panel_width_ptr(self);
+  gint *analysis_panel_width = gcheckers_window_saved_analysis_panel_width_ptr(self);
+  g_return_if_fail(board_panel_width != NULL);
+  g_return_if_fail(navigation_panel_width != NULL);
+  g_return_if_fail(analysis_panel_width != NULL);
+
   if (self->board_panel != NULL && gtk_widget_get_visible(self->board_panel)) {
     gint width = gtk_widget_get_width(self->board_panel);
     if (width > 0) {
-      self->board_panel_width = width;
+      *board_panel_width = width;
     }
   }
 
   if (self->navigation_panel != NULL && gtk_widget_get_parent(self->navigation_panel) != NULL) {
     gint width = gtk_widget_get_width(self->navigation_panel);
     if (width > 0) {
-      self->navigation_panel_width = width;
+      *navigation_panel_width = width;
     }
   }
 
   if (self->analysis_panel != NULL && gtk_widget_get_parent(self->analysis_panel) != NULL) {
     gint width = gtk_widget_get_width(self->analysis_panel);
     if (width > 0) {
-      self->analysis_panel_width = width;
+      *analysis_panel_width = width;
     }
   }
+
+  gint *extra_width = gcheckers_window_saved_extra_width_ptr(self);
+  g_return_if_fail(extra_width != NULL);
+  *extra_width = gcheckers_window_current_extra_width(self);
 }
 
 static gint gcheckers_window_current_extra_width(GCheckersWindow *self) {
@@ -473,12 +533,44 @@ static gint gcheckers_window_current_extra_width(GCheckersWindow *self) {
   return MAX(0, window_width - panel_width);
 }
 
-static void gcheckers_window_apply_saved_panel_widths(GCheckersWindow *self, gint extra_width) {
+static gint gcheckers_window_expected_default_width(GCheckersWindow *self) {
+  g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), GCHECKERS_WINDOW_DEFAULT_BOARD_PANEL_WIDTH);
+
+  gint *board_panel_width = gcheckers_window_saved_board_panel_width_ptr(self);
+  gint *navigation_panel_width = gcheckers_window_saved_navigation_panel_width_ptr(self);
+  gint *analysis_panel_width = gcheckers_window_saved_analysis_panel_width_ptr(self);
+  gint *extra_width = gcheckers_window_saved_extra_width_ptr(self);
+  g_return_val_if_fail(board_panel_width != NULL, GCHECKERS_WINDOW_DEFAULT_BOARD_PANEL_WIDTH);
+  g_return_val_if_fail(navigation_panel_width != NULL, GCHECKERS_WINDOW_DEFAULT_NAVIGATION_PANEL_WIDTH);
+  g_return_val_if_fail(analysis_panel_width != NULL, GCHECKERS_WINDOW_DEFAULT_ANALYSIS_PANEL_WIDTH);
+  g_return_val_if_fail(extra_width != NULL, 0);
+
+  gint drawer_width = 0;
+  if (self->show_navigation_drawer) {
+    drawer_width += MAX(1, *navigation_panel_width);
+  }
+  if (self->show_analysis_drawer) {
+    drawer_width += MAX(1, *analysis_panel_width);
+  }
+
+  return MAX(1, *board_panel_width) + drawer_width + MAX(0, *extra_width);
+}
+
+static void gcheckers_window_apply_saved_panel_widths(GCheckersWindow *self) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
 
-  gint board_width = MAX(1, self->board_panel_width);
-  gint navigation_width = MAX(1, self->navigation_panel_width);
-  gint analysis_width = MAX(1, self->analysis_panel_width);
+  gint *board_panel_width = gcheckers_window_saved_board_panel_width_ptr(self);
+  gint *navigation_panel_width = gcheckers_window_saved_navigation_panel_width_ptr(self);
+  gint *analysis_panel_width = gcheckers_window_saved_analysis_panel_width_ptr(self);
+  gint *extra_width = gcheckers_window_saved_extra_width_ptr(self);
+  g_return_if_fail(board_panel_width != NULL);
+  g_return_if_fail(navigation_panel_width != NULL);
+  g_return_if_fail(analysis_panel_width != NULL);
+  g_return_if_fail(extra_width != NULL);
+
+  gint board_width = MAX(1, *board_panel_width);
+  gint navigation_width = MAX(1, *navigation_panel_width);
+  gint analysis_width = MAX(1, *analysis_panel_width);
   gint drawer_width = 0;
 
   if (self->show_navigation_drawer) {
@@ -493,7 +585,9 @@ static void gcheckers_window_apply_saved_panel_widths(GCheckersWindow *self, gin
     current_height = GCHECKERS_WINDOW_DEFAULT_HEIGHT;
   }
 
-  gtk_window_set_default_size(GTK_WINDOW(self), board_width + drawer_width + MAX(0, extra_width), current_height);
+  self->syncing_layout_default_size = TRUE;
+  gtk_window_set_default_size(GTK_WINDOW(self), board_width + drawer_width + MAX(0, *extra_width), current_height);
+  self->syncing_layout_default_size = FALSE;
 
   if (self->main_paned != NULL && (self->show_navigation_drawer || self->show_analysis_drawer)) {
     gtk_paned_set_position(GTK_PANED(self->main_paned), board_width);
@@ -518,9 +612,15 @@ static void gcheckers_window_apply_saved_panel_widths(GCheckersWindow *self, gin
 
 static void gcheckers_window_sync_drawer_ui(GCheckersWindow *self) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  gcheckers_window_sync_drawer_ui_with_capture(self, TRUE);
+}
 
-  gcheckers_window_capture_panel_widths(self);
-  gint extra_width = gcheckers_window_current_extra_width(self);
+static void gcheckers_window_sync_drawer_ui_with_capture(GCheckersWindow *self, gboolean capture_current_layout) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+
+  if (capture_current_layout) {
+    gcheckers_window_capture_panel_widths(self);
+  }
 
   if (self->navigation_panel != NULL) {
     gcheckers_widget_remove_from_parent(self->navigation_panel);
@@ -566,7 +666,7 @@ static void gcheckers_window_sync_drawer_ui(GCheckersWindow *self) {
     gtk_paned_set_end_child(GTK_PANED(self->main_paned), NULL);
   }
 
-  gcheckers_window_apply_saved_panel_widths(self, extra_width);
+  gcheckers_window_apply_saved_panel_widths(self);
   gtk_widget_queue_allocate(GTK_WIDGET(self));
 }
 
@@ -952,10 +1052,12 @@ static void gcheckers_window_leave_puzzle_mode(GCheckersWindow *self, gboolean r
     return;
   }
 
+  gcheckers_window_capture_panel_widths(self);
   g_clear_handle_id(&self->puzzle_wrong_move_source_id, g_source_remove);
   gcheckers_window_clear_board_banner(self);
   self->puzzle_feedback_locked = FALSE;
   self->puzzle_mode = FALSE;
+  self->layout_mode = GCHECKERS_WINDOW_LAYOUT_MODE_NORMAL;
   self->puzzle_finished = FALSE;
   self->puzzle_expected_step = 0;
   self->puzzle_attacker = CHECKERS_COLOR_WHITE;
@@ -972,7 +1074,7 @@ static void gcheckers_window_leave_puzzle_mode(GCheckersWindow *self, gboolean r
     self->show_analysis_drawer = self->puzzle_saved_show_analysis_drawer;
   }
   gcheckers_window_sync_board_orientation(self);
-  gcheckers_window_sync_drawer_ui(self);
+  gcheckers_window_sync_drawer_ui_with_capture(self, FALSE);
   gcheckers_window_sync_puzzle_ui(self);
   gcheckers_window_sync_mode_ui(self);
   gcheckers_window_analysis_sync_ui(self);
@@ -1016,11 +1118,17 @@ static gboolean gcheckers_window_enter_puzzle_mode_with_path(GCheckersWindow *se
   }
 
   if (!self->puzzle_mode) {
+    gcheckers_window_capture_panel_widths(self);
     self->puzzle_saved_show_navigation_drawer = self->show_navigation_drawer;
     self->puzzle_saved_show_analysis_drawer = self->show_analysis_drawer;
     self->puzzle_saved_board_orientation_mode = self->board_orientation_mode;
     self->puzzle_saved_board_bottom_color = self->board_bottom_color;
+    self->puzzle_board_panel_width = self->board_panel_width;
+    self->puzzle_navigation_panel_width = self->navigation_panel_width;
+    self->puzzle_analysis_panel_width = self->analysis_panel_width;
+    self->puzzle_extra_width = self->extra_width;
   } else if (self->puzzle_steps != NULL) {
+    gcheckers_window_capture_panel_widths(self);
     g_array_unref(self->puzzle_steps);
     self->puzzle_steps = NULL;
   }
@@ -1028,6 +1136,7 @@ static gboolean gcheckers_window_enter_puzzle_mode_with_path(GCheckersWindow *se
   g_clear_handle_id(&self->puzzle_wrong_move_source_id, g_source_remove);
   self->puzzle_feedback_locked = FALSE;
   self->puzzle_mode = TRUE;
+  self->layout_mode = GCHECKERS_WINDOW_LAYOUT_MODE_PUZZLE;
   self->puzzle_finished = FALSE;
   self->puzzle_attacker = state->turn;
   if (!gcheckers_window_parse_puzzle_number_from_path(path, &self->puzzle_number)) {
@@ -1046,7 +1155,7 @@ static gboolean gcheckers_window_enter_puzzle_mode_with_path(GCheckersWindow *se
   gcheckers_window_set_board_orientation_mode(self, GCHECKERS_WINDOW_BOARD_ORIENTATION_FIXED);
   gcheckers_window_set_board_bottom_color(self, self->puzzle_attacker);
   gcheckers_window_set_default_puzzle_message(self);
-  gcheckers_window_sync_drawer_ui(self);
+  gcheckers_window_sync_drawer_ui_with_capture(self, FALSE);
   gcheckers_window_sync_puzzle_ui(self);
   gcheckers_window_sync_mode_ui(self);
   gcheckers_window_analysis_sync_ui(self);
@@ -2107,6 +2216,35 @@ static void gcheckers_window_on_mode_selected_notify(GObject * /*object*/,
   gcheckers_window_sync_mode_ui(self);
 }
 
+static void gcheckers_window_on_default_size_notify(GObject *object,
+                                                    GParamSpec *pspec,
+                                                    gpointer user_data) {
+  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(GTK_IS_WINDOW(object));
+  g_return_if_fail(pspec != NULL);
+
+  if (self->syncing_layout_default_size) {
+    return;
+  }
+  if (!self->puzzle_mode || self->layout_mode != GCHECKERS_WINDOW_LAYOUT_MODE_PUZZLE) {
+    return;
+  }
+  if (g_strcmp0(g_param_spec_get_name(pspec), "default-width") != 0) {
+    return;
+  }
+
+  gint default_width = -1;
+  gtk_window_get_default_size(GTK_WINDOW(self), &default_width, NULL);
+  gint expected_width = gcheckers_window_expected_default_width(self);
+  if (default_width == expected_width || default_width <= 0) {
+    return;
+  }
+
+  gcheckers_window_apply_saved_panel_widths(self);
+  gtk_widget_queue_allocate(GTK_WIDGET(self));
+}
+
 static void gcheckers_window_on_manual_requested(GCheckersSgfController * /*controller*/,
                                                  gpointer /*node*/,
                                                  gpointer user_data) {
@@ -2568,6 +2706,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   self->analysis_mode = GCHECKERS_WINDOW_ANALYSIS_MODE_NONE;
   self->analysis_generation = 1;
   self->puzzle_wrong_move_source_id = 0;
+  self->syncing_layout_default_size = FALSE;
   g_mutex_init(&self->analysis_report_mutex);
   self->analysis_report_queue = g_queue_new();
   gcheckers_window_analysis_reset_runtime_state(self);
@@ -2859,6 +2998,10 @@ static void gcheckers_window_init(GCheckersWindow *self) {
                    "notify::selected",
                    G_CALLBACK(gcheckers_window_on_mode_selected_notify),
                    self);
+  g_signal_connect(self,
+                   "notify::default-width",
+                   G_CALLBACK(gcheckers_window_on_default_size_notify),
+                   self);
   gtk_box_append(GTK_BOX(sgf_mode_row), GTK_WIDGET(self->sgf_mode_control));
   gtk_box_append(GTK_BOX(middle_panel), sgf_mode_row);
 
@@ -2926,11 +3069,17 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   self->edit_mode_enabled = FALSE;
   self->show_navigation_drawer = TRUE;
   self->show_analysis_drawer = TRUE;
+  self->layout_mode = GCHECKERS_WINDOW_LAYOUT_MODE_NORMAL;
   self->puzzle_saved_show_navigation_drawer = TRUE;
   self->puzzle_saved_show_analysis_drawer = TRUE;
   self->board_panel_width = GCHECKERS_WINDOW_DEFAULT_BOARD_PANEL_WIDTH;
   self->navigation_panel_width = GCHECKERS_WINDOW_DEFAULT_NAVIGATION_PANEL_WIDTH;
   self->analysis_panel_width = GCHECKERS_WINDOW_DEFAULT_ANALYSIS_PANEL_WIDTH;
+  self->extra_width = 0;
+  self->puzzle_board_panel_width = GCHECKERS_WINDOW_DEFAULT_BOARD_PANEL_WIDTH;
+  self->puzzle_navigation_panel_width = GCHECKERS_WINDOW_DEFAULT_NAVIGATION_PANEL_WIDTH;
+  self->puzzle_analysis_panel_width = GCHECKERS_WINDOW_DEFAULT_ANALYSIS_PANEL_WIDTH;
+  self->puzzle_extra_width = 0;
   self->board_orientation_mode = GCHECKERS_WINDOW_BOARD_ORIENTATION_FIXED;
   self->puzzle_saved_board_orientation_mode = GCHECKERS_WINDOW_BOARD_ORIENTATION_FIXED;
   self->board_bottom_color = CHECKERS_COLOR_WHITE;

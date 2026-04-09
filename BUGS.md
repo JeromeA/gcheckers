@@ -219,6 +219,17 @@ that repeated primary clicks are processed.
 
 ## Forced move plies consumed alpha-beta depth budget
 
+## Puzzle mode window width could jump back to the normal layout on focus changes
+
+While puzzle mode is active, the window should keep the puzzle layout width with both drawers hidden.
+
+GTK could change the toplevel `default-width` while the window was inactive. Because puzzle mode only owned the saved
+panel widths and not the toplevel default width, the window could reactivate at the normal-layout width even though
+the drawers were still detached and hidden.
+
+The fix makes puzzle mode reassert its own expected `default-width` whenever a foreign width change happens, and adds a
+window regression test that simulates an external `gtk_window_set_default_size()` while puzzle mode is active.
+
 Analysis depth should count only decision points, so mandatory single-move plies should not reduce remaining depth.
 
 The search decremented `depth_remaining` on every recursive ply, including forced plies with exactly one legal move.

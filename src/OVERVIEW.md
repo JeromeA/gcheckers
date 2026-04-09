@@ -24,6 +24,8 @@ independent toggles for the navigation drawer and analysis drawer; hiding both r
 split while preserving the board pane.
 Panel width state is retained for the board, navigation drawer, and analysis drawer, and drawer show/hide transitions
 recompute window width plus paned positions so visible panels keep their prior widths instead of stretching.
+Puzzle mode also owns the toplevel default width while active, so foreign GTK/default-size changes are reasserted back
+to the puzzle layout instead of expanding the window to the normal three-pane width.
 Mode dropdown supports `Play` and `Edit`. In `Edit`, board clicks mutate SGF setup properties on the current node:
 left click cycles empty->white man->white king->empty (with black pieces and any king clearing to empty), right click
 mirrors this for black. SGF navigation and `Force move` actions are disabled while `Edit` is active.

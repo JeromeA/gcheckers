@@ -783,6 +783,13 @@ static void test_gcheckers_window_puzzle_mode_solves_and_exits_to_analysis(void)
   GtkApplication *app = test_gcheckers_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
   GCheckersWindow *window = gcheckers_window_new(app, model);
+  gtk_window_present(GTK_WINDOW(window));
+  test_gcheckers_window_drain_main_context(32);
+
+  GtkWidget *board_panel = test_gcheckers_window_get_named_widget(window, "board-panel");
+  g_assert_nonnull(board_panel);
+  gint initial_board_width = gtk_widget_get_width(board_panel);
+  g_assert_cmpint(initial_board_width, >, 0);
 
   g_action_group_activate_action(G_ACTION_GROUP(window), "puzzle-play", NULL);
   test_gcheckers_window_drain_main_context(32);
@@ -808,6 +815,17 @@ static void test_gcheckers_window_puzzle_mode_solves_and_exits_to_analysis(void)
   g_assert_false(gtk_widget_is_sensitive(next_button));
   g_assert_true(gtk_widget_is_sensitive(analyze_button));
 
+  gint puzzle_default_width = -1;
+  gint puzzle_default_height = -1;
+  gtk_window_get_default_size(GTK_WINDOW(window), &puzzle_default_width, &puzzle_default_height);
+  g_assert_cmpint(puzzle_default_width, >, 0);
+  gtk_window_set_default_size(GTK_WINDOW(window), puzzle_default_width + 400, puzzle_default_height);
+  test_gcheckers_window_drain_main_context(32);
+
+  gint restored_default_width = -1;
+  gtk_window_get_default_size(GTK_WINDOW(window), &restored_default_width, NULL);
+  g_assert_cmpint(restored_default_width, ==, puzzle_default_width);
+
   GtkWidget *from_square = test_gcheckers_window_find_board_square_by_index(GTK_WIDGET(window), puzzle_move.path[0]);
   GtkWidget *to_square =
       test_gcheckers_window_find_board_square_by_index(GTK_WIDGET(window), puzzle_move.path[puzzle_move.length - 1]);
@@ -824,6 +842,7 @@ static void test_gcheckers_window_puzzle_mode_solves_and_exits_to_analysis(void)
   test_gcheckers_window_drain_main_context(32);
   g_assert_nonnull(gtk_widget_get_parent(analysis_panel));
   g_assert_false(gtk_widget_get_visible(puzzle_panel));
+  g_assert_cmpint(test_gcheckers_window_get_size_request_width(board_panel), ==, initial_board_width);
 
   g_unsetenv("GCHECKERS_PUZZLES_DIR");
   g_clear_object(&window);
