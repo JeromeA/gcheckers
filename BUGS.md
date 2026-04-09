@@ -198,6 +198,16 @@ The fix writes full setup snapshots with `AE` (all empties) first, then `AB/AW`,
 
 Board square input should be processed consistently on every click, including repeated clicks on the same square.
 
+## Starting a new computer-vs-computer game reset both sides to user control
+
+Choosing computer players in the New game flow should carry through to the fresh game that gets created.
+
+`gcheckers_sgf_controller_new_game()` emitted `manual-requested` after resetting the SGF tree, and the window's
+`manual-requested` handler is intentionally used by SGF navigation/edit flows to force both controls back to user.
+That made a new computer-vs-computer game immediately revert to user-vs-user.
+
+The fix stops emitting `manual-requested` from the new-game path, keeps the reset scoped to real manual SGF flows,
+and adds a window regression test to verify computer controls survive repeated New game actions.
 Dark squares are `GtkButton` widgets. The board wired square actions to an additional generic `GtkGestureClick`
 (`button=0`) on the same button, while the button itself handled activation internally. In failing cases, GTK still
 delivered and activated the button (`clicked`), but the custom gesture callback path did not run, so board logic saw no

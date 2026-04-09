@@ -214,6 +214,37 @@ static void test_gcheckers_sgf_controller_new_game_clears_tree(void) {
   g_clear_object(&board_view);
 }
 
+static void on_manual_requested_count(GCheckersSgfController * /*controller*/,
+                                      const SgfNode * /*node*/,
+                                      gpointer user_data) {
+  guint *count = user_data;
+
+  g_return_if_fail(count != NULL);
+
+  (*count)++;
+}
+
+static void test_gcheckers_sgf_controller_new_game_does_not_request_manual_mode(void) {
+  BoardView *board_view = board_view_new();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersSgfController *controller = gcheckers_sgf_controller_new(board_view);
+  gcheckers_sgf_controller_set_model(controller, model);
+
+  guint manual_requested_count = 0;
+  g_signal_connect(controller, "manual-requested", G_CALLBACK(on_manual_requested_count), &manual_requested_count);
+
+  CheckersMove move;
+  g_assert_true(apply_first_move(controller, model, &move));
+
+  gcheckers_sgf_controller_new_game(controller);
+
+  g_assert_cmpuint(manual_requested_count, ==, 0);
+
+  g_clear_object(&controller);
+  g_clear_object(&model);
+  g_clear_object(&board_view);
+}
+
 static void test_gcheckers_sgf_controller_step_ai_move(void) {
   BoardView *board_view = board_view_new();
   GCheckersModel *model = gcheckers_model_new();
@@ -509,6 +540,8 @@ int main(int argc, char **argv) {
   g_test_add_func("/sgf-controller/appends-move-property", test_gcheckers_sgf_controller_appends_move_property);
   g_test_add_func("/sgf-controller/replay-branching", test_gcheckers_sgf_controller_replay_branching);
   g_test_add_func("/sgf-controller/new-game", test_gcheckers_sgf_controller_new_game_clears_tree);
+  g_test_add_func("/sgf-controller/new-game-no-manual-request",
+                  test_gcheckers_sgf_controller_new_game_does_not_request_manual_mode);
   g_test_add_func("/sgf-controller/step-ai-move", test_gcheckers_sgf_controller_step_ai_move);
   g_test_add_func("/sgf-controller/navigation-step-and-rewind",
                   test_gcheckers_sgf_controller_navigation_step_and_rewind);

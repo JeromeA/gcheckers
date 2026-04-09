@@ -634,7 +634,6 @@ void gcheckers_sgf_controller_new_game(GCheckersSgfController *self) {
   const SgfNode *root = sgf_tree_get_root(self->sgf_tree);
   if (root != NULL) {
     gcheckers_sgf_controller_emit_node_changed(self, root);
-    g_signal_emit(self, controller_signals[SIGNAL_MANUAL_REQUESTED], 0, root);
   }
 }
 
