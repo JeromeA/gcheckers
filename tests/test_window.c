@@ -657,12 +657,9 @@ static void test_gcheckers_window_analysis_full_button_exists(void) {
 
   GtkButton *full_button =
       test_gcheckers_window_find_button_with_label(GTK_WIDGET(window), "Analyze full game");
-  GtkButton *full_reverse_button =
-      test_gcheckers_window_find_button_with_label(GTK_WIDGET(window), "Analyze full game in reverse");
   g_assert_nonnull(full_button);
-  g_assert_nonnull(full_reverse_button);
   g_assert_true(gtk_widget_get_sensitive(GTK_WIDGET(full_button)));
-  g_assert_true(gtk_widget_get_sensitive(GTK_WIDGET(full_reverse_button)));
+  g_assert_null(test_gcheckers_window_find_button_with_label(GTK_WIDGET(window), "Analyze full game in reverse"));
 
   g_clear_object(&window);
   g_clear_object(&model);

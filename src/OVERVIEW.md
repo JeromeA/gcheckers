@@ -8,8 +8,8 @@ Collaborates with: `gcheckers_style_init()` for CSS, model signals for refresh, 
 player dropdowns. Computer turns are routed by control mode with alpha-beta depth configured from the shared
 `Computer depth` slider (`0..16`). Uses a three-pane layout: board and player controls (left), SGF mode selector
 and SGF view (middle), and analysis (right) with both an `Analyze this position` toggle (iterative deepening on the
-current SGF node) plus `Analyze full game` and `Analyze full game in reverse` buttons (fixed-depth analysis of all
-SGF nodes in forward or reverse order, with the reverse pass reusing TT state from later positions first).
+current SGF node) plus an `Analyze full game` button. Full-game analysis always processes SGF nodes in reverse order
+so TT state is reused from later positions first.
 Board orientation is runtime-only window state: live games choose `follow-player`, `follow-turn`, or `fixed`
 orientation based on the new-game player modes, and SGF review/manual navigation switches back to `fixed` so analysis
 navigation does not keep rotating the board.

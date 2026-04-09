@@ -24,7 +24,6 @@ struct _GCheckersWindow {
   GtkWidget *analysis_panel;
   GtkWidget *analyze_toggle_button;
   GtkWidget *analyze_full_button;
-  GtkWidget *analyze_full_reverse_button;
   GtkTextBuffer *analysis_buffer;
   BoardView *board_view;
   PlayerControlsPanel *controls_panel;
@@ -215,9 +214,6 @@ static void gcheckers_window_analysis_sync_ui(GCheckersWindow *self) {
   gboolean full_game_active = self->analysis_mode == GCHECKERS_WINDOW_ANALYSIS_MODE_FULL_GAME;
   if (self->analyze_full_button != NULL) {
     gtk_widget_set_sensitive(self->analyze_full_button, !full_game_active);
-  }
-  if (self->analyze_full_reverse_button != NULL) {
-    gtk_widget_set_sensitive(self->analyze_full_reverse_button, !full_game_active);
   }
 
   if (!full_game_active && self->analysis_graph != NULL) {
@@ -1204,7 +1200,7 @@ static void gcheckers_window_full_node_job_free(gpointer data) {
   g_free(job);
 }
 
-static GPtrArray *gcheckers_window_build_full_analysis_jobs(SgfTree *tree, gboolean reverse_order) {
+static GPtrArray *gcheckers_window_build_full_analysis_jobs(SgfTree *tree) {
   g_return_val_if_fail(SGF_IS_TREE(tree), NULL);
 
   g_autoptr(GPtrArray) nodes = sgf_tree_collect_nodes_preorder(tree);
@@ -1260,13 +1256,11 @@ static GPtrArray *gcheckers_window_build_full_analysis_jobs(SgfTree *tree, gbool
     g_ptr_array_add(jobs, job);
   }
 
-  if (reverse_order) {
-    for (guint i = 0; i < jobs->len / 2; ++i) {
-      guint swap_i = jobs->len - 1 - i;
-      gpointer tmp = g_ptr_array_index(jobs, i);
-      jobs->pdata[i] = jobs->pdata[swap_i];
-      jobs->pdata[swap_i] = tmp;
-    }
+  for (guint i = 0; i < jobs->len / 2; ++i) {
+    guint swap_i = jobs->len - 1 - i;
+    gpointer tmp = g_ptr_array_index(jobs, i);
+    jobs->pdata[i] = jobs->pdata[swap_i];
+    jobs->pdata[swap_i] = tmp;
   }
 
   return jobs;
@@ -1454,7 +1448,7 @@ static void gcheckers_window_start_analysis(GCheckersWindow *self) {
   g_thread_unref(thread);
 }
 
-static void gcheckers_window_start_full_game_analysis(GCheckersWindow *self, gboolean reverse_order) {
+static void gcheckers_window_start_full_game_analysis(GCheckersWindow *self) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
   g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
   g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self->sgf_controller));
@@ -1466,7 +1460,7 @@ static void gcheckers_window_start_full_game_analysis(GCheckersWindow *self, gbo
     return;
   }
 
-  g_autoptr(GPtrArray) jobs = gcheckers_window_build_full_analysis_jobs(tree, reverse_order);
+  g_autoptr(GPtrArray) jobs = gcheckers_window_build_full_analysis_jobs(tree);
   if (jobs == NULL) {
     g_debug("Failed to build full-game analysis jobs");
     return;
@@ -1487,9 +1481,7 @@ static void gcheckers_window_start_full_game_analysis(GCheckersWindow *self, gbo
   guint depth = configured_depth;
   gint generation = g_atomic_int_add(&self->analysis_generation, 1) + 1;
   gcheckers_window_analysis_begin_session(self, GCHECKERS_WINDOW_ANALYSIS_MODE_FULL_GAME, jobs->len);
-  gcheckers_window_set_analysis_text(self,
-                                     reverse_order ? "Analyzing full game in reverse..."
-                                                   : "Analyzing full game...");
+  gcheckers_window_set_analysis_text(self, "Analyzing full game...");
 
   GCheckersWindowFullAnalysisTask *task = g_new0(GCheckersWindowFullAnalysisTask, 1);
   task->self = g_object_ref(self);
@@ -1721,20 +1713,7 @@ static void gcheckers_window_on_analyze_full_clicked(GtkButton *button, gpointer
   } else {
     gcheckers_window_stop_analysis(self);
   }
-  gcheckers_window_start_full_game_analysis(self, FALSE);
-}
-
-static void gcheckers_window_on_analyze_full_reverse_clicked(GtkButton *button, gpointer user_data) {
-  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
-  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
-  g_return_if_fail(GTK_IS_BUTTON(button));
-
-  if (self->analyze_toggle_button != NULL && GTK_IS_TOGGLE_BUTTON(self->analyze_toggle_button)) {
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->analyze_toggle_button), FALSE);
-  } else {
-    gcheckers_window_stop_analysis(self);
-  }
-  gcheckers_window_start_full_game_analysis(self, TRUE);
+  gcheckers_window_start_full_game_analysis(self);
 }
 
 static void gcheckers_window_on_sgf_rewind(GSimpleAction * /*action*/,
@@ -2009,7 +1988,6 @@ static void gcheckers_window_dispose(GObject *object) {
   self->board_panel = NULL;
   self->analyze_toggle_button = NULL;
   self->analyze_full_button = NULL;
-  self->analyze_full_reverse_button = NULL;
   self->analysis_buffer = NULL;
   self->sgf_mode_control = NULL;
   G_OBJECT_CLASS(gcheckers_window_parent_class)->dispose(object);
@@ -2292,13 +2270,6 @@ static void gcheckers_window_init(GCheckersWindow *self) {
                    G_CALLBACK(gcheckers_window_on_analyze_full_clicked),
                    self);
   gtk_box_append(GTK_BOX(analysis_panel), self->analyze_full_button);
-
-  self->analyze_full_reverse_button = gtk_button_new_with_label("Analyze full game in reverse");
-  g_signal_connect(self->analyze_full_reverse_button,
-                   "clicked",
-                   G_CALLBACK(gcheckers_window_on_analyze_full_reverse_clicked),
-                   self);
-  gtk_box_append(GTK_BOX(analysis_panel), self->analyze_full_reverse_button);
 
   GtkWidget *graph_widget = analysis_graph_get_widget(self->analysis_graph);
   g_return_if_fail(graph_widget != NULL);
