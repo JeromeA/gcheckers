@@ -934,7 +934,8 @@ static gboolean gcheckers_window_play_next_puzzle_step_if_needed(GCheckersWindow
 
   if (self->puzzle_expected_step >= self->puzzle_steps->len) {
     self->puzzle_finished = TRUE;
-    gcheckers_window_set_puzzle_message(self, "");
+    g_autofree char *message = g_strdup_printf("Puzzle %04u.", self->puzzle_number);
+    gcheckers_window_set_puzzle_message(self, message);
     board_view_set_banner_text(self->board_view, "Puzzle solved");
   } else {
     gcheckers_window_clear_board_banner(self);
