@@ -22,8 +22,6 @@ struct _GCheckersWindow {
   GtkWidget *drawer_split;
   GtkWidget *navigation_panel;
   GtkWidget *analysis_panel;
-  GtkWidget *analyze_toggle_button;
-  GtkWidget *analyze_full_button;
   GtkScale *analysis_depth_scale;
   GtkTextBuffer *analysis_buffer;
   BoardView *board_view;
@@ -221,8 +219,9 @@ static void gcheckers_window_analysis_sync_ui(GCheckersWindow *self) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
 
   gboolean full_game_active = self->analysis_mode == GCHECKERS_WINDOW_ANALYSIS_MODE_FULL_GAME;
-  if (self->analyze_full_button != NULL) {
-    gtk_widget_set_sensitive(self->analyze_full_button, !full_game_active);
+  GAction *action = g_action_map_lookup_action(G_ACTION_MAP(self), "analysis-whole-game");
+  if (action != NULL && G_IS_SIMPLE_ACTION(action)) {
+    g_simple_action_set_enabled(G_SIMPLE_ACTION(action), !full_game_active);
   }
 
   if (!full_game_active && self->analysis_graph != NULL) {
@@ -460,16 +459,12 @@ static void gcheckers_window_sync_mode_ui(GCheckersWindow *self) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
 
   gboolean allow_navigation = !self->edit_mode_enabled;
-  gcheckers_window_set_action_enabled(G_ACTION_MAP(self), "sgf-rewind", allow_navigation);
-  gcheckers_window_set_action_enabled(G_ACTION_MAP(self), "sgf-step-backward", allow_navigation);
-  gcheckers_window_set_action_enabled(G_ACTION_MAP(self), "sgf-step-forward", allow_navigation);
-  gcheckers_window_set_action_enabled(G_ACTION_MAP(self), "sgf-step-forward-to-branch", allow_navigation);
-  gcheckers_window_set_action_enabled(G_ACTION_MAP(self), "sgf-step-forward-to-end", allow_navigation);
-
-  GApplication *app = g_application_get_default();
-  if (app != NULL && G_IS_ACTION_MAP(app)) {
-    gcheckers_window_set_action_enabled(G_ACTION_MAP(app), "force-move", allow_navigation);
-  }
+  gcheckers_window_set_action_enabled(G_ACTION_MAP(self), "game-force-move", allow_navigation);
+  gcheckers_window_set_action_enabled(G_ACTION_MAP(self), "navigation-rewind", allow_navigation);
+  gcheckers_window_set_action_enabled(G_ACTION_MAP(self), "navigation-step-backward", allow_navigation);
+  gcheckers_window_set_action_enabled(G_ACTION_MAP(self), "navigation-step-forward", allow_navigation);
+  gcheckers_window_set_action_enabled(G_ACTION_MAP(self), "navigation-step-forward-to-branch", allow_navigation);
+  gcheckers_window_set_action_enabled(G_ACTION_MAP(self), "navigation-step-forward-to-end", allow_navigation);
 
   if (self->analysis_graph != NULL) {
     GtkWidget *graph_widget = analysis_graph_get_widget(self->analysis_graph);
@@ -1528,11 +1523,15 @@ static void gcheckers_window_start_full_game_analysis(GCheckersWindow *self) {
 static void gcheckers_window_restart_analysis_if_active(GCheckersWindow *self) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
 
-  if (!self->analyze_toggle_button || !GTK_IS_TOGGLE_BUTTON(self->analyze_toggle_button)) {
+  GAction *action = g_action_map_lookup_action(G_ACTION_MAP(self), "analysis-current-position");
+  if (action == NULL || !G_IS_SIMPLE_ACTION(action)) {
     return;
   }
 
-  if (!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(self->analyze_toggle_button))) {
+  GVariant *state = g_action_get_state(action);
+  gboolean active = state != NULL && g_variant_get_boolean(state);
+  g_clear_pointer(&state, g_variant_unref);
+  if (!active) {
     return;
   }
   if (self->analysis_mode == GCHECKERS_WINDOW_ANALYSIS_MODE_FULL_GAME) {
@@ -1713,14 +1712,30 @@ static void gcheckers_window_on_analysis_graph_node_activated(AnalysisGraph * /*
   }
 }
 
-static void gcheckers_window_on_analyze_toggled(GtkToggleButton *button, gpointer user_data) {
+static void gcheckers_window_set_analysis_current_action_state(GCheckersWindow *self, gboolean active) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+
+  GAction *action = g_action_map_lookup_action(G_ACTION_MAP(self), "analysis-current-position");
+  if (action == NULL || !G_IS_SIMPLE_ACTION(action)) {
+    g_debug("Missing analysis-current-position action");
+    return;
+  }
+
+  g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_boolean(active));
+}
+
+static void gcheckers_window_on_analysis_current_change_state(GSimpleAction *action,
+                                                              GVariant *value,
+                                                              gpointer user_data) {
   GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
 
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(G_IS_SIMPLE_ACTION(action));
+  g_return_if_fail(value != NULL);
   g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
-  g_return_if_fail(GTK_IS_TOGGLE_BUTTON(button));
 
-  gboolean active = gtk_toggle_button_get_active(button);
+  gboolean active = g_variant_get_boolean(value);
+  g_simple_action_set_state(action, value);
   if (active) {
     gcheckers_window_stop_analysis(self);
     gcheckers_window_start_analysis(self);
@@ -1730,17 +1745,24 @@ static void gcheckers_window_on_analyze_toggled(GtkToggleButton *button, gpointe
   gcheckers_window_stop_analysis(self);
 }
 
-static void gcheckers_window_on_analyze_full_clicked(GtkButton *button, gpointer user_data) {
+static void gcheckers_window_on_analyze_full_game_action(GSimpleAction * /*action*/,
+                                                         GVariant * /*parameter*/,
+                                                         gpointer user_data) {
   GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
-  g_return_if_fail(GTK_IS_BUTTON(button));
 
-  if (self->analyze_toggle_button != NULL && GTK_IS_TOGGLE_BUTTON(self->analyze_toggle_button)) {
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->analyze_toggle_button), FALSE);
-  } else {
-    gcheckers_window_stop_analysis(self);
-  }
+  gcheckers_window_set_analysis_current_action_state(self, FALSE);
+  gcheckers_window_stop_analysis(self);
   gcheckers_window_start_full_game_analysis(self);
+}
+
+static void gcheckers_window_on_force_move_action(GSimpleAction * /*action*/,
+                                                  GVariant * /*parameter*/,
+                                                  gpointer user_data) {
+  GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+
+  gcheckers_window_force_move(self);
 }
 
 static void gcheckers_window_on_sgf_rewind(GSimpleAction * /*action*/,
@@ -2013,8 +2035,6 @@ static void gcheckers_window_dispose(GObject *object) {
   g_clear_object(&self->model);
   self->main_paned = NULL;
   self->board_panel = NULL;
-  self->analyze_toggle_button = NULL;
-  self->analyze_full_button = NULL;
   self->analysis_depth_scale = NULL;
   self->analysis_buffer = NULL;
   self->sgf_mode_control = NULL;
@@ -2052,7 +2072,15 @@ static void gcheckers_window_init(GCheckersWindow *self) {
 
   static const GActionEntry window_actions[] = {
       {
-          .name = "sgf-rewind",
+          .name = "game-force-move",
+          .activate = gcheckers_window_on_force_move_action,
+          .parameter_type = NULL,
+          .state = NULL,
+          .change_state = NULL,
+          .padding = {0},
+      },
+      {
+          .name = "navigation-rewind",
           .activate = gcheckers_window_on_sgf_rewind,
           .parameter_type = NULL,
           .state = NULL,
@@ -2060,7 +2088,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
           .padding = {0},
       },
       {
-          .name = "sgf-step-backward",
+          .name = "navigation-step-backward",
           .activate = gcheckers_window_on_sgf_step_backward,
           .parameter_type = NULL,
           .state = NULL,
@@ -2068,7 +2096,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
           .padding = {0},
       },
       {
-          .name = "sgf-step-forward",
+          .name = "navigation-step-forward",
           .activate = gcheckers_window_on_sgf_step_forward,
           .parameter_type = NULL,
           .state = NULL,
@@ -2076,7 +2104,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
           .padding = {0},
       },
       {
-          .name = "sgf-step-forward-to-branch",
+          .name = "navigation-step-forward-to-branch",
           .activate = gcheckers_window_on_sgf_step_forward_to_branch,
           .parameter_type = NULL,
           .state = NULL,
@@ -2084,7 +2112,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
           .padding = {0},
       },
       {
-          .name = "sgf-step-forward-to-end",
+          .name = "navigation-step-forward-to-end",
           .activate = gcheckers_window_on_sgf_step_forward_to_end,
           .parameter_type = NULL,
           .state = NULL,
@@ -2092,7 +2120,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
           .padding = {0},
       },
       {
-          .name = "show-navigation-drawer",
+          .name = "view-show-navigation-drawer",
           .activate = NULL,
           .parameter_type = NULL,
           .state = "true",
@@ -2100,11 +2128,27 @@ static void gcheckers_window_init(GCheckersWindow *self) {
           .padding = {0},
       },
       {
-          .name = "show-analysis-drawer",
+          .name = "view-show-analysis-drawer",
           .activate = NULL,
           .parameter_type = NULL,
           .state = "true",
           .change_state = gcheckers_window_on_show_analysis_drawer_change_state,
+          .padding = {0},
+      },
+      {
+          .name = "analysis-current-position",
+          .activate = NULL,
+          .parameter_type = NULL,
+          .state = "false",
+          .change_state = gcheckers_window_on_analysis_current_change_state,
+          .padding = {0},
+      },
+      {
+          .name = "analysis-whole-game",
+          .activate = gcheckers_window_on_analyze_full_game_action,
+          .parameter_type = NULL,
+          .state = NULL,
+          .change_state = NULL,
           .padding = {0},
       },
   };
@@ -2139,7 +2183,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   GtkWidget *force_move_button =
       gcheckers_window_new_toolbar_action_button("media-playback-start-symbolic",
                                                  "Force move",
-                                                 "app.force-move");
+                                                 "win.game-force-move");
   gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), force_move_button);
 
   GtkWidget *toolbar_separator = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
@@ -2147,29 +2191,29 @@ static void gcheckers_window_init(GCheckersWindow *self) {
 
   GtkWidget *rewind_button = gcheckers_window_new_toolbar_action_button("media-skip-backward-symbolic",
                                                                          "Rewind to start",
-                                                                         "win.sgf-rewind");
+                                                                         "win.navigation-rewind");
   gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), rewind_button);
 
   GtkWidget *step_backward_button =
       gcheckers_window_new_toolbar_action_button("go-previous-symbolic",
                                                  "Back one move",
-                                                 "win.sgf-step-backward");
+                                                 "win.navigation-step-backward");
   gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), step_backward_button);
 
   GtkWidget *step_forward_button = gcheckers_window_new_toolbar_action_button("go-next-symbolic",
                                                                                "Forward one move",
-                                                                               "win.sgf-step-forward");
+                                                                               "win.navigation-step-forward");
   gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), step_forward_button);
 
   GtkWidget *step_to_branch_button =
       gcheckers_window_new_toolbar_action_button("media-seek-forward-symbolic",
                                                  "Forward to next branch point",
-                                                 "win.sgf-step-forward-to-branch");
+                                                 "win.navigation-step-forward-to-branch");
   gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), step_to_branch_button);
 
   GtkWidget *step_to_end_button = gcheckers_window_new_toolbar_action_button("media-skip-forward-symbolic",
                                                                               "Forward to main line end",
-                                                                              "win.sgf-step-forward-to-end");
+                                                                              "win.navigation-step-forward-to-end");
   gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), step_to_end_button);
   gtk_box_append(GTK_BOX(content), toolbar);
 
@@ -2285,22 +2329,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gtk_widget_add_css_class(sgf_widget, "sgf-panel");
   gtk_box_append(GTK_BOX(middle_panel), sgf_widget);
 
-  self->analyze_toggle_button = gtk_toggle_button_new_with_label("Analyze this position");
-  g_signal_connect(self->analyze_toggle_button,
-                   "toggled",
-                   G_CALLBACK(gcheckers_window_on_analyze_toggled),
-                   self);
-  gtk_box_append(GTK_BOX(analysis_panel), self->analyze_toggle_button);
-
-  self->analyze_full_button = gtk_button_new_with_label("Analyze full game");
-  g_signal_connect(self->analyze_full_button,
-                   "clicked",
-                   G_CALLBACK(gcheckers_window_on_analyze_full_clicked),
-                   self);
-  gtk_box_append(GTK_BOX(analysis_panel), self->analyze_full_button);
-
   GtkWidget *analysis_depth_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
-  gtk_widget_set_margin_top(analysis_depth_box, 8);
   gtk_box_append(GTK_BOX(analysis_panel), analysis_depth_box);
 
   GtkWidget *analysis_depth_label = gtk_label_new("Analysis depth");
@@ -2354,7 +2383,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gcheckers_window_sync_drawer_ui(self);
   gcheckers_window_sync_mode_ui(self);
   gcheckers_window_analysis_sync_ui(self);
-  gcheckers_window_set_analysis_text(self, "Toggle Analyze this position to start/stop iterative analysis.");
+  gcheckers_window_set_analysis_text(self, "Use the Analysis menu to analyze this move or the whole game.");
   gcheckers_window_refresh_analysis_graph(self);
 }
 

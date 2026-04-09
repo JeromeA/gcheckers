@@ -56,25 +56,6 @@ static void gcheckers_application_on_quit(GSimpleAction * /*action*/,
   g_application_quit(G_APPLICATION(self));
 }
 
-static void gcheckers_application_on_force_move(GSimpleAction * /*action*/,
-                                                GVariant * /*parameter*/,
-                                                gpointer user_data) {
-  GCheckersApplication *self = GCHECKERS_APPLICATION(user_data);
-  g_return_if_fail(GCHECKERS_IS_APPLICATION(self));
-
-  GtkWindow *window = gtk_application_get_active_window(GTK_APPLICATION(self));
-  if (!window) {
-    g_debug("No active window for force move action");
-    return;
-  }
-  if (!GCHECKERS_IS_WINDOW(window)) {
-    g_debug("Active window is not a gcheckers window");
-    return;
-  }
-
-  gcheckers_window_force_move(GCHECKERS_WINDOW(window));
-}
-
 static void gcheckers_application_startup(GApplication *app) {
   G_APPLICATION_CLASS(gcheckers_application_parent_class)->startup(app);
 
@@ -90,14 +71,6 @@ static void gcheckers_application_startup(GApplication *app) {
       {
           .name = "import",
           .activate = gcheckers_application_on_import,
-          .parameter_type = NULL,
-          .state = NULL,
-          .change_state = NULL,
-          .padding = {0},
-      },
-      {
-          .name = "force-move",
-          .activate = gcheckers_application_on_force_move,
           .parameter_type = NULL,
           .state = NULL,
           .change_state = NULL,
@@ -120,6 +93,7 @@ static void gcheckers_application_startup(GApplication *app) {
   GMenu *file_quit_menu = g_menu_new();
   GMenu *game_menu = g_menu_new();
   GMenu *game_navigation_menu = g_menu_new();
+  GMenu *analysis_menu = g_menu_new();
   GMenu *view_menu = g_menu_new();
   g_menu_append(file_primary_menu, "New game...", "app.new-game");
   g_menu_append(file_primary_menu, "Import...", "app.import");
@@ -129,17 +103,20 @@ static void gcheckers_application_startup(GApplication *app) {
   g_menu_append_section(file_menu, NULL, G_MENU_MODEL(file_primary_menu));
   g_menu_append(file_quit_menu, "Quit", "app.quit");
   g_menu_append_section(file_menu, NULL, G_MENU_MODEL(file_quit_menu));
-  g_menu_append(game_menu, "Force move", "app.force-move");
-  g_menu_append(game_navigation_menu, "Rewind to start", "win.sgf-rewind");
-  g_menu_append(game_navigation_menu, "Back one move", "win.sgf-step-backward");
-  g_menu_append(game_navigation_menu, "Forward one move", "win.sgf-step-forward");
-  g_menu_append(game_navigation_menu, "Forward to next branch", "win.sgf-step-forward-to-branch");
-  g_menu_append(game_navigation_menu, "Forward to main line end", "win.sgf-step-forward-to-end");
+  g_menu_append(game_menu, "Force move", "win.game-force-move");
+  g_menu_append(game_navigation_menu, "Rewind to start", "win.navigation-rewind");
+  g_menu_append(game_navigation_menu, "Back one move", "win.navigation-step-backward");
+  g_menu_append(game_navigation_menu, "Forward one move", "win.navigation-step-forward");
+  g_menu_append(game_navigation_menu, "Forward to next branch", "win.navigation-step-forward-to-branch");
+  g_menu_append(game_navigation_menu, "Forward to main line end", "win.navigation-step-forward-to-end");
   g_menu_append_section(game_menu, NULL, G_MENU_MODEL(game_navigation_menu));
-  g_menu_append(view_menu, "Show navigation drawer", "win.show-navigation-drawer");
-  g_menu_append(view_menu, "Show analysis drawer", "win.show-analysis-drawer");
+  g_menu_append(analysis_menu, "Analyse this move", "win.analysis-current-position");
+  g_menu_append(analysis_menu, "Analyse whole game", "win.analysis-whole-game");
+  g_menu_append(view_menu, "Show navigation drawer", "win.view-show-navigation-drawer");
+  g_menu_append(view_menu, "Show analysis drawer", "win.view-show-analysis-drawer");
   g_menu_append_submenu(menubar, "File", G_MENU_MODEL(file_menu));
   g_menu_append_submenu(menubar, "Game", G_MENU_MODEL(game_menu));
+  g_menu_append_submenu(menubar, "Analysis", G_MENU_MODEL(analysis_menu));
   g_menu_append_submenu(menubar, "View", G_MENU_MODEL(view_menu));
   gtk_application_set_menubar(GTK_APPLICATION(app), G_MENU_MODEL(menubar));
 
@@ -147,6 +124,7 @@ static void gcheckers_application_startup(GApplication *app) {
   g_object_unref(file_primary_menu);
   g_object_unref(game_navigation_menu);
   g_object_unref(game_menu);
+  g_object_unref(analysis_menu);
   g_object_unref(view_menu);
   g_object_unref(file_menu);
   g_object_unref(menubar);
@@ -158,16 +136,16 @@ static void gcheckers_application_startup(GApplication *app) {
                                         "app.quit",
                                         (const char *[]){"<Primary>q", NULL});
   gtk_application_set_accels_for_action(GTK_APPLICATION(app),
-                                        "win.sgf-step-backward",
+                                        "win.navigation-step-backward",
                                         (const char *[]){"Left", NULL});
   gtk_application_set_accels_for_action(GTK_APPLICATION(app),
-                                        "win.sgf-step-forward",
+                                        "win.navigation-step-forward",
                                         (const char *[]){"Right", NULL});
   gtk_application_set_accels_for_action(GTK_APPLICATION(app),
-                                        "win.sgf-rewind",
+                                        "win.navigation-rewind",
                                         (const char *[]){"Home", NULL});
   gtk_application_set_accels_for_action(GTK_APPLICATION(app),
-                                        "win.sgf-step-forward-to-end",
+                                        "win.navigation-step-forward-to-end",
                                         (const char *[]){"End", NULL});
 }
 

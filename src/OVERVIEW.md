@@ -7,17 +7,18 @@ Owns: `GCheckersModel`, `BoardView`, `PlayerControlsPanel`, and `GCheckersSgfCon
 Collaborates with: `gcheckers_style_init()` for CSS, model signals for refresh, and SGF analysis signals to reset
 player dropdowns. Computer turns are routed by control mode with alpha-beta depth configured from the shared
 `Computer depth` slider (`0..16`). Uses a three-pane layout: board and player controls (left), SGF mode selector
-and SGF view (middle), and analysis (right) with both an `Analyze this position` toggle (iterative deepening on the
-current SGF node) plus an `Analyze full game` button. Full-game analysis always processes SGF nodes in reverse order
-so TT state is reused from later positions first.
+and SGF view (middle), and analysis (right). Analysis is launched from shared window actions exposed in the
+`Analysis` menubar submenu: current-position analysis iterates on the selected node, and full-game analysis always
+processes nodes in reverse order so TT state is reused from later positions first.
 The analysis pane owns its own `Analysis depth` slider; analysis no longer reuses the player `Computer depth`
 setting. Current-position analysis iterates up to the selected depth, and full-game analysis uses the same selected
 depth as a fixed search limit.
 Board orientation is runtime-only window state: live games choose `follow-player`, `follow-turn`, or `fixed`
 orientation based on the new-game player modes, and SGF review/manual navigation switches back to `fixed` so analysis
 navigation does not keep rotating the board.
-Adds a `View` menubar submenu with independent toggles for the navigation drawer and analysis drawer; hiding both
-removes the entire right-side drawer split while preserving the board pane.
+Adds an `Analysis` menubar submenu for current-position and whole-game analysis, plus a `View` submenu with
+independent toggles for the navigation drawer and analysis drawer; hiding both removes the entire right-side drawer
+split while preserving the board pane.
 Panel width state is retained for the board, navigation drawer, and analysis drawer, and drawer show/hide transitions
 recompute window width plus paned positions so visible panels keep their prior widths instead of stretching.
 Mode dropdown supports `Play` and `Edit`. In `Edit`, board clicks mutate SGF setup properties on the current node:
@@ -34,7 +35,7 @@ visible in the report text.
 Static material in search also values man advancement: men gain `+1/+2/+3` as they get within three rows of
 promotion, while the standalone static-material API remains pure material.
 Full-game completion gating uses processed-job counts (not only payload-attached counts), so terminal/no-move nodes do
-not leave the Analyze full game button disabled after completion.
+not leave the whole-game analysis action disabled after completion.
 Analysis lifecycle transitions are centralized (begin/finish/sync-ui helpers), so full-game button state, transient
 graph progress highlight, and runtime counters reset from one source of truth.
 Analysis text reports depth, node count, and scored moves, while reusing a single TT allocation across passes.
@@ -269,9 +270,10 @@ Collaborates with: `sgf_file_actions.c` and `tests/test_file_dialog_history.c`.
 ## GTK application entry (`src/gcheckers.c`, `src/application.c`, `src/application.h`)
 Class: `GCheckersApplication` (`GtkApplication`).
 Role: define the GTK application type and activation flow that creates the main window and model, installs app actions
-(`app.new-game`, `app.import`, `app.force-move`, `app.quit`), installs window SGF navigation actions, and publishes a
-menubar model (`File` -> `New game...`, `Import...`, `Load...`, `Save as...`, `Save position...`, `Quit`; `Game` ->
-`Force move` + SGF navigation section) with keyboard accelerators.
+(`app.new-game`, `app.import`, `app.quit`), installs window game/SGF/navigation/analysis/view actions, and
+publishes a menubar model (`File` -> `New game...`, `Import...`, `Load...`, `Save as...`, `Save position...`, `Quit`;
+`Game` -> `Force move` + navigation section; `Analysis` -> current-position and whole-game analysis; `View` -> drawer
+toggles) with keyboard accelerators.
 Collaborates with: `GCheckersWindow` for UI wiring and new-game dialog presentation.
 
 ## Board view subsystem

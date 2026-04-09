@@ -213,11 +213,11 @@ static gboolean sgf_view_on_key_pressed(GtkEventControllerKey * /*controller*/,
   g_return_val_if_fail(SGF_IS_VIEW(self), GDK_EVENT_PROPAGATE);
 
   if (keyval == GDK_KEY_Left) {
-    return gtk_widget_activate_action(self->root, "win.sgf-step-backward", NULL) ? GDK_EVENT_STOP
+    return gtk_widget_activate_action(self->root, "win.navigation-step-backward", NULL) ? GDK_EVENT_STOP
                                                                                   : GDK_EVENT_PROPAGATE;
   }
   if (keyval == GDK_KEY_Right) {
-    return gtk_widget_activate_action(self->root, "win.sgf-step-forward", NULL) ? GDK_EVENT_STOP
+    return gtk_widget_activate_action(self->root, "win.navigation-step-forward", NULL) ? GDK_EVENT_STOP
                                                                                  : GDK_EVENT_PROPAGATE;
   }
 
