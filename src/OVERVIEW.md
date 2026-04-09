@@ -231,10 +231,12 @@ Collaborates with: `position_search.c`, `position_predicate.c`, and `position_fo
 ## Puzzle generator CLI (`src/create_puzzles.c`)
 Module: CLI front end.
 Role: repeatedly self-play games at depth 0, detect mistake positions with configurable best-move-depth analysis,
-filter candidates where the attacker has at least four legal moves and a best response at least 50 points above the
-runner-up, then save puzzles as
+validate each candidate immediately in one pass, require the attacker to have at least four legal moves and a best
+response at least 50 points above the runner-up, then save puzzles as
 SGF files under `puzzles/puzzle-####.sgf` with root setup (`AE/AB/AW/ABK/AWK/PL`) and a tactical continuation line.
 The CLI accepts `--depth N` to override the puzzle-analysis depth; otherwise it uses the built-in default depth 8.
+Before generating anything, the CLI loads existing `puzzle-*.sgf` files from the output directory and deduplicates by
+solution move sequence, so equivalent puzzles are skipped instead of being saved twice.
 The main validation path is organized as puzzle-rule predicates (`position_follows_a_serious_mistake`,
 `position_is_valid`, `attacker_has_enough_choice`, `attacker_has_a_single_good_move`,
 `solution_line_of_best_depth_moves_improves_static_evaluation`) so puzzle selection

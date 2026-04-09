@@ -257,6 +257,29 @@ static void test_puzzle_solution_rejects_immediate_recapture(void) {
       checkers_puzzle_solution_has_no_immediate_recapture(solution_moves, G_N_ELEMENTS(solution_moves), NULL));
 }
 
+static void test_puzzle_solution_key_building(void) {
+  CheckersMove solution_a[] = {
+      {.path = {12, 16}, .length = 2, .captures = 0},
+      {.path = {21, 17, 10}, .length = 3, .captures = 1},
+  };
+  CheckersMove solution_b[] = {
+      {.path = {12, 16}, .length = 2, .captures = 0},
+      {.path = {21, 17, 10}, .length = 3, .captures = 1},
+  };
+  CheckersMove solution_c[] = {
+      {.path = {12, 16}, .length = 2, .captures = 0},
+      {.path = {21, 14, 10}, .length = 3, .captures = 1},
+  };
+
+  g_autofree char *key_a = checkers_puzzle_build_solution_key(solution_a, G_N_ELEMENTS(solution_a));
+  g_autofree char *key_b = checkers_puzzle_build_solution_key(solution_b, G_N_ELEMENTS(solution_b));
+  g_autofree char *key_c = checkers_puzzle_build_solution_key(solution_c, G_N_ELEMENTS(solution_c));
+
+  g_assert_cmpstr(key_a, ==, key_b);
+  g_assert_cmpstr(key_a, !=, key_c);
+  g_assert_cmpstr(key_a, ==, "2:0:12,16;3:1:21,17,10;");
+}
+
 static void test_puzzle_find_next_index(void) {
   guint next = G_MAXUINT;
   g_assert_true(checkers_puzzle_find_next_index("/tmp/does-not-exist-gcheckers-puzzles", &next, NULL));
@@ -326,6 +349,7 @@ int main(int argc, char **argv) {
   g_test_add_func("/puzzle-generation/solution-shape", test_puzzle_solution_shape_interest_rules);
   g_test_add_func("/puzzle-generation/immediate-recapture",
                   test_puzzle_solution_rejects_immediate_recapture);
+  g_test_add_func("/puzzle-generation/solution-key", test_puzzle_solution_key_building);
   g_test_add_func("/puzzle-generation/find-next-index", test_puzzle_find_next_index);
   g_test_add_func("/puzzle-generation/build-indexed-path", test_puzzle_build_indexed_path);
   g_test_add_func("/puzzle-generation/parse-arg", test_puzzle_parse_arg);

@@ -37,6 +37,7 @@ gboolean checkers_puzzle_solution_shape_is_interesting(const CheckersMove *moves
 gboolean checkers_puzzle_solution_has_no_immediate_recapture(const CheckersMove *solution_moves,
                                                              guint solution_move_count,
                                                              const CheckersMove *next_move);
+char *checkers_puzzle_build_solution_key(const CheckersMove *moves, guint move_count);
 gboolean checkers_puzzle_find_next_index(const char *dir_path, guint *out_next_index, GError **error);
 char *checkers_puzzle_build_indexed_path(const char *dir_path, const char *prefix, guint index);
 CheckersPuzzleArgType checkers_puzzle_parse_arg(const char *arg, guint *out_count);

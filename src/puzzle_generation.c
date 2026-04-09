@@ -144,6 +144,25 @@ gboolean checkers_puzzle_solution_has_no_immediate_recapture(const CheckersMove 
   return next_move == NULL || next_move->captures == 0;
 }
 
+char *checkers_puzzle_build_solution_key(const CheckersMove *moves, guint move_count) {
+  g_return_val_if_fail(moves != NULL || move_count == 0, NULL);
+
+  GString *key = g_string_new(NULL);
+  for (guint i = 0; i < move_count; ++i) {
+    const CheckersMove *move = &moves[i];
+    g_string_append_printf(key, "%u:%u:", move->length, move->captures);
+    for (guint path_i = 0; path_i < move->length; ++path_i) {
+      g_string_append_printf(key, "%u", move->path[path_i]);
+      if (path_i + 1 < move->length) {
+        g_string_append_c(key, ',');
+      }
+    }
+    g_string_append_c(key, ';');
+  }
+
+  return g_string_free(key, FALSE);
+}
+
 static gboolean checkers_puzzle_parse_index_from_name(const char *name, guint *out_index) {
   g_return_val_if_fail(name != NULL, FALSE);
   g_return_val_if_fail(out_index != NULL, FALSE);
