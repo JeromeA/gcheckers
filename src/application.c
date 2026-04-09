@@ -94,6 +94,7 @@ static void gcheckers_application_startup(GApplication *app) {
   GMenu *game_menu = g_menu_new();
   GMenu *game_navigation_menu = g_menu_new();
   GMenu *analysis_menu = g_menu_new();
+  GMenu *puzzle_menu = g_menu_new();
   GMenu *view_menu = g_menu_new();
   g_menu_append(file_primary_menu, "New game...", "app.new-game");
   g_menu_append(file_primary_menu, "Import...", "app.import");
@@ -112,11 +113,13 @@ static void gcheckers_application_startup(GApplication *app) {
   g_menu_append_section(game_menu, NULL, G_MENU_MODEL(game_navigation_menu));
   g_menu_append(analysis_menu, "Analyse this move", "win.analysis-current-position");
   g_menu_append(analysis_menu, "Analyse whole game", "win.analysis-whole-game");
+  g_menu_append(puzzle_menu, "Play puzzles", "win.puzzle-play");
   g_menu_append(view_menu, "Show navigation drawer", "win.view-show-navigation-drawer");
   g_menu_append(view_menu, "Show analysis drawer", "win.view-show-analysis-drawer");
   g_menu_append_submenu(menubar, "File", G_MENU_MODEL(file_menu));
   g_menu_append_submenu(menubar, "Game", G_MENU_MODEL(game_menu));
   g_menu_append_submenu(menubar, "Analysis", G_MENU_MODEL(analysis_menu));
+  g_menu_append_submenu(menubar, "Puzzle", G_MENU_MODEL(puzzle_menu));
   g_menu_append_submenu(menubar, "View", G_MENU_MODEL(view_menu));
   gtk_application_set_menubar(GTK_APPLICATION(app), G_MENU_MODEL(menubar));
 
@@ -125,6 +128,7 @@ static void gcheckers_application_startup(GApplication *app) {
   g_object_unref(game_navigation_menu);
   g_object_unref(game_menu);
   g_object_unref(analysis_menu);
+  g_object_unref(puzzle_menu);
   g_object_unref(view_menu);
   g_object_unref(file_menu);
   g_object_unref(menubar);

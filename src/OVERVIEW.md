@@ -16,6 +16,9 @@ depth as a fixed search limit.
 Board orientation is runtime-only window state: live games choose `follow-player`, `follow-turn`, or `fixed`
 orientation based on the new-game player modes, and SGF review/manual navigation switches back to `fixed` so analysis
 navigation does not keep rotating the board.
+Puzzle mode loads a random `puzzle-*.sgf` / `puzzles-*.sgf` from the puzzle directory (`GCHECKERS_PUZZLES_DIR` or the
+default `puzzles/`), hides both drawers, disables SGF/review actions, shows puzzle-only `Next puzzle` and `Analyze`
+buttons, and validates the player's moves against the SGF main-line solution while auto-playing defender replies.
 Adds an `Analysis` menubar submenu for current-position and whole-game analysis, plus a `View` submenu with
 independent toggles for the navigation drawer and analysis drawer; hiding both removes the entire right-side drawer
 split while preserving the board pane.
@@ -270,10 +273,10 @@ Collaborates with: `sgf_file_actions.c` and `tests/test_file_dialog_history.c`.
 ## GTK application entry (`src/gcheckers.c`, `src/application.c`, `src/application.h`)
 Class: `GCheckersApplication` (`GtkApplication`).
 Role: define the GTK application type and activation flow that creates the main window and model, installs app actions
-(`app.new-game`, `app.import`, `app.quit`), installs window game/SGF/navigation/analysis/view actions, and
+(`app.new-game`, `app.import`, `app.quit`), installs window game/SGF/navigation/analysis/puzzle/view actions, and
 publishes a menubar model (`File` -> `New game...`, `Import...`, `Load...`, `Save as...`, `Save position...`, `Quit`;
-`Game` -> `Force move` + navigation section; `Analysis` -> current-position and whole-game analysis; `View` -> drawer
-toggles) with keyboard accelerators.
+`Game` -> `Force move` + navigation section; `Analysis` -> current-position and whole-game analysis; `Puzzle` ->
+`Play puzzles`; `View` -> drawer toggles) with keyboard accelerators.
 Collaborates with: `GCheckersWindow` for UI wiring and new-game dialog presentation.
 
 ## Board view subsystem
