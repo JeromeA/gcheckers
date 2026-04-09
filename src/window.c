@@ -24,6 +24,7 @@ struct _GCheckersWindow {
   GtkWidget *analysis_panel;
   GtkWidget *analyze_toggle_button;
   GtkWidget *analyze_full_button;
+  GtkScale *analysis_depth_scale;
   GtkTextBuffer *analysis_buffer;
   BoardView *board_view;
   PlayerControlsPanel *controls_panel;
@@ -62,6 +63,7 @@ typedef struct {
   gint generation;
   CheckersAiTranspositionTable *tt;
   guint current_depth;
+  guint target_depth;
   gint64 last_progress_publish_us;
   CheckersAiSearchStats cumulative_stats;
   guint last_completed_depth;
@@ -126,9 +128,16 @@ enum {
   GCHECKERS_WINDOW_DEFAULT_HEIGHT = 700,
   GCHECKERS_WINDOW_ANALYSIS_PROGRESS_INTERVAL_MS = 100,
   GCHECKERS_WINDOW_ANALYSIS_TT_SIZE_MB = 256,
+  GCHECKERS_WINDOW_ANALYSIS_DEPTH_MIN = 1,
+  GCHECKERS_WINDOW_ANALYSIS_DEPTH_MAX = 16,
+  GCHECKERS_WINDOW_ANALYSIS_DEPTH_DEFAULT = 8,
 };
 
 static void gcheckers_window_refresh_analysis_graph(GCheckersWindow *self);
+
+static gboolean gcheckers_window_analysis_depth_valid(guint depth) {
+  return depth >= GCHECKERS_WINDOW_ANALYSIS_DEPTH_MIN && depth <= GCHECKERS_WINDOW_ANALYSIS_DEPTH_MAX;
+}
 
 static gboolean gcheckers_window_board_orientation_mode_valid(GCheckersWindowBoardOrientationMode mode) {
   return mode == GCHECKERS_WINDOW_BOARD_ORIENTATION_FIXED ||
@@ -694,6 +703,27 @@ static gboolean gcheckers_window_is_computer_control(GCheckersWindow *self, Chec
   return !gcheckers_window_is_user_control(self, color);
 }
 
+guint gcheckers_window_get_analysis_depth(GCheckersWindow *self) {
+  g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), GCHECKERS_WINDOW_ANALYSIS_DEPTH_DEFAULT);
+  g_return_val_if_fail(self->analysis_depth_scale != NULL, GCHECKERS_WINDOW_ANALYSIS_DEPTH_DEFAULT);
+
+  guint depth = (guint)gtk_range_get_value(GTK_RANGE(self->analysis_depth_scale));
+  if (!gcheckers_window_analysis_depth_valid(depth)) {
+    g_debug("Unexpected analysis depth value");
+    return GCHECKERS_WINDOW_ANALYSIS_DEPTH_DEFAULT;
+  }
+
+  return depth;
+}
+
+void gcheckers_window_set_analysis_depth(GCheckersWindow *self, guint depth) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(gcheckers_window_analysis_depth_valid(depth));
+  g_return_if_fail(self->analysis_depth_scale != NULL);
+
+  gtk_range_set_value(GTK_RANGE(self->analysis_depth_scale), (gdouble)depth);
+}
+
 static gboolean gcheckers_window_choose_computer_move(GCheckersWindow *self, CheckersMove *move) {
   g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), FALSE);
   g_return_val_if_fail(move != NULL, FALSE);
@@ -1113,8 +1143,9 @@ static gpointer gcheckers_window_analysis_thread(gpointer user_data) {
   GCheckersWindowAnalysisTask *task = user_data;
   g_return_val_if_fail(task != NULL, NULL);
 
-  guint depth = 8;
-  while (!gcheckers_window_should_cancel_analysis(task)) {
+  for (guint depth = GCHECKERS_WINDOW_ANALYSIS_DEPTH_MIN;
+       depth <= task->target_depth && !gcheckers_window_should_cancel_analysis(task);
+       ++depth) {
     task->current_depth = depth;
     task->last_progress_publish_us = 0;
     gcheckers_window_analysis_on_progress(&task->cumulative_stats, task);
@@ -1170,10 +1201,6 @@ static gpointer gcheckers_window_analysis_thread(gpointer user_data) {
                                              FALSE,
                                              FALSE,
                                              text);
-    if (depth == G_MAXUINT) {
-      break;
-    }
-    depth++;
   }
 
   gcheckers_window_analysis_publish_status(task->self,
@@ -1440,6 +1467,7 @@ static void gcheckers_window_start_analysis(GCheckersWindow *self) {
   task->game = game;
   task->generation = generation;
   task->target_node = target_node;
+  task->target_depth = gcheckers_window_get_analysis_depth(self);
   task->tt = checkers_ai_tt_new(GCHECKERS_WINDOW_ANALYSIS_TT_SIZE_MB);
   if (task->tt == NULL) {
     g_debug("Failed to allocate analysis TT, continuing without TT caching");
@@ -1477,8 +1505,7 @@ static void gcheckers_window_start_full_game_analysis(GCheckersWindow *self) {
     return;
   }
 
-  guint configured_depth = player_controls_panel_get_computer_depth(self->controls_panel);
-  guint depth = configured_depth;
+  guint depth = gcheckers_window_get_analysis_depth(self);
   gint generation = g_atomic_int_add(&self->analysis_generation, 1) + 1;
   gcheckers_window_analysis_begin_session(self, GCHECKERS_WINDOW_ANALYSIS_MODE_FULL_GAME, jobs->len);
   gcheckers_window_set_analysis_text(self, "Analyzing full game...");
@@ -1988,6 +2015,7 @@ static void gcheckers_window_dispose(GObject *object) {
   self->board_panel = NULL;
   self->analyze_toggle_button = NULL;
   self->analyze_full_button = NULL;
+  self->analysis_depth_scale = NULL;
   self->analysis_buffer = NULL;
   self->sgf_mode_control = NULL;
   G_OBJECT_CLASS(gcheckers_window_parent_class)->dispose(object);
@@ -2270,6 +2298,26 @@ static void gcheckers_window_init(GCheckersWindow *self) {
                    G_CALLBACK(gcheckers_window_on_analyze_full_clicked),
                    self);
   gtk_box_append(GTK_BOX(analysis_panel), self->analyze_full_button);
+
+  GtkWidget *analysis_depth_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+  gtk_widget_set_margin_top(analysis_depth_box, 8);
+  gtk_box_append(GTK_BOX(analysis_panel), analysis_depth_box);
+
+  GtkWidget *analysis_depth_label = gtk_label_new("Analysis depth");
+  gtk_widget_set_halign(analysis_depth_label, GTK_ALIGN_START);
+  gtk_box_append(GTK_BOX(analysis_depth_box), analysis_depth_label);
+
+  self->analysis_depth_scale = GTK_SCALE(gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL,
+                                                                  GCHECKERS_WINDOW_ANALYSIS_DEPTH_MIN,
+                                                                  GCHECKERS_WINDOW_ANALYSIS_DEPTH_MAX,
+                                                                  1));
+  gtk_scale_set_digits(self->analysis_depth_scale, 0);
+  gtk_scale_set_draw_value(self->analysis_depth_scale, TRUE);
+  gtk_widget_set_hexpand(GTK_WIDGET(self->analysis_depth_scale), TRUE);
+  gtk_widget_set_size_request(GTK_WIDGET(self->analysis_depth_scale), 100, -1);
+  gtk_box_append(GTK_BOX(analysis_depth_box), GTK_WIDGET(self->analysis_depth_scale));
+  g_object_set_data(G_OBJECT(self), "analysis-depth-scale", self->analysis_depth_scale);
+  gcheckers_window_set_analysis_depth(self, GCHECKERS_WINDOW_ANALYSIS_DEPTH_DEFAULT);
 
   GtkWidget *graph_widget = analysis_graph_get_widget(self->analysis_graph);
   g_return_if_fail(graph_widget != NULL);

@@ -35,6 +35,8 @@ void gcheckers_window_set_board_orientation_mode(GCheckersWindow *self,
                                                  GCheckersWindowBoardOrientationMode mode);
 void gcheckers_window_set_board_bottom_color(GCheckersWindow *self, CheckersColor bottom_color);
 CheckersColor gcheckers_window_get_board_bottom_color(GCheckersWindow *self);
+void gcheckers_window_set_analysis_depth(GCheckersWindow *self, guint depth);
+guint gcheckers_window_get_analysis_depth(GCheckersWindow *self);
 PlayerControlsPanel *gcheckers_window_get_controls_panel(GCheckersWindow *self);
 GCheckersSgfController *gcheckers_window_get_sgf_controller(GCheckersWindow *self);
 

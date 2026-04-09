@@ -666,6 +666,36 @@ static void test_gcheckers_window_analysis_full_button_exists(void) {
   g_clear_object(&app);
 }
 
+static void test_gcheckers_window_analysis_depth_slider_is_independent(void) {
+  GtkApplication *app = test_gcheckers_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersWindow *window = gcheckers_window_new(app, model);
+
+  g_assert_nonnull(test_gcheckers_window_find_label_with_text(GTK_WIDGET(window), "Analysis depth"));
+
+  GtkWidget *analysis_depth_widget = test_gcheckers_window_get_named_widget(window, "analysis-depth-scale");
+  g_assert_nonnull(analysis_depth_widget);
+  g_assert_true(GTK_IS_RANGE(analysis_depth_widget));
+  g_assert_cmpuint(gcheckers_window_get_analysis_depth(window), ==, 8);
+
+  PlayerControlsPanel *panel = gcheckers_window_get_controls_panel(window);
+  g_assert_nonnull(panel);
+  player_controls_panel_set_computer_depth(panel, 3);
+  test_gcheckers_window_drain_main_context(8);
+
+  g_assert_cmpuint(player_controls_panel_get_computer_depth(panel), ==, 3);
+  g_assert_cmpuint(gcheckers_window_get_analysis_depth(window), ==, 8);
+
+  gcheckers_window_set_analysis_depth(window, 5);
+  test_gcheckers_window_drain_main_context(8);
+  g_assert_cmpuint(gcheckers_window_get_analysis_depth(window), ==, 5);
+  g_assert_cmpuint(player_controls_panel_get_computer_depth(panel), ==, 3);
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
 static void test_gcheckers_window_drawer_visibility_actions(void) {
   GtkApplication *app = test_gcheckers_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
@@ -1176,6 +1206,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/gcheckers-window/sgf-actions-navigate", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/analysis-toggle", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/analysis-full-button", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/analysis-depth-slider", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/drawer-visibility-actions", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/drawer-width-preservation", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/edit-mode-disables-navigation", test_gcheckers_window_skip);
@@ -1223,6 +1254,8 @@ int main(int argc, char **argv) {
                   test_gcheckers_window_sgf_actions_navigate_timeline);
   g_test_add_func("/gcheckers-window/analysis-toggle", test_gcheckers_window_analysis_toggle);
   g_test_add_func("/gcheckers-window/analysis-full-button", test_gcheckers_window_analysis_full_button_exists);
+  g_test_add_func("/gcheckers-window/analysis-depth-slider",
+                  test_gcheckers_window_analysis_depth_slider_is_independent);
   g_test_add_func("/gcheckers-window/drawer-visibility-actions",
                   test_gcheckers_window_drawer_visibility_actions);
   g_test_add_func("/gcheckers-window/drawer-width-preservation",
