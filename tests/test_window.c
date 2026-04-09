@@ -802,6 +802,7 @@ static void test_gcheckers_window_puzzle_mode_solves_and_exits_to_analysis(void)
   g_assert_null(gtk_widget_get_parent(navigation_panel));
   g_assert_null(gtk_widget_get_parent(analysis_panel));
   g_assert_true(gtk_widget_get_visible(puzzle_panel));
+  g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(puzzle_message)), "Puzzle 0000."));
   g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(puzzle_message)),
                           attacker == CHECKERS_COLOR_BLACK ? "Black" : "White"));
   g_assert_false(gtk_widget_is_sensitive(next_button));
@@ -817,7 +818,7 @@ static void test_gcheckers_window_puzzle_mode_solves_and_exits_to_analysis(void)
   test_gcheckers_window_drain_main_context(32);
 
   g_assert_true(gtk_widget_is_sensitive(next_button));
-  g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(puzzle_message)), "Puzzle solved"));
+  g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(puzzle_message)), ==, "");
 
   g_signal_emit_by_name(analyze_button, "clicked");
   test_gcheckers_window_drain_main_context(32);

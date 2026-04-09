@@ -59,6 +59,7 @@ struct _GCheckersWindow {
   CheckersColor board_bottom_color;
   CheckersColor puzzle_saved_board_bottom_color;
   CheckersColor puzzle_attacker;
+  guint puzzle_number;
   guint puzzle_expected_step;
   guint puzzle_wrong_move_source_id;
   GArray *puzzle_steps;
@@ -252,6 +253,34 @@ static gboolean gcheckers_window_puzzle_name_matches(const char *name) {
          g_str_has_suffix(name, ".sgf");
 }
 
+static gboolean gcheckers_window_parse_puzzle_number_from_path(const char *path, guint *out_number) {
+  g_return_val_if_fail(path != NULL, FALSE);
+  g_return_val_if_fail(out_number != NULL, FALSE);
+
+  g_autofree char *name = g_path_get_basename(path);
+  g_return_val_if_fail(name != NULL, FALSE);
+
+  if (!gcheckers_window_puzzle_name_matches(name)) {
+    return FALSE;
+  }
+
+  const char *dash = strrchr(name, '-');
+  const char *dot = strrchr(name, '.');
+  if (dash == NULL || dot == NULL || dot <= dash + 1) {
+    return FALSE;
+  }
+
+  g_autofree char *number_text = g_strndup(dash + 1, (gsize)(dot - dash - 1));
+  char *end_ptr = NULL;
+  guint64 number = g_ascii_strtoull(number_text, &end_ptr, 10);
+  if (end_ptr == number_text || (end_ptr != NULL && *end_ptr != '\0') || number > G_MAXUINT) {
+    return FALSE;
+  }
+
+  *out_number = (guint)number;
+  return TRUE;
+}
+
 static gboolean gcheckers_window_collect_puzzle_paths(const char *dir_path, GPtrArray *out_paths) {
   g_return_val_if_fail(dir_path != NULL, FALSE);
   g_return_val_if_fail(out_paths != NULL, FALSE);
@@ -346,7 +375,9 @@ static void gcheckers_window_set_default_puzzle_message(GCheckersWindow *self) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
 
   g_autofree char *message =
-      g_strdup_printf("Find the best sequence for %s.", gcheckers_window_color_name(self->puzzle_attacker));
+      g_strdup_printf("Puzzle %04u. Find the best sequence for %s.",
+                      self->puzzle_number,
+                      gcheckers_window_color_name(self->puzzle_attacker));
   gcheckers_window_set_puzzle_message(self, message);
 }
 
@@ -927,6 +958,7 @@ static void gcheckers_window_leave_puzzle_mode(GCheckersWindow *self, gboolean r
   self->puzzle_finished = FALSE;
   self->puzzle_expected_step = 0;
   self->puzzle_attacker = CHECKERS_COLOR_WHITE;
+  self->puzzle_number = 0;
   if (self->puzzle_steps != NULL) {
     g_array_unref(self->puzzle_steps);
     self->puzzle_steps = NULL;
@@ -997,6 +1029,9 @@ static gboolean gcheckers_window_enter_puzzle_mode_with_path(GCheckersWindow *se
   self->puzzle_mode = TRUE;
   self->puzzle_finished = FALSE;
   self->puzzle_attacker = state->turn;
+  if (!gcheckers_window_parse_puzzle_number_from_path(path, &self->puzzle_number)) {
+    self->puzzle_number = 0;
+  }
   self->puzzle_expected_step = 0;
   self->puzzle_steps = g_steal_pointer(&steps);
   self->show_navigation_drawer = FALSE;
@@ -2900,6 +2935,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   self->board_bottom_color = CHECKERS_COLOR_WHITE;
   self->puzzle_saved_board_bottom_color = CHECKERS_COLOR_WHITE;
   self->puzzle_attacker = CHECKERS_COLOR_WHITE;
+  self->puzzle_number = 0;
   gcheckers_window_sync_drawer_ui(self);
   gcheckers_window_sync_puzzle_ui(self);
   gcheckers_window_sync_mode_ui(self);
