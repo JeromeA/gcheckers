@@ -734,8 +734,12 @@ static void test_gcheckers_window_analysis_actions_exist(void) {
   GCheckersModel *model = gcheckers_model_new();
   GCheckersWindow *window = gcheckers_window_new(app, model);
 
-  g_assert_nonnull(g_action_map_lookup_action(G_ACTION_MAP(window), "analysis-current-position"));
-  g_assert_nonnull(g_action_map_lookup_action(G_ACTION_MAP(window), "analysis-whole-game"));
+  GAction *current_action = g_action_map_lookup_action(G_ACTION_MAP(window), "analysis-current-position");
+  GAction *full_action = g_action_map_lookup_action(G_ACTION_MAP(window), "analysis-whole-game");
+  g_assert_nonnull(current_action);
+  g_assert_nonnull(full_action);
+  g_assert_null(g_action_get_state(current_action));
+  g_assert_null(g_action_get_state(full_action));
   g_assert_null(test_gcheckers_window_find_toggle_button_with_label(GTK_WIDGET(window), "Analyze this position"));
   g_assert_null(test_gcheckers_window_find_button_with_label(GTK_WIDGET(window), "Analyze full game"));
 

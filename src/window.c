@@ -154,7 +154,6 @@ static void gcheckers_window_sync_puzzle_ui(GCheckersWindow *self);
 static void gcheckers_window_leave_puzzle_mode(GCheckersWindow *self, gboolean restore_drawers);
 static gboolean gcheckers_window_start_random_puzzle_mode(GCheckersWindow *self);
 static void gcheckers_window_sync_drawer_ui_with_capture(GCheckersWindow *self, gboolean capture_current_layout);
-static void gcheckers_window_set_analysis_current_action_state(GCheckersWindow *self, gboolean active);
 static void gcheckers_window_stop_analysis(GCheckersWindow *self);
 
 enum {
@@ -1079,7 +1078,6 @@ static gboolean gcheckers_window_enter_puzzle_mode_with_path(GCheckersWindow *se
   g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), FALSE);
   g_return_val_if_fail(path != NULL, FALSE);
 
-  gcheckers_window_set_analysis_current_action_state(self, FALSE);
   gcheckers_window_stop_analysis(self);
 
   g_autoptr(GError) error = NULL;
@@ -2065,28 +2063,6 @@ static void gcheckers_window_start_full_game_analysis(GCheckersWindow *self) {
   g_thread_unref(thread);
 }
 
-static void gcheckers_window_restart_analysis_if_active(GCheckersWindow *self) {
-  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
-
-  GAction *action = g_action_map_lookup_action(G_ACTION_MAP(self), "analysis-current-position");
-  if (action == NULL || !G_IS_SIMPLE_ACTION(action)) {
-    return;
-  }
-
-  GVariant *state = g_action_get_state(action);
-  gboolean active = state != NULL && g_variant_get_boolean(state);
-  g_clear_pointer(&state, g_variant_unref);
-  if (!active) {
-    return;
-  }
-  if (self->analysis_mode == GCHECKERS_WINDOW_ANALYSIS_MODE_FULL_GAME) {
-    return;
-  }
-
-  gcheckers_window_stop_analysis(self);
-  gcheckers_window_start_analysis(self);
-}
-
 static void gcheckers_window_update_control_state(GCheckersWindow *self) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
 
@@ -2179,7 +2155,6 @@ static void gcheckers_window_on_state_changed(GCheckersModel *model, gpointer us
   gcheckers_window_update_status(self);
   gcheckers_window_update_control_state(self);
   gcheckers_window_maybe_trigger_auto_move(self);
-  gcheckers_window_restart_analysis_if_active(self);
   gcheckers_window_refresh_analysis_graph(self);
 }
 
@@ -2264,8 +2239,6 @@ static void gcheckers_window_on_manual_requested(GCheckersSgfController * /*cont
     }
   }
   gcheckers_window_refresh_analysis_graph(self);
-
-  gcheckers_window_restart_analysis_if_active(self);
 }
 
 static void gcheckers_window_on_sgf_node_changed(GCheckersSgfController * /*controller*/,
@@ -2294,37 +2267,16 @@ static void gcheckers_window_on_analysis_graph_node_activated(AnalysisGraph * /*
   }
 }
 
-static void gcheckers_window_set_analysis_current_action_state(GCheckersWindow *self, gboolean active) {
-  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
-
-  GAction *action = g_action_map_lookup_action(G_ACTION_MAP(self), "analysis-current-position");
-  if (action == NULL || !G_IS_SIMPLE_ACTION(action)) {
-    g_debug("Missing analysis-current-position action");
-    return;
-  }
-
-  g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_boolean(active));
-}
-
-static void gcheckers_window_on_analysis_current_change_state(GSimpleAction *action,
-                                                              GVariant *value,
-                                                              gpointer user_data) {
+static void gcheckers_window_on_analyze_current_position_action(GSimpleAction * /*action*/,
+                                                                GVariant * /*parameter*/,
+                                                                gpointer user_data) {
   GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
 
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
-  g_return_if_fail(G_IS_SIMPLE_ACTION(action));
-  g_return_if_fail(value != NULL);
   g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
 
-  gboolean active = g_variant_get_boolean(value);
-  g_simple_action_set_state(action, value);
-  if (active) {
-    gcheckers_window_stop_analysis(self);
-    gcheckers_window_start_analysis(self);
-    return;
-  }
-
   gcheckers_window_stop_analysis(self);
+  gcheckers_window_start_analysis(self);
 }
 
 static void gcheckers_window_on_analyze_full_game_action(GSimpleAction * /*action*/,
@@ -2333,7 +2285,6 @@ static void gcheckers_window_on_analyze_full_game_action(GSimpleAction * /*actio
   GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
 
-  gcheckers_window_set_analysis_current_action_state(self, FALSE);
   gcheckers_window_stop_analysis(self);
   gcheckers_window_start_full_game_analysis(self);
 }
@@ -2381,7 +2332,8 @@ static void gcheckers_window_on_puzzle_analyze_clicked(GtkButton * /*button*/, g
   gcheckers_window_leave_puzzle_mode(self, TRUE);
   self->show_analysis_drawer = TRUE;
   gcheckers_window_sync_drawer_ui(self);
-  gcheckers_window_set_analysis_current_action_state(self, TRUE);
+  gcheckers_window_stop_analysis(self);
+  gcheckers_window_start_analysis(self);
 }
 
 static void gcheckers_window_on_sgf_rewind(GSimpleAction * /*action*/,
@@ -2780,10 +2732,10 @@ static void gcheckers_window_init(GCheckersWindow *self) {
       },
       {
           .name = "analysis-current-position",
-          .activate = NULL,
+          .activate = gcheckers_window_on_analyze_current_position_action,
           .parameter_type = NULL,
-          .state = "false",
-          .change_state = gcheckers_window_on_analysis_current_change_state,
+          .state = NULL,
+          .change_state = NULL,
           .padding = {0},
       },
       {

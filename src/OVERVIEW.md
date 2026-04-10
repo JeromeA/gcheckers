@@ -12,7 +12,8 @@ and SGF view (middle), and analysis (right). Analysis is launched from shared wi
 processes nodes in reverse order so TT state is reused from later positions first.
 The analysis pane owns its own `Analysis depth` slider; analysis no longer reuses the player `Computer depth`
 setting. Current-position analysis iterates up to the selected depth, and full-game analysis uses the same selected
-depth as a fixed search limit.
+depth as a fixed search limit. Analysis menu entries are one-shot actions, so SGF navigation does not implicitly keep
+restarting current-position analysis.
 Board orientation is runtime-only window state: live games choose `follow-player`, `follow-turn`, or `fixed`
 orientation based on the new-game player modes, and SGF review/manual navigation switches back to `fixed` so analysis
 navigation does not keep rotating the board.
