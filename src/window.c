@@ -34,6 +34,7 @@ struct _GCheckersWindow {
   GtkDropDown *sgf_mode_control;
   GCheckersSgfController *sgf_controller;
   AnalysisGraph *analysis_graph;
+  char *loaded_source_name;
   PlayerRuleset applied_ruleset;
   gulong state_handler_id;
   guint auto_move_source_id;
@@ -154,6 +155,7 @@ static void gcheckers_window_leave_puzzle_mode(GCheckersWindow *self, gboolean r
 static gboolean gcheckers_window_start_random_puzzle_mode(GCheckersWindow *self);
 static void gcheckers_window_sync_drawer_ui_with_capture(GCheckersWindow *self, gboolean capture_current_layout);
 static void gcheckers_window_stop_analysis(GCheckersWindow *self);
+static void gcheckers_window_sync_title(GCheckersWindow *self);
 
 enum {
   GCHECKERS_WINDOW_DEFAULT_BOARD_PANEL_WIDTH = 500,
@@ -469,6 +471,18 @@ static void gcheckers_window_analysis_sync_ui(GCheckersWindow *self) {
   if (!full_game_active && self->analysis_graph != NULL) {
     analysis_graph_clear_progress_node(self->analysis_graph);
   }
+}
+
+static void gcheckers_window_sync_title(GCheckersWindow *self) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+
+  if (self->loaded_source_name == NULL || *self->loaded_source_name == '\0') {
+    gtk_window_set_title(GTK_WINDOW(self), "gcheckers");
+    return;
+  }
+
+  g_autofree char *title = g_strdup_printf("gcheckers - %s", self->loaded_source_name);
+  gtk_window_set_title(GTK_WINDOW(self), title);
 }
 
 static void gcheckers_window_capture_panel_widths(GCheckersWindow *self) {
@@ -989,6 +1003,8 @@ static void gcheckers_window_start_new_game(GCheckersWindow *self) {
   gcheckers_model_reset(self->model);
   board_view_clear_selection(self->board_view);
   gcheckers_sgf_controller_new_game(self->sgf_controller);
+  g_clear_pointer(&self->loaded_source_name, g_free);
+  gcheckers_window_sync_title(self);
 }
 
 static gboolean gcheckers_window_revert_wrong_puzzle_move_cb(gpointer user_data) {
@@ -1084,6 +1100,7 @@ static gboolean gcheckers_window_enter_puzzle_mode_with_path(GCheckersWindow *se
     g_debug("Failed to load puzzle file %s: %s", path, error != NULL ? error->message : "unknown error");
     return FALSE;
   }
+  gcheckers_window_set_loaded_source_path(self, path);
 
   SgfTree *tree = gcheckers_sgf_controller_get_tree(self->sgf_controller);
   if (tree == NULL) {
@@ -2563,6 +2580,7 @@ static void gcheckers_window_dispose(GObject *object) {
     gcheckers_widget_remove_from_parent(self->analysis_panel);
     g_clear_object(&self->analysis_panel);
   }
+  g_clear_pointer(&self->loaded_source_name, g_free);
   if (self->puzzle_steps != NULL) {
     g_array_unref(self->puzzle_steps);
     self->puzzle_steps = NULL;
@@ -2715,8 +2733,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
                                   G_N_ELEMENTS(window_actions),
                                   self);
   gcheckers_window_install_sgf_file_actions(self);
-
-  gtk_window_set_title(GTK_WINDOW(self), "gcheckers");
+  gcheckers_window_sync_title(self);
   gtk_window_set_default_size(GTK_WINDOW(self), 1100, 700);
 
   gcheckers_style_init();
@@ -3020,6 +3037,16 @@ GCheckersSgfController *gcheckers_window_get_sgf_controller(GCheckersWindow *sel
   }
 
   return self->sgf_controller;
+}
+
+void gcheckers_window_set_loaded_source_path(GCheckersWindow *self, const char *path) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+
+  g_clear_pointer(&self->loaded_source_name, g_free);
+  if (path != NULL && *path != '\0') {
+    self->loaded_source_name = g_path_get_basename(path);
+  }
+  gcheckers_window_sync_title(self);
 }
 
 GCheckersWindow *gcheckers_window_new(GtkApplication *app, GCheckersModel *model) {
