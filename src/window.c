@@ -115,7 +115,6 @@ typedef struct {
 
 typedef struct {
   const SgfNode *node;
-  GArray *moves;
 } GCheckersWindowFullNodeJob;
 
 typedef struct {
@@ -1762,7 +1761,6 @@ static void gcheckers_window_full_node_job_free(gpointer data) {
     return;
   }
 
-  g_clear_pointer(&job->moves, g_array_unref);
   g_free(job);
 }
 
@@ -1780,44 +1778,8 @@ static GPtrArray *gcheckers_window_build_full_analysis_jobs(SgfTree *tree) {
     const SgfNode *node = g_ptr_array_index(nodes, i);
     g_return_val_if_fail(node != NULL, NULL);
 
-    g_autoptr(GPtrArray) path = sgf_tree_build_path_to_node(tree, node);
-    if (path == NULL) {
-      g_debug("Failed to build SGF path for full analysis node");
-      g_ptr_array_unref(jobs);
-      return NULL;
-    }
-
     GCheckersWindowFullNodeJob *job = g_new0(GCheckersWindowFullNodeJob, 1);
     job->node = node;
-    job->moves = g_array_new(FALSE, FALSE, sizeof(CheckersMove));
-
-    gboolean path_ok = TRUE;
-    for (guint step_i = 1; step_i < path->len; ++step_i) {
-      const SgfNode *step = g_ptr_array_index(path, step_i);
-      g_return_val_if_fail(step != NULL, NULL);
-
-      CheckersMove move = {0};
-      SgfColor color = SGF_COLOR_NONE;
-      gboolean has_move = FALSE;
-      g_autoptr(GError) error = NULL;
-      if (!sgf_move_props_try_parse_node(step, &color, &move, &has_move, &error)) {
-        g_debug("Failed to parse SGF path move for full analysis node %u: %s",
-                sgf_node_get_move_number(step),
-                error != NULL ? error->message : "unknown error");
-        path_ok = FALSE;
-        break;
-      }
-      if (!has_move) {
-        continue;
-      }
-      g_array_append_val(job->moves, move);
-    }
-
-    if (!path_ok) {
-      gcheckers_window_full_node_job_free(job);
-      g_ptr_array_unref(jobs);
-      return NULL;
-    }
 
     g_ptr_array_add(jobs, job);
   }
@@ -1847,18 +1809,14 @@ static gpointer gcheckers_window_full_analysis_thread(gpointer user_data) {
 
     Game game = {0};
     game_init_with_rules(&game, task->rules);
-    gboolean replay_ok = TRUE;
-    for (guint move_i = 0; move_i < job->moves->len; ++move_i) {
-      const CheckersMove *move = &g_array_index(job->moves, CheckersMove, move_i);
-      if (game_apply_move(&game, move) != 0) {
-        replay_ok = FALSE;
-        break;
-      }
-    }
+    g_autoptr(GError) replay_error = NULL;
+    gboolean replay_ok = gcheckers_sgf_controller_replay_node_into_game(job->node, &game, &replay_error);
 
     if (!replay_ok) {
       game_destroy(&game);
-      g_debug("Skipping full analysis for SGF node with invalid replay path");
+      g_debug("Skipping full analysis for SGF node %u: %s",
+              sgf_node_get_move_number(job->node),
+              replay_error != NULL ? replay_error->message : "unknown error");
       g_autofree char *text = g_strdup_printf("Full-game analysis: %u/%u nodes processed (replay skipped).",
                                               i + 1,
                                               task->jobs->len);

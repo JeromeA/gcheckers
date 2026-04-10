@@ -21,3 +21,15 @@ moves due to forced tactical continuations.
 
 The fix adds a dedicated public API `checkers_ai_evaluate_static_material()` and updates puzzle continuation building to
 use that static evaluator for target matching.
+
+## Full-game analysis rebuilt puzzle nodes from move replay instead of SGF state
+
+Full-game analysis should reconstruct each target node from the SGF itself so setup-root puzzles, edited positions, and
+variation nodes analyze the exact position shown in the UI.
+
+The full-game worker built a move list for each SGF node and replayed those moves from a fresh default `Game`. That
+ignored SGF setup properties such as `AE`, `AB`, `AW`, `ABK`, `AWK`, and `PL`, so setup-root puzzle nodes could fail
+replay, report `replay skipped`, and end up with missing saved analysis.
+
+The fix centralizes SGF node replay into a shared helper in `sgf_controller.c` that applies setup properties and moves
+from root to the exact node. Full-game analysis now uses that helper instead of a move-only reconstruction path.

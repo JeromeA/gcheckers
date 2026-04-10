@@ -21,6 +21,7 @@ G_DECLARE_FINAL_TYPE(GCheckersSgfController,
 GCheckersSgfController *gcheckers_sgf_controller_new(BoardView *board_view);
 void gcheckers_sgf_controller_set_model(GCheckersSgfController *self, GCheckersModel *model);
 void gcheckers_sgf_controller_new_game(GCheckersSgfController *self);
+gboolean gcheckers_sgf_controller_replay_node_into_game(const SgfNode *node, Game *game, GError **error);
 gboolean gcheckers_sgf_controller_apply_move(GCheckersSgfController *self, const CheckersMove *move);
 gboolean gcheckers_sgf_controller_step_ai_move(GCheckersSgfController *self, guint depth, CheckersMove *out_move);
 gboolean gcheckers_sgf_controller_rewind_to_start(GCheckersSgfController *self);

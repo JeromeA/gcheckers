@@ -2,8 +2,10 @@
 
 #include "board_view.h"
 #include "checkers_model.h"
+#include "rulesets.h"
 #include "sgf_controller.h"
 #include "sgf_io.h"
+#include "sgf_move_props.h"
 
 #include <glib/gstdio.h>
 #include <string.h>
@@ -521,6 +523,43 @@ static void test_gcheckers_sgf_controller_save_position_file(void) {
   g_clear_object(&board_view);
 }
 
+static void test_gcheckers_sgf_controller_replay_node_into_game_applies_setup_root(void) {
+  g_autoptr(SgfTree) tree = sgf_tree_new();
+  g_assert_nonnull(tree);
+
+  SgfNode *root = (SgfNode *)sgf_tree_get_root(tree);
+  g_assert_nonnull(root);
+  g_assert_true(sgf_node_add_property(root, "AE", "1:50"));
+  g_assert_true(sgf_node_add_property(root, "AW", "31"));
+  g_assert_true(sgf_node_add_property(root, "AWK", "31"));
+  g_assert_true(sgf_node_add_property(root, "AB", "8"));
+  g_assert_true(sgf_node_add_property(root, "ABK", "8"));
+  g_assert_true(sgf_node_add_property(root, "PL", "B"));
+
+  SgfNode *child = (SgfNode *)sgf_tree_append_node(tree);
+  g_assert_nonnull(child);
+  CheckersMove move = {0};
+  move.length = 2;
+  move.path[0] = 7;
+  move.path[1] = 11;
+  g_autoptr(GError) move_error = NULL;
+  g_assert_true(sgf_move_props_set_move(child, SGF_COLOR_BLACK, &move, &move_error));
+  g_assert_no_error(move_error);
+
+  Game game = {0};
+  game_init_with_rules(&game, checkers_ruleset_get_rules(PLAYER_RULESET_INTERNATIONAL));
+  g_autoptr(GError) replay_error = NULL;
+  g_assert_true(gcheckers_sgf_controller_replay_node_into_game((const SgfNode *)child, &game, &replay_error));
+  g_assert_no_error(replay_error);
+
+  g_assert_cmpuint(game.state.turn, ==, CHECKERS_COLOR_WHITE);
+  g_assert_cmpint(board_get(&game.state.board, 7), ==, CHECKERS_PIECE_EMPTY);
+  g_assert_cmpint(board_get(&game.state.board, 11), ==, CHECKERS_PIECE_BLACK_KING);
+  g_assert_cmpint(board_get(&game.state.board, 30), ==, CHECKERS_PIECE_WHITE_KING);
+
+  game_destroy(&game);
+}
+
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   if (!gtk_init_check()) {
@@ -533,6 +572,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/sgf-controller/navigation-forward-to-branch-and-end", test_gcheckers_sgf_controller_skip);
     g_test_add_func("/sgf-controller/select-node-emits-node-changed", test_gcheckers_sgf_controller_skip);
     g_test_add_func("/sgf-controller/load-applies-setup-properties", test_gcheckers_sgf_controller_skip);
+    g_test_add_func("/sgf-controller/replay-node-into-game-applies-setup-root", test_gcheckers_sgf_controller_skip);
     g_test_add_func("/sgf-controller/save-position-file", test_gcheckers_sgf_controller_skip);
     return g_test_run();
   }
@@ -553,6 +593,8 @@ int main(int argc, char **argv) {
                   test_gcheckers_sgf_controller_select_node_emits_node_changed);
   g_test_add_func("/sgf-controller/load-applies-setup-properties",
                   test_gcheckers_sgf_controller_load_applies_setup_properties);
+  g_test_add_func("/sgf-controller/replay-node-into-game-applies-setup-root",
+                  test_gcheckers_sgf_controller_replay_node_into_game_applies_setup_root);
   g_test_add_func("/sgf-controller/save-position-file", test_gcheckers_sgf_controller_save_position_file);
   return g_test_run();
 }

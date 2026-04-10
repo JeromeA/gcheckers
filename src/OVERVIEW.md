@@ -13,7 +13,9 @@ processes nodes in reverse order so TT state is reused from later positions firs
 The analysis pane owns its own `Analysis depth` slider; analysis no longer reuses the player `Computer depth`
 setting. Current-position analysis iterates up to the selected depth, and full-game analysis uses the same selected
 depth as a fixed search limit. Analysis menu entries are one-shot actions, so SGF navigation does not implicitly keep
-restarting current-position analysis.
+restarting current-position analysis. Full-game analysis reconstructs each node position from SGF replay semantics
+(setup properties plus moves from root to the exact node), so setup-root puzzle files and edited SGF setup nodes share
+the same position source of truth as normal controller navigation.
 Board orientation is runtime-only window state: live games choose `follow-player`, `follow-turn`, or `fixed`
 orientation based on the new-game player modes, and SGF review/manual navigation switches back to `fixed` so analysis
 navigation does not keep rotating the board.

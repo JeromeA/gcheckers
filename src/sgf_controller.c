@@ -402,6 +402,54 @@ static GPtrArray *gcheckers_sgf_controller_build_node_path(const SgfNode *node) 
   return path;
 }
 
+gboolean gcheckers_sgf_controller_replay_node_into_game(const SgfNode *node, Game *game, GError **error) {
+  g_return_val_if_fail(node != NULL, FALSE);
+  g_return_val_if_fail(game != NULL, FALSE);
+
+  g_autoptr(GPtrArray) path = gcheckers_sgf_controller_build_node_path(node);
+  if (path == NULL) {
+    g_set_error_literal(error,
+                        g_quark_from_static_string("gcheckers-sgf-controller-error"),
+                        12,
+                        "Unable to build SGF node path");
+    return FALSE;
+  }
+
+  for (guint i = 0; i < path->len; ++i) {
+    const SgfNode *step = g_ptr_array_index(path, i);
+    g_autoptr(GError) setup_error = NULL;
+    if (!gcheckers_sgf_controller_apply_setup_node(&game->state, step, &setup_error)) {
+      g_propagate_error(error, g_steal_pointer(&setup_error));
+      return FALSE;
+    }
+
+    CheckersMove move = {0};
+    gboolean has_move = FALSE;
+    if (!gcheckers_sgf_controller_extract_node_move(step, &move, &has_move)) {
+      g_set_error(error,
+                  g_quark_from_static_string("gcheckers-sgf-controller-error"),
+                  13,
+                  "Unable to extract SGF move for node %u",
+                  sgf_node_get_move_number(step));
+      return FALSE;
+    }
+    if (!has_move) {
+      continue;
+    }
+
+    if (game_apply_move(game, &move) != 0) {
+      g_set_error(error,
+                  g_quark_from_static_string("gcheckers-sgf-controller-error"),
+                  14,
+                  "Unable to replay SGF move %u",
+                  sgf_node_get_move_number(step));
+      return FALSE;
+    }
+  }
+
+  return TRUE;
+}
+
 static gboolean gcheckers_sgf_controller_replay_to_node(GCheckersSgfController *self, const SgfNode *node) {
   g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(GCHECKERS_IS_MODEL(self->model), FALSE);
@@ -411,48 +459,20 @@ static gboolean gcheckers_sgf_controller_replay_to_node(GCheckersSgfController *
   gcheckers_model_reset(self->model);
   board_view_clear_selection(self->board_view);
 
-  GPtrArray *path = gcheckers_sgf_controller_build_node_path(node);
-  if (!path) {
-    g_debug("Failed to build SGF node path for replay");
-    self->is_replaying = FALSE;
-    return FALSE;
-  }
-
   gboolean success = TRUE;
   Game game = {0};
   if (!gcheckers_model_copy_game(self->model, &game)) {
     g_debug("Failed to copy model game for SGF replay");
-    g_ptr_array_unref(path);
     self->is_replaying = FALSE;
     return FALSE;
   }
 
-  for (guint i = 0; i < path->len; ++i) {
-    const SgfNode *step = g_ptr_array_index(path, i);
-    g_autoptr(GError) setup_error = NULL;
-    if (!gcheckers_sgf_controller_apply_setup_node(&game.state, step, &setup_error)) {
-      g_debug("Failed to apply SGF setup for node %u: %s",
-              sgf_node_get_move_number(step),
-              setup_error != NULL ? setup_error->message : "unknown error");
-      success = FALSE;
-      break;
-    }
-
-    CheckersMove move = {0};
-    gboolean has_move = FALSE;
-    if (!gcheckers_sgf_controller_extract_node_move(step, &move, &has_move)) {
-      success = FALSE;
-      break;
-    }
-    if (!has_move) {
-      continue;
-    }
-
-    if (game_apply_move(&game, &move) != 0) {
-      g_debug("Failed to replay SGF move %u", sgf_node_get_move_number(step));
-      success = FALSE;
-      break;
-    }
+  g_autoptr(GError) replay_error = NULL;
+  if (!gcheckers_sgf_controller_replay_node_into_game(node, &game, &replay_error)) {
+    g_debug("Failed to replay SGF node %u: %s",
+            sgf_node_get_move_number(node),
+            replay_error != NULL ? replay_error->message : "unknown error");
+    success = FALSE;
   }
 
   if (success && !gcheckers_model_set_state(self->model, &game.state)) {
@@ -461,7 +481,6 @@ static gboolean gcheckers_sgf_controller_replay_to_node(GCheckersSgfController *
   }
 
   game_destroy(&game);
-  g_ptr_array_unref(path);
   self->is_replaying = FALSE;
   return success;
 }
