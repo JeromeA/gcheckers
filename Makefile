@@ -40,22 +40,11 @@ COV_GCOV_DIR := $(COV_DIR)/gcov
 COV_REPORT_DIR := $(COV_DIR)/report
 COV_OBJS := $(SRCS:%.c=$(COV_OBJ_DIR)/%.o)
 COV_BOARD_OBJS := $(BOARD_SRCS:%.c=$(COV_OBJ_DIR)/%.o)
-SCREENSHOT ?= gcheckers.png
-BROADWAY_DISPLAY_NUM ?= 5
-BROADWAY_PORT ?= 8085
-BROADWAY_TEST_DISPLAY ?= 40
-BROADWAY_TEST_PORT ?= 8120
-BROADWAY_STARTUP_DELAY ?= 0.3
-SCREEN_SIZE ?= 1280x720
-BROADWAYD_BIN ?= gtk4-broadwayd
-CHROMIUM_BIN ?= google-chrome
-XDG_RUNTIME_DIR ?= /tmp/xdg-runtime
-BROADWAY_TEST_LOG ?= /tmp/broadwayd-$(BROADWAY_TEST_PORT).log
 GSETTINGS_SCHEMA_DIR := data/schemas
 GSETTINGS_SCHEMA_XML := $(GSETTINGS_SCHEMA_DIR)/com.example.gcheckers.gschema.xml
 GSETTINGS_SCHEMA_COMPILED := $(GSETTINGS_SCHEMA_DIR)/gschemas.compiled
 
-.PHONY: all clean test coverage screenshot test_screenshot test_sgf_view_broadway
+.PHONY: all clean test coverage
 
 all: $(GSETTINGS_SCHEMA_COMPILED) libgame.a create_puzzles find_position gcheckers
 
@@ -69,7 +58,7 @@ test: test_game test_game_print test_board test_move_gen test_checkers_model \
 	test_ai_transposition_table test_position_search \
 	test_position_predicate test_sgf_tree test_sgf_io test_sgf_view test_bga_client \
 	test_file_dialog_history test_board_view test_player_controls_panel test_sgf_controller test_window \
-	test_puzzle_generation test_screenshot
+	test_puzzle_generation
 	./test_game
 	./test_game_print
 	./test_board
@@ -80,11 +69,14 @@ test: test_game test_game_print test_board test_move_gen test_checkers_model \
 	./test_position_predicate
 	./test_sgf_tree
 	./test_sgf_io
+	./test_sgf_view
 	./test_bga_client
 	./test_file_dialog_history
 	./test_puzzle_generation
-	$(MAKE) test_sgf_view_broadway
-	$(MAKE) test_gtk_broadway
+	./test_board_view
+	./test_player_controls_panel
+	./test_sgf_controller
+	./test_window
 
 test_game: tests/test_game.c $(SRCS) src/game.h
 	$(CC) $(CFLAGS) -o $@ tests/test_game.c $(SRCS) $(LDLIBS)
@@ -140,56 +132,6 @@ test_sgf_view: tests/test_sgf_view.c $(SGF_VIEW_SRCS) $(SGF_TREE_SRCS) $(WIDGET_
 	src/sgf_view.h src/sgf_tree.h $(WIDGET_UTILS_HDRS)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_sgf_view.c $(SGF_VIEW_SRCS) $(SGF_TREE_SRCS) \
 		$(WIDGET_UTILS_SRCS) $(LDLIBS) $(GTK_LIBS)
-
-test_sgf_view_broadway: test_sgf_view
-	@if ! command -v $(BROADWAYD_BIN) >/dev/null 2>&1; then \
-		echo "Skipping Broadway SGF view test: $(BROADWAYD_BIN) not available."; \
-		exit 0; \
-	fi; \
-	mkdir -p "$(XDG_RUNTIME_DIR)"; \
-	chmod 700 "$(XDG_RUNTIME_DIR)"; \
-	broadway_pid=""; \
-	cleanup() { \
-		if [ -n "$$broadway_pid" ]; then \
-			kill "$$broadway_pid" >/dev/null 2>&1 || true; \
-			wait "$$broadway_pid" >/dev/null 2>&1 || true; \
-		fi; \
-	}; \
-	trap cleanup EXIT INT TERM; \
-	XDG_RUNTIME_DIR="$(XDG_RUNTIME_DIR)" $(BROADWAYD_BIN) --port "$(BROADWAY_TEST_PORT)" \
-		":$(BROADWAY_TEST_DISPLAY)" >"$(BROADWAY_TEST_LOG)" 2>&1 & \
-	broadway_pid=$$!; \
-	sleep "$(BROADWAY_STARTUP_DELAY)"; \
-	XDG_RUNTIME_DIR="$(XDG_RUNTIME_DIR)" GDK_BACKEND=broadway \
-		BROADWAY_DISPLAY=":$(BROADWAY_TEST_DISPLAY)" ./test_sgf_view
-
-test_gtk_broadway: test_board_view test_player_controls_panel test_sgf_controller test_window
-	@if ! command -v $(BROADWAYD_BIN) >/dev/null 2>&1; then \
-		echo "Skipping GTK tests: $(BROADWAYD_BIN) not available."; \
-		exit 0; \
-	fi; \
-	mkdir -p "$(XDG_RUNTIME_DIR)"; \
-	chmod 700 "$(XDG_RUNTIME_DIR)"; \
-	broadway_pid=""; \
-	cleanup() { \
-		if [ -n "$$broadway_pid" ]; then \
-			kill "$$broadway_pid" >/dev/null 2>&1 || true; \
-			wait "$$broadway_pid" >/dev/null 2>&1 || true; \
-		fi; \
-	}; \
-	trap cleanup EXIT INT TERM; \
-	XDG_RUNTIME_DIR="$(XDG_RUNTIME_DIR)" $(BROADWAYD_BIN) --port "$(BROADWAY_TEST_PORT)" \
-		":$(BROADWAY_TEST_DISPLAY)" >"$(BROADWAY_TEST_LOG)" 2>&1 & \
-	broadway_pid=$$!; \
-	sleep "$(BROADWAY_STARTUP_DELAY)"; \
-	XDG_RUNTIME_DIR="$(XDG_RUNTIME_DIR)" GDK_BACKEND=broadway \
-		BROADWAY_DISPLAY=":$(BROADWAY_TEST_DISPLAY)" ./test_board_view; \
-	XDG_RUNTIME_DIR="$(XDG_RUNTIME_DIR)" GDK_BACKEND=broadway \
-		BROADWAY_DISPLAY=":$(BROADWAY_TEST_DISPLAY)" ./test_player_controls_panel; \
-	XDG_RUNTIME_DIR="$(XDG_RUNTIME_DIR)" GDK_BACKEND=broadway \
-		BROADWAY_DISPLAY=":$(BROADWAY_TEST_DISPLAY)" ./test_sgf_controller; \
-	XDG_RUNTIME_DIR="$(XDG_RUNTIME_DIR)" GDK_BACKEND=broadway \
-		BROADWAY_DISPLAY=":$(BROADWAY_TEST_DISPLAY)" ./test_window
 
 test_board_view: tests/test_board_view.c src/board_view.c src/board_view.h src/board_grid.c src/board_grid.h \
 	src/board_square.c src/board_square.h src/board_move_overlay.c src/board_move_overlay.h \
@@ -259,21 +201,6 @@ test_puzzle_generation: tests/test_puzzle_generation.c src/puzzle_generation.c s
 	src/board.h
 	$(CC) $(CFLAGS) -o $@ tests/test_puzzle_generation.c src/puzzle_generation.c $(LDLIBS)
 
-test_screenshot: gcheckers tools/screenshot_gcheckers.sh
-	@if ! command -v $(BROADWAYD_BIN) >/dev/null 2>&1; then \
-		echo "Skipping screenshot test: $(BROADWAYD_BIN) not available."; \
-		exit 0; \
-	fi; \
-	if ! command -v $(CHROMIUM_BIN) >/dev/null 2>&1; then \
-		echo "Skipping screenshot test: Chrome not available."; \
-		exit 0; \
-	fi; \
-	tmp_file=$$(mktemp -t gcheckers_screenshot.XXXXXX.png); \
-		BROADWAY_DISPLAY_NUM=5 BROADWAY_PORT=8085 SCREEN_SIZE=1280x720 \
-		CHROMIUM_BIN="$(CHROMIUM_BIN)" tools/screenshot_gcheckers.sh "$$tmp_file"; \
-		test -s "$$tmp_file"; \
-		rm -f "$$tmp_file"
-
 gcheckers: $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c src/application.c src/window.c \
 	src/new_game_dialog.c \
 	src/rulesets.c src/rulesets.h \
@@ -311,13 +238,9 @@ clean:
 	rm -f $(OBJS) libgame.a test_game test_game_print test_board test_move_gen test_checkers_model \
 		test_ai_transposition_table test_position_search test_position_predicate test_sgf_tree test_sgf_io test_sgf_view \
 		test_bga_client test_file_dialog_history test_board_view test_player_controls_panel test_sgf_controller \
-		test_window test_screenshot find_position gcheckers
+		test_window find_position gcheckers
 	rm -f $(GSETTINGS_SCHEMA_COMPILED)
 	rm -rf $(COV_DIR)
-
-screenshot: gcheckers tools/screenshot_gcheckers.sh
-	BROADWAY_DISPLAY_NUM=$(BROADWAY_DISPLAY_NUM) BROADWAY_PORT=$(BROADWAY_PORT) \
-		SCREEN_SIZE=$(SCREEN_SIZE) tools/screenshot_gcheckers.sh $(SCREENSHOT)
 
 $(COV_OBJ_DIR)/%.o: %.c src/game.h src/board.h src/checkers_constants.h
 	@mkdir -p $(dir $@)

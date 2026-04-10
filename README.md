@@ -16,10 +16,6 @@ Build dependencies:
   - libcurl development headers
   - glib-compile-schemas
 
-Optional test/screenshot dependencies:
-
-  - gtk4-broadwayd for Broadway-based GTK tests and screenshots
-
 Build the project:
 
   make
