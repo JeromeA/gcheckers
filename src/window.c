@@ -1480,15 +1480,16 @@ static void gcheckers_window_analysis_publish_status(GCheckersWindow *self,
                                                      gboolean canceled,
                                                      const char *text) {
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
-  g_return_if_fail(text != NULL);
 
   GCheckersWindowAnalysisEvent *event = g_new0(GCheckersWindowAnalysisEvent, 1);
   event->generation = generation;
   event->mode = mode;
   event->done = done;
   event->canceled = canceled;
-  event->is_status = TRUE;
-  event->status_text = g_strdup(text);
+  if (text != NULL) {
+    event->is_status = TRUE;
+    event->status_text = g_strdup(text);
+  }
   gcheckers_window_analysis_enqueue_event(self, event);
 }
 
@@ -1746,7 +1747,7 @@ static gpointer gcheckers_window_analysis_thread(gpointer user_data) {
                                            GCHECKERS_WINDOW_ANALYSIS_MODE_CURRENT,
                                            TRUE,
                                            gcheckers_window_should_cancel_analysis(task),
-                                           "Analysis stopped.");
+                                           gcheckers_window_should_cancel_analysis(task) ? "Analysis stopped." : NULL);
 
   g_object_unref(task->self);
   checkers_ai_tt_free(task->tt);
@@ -2324,16 +2325,20 @@ static void gcheckers_window_on_puzzle_next_clicked(GtkButton * /*button*/, gpoi
 static void gcheckers_window_on_puzzle_analyze_clicked(GtkButton * /*button*/, gpointer user_data) {
   GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self->sgf_controller));
 
   if (!self->puzzle_mode) {
     return;
   }
 
   gcheckers_window_leave_puzzle_mode(self, TRUE);
+  if (!gcheckers_sgf_controller_rewind_to_start(self->sgf_controller)) {
+    g_debug("Failed to rewind puzzle before analysis");
+  }
   self->show_analysis_drawer = TRUE;
   gcheckers_window_sync_drawer_ui(self);
   gcheckers_window_stop_analysis(self);
-  gcheckers_window_start_analysis(self);
+  gcheckers_window_start_full_game_analysis(self);
 }
 
 static void gcheckers_window_on_sgf_rewind(GSimpleAction * /*action*/,

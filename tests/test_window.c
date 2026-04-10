@@ -844,11 +844,28 @@ static void test_gcheckers_window_puzzle_mode_solves_and_exits_to_analysis(void)
   g_assert_true(gtk_widget_is_sensitive(next_button));
   g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(puzzle_message)), ==, "");
 
+  GCheckersSgfController *controller = gcheckers_window_get_sgf_controller(window);
+  g_assert_nonnull(controller);
+  SgfTree *tree = gcheckers_sgf_controller_get_tree(controller);
+  g_assert_nonnull(tree);
+  g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 1);
+
   g_signal_emit_by_name(analyze_button, "clicked");
   test_gcheckers_window_drain_main_context(32);
   g_assert_nonnull(gtk_widget_get_parent(analysis_panel));
   g_assert_false(gtk_widget_get_visible(puzzle_panel));
   g_assert_cmpint(test_gcheckers_window_get_size_request_width(board_panel), ==, initial_board_width);
+  g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 0);
+  GtkWidget *analysis_view = test_gcheckers_window_find_by_type(analysis_panel, GTK_TYPE_TEXT_VIEW);
+  g_assert_nonnull(analysis_view);
+  GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(analysis_view));
+  g_assert_nonnull(buffer);
+  GtkTextIter start_iter;
+  GtkTextIter end_iter;
+  gtk_text_buffer_get_bounds(buffer, &start_iter, &end_iter);
+  g_autofree char *analysis_text = gtk_text_buffer_get_text(buffer, &start_iter, &end_iter, FALSE);
+  g_assert_nonnull(analysis_text);
+  g_assert_nonnull(strstr(analysis_text, "Analyzing full game"));
 
   g_unsetenv("GCHECKERS_PUZZLES_DIR");
   g_clear_object(&window);
