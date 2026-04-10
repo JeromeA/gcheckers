@@ -19,6 +19,8 @@ navigation does not keep rotating the board.
 Puzzle mode loads a random `puzzle-*.sgf` / `puzzles-*.sgf` from the puzzle directory (`GCHECKERS_PUZZLES_DIR` or the
 default `puzzles/`), hides both drawers, disables SGF/review actions, shows puzzle-only `Next puzzle` and `Analyze`
 buttons, and validates the player's moves against the SGF main-line solution while auto-playing defender replies.
+Puzzle entry forces a fixed attacker-at-bottom orientation, while puzzle exit restores only layout/drawer state and
+leaves the current board orientation unchanged.
 Adds an `Analysis` menubar submenu for current-position and whole-game analysis, plus a `View` submenu with
 independent toggles for the navigation drawer and analysis drawer; hiding both removes the entire right-side drawer
 split while preserving the board pane.

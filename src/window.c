@@ -67,9 +67,7 @@ struct _GCheckersWindow {
   gint puzzle_analysis_panel_width;
   gint puzzle_extra_width;
   GCheckersWindowBoardOrientationMode board_orientation_mode;
-  GCheckersWindowBoardOrientationMode puzzle_saved_board_orientation_mode;
   CheckersColor board_bottom_color;
-  CheckersColor puzzle_saved_board_bottom_color;
   CheckersColor puzzle_attacker;
   guint puzzle_number;
   guint puzzle_expected_step;
@@ -1067,13 +1065,10 @@ static void gcheckers_window_leave_puzzle_mode(GCheckersWindow *self, gboolean r
     self->puzzle_steps = NULL;
   }
 
-  self->board_orientation_mode = self->puzzle_saved_board_orientation_mode;
-  self->board_bottom_color = self->puzzle_saved_board_bottom_color;
   if (restore_drawers) {
     self->show_navigation_drawer = self->puzzle_saved_show_navigation_drawer;
     self->show_analysis_drawer = self->puzzle_saved_show_analysis_drawer;
   }
-  gcheckers_window_sync_board_orientation(self);
   gcheckers_window_sync_drawer_ui_with_capture(self, FALSE);
   gcheckers_window_sync_puzzle_ui(self);
   gcheckers_window_sync_mode_ui(self);
@@ -1121,8 +1116,6 @@ static gboolean gcheckers_window_enter_puzzle_mode_with_path(GCheckersWindow *se
     gcheckers_window_capture_panel_widths(self);
     self->puzzle_saved_show_navigation_drawer = self->show_navigation_drawer;
     self->puzzle_saved_show_analysis_drawer = self->show_analysis_drawer;
-    self->puzzle_saved_board_orientation_mode = self->board_orientation_mode;
-    self->puzzle_saved_board_bottom_color = self->board_bottom_color;
     self->puzzle_board_panel_width = self->board_panel_width;
     self->puzzle_navigation_panel_width = self->navigation_panel_width;
     self->puzzle_analysis_panel_width = self->analysis_panel_width;
@@ -3081,9 +3074,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   self->puzzle_analysis_panel_width = GCHECKERS_WINDOW_DEFAULT_ANALYSIS_PANEL_WIDTH;
   self->puzzle_extra_width = 0;
   self->board_orientation_mode = GCHECKERS_WINDOW_BOARD_ORIENTATION_FIXED;
-  self->puzzle_saved_board_orientation_mode = GCHECKERS_WINDOW_BOARD_ORIENTATION_FIXED;
   self->board_bottom_color = CHECKERS_COLOR_WHITE;
-  self->puzzle_saved_board_bottom_color = CHECKERS_COLOR_WHITE;
   self->puzzle_attacker = CHECKERS_COLOR_WHITE;
   self->puzzle_number = 0;
   gcheckers_window_sync_drawer_ui(self);

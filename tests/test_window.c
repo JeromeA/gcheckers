@@ -426,10 +426,10 @@ static GtkWidget *test_gcheckers_window_get_named_widget(GCheckersWindow *window
 
 static gboolean test_gcheckers_window_write_single_move_puzzle(char **out_dir_path,
                                                                CheckersMove *out_move,
-                                                               CheckersColor *out_attacker) {
+                                                               CheckersColor attacker) {
   g_return_val_if_fail(out_dir_path != NULL, FALSE);
   g_return_val_if_fail(out_move != NULL, FALSE);
-  g_return_val_if_fail(out_attacker != NULL, FALSE);
+  g_return_val_if_fail(attacker == CHECKERS_COLOR_WHITE || attacker == CHECKERS_COLOR_BLACK, FALSE);
 
   g_autoptr(GError) error = NULL;
   g_autofree char *dir_path = g_dir_make_tmp("gcheckers-window-puzzles-XXXXXX", &error);
@@ -454,7 +454,7 @@ static gboolean test_gcheckers_window_write_single_move_puzzle(char **out_dir_pa
   guint8 black_square = (guint8)black_square_i;
   board_set(&state.board, white_square, CHECKERS_PIECE_WHITE_KING);
   board_set(&state.board, black_square, CHECKERS_PIECE_BLACK_KING);
-  state.turn = CHECKERS_COLOR_WHITE;
+  state.turn = attacker;
   state.winner = CHECKERS_WINNER_NONE;
   g_assert_true(gcheckers_model_set_state(model, &state));
 
@@ -475,17 +475,19 @@ static gboolean test_gcheckers_window_write_single_move_puzzle(char **out_dir_pa
   g_assert_true(sgf_move_props_format_notation(out_move, notation, sizeof(notation), &error));
   g_assert_no_error(error);
 
-  g_autofree char *content = g_strdup_printf("(;FF[4]CA[UTF-8]GM[40]AE[1:32]AW[%u]AWK[%u]AB[%u]ABK[%u]PL[W];W[%s])",
-                                             white_square + 1,
-                                             white_square + 1,
-                                             black_square + 1,
-                                             black_square + 1,
-                                             notation);
+  g_autofree char *content =
+      g_strdup_printf("(;FF[4]CA[UTF-8]GM[40]AE[1:32]AW[%u]AWK[%u]AB[%u]ABK[%u]PL[%c];%c[%s])",
+                      white_square + 1,
+                      white_square + 1,
+                      black_square + 1,
+                      black_square + 1,
+                      attacker == CHECKERS_COLOR_BLACK ? 'B' : 'W',
+                      attacker == CHECKERS_COLOR_BLACK ? 'B' : 'W',
+                      notation);
   g_autofree char *path = g_build_filename(dir_path, "puzzle-0000.sgf", NULL);
   g_assert_true(g_file_set_contents(path, content, -1, &error));
   g_assert_no_error(error);
 
-  *out_attacker = CHECKERS_COLOR_WHITE;
   *out_dir_path = g_steal_pointer(&dir_path);
   g_clear_object(&model);
   return TRUE;
@@ -776,7 +778,7 @@ static void test_gcheckers_window_puzzle_mode_solves_and_exits_to_analysis(void)
   g_autofree char *dir_path = NULL;
   CheckersMove puzzle_move = {0};
   CheckersColor attacker = CHECKERS_COLOR_WHITE;
-  g_assert_true(test_gcheckers_window_write_single_move_puzzle(&dir_path, &puzzle_move, &attacker));
+  g_assert_true(test_gcheckers_window_write_single_move_puzzle(&dir_path, &puzzle_move, attacker));
 
   g_setenv("GCHECKERS_PUZZLES_DIR", dir_path, TRUE);
 
@@ -843,6 +845,37 @@ static void test_gcheckers_window_puzzle_mode_solves_and_exits_to_analysis(void)
   g_assert_nonnull(gtk_widget_get_parent(analysis_panel));
   g_assert_false(gtk_widget_get_visible(puzzle_panel));
   g_assert_cmpint(test_gcheckers_window_get_size_request_width(board_panel), ==, initial_board_width);
+
+  g_unsetenv("GCHECKERS_PUZZLES_DIR");
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
+static void test_gcheckers_window_puzzle_analyze_keeps_black_orientation(void) {
+  g_autofree char *dir_path = NULL;
+  CheckersMove puzzle_move = {0};
+  g_assert_true(test_gcheckers_window_write_single_move_puzzle(&dir_path, &puzzle_move, CHECKERS_COLOR_BLACK));
+
+  g_setenv("GCHECKERS_PUZZLES_DIR", dir_path, TRUE);
+
+  GtkApplication *app = test_gcheckers_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersWindow *window = gcheckers_window_new(app, model);
+  gtk_window_present(GTK_WINDOW(window));
+  test_gcheckers_window_drain_main_context(32);
+
+  g_action_group_activate_action(G_ACTION_GROUP(window), "puzzle-play", NULL);
+  test_gcheckers_window_drain_main_context(32);
+
+  GtkWidget *analyze_button = test_gcheckers_window_get_named_widget(window, "puzzle-analyze-button");
+  g_assert_nonnull(analyze_button);
+  g_assert_cmpuint(gcheckers_window_get_board_bottom_color(window), ==, CHECKERS_COLOR_BLACK);
+
+  g_signal_emit_by_name(analyze_button, "clicked");
+  test_gcheckers_window_drain_main_context(32);
+
+  g_assert_cmpuint(gcheckers_window_get_board_bottom_color(window), ==, CHECKERS_COLOR_BLACK);
 
   g_unsetenv("GCHECKERS_PUZZLES_DIR");
   g_clear_object(&window);
@@ -1372,6 +1405,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/gcheckers-window/hotseat-follows-turn", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/new-game-keeps-computer-controls", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/manual-review-keeps-current-orientation", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/puzzle-analyze-keeps-black-orientation", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/new-game-ruleset-options-russian", test_gcheckers_window_skip);
     return g_test_run();
   }
@@ -1430,6 +1464,8 @@ int main(int argc, char **argv) {
                   test_gcheckers_window_new_game_keeps_computer_controls);
   g_test_add_func("/gcheckers-window/manual-review-keeps-current-orientation",
                   test_gcheckers_window_manual_review_keeps_current_orientation);
+  g_test_add_func("/gcheckers-window/puzzle-analyze-keeps-black-orientation",
+                  test_gcheckers_window_puzzle_analyze_keeps_black_orientation);
   g_test_add_func("/gcheckers-window/new-game-ruleset-options-russian",
                   test_gcheckers_window_new_game_dialog_ruleset_options_and_russian_apply);
   return g_test_run();

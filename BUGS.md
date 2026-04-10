@@ -219,6 +219,19 @@ that repeated primary clicks are processed.
 
 ## Forced move plies consumed alpha-beta depth budget
 
+## Puzzle Analyze restored the pre-puzzle board orientation
+
+Entering a puzzle should orient the board for the puzzle attacker, and switching from that puzzle into analysis should
+keep showing the same position from the same side unless some later action explicitly changes orientation.
+
+The window saved `board_orientation_mode` and `board_bottom_color` on puzzle entry and restored them on puzzle exit.
+Clicking `Analyze` therefore discarded the current puzzle-facing orientation and jumped back to whatever side had been
+visible before the puzzle, which was often white.
+
+The fix removes board orientation from the saved puzzle-mode snapshot. Puzzle mode still sets a fixed attacker-facing
+orientation when it starts, but leaving puzzle mode now restores only layout/drawer state and keeps the current board
+orientation intact.
+
 ## Puzzle mode window width could jump back to the normal layout on focus changes
 
 While puzzle mode is active, the window should keep the puzzle layout width with both drawers hidden.
