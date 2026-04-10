@@ -576,7 +576,9 @@ static gboolean checkers_puzzle_emit_validated_candidate(const GameState *start_
                                                          const GArray *game_line,
                                                          const char *output_dir,
                                                          GHashTable *existing_solution_keys,
-                                                         guint *inout_index) {
+                                                         guint *inout_index,
+                                                         char **out_puzzle_path,
+                                                         char **out_game_path) {
   g_return_val_if_fail(start_state != NULL, FALSE);
   g_return_val_if_fail(line != NULL, FALSE);
   g_return_val_if_fail(solution_move != NULL, FALSE);
@@ -584,6 +586,8 @@ static gboolean checkers_puzzle_emit_validated_candidate(const GameState *start_
   g_return_val_if_fail(output_dir != NULL, FALSE);
   g_return_val_if_fail(existing_solution_keys != NULL, FALSE);
   g_return_val_if_fail(inout_index != NULL, FALSE);
+  g_return_val_if_fail(out_puzzle_path != NULL, FALSE);
+  g_return_val_if_fail(out_game_path != NULL, FALSE);
 
   g_autofree char *solution_key = checkers_puzzle_build_line_solution_key(line);
   g_return_val_if_fail(solution_key != NULL, FALSE);
@@ -612,7 +616,8 @@ static gboolean checkers_puzzle_emit_validated_candidate(const GameState *start_
   }
 
   g_hash_table_add(existing_solution_keys, g_steal_pointer(&solution_key));
-  g_print("saved %s and %s\n", puzzle_path, game_path);
+  *out_puzzle_path = g_steal_pointer(&puzzle_path);
+  *out_game_path = g_steal_pointer(&game_path);
   *inout_index += 1;
   return TRUE;
 }
@@ -695,6 +700,8 @@ static gboolean checkers_puzzle_try_build_candidate_from_resulting_position(cons
     return FALSE;
   }
 
+  g_autofree char *puzzle_path = NULL;
+  g_autofree char *game_path = NULL;
   if (!checkers_puzzle_emit_validated_candidate(&post_mistake_game->state,
                                                 line,
                                                 mistake_delta,
@@ -705,7 +712,9 @@ static gboolean checkers_puzzle_try_build_candidate_from_resulting_position(cons
                                                 game_line,
                                                 output_dir,
                                                 existing_solution_keys,
-                                                inout_index)) {
+                                                inout_index,
+                                                &puzzle_path,
+                                                &game_path)) {
     checkers_puzzle_position_analysis_clear(&analysis);
     g_array_unref(line);
     return FALSE;
@@ -713,10 +722,11 @@ static gboolean checkers_puzzle_try_build_candidate_from_resulting_position(cons
 
   (*out_emitted)++;
   checkers_puzzle_log_progress("  -> kept: mistake_delta=%d start_static=%d final_static=%d line_plies=%u",
-          mistake_delta,
-          analysis.static_score,
-          final_static,
-          line->len);
+                               mistake_delta,
+                               analysis.static_score,
+                               final_static,
+                               line->len);
+  checkers_puzzle_log_progress("  -> saved %s and %s", puzzle_path, game_path);
   checkers_puzzle_position_analysis_clear(&analysis);
   g_array_unref(line);
   return TRUE;
