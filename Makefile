@@ -17,6 +17,13 @@ LDLIBS := $(GLIB_LIBS) $(GOBJECT_LIBS) $(GIO_LIBS) $(CURL_LIBS) -lm
 
 CFLAGS += $(GLIB_CFLAGS) $(GOBJECT_CFLAGS) $(GIO_CFLAGS) $(CURL_CFLAGS)
 
+BUILD_DIR := build
+BIN_DIR := $(BUILD_DIR)/bin
+TOOLS_DIR := $(BUILD_DIR)/tools
+TESTS_DIR := $(BUILD_DIR)/tests
+LIB_DIR := $(BUILD_DIR)/lib
+OBJ_DIR := $(BUILD_DIR)/obj
+
 APP_PATHS_SRCS := src/app_paths.c
 SRCS := src/board.c src/game.c src/game_print.c src/move_gen.c src/ai_alpha_beta.c \
 	src/rulesets.c \
@@ -34,7 +41,7 @@ SGF_VIEW_SRCS := \
   src/sgf_view_selection_controller.c
 WIDGET_UTILS_SRCS := src/widget_utils.c
 WIDGET_UTILS_HDRS := src/widget_utils.h
-OBJS := $(SRCS:.c=.o)
+OBJS := $(SRCS:%.c=$(OBJ_DIR)/%.o)
 COV_DIR := coverage
 COV_OBJ_DIR := $(COV_DIR)/obj
 COV_BIN_DIR := $(COV_DIR)/bin
@@ -61,227 +68,293 @@ PUZZLES_INSTALL_DIR := $(DATADIR)/gcheckers/puzzles
 SCHEMAS_INSTALL_DIR := $(DATADIR)/glib-2.0/schemas
 INSTALL ?= install
 
-.PHONY: all clean test coverage install validate-desktop-metadata
+LIBGAME_A := $(LIB_DIR)/libgame.a
+GCHECKERS_BIN := $(BIN_DIR)/gcheckers
+CREATE_PUZZLES_BIN := $(TOOLS_DIR)/create_puzzles
+FIND_POSITION_BIN := $(TOOLS_DIR)/find_position
+TEST_GAME_BIN := $(TESTS_DIR)/test_game
+TEST_GAME_PRINT_BIN := $(TESTS_DIR)/test_game_print
+TEST_BOARD_BIN := $(TESTS_DIR)/test_board
+TEST_MOVE_GEN_BIN := $(TESTS_DIR)/test_move_gen
+TEST_CREATE_PUZZLES_CLI_BIN := $(TESTS_DIR)/test_create_puzzles_cli
+TEST_CREATE_PUZZLES_CHECK_BIN := $(TESTS_DIR)/test_create_puzzles_check
+TEST_CHECKERS_MODEL_BIN := $(TESTS_DIR)/test_checkers_model
+TEST_AI_TRANSPOSITION_TABLE_BIN := $(TESTS_DIR)/test_ai_transposition_table
+TEST_POSITION_SEARCH_BIN := $(TESTS_DIR)/test_position_search
+TEST_POSITION_PREDICATE_BIN := $(TESTS_DIR)/test_position_predicate
+TEST_BGA_CLIENT_BIN := $(TESTS_DIR)/test_bga_client
+TEST_FILE_DIALOG_HISTORY_BIN := $(TESTS_DIR)/test_file_dialog_history
+TEST_APP_PATHS_BIN := $(TESTS_DIR)/test_app_paths
+TEST_DESKTOP_METADATA_BIN := $(TESTS_DIR)/test_desktop_metadata
+TEST_FLATPAK_MANIFEST_BIN := $(TESTS_DIR)/test_flatpak_manifest
+TEST_SGF_TREE_BIN := $(TESTS_DIR)/test_sgf_tree
+TEST_SGF_IO_BIN := $(TESTS_DIR)/test_sgf_io
+TEST_SGF_VIEW_BIN := $(TESTS_DIR)/test_sgf_view
+TEST_BOARD_VIEW_BIN := $(TESTS_DIR)/test_board_view
+TEST_PLAYER_CONTROLS_PANEL_BIN := $(TESTS_DIR)/test_player_controls_panel
+TEST_SGF_CONTROLLER_BIN := $(TESTS_DIR)/test_sgf_controller
+TEST_WINDOW_BIN := $(TESTS_DIR)/test_window
+TEST_PUZZLE_GENERATION_BIN := $(TESTS_DIR)/test_puzzle_generation
 
-all: $(GSETTINGS_SCHEMA_COMPILED) libgame.a create_puzzles find_position gcheckers
+.PHONY: all clean test coverage install validate-desktop-metadata \
+	gcheckers create_puzzles find_position libgame.a \
+	test_game test_game_print test_board test_move_gen test_create_puzzles_cli test_create_puzzles_check \
+	test_checkers_model test_ai_transposition_table test_position_search test_position_predicate test_bga_client \
+	test_file_dialog_history test_app_paths test_desktop_metadata test_flatpak_manifest test_sgf_tree test_sgf_io \
+	test_sgf_view test_board_view test_player_controls_panel test_sgf_controller test_window test_puzzle_generation
 
-libgame.a: $(OBJS)
+all: $(GSETTINGS_SCHEMA_COMPILED) $(LIBGAME_A) $(CREATE_PUZZLES_BIN) $(FIND_POSITION_BIN) $(GCHECKERS_BIN)
+
+gcheckers: $(GCHECKERS_BIN)
+create_puzzles: $(CREATE_PUZZLES_BIN)
+find_position: $(FIND_POSITION_BIN)
+libgame.a: $(LIBGAME_A)
+
+$(LIBGAME_A): $(OBJS)
+	@mkdir -p $(dir $@)
 	ar rcs $@ $^
 
-%.o: %.c src/game.h src/board.h src/checkers_constants.h
+$(OBJ_DIR)/%.o: %.c src/game.h src/board.h src/checkers_constants.h
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-test: test_game test_game_print test_board test_move_gen test_checkers_model \
-	test_ai_transposition_table test_position_search \
-	test_position_predicate test_sgf_tree test_sgf_io test_sgf_view test_bga_client \
-	test_file_dialog_history test_app_paths test_board_view test_player_controls_panel test_sgf_controller test_window \
-	test_create_puzzles_cli test_create_puzzles_check test_desktop_metadata test_flatpak_manifest \
-	test_puzzle_generation
-	./test_game
-	./test_game_print
-	./test_board
-	./test_move_gen
-	./test_checkers_model
-	./test_ai_transposition_table
-	./test_position_search
-	./test_position_predicate
-	./test_sgf_tree
-	./test_sgf_io
-	./test_sgf_view
-	./test_bga_client
-	./test_file_dialog_history
-	./test_app_paths
-	./test_desktop_metadata
-	./test_flatpak_manifest
-	./test_create_puzzles_cli
-	./test_create_puzzles_check
-	./test_puzzle_generation
-	./test_board_view
-	./test_player_controls_panel
-	./test_sgf_controller
-	./test_window
+test: $(TEST_GAME_BIN) $(TEST_GAME_PRINT_BIN) $(TEST_BOARD_BIN) $(TEST_MOVE_GEN_BIN) $(TEST_CHECKERS_MODEL_BIN) \
+	$(TEST_AI_TRANSPOSITION_TABLE_BIN) $(TEST_POSITION_SEARCH_BIN) $(TEST_POSITION_PREDICATE_BIN) $(TEST_SGF_TREE_BIN) \
+	$(TEST_SGF_IO_BIN) $(TEST_SGF_VIEW_BIN) $(TEST_BGA_CLIENT_BIN) $(TEST_FILE_DIALOG_HISTORY_BIN) \
+	$(TEST_APP_PATHS_BIN) $(TEST_BOARD_VIEW_BIN) $(TEST_PLAYER_CONTROLS_PANEL_BIN) $(TEST_SGF_CONTROLLER_BIN) \
+	$(TEST_WINDOW_BIN) $(TEST_CREATE_PUZZLES_CLI_BIN) $(TEST_CREATE_PUZZLES_CHECK_BIN) $(TEST_DESKTOP_METADATA_BIN) \
+	$(TEST_FLATPAK_MANIFEST_BIN) $(TEST_PUZZLE_GENERATION_BIN)
+	$(TEST_GAME_BIN)
+	$(TEST_GAME_PRINT_BIN)
+	$(TEST_BOARD_BIN)
+	$(TEST_MOVE_GEN_BIN)
+	$(TEST_CHECKERS_MODEL_BIN)
+	$(TEST_AI_TRANSPOSITION_TABLE_BIN)
+	$(TEST_POSITION_SEARCH_BIN)
+	$(TEST_POSITION_PREDICATE_BIN)
+	$(TEST_SGF_TREE_BIN)
+	$(TEST_SGF_IO_BIN)
+	$(TEST_SGF_VIEW_BIN)
+	$(TEST_BGA_CLIENT_BIN)
+	$(TEST_FILE_DIALOG_HISTORY_BIN)
+	$(TEST_APP_PATHS_BIN)
+	$(TEST_DESKTOP_METADATA_BIN)
+	$(TEST_FLATPAK_MANIFEST_BIN)
+	$(TEST_CREATE_PUZZLES_CLI_BIN)
+	$(TEST_CREATE_PUZZLES_CHECK_BIN)
+	$(TEST_PUZZLE_GENERATION_BIN)
+	$(TEST_BOARD_VIEW_BIN)
+	$(TEST_PLAYER_CONTROLS_PANEL_BIN)
+	$(TEST_SGF_CONTROLLER_BIN)
+	$(TEST_WINDOW_BIN)
 
-test_game: tests/test_game.c $(SRCS) src/game.h
+test_game: $(TEST_GAME_BIN)
+$(TEST_GAME_BIN): tests/test_game.c $(SRCS) src/game.h
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_game.c $(SRCS) $(LDLIBS)
 
-test_game_print: tests/test_game_print.c $(SRCS) src/game.h
+test_game_print: $(TEST_GAME_PRINT_BIN)
+$(TEST_GAME_PRINT_BIN): tests/test_game_print.c $(SRCS) src/game.h
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_game_print.c $(SRCS) $(LDLIBS)
 
-test_board: tests/test_board.c $(BOARD_SRCS) src/board.h src/checkers_constants.h
+test_board: $(TEST_BOARD_BIN)
+$(TEST_BOARD_BIN): tests/test_board.c $(BOARD_SRCS) src/board.h src/checkers_constants.h
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_board.c $(BOARD_SRCS) $(LDLIBS)
 
-test_move_gen: tests/test_move_gen.c $(SRCS) src/game.h
+test_move_gen: $(TEST_MOVE_GEN_BIN)
+$(TEST_MOVE_GEN_BIN): tests/test_move_gen.c $(SRCS) src/game.h
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_move_gen.c $(SRCS) $(LDLIBS)
 
-create_puzzles: src/create_puzzles.c src/create_puzzles_cli.c src/create_puzzles_cli.h \
-	src/puzzle_generation.c src/puzzle_generation.h \
-	src/sgf_io.c src/sgf_io.h src/sgf_tree.c src/sgf_tree.h src/sgf_move_props.c src/sgf_move_props.h \
-	$(SRCS)
+$(CREATE_PUZZLES_BIN): src/create_puzzles.c src/create_puzzles_cli.c src/create_puzzles_cli.h \
+	src/puzzle_generation.c src/puzzle_generation.h src/sgf_io.c src/sgf_io.h src/sgf_tree.c src/sgf_tree.h \
+	src/sgf_move_props.c src/sgf_move_props.h $(SRCS)
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ src/create_puzzles.c src/create_puzzles_cli.c src/puzzle_generation.c src/sgf_io.c \
-		src/sgf_tree.c \
-		src/sgf_move_props.c $(SRCS) $(LDLIBS)
+		src/sgf_tree.c src/sgf_move_props.c $(SRCS) $(LDLIBS)
 
-test_create_puzzles_cli: tests/test_create_puzzles_cli.c src/create_puzzles_cli.c src/create_puzzles_cli.h
+test_create_puzzles_cli: $(TEST_CREATE_PUZZLES_CLI_BIN)
+$(TEST_CREATE_PUZZLES_CLI_BIN): tests/test_create_puzzles_cli.c src/create_puzzles_cli.c src/create_puzzles_cli.h
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_create_puzzles_cli.c src/create_puzzles_cli.c $(LDLIBS)
 
-test_create_puzzles_check: create_puzzles tests/test_create_puzzles_check.c src/sgf_io.c src/sgf_tree.c \
-	src/sgf_move_props.c $(SRCS)
-	$(CC) $(CFLAGS) -o $@ tests/test_create_puzzles_check.c src/sgf_io.c src/sgf_tree.c src/sgf_move_props.c \
-		$(SRCS) $(LDLIBS)
+test_create_puzzles_check: $(TEST_CREATE_PUZZLES_CHECK_BIN)
+$(TEST_CREATE_PUZZLES_CHECK_BIN): $(CREATE_PUZZLES_BIN) tests/test_create_puzzles_check.c src/sgf_io.c \
+	src/sgf_tree.c src/sgf_move_props.c $(SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -DGCHECKERS_CREATE_PUZZLES_PATH=\"$(CREATE_PUZZLES_BIN)\" -o $@ \
+		tests/test_create_puzzles_check.c src/sgf_io.c src/sgf_tree.c src/sgf_move_props.c $(SRCS) $(LDLIBS)
 
-find_position: src/find_position.c $(POSITION_SRCS) $(SRCS) src/position_search.h src/position_predicate.h \
+$(FIND_POSITION_BIN): src/find_position.c $(POSITION_SRCS) $(SRCS) src/position_search.h src/position_predicate.h \
 	src/position_format.h
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ src/find_position.c $(POSITION_SRCS) $(SRCS) $(LDLIBS)
 
-test_checkers_model: tests/test_checkers_model.c $(SRCS) src/checkers_model.h
+test_checkers_model: $(TEST_CHECKERS_MODEL_BIN)
+$(TEST_CHECKERS_MODEL_BIN): tests/test_checkers_model.c $(SRCS) src/checkers_model.h
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_checkers_model.c $(SRCS) $(LDLIBS)
 
-test_ai_transposition_table: tests/test_ai_transposition_table.c $(SRCS) src/ai_transposition_table.h src/ai_zobrist.h
+test_ai_transposition_table: $(TEST_AI_TRANSPOSITION_TABLE_BIN)
+$(TEST_AI_TRANSPOSITION_TABLE_BIN): tests/test_ai_transposition_table.c $(SRCS) src/ai_transposition_table.h \
+	src/ai_zobrist.h
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_ai_transposition_table.c $(SRCS) $(LDLIBS)
 
-test_position_search: tests/test_position_search.c $(POSITION_SRCS) $(SRCS) src/position_search.h
+test_position_search: $(TEST_POSITION_SEARCH_BIN)
+$(TEST_POSITION_SEARCH_BIN): tests/test_position_search.c $(POSITION_SRCS) $(SRCS) src/position_search.h
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_position_search.c $(POSITION_SRCS) $(SRCS) $(LDLIBS)
 
-test_position_predicate: tests/test_position_predicate.c $(POSITION_SRCS) $(SRCS) src/position_predicate.h
+test_position_predicate: $(TEST_POSITION_PREDICATE_BIN)
+$(TEST_POSITION_PREDICATE_BIN): tests/test_position_predicate.c $(POSITION_SRCS) $(SRCS) src/position_predicate.h
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_position_predicate.c $(POSITION_SRCS) $(SRCS) $(LDLIBS)
 
-test_bga_client: tests/test_bga_client.c src/bga_client.c src/bga_client.h
+test_bga_client: $(TEST_BGA_CLIENT_BIN)
+$(TEST_BGA_CLIENT_BIN): tests/test_bga_client.c src/bga_client.c src/bga_client.h
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_bga_client.c src/bga_client.c $(LDLIBS)
 
-test_file_dialog_history: $(GSETTINGS_SCHEMA_COMPILED) tests/test_file_dialog_history.c \
+test_file_dialog_history: $(TEST_FILE_DIALOG_HISTORY_BIN)
+$(TEST_FILE_DIALOG_HISTORY_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_file_dialog_history.c \
 	src/file_dialog_history.c src/file_dialog_history.h
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_file_dialog_history.c src/file_dialog_history.c $(LDLIBS)
 
-test_app_paths: tests/test_app_paths.c $(APP_PATHS_SRCS) src/app_paths.h
+test_app_paths: $(TEST_APP_PATHS_BIN)
+$(TEST_APP_PATHS_BIN): tests/test_app_paths.c $(APP_PATHS_SRCS) src/app_paths.h
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_app_paths.c $(APP_PATHS_SRCS) $(LDLIBS)
 
-test_desktop_metadata: tests/test_desktop_metadata.sh Makefile $(DESKTOP_FILE) $(METAINFO_FILE) $(ICON_FILE) \
+test_desktop_metadata: $(TEST_DESKTOP_METADATA_BIN)
+$(TEST_DESKTOP_METADATA_BIN): tests/test_desktop_metadata.sh Makefile $(DESKTOP_FILE) $(METAINFO_FILE) $(ICON_FILE) \
 	$(GSETTINGS_SCHEMA_XML)
+	@mkdir -p $(dir $@)
 	cp tests/test_desktop_metadata.sh $@
 	chmod +x $@
 
-test_flatpak_manifest: tests/test_flatpak_manifest.sh Makefile $(FLATPAK_MANIFEST)
+test_flatpak_manifest: $(TEST_FLATPAK_MANIFEST_BIN)
+$(TEST_FLATPAK_MANIFEST_BIN): tests/test_flatpak_manifest.sh Makefile $(FLATPAK_MANIFEST)
+	@mkdir -p $(dir $@)
 	cp tests/test_flatpak_manifest.sh $@
 	chmod +x $@
 
-test_sgf_tree: tests/test_sgf_tree.c $(SGF_TREE_SRCS) src/sgf_tree.h
+test_sgf_tree: $(TEST_SGF_TREE_BIN)
+$(TEST_SGF_TREE_BIN): tests/test_sgf_tree.c $(SGF_TREE_SRCS) src/sgf_tree.h
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_sgf_tree.c $(SGF_TREE_SRCS) $(LDLIBS)
 
-test_sgf_io: tests/test_sgf_io.c src/sgf_io.c src/sgf_io.h src/sgf_tree.c src/sgf_tree.h src/sgf_move_props.c \
-	src/sgf_move_props.h \
-	src/game.h src/game_print.c src/board.c
+test_sgf_io: $(TEST_SGF_IO_BIN)
+$(TEST_SGF_IO_BIN): tests/test_sgf_io.c src/sgf_io.c src/sgf_io.h src/sgf_tree.c src/sgf_tree.h src/sgf_move_props.c \
+	src/sgf_move_props.h src/game.h src/game_print.c src/board.c
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_sgf_io.c src/sgf_io.c src/sgf_tree.c src/sgf_move_props.c src/game_print.c \
 		src/board.c $(LDLIBS)
 
-test_sgf_view: tests/test_sgf_view.c $(SGF_VIEW_SRCS) $(SGF_TREE_SRCS) $(WIDGET_UTILS_SRCS) \
+test_sgf_view: $(TEST_SGF_VIEW_BIN)
+$(TEST_SGF_VIEW_BIN): tests/test_sgf_view.c $(SGF_VIEW_SRCS) $(SGF_TREE_SRCS) $(WIDGET_UTILS_SRCS) \
 	src/sgf_view.h src/sgf_tree.h $(WIDGET_UTILS_HDRS)
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_sgf_view.c $(SGF_VIEW_SRCS) $(SGF_TREE_SRCS) \
 		$(WIDGET_UTILS_SRCS) $(LDLIBS) $(GTK_LIBS)
 
-test_board_view: tests/test_board_view.c src/board_view.c src/board_view.h src/board_grid.c src/board_grid.h \
+test_board_view: $(TEST_BOARD_VIEW_BIN)
+$(TEST_BOARD_VIEW_BIN): tests/test_board_view.c src/board_view.c src/board_view.h src/board_grid.c src/board_grid.h \
 	src/board_square.c src/board_square.h src/board_move_overlay.c src/board_move_overlay.h \
-	src/board_selection_controller.c src/board_selection_controller.h src/piece_palette.c \
-	src/piece_palette.h src/man_paintable.c src/man_paintable.h src/checkers_model.h \
-	$(SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
+	src/board_selection_controller.c src/board_selection_controller.h src/piece_palette.c src/piece_palette.h \
+	src/man_paintable.c src/man_paintable.h src/checkers_model.h $(SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_board_view.c src/board_view.c src/board_grid.c \
 		src/board_square.c src/board_move_overlay.c src/board_selection_controller.c src/piece_palette.c \
 		src/man_paintable.c $(WIDGET_UTILS_SRCS) $(SRCS) $(LDLIBS) $(GTK_LIBS)
 
-test_player_controls_panel: tests/test_player_controls_panel.c src/player_controls_panel.c src/player_controls_panel.h
+test_player_controls_panel: $(TEST_PLAYER_CONTROLS_PANEL_BIN)
+$(TEST_PLAYER_CONTROLS_PANEL_BIN): tests/test_player_controls_panel.c src/player_controls_panel.c \
+	src/player_controls_panel.h
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_player_controls_panel.c src/player_controls_panel.c \
 		$(LDLIBS) $(GTK_LIBS)
 
-test_sgf_controller: tests/test_sgf_controller.c src/sgf_controller.c \
-	src/sgf_controller.h src/board_view.c src/board_view.h src/board_grid.c src/board_grid.h \
-	src/board_square.c src/board_square.h src/board_move_overlay.c src/board_move_overlay.h \
-	src/board_selection_controller.c src/board_selection_controller.h src/piece_palette.c \
-	src/piece_palette.h src/man_paintable.c src/man_paintable.h src/checkers_model.c \
-	src/checkers_model.h src/sgf_io.c src/sgf_io.h src/sgf_move_props.c src/sgf_move_props.h src/sgf_tree.c \
-	src/sgf_tree.h src/sgf_view.c src/sgf_view.h \
+test_sgf_controller: $(TEST_SGF_CONTROLLER_BIN)
+$(TEST_SGF_CONTROLLER_BIN): tests/test_sgf_controller.c src/sgf_controller.c src/sgf_controller.h src/board_view.c \
+	src/board_view.h src/board_grid.c src/board_grid.h src/board_square.c src/board_square.h \
+	src/board_move_overlay.c src/board_move_overlay.h src/board_selection_controller.c \
+	src/board_selection_controller.h src/piece_palette.c src/piece_palette.h src/man_paintable.c \
+	src/man_paintable.h src/checkers_model.c src/checkers_model.h src/sgf_io.c src/sgf_io.h \
+	src/sgf_move_props.c src/sgf_move_props.h src/sgf_tree.c src/sgf_tree.h src/sgf_view.c src/sgf_view.h \
 	src/sgf_view_disc_factory.c src/sgf_view_disc_factory.h src/sgf_view_layout.c src/sgf_view_layout.h \
 	src/sgf_view_link_renderer.c src/sgf_view_link_renderer.h src/sgf_view_scroller.c \
 	src/sgf_view_scroller.h src/sgf_view_selection_controller.c src/sgf_view_selection_controller.h \
 	$(SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
-	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_sgf_controller.c \
-	src/sgf_controller.c src/board_view.c src/board_grid.c src/board_square.c \
-	src/board_move_overlay.c src/board_selection_controller.c src/piece_palette.c \
-	src/man_paintable.c src/sgf_io.c src/sgf_move_props.c src/sgf_tree.c src/sgf_view.c src/sgf_view_disc_factory.c \
-	src/sgf_view_layout.c src/sgf_view_link_renderer.c src/sgf_view_scroller.c \
-	src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(SRCS) $(LDLIBS) $(GTK_LIBS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_sgf_controller.c src/sgf_controller.c src/board_view.c \
+		src/board_grid.c src/board_square.c src/board_move_overlay.c src/board_selection_controller.c \
+		src/piece_palette.c src/man_paintable.c src/sgf_io.c src/sgf_move_props.c src/sgf_tree.c src/sgf_view.c \
+		src/sgf_view_disc_factory.c src/sgf_view_layout.c src/sgf_view_link_renderer.c src/sgf_view_scroller.c \
+		src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(SRCS) $(LDLIBS) $(GTK_LIBS)
 
-test_window: $(GSETTINGS_SCHEMA_COMPILED) tests/test_window.c src/window.c $(APP_PATHS_SRCS) \
-	src/new_game_dialog.c \
-	src/rulesets.c src/rulesets.h \
-	src/import_dialog.c \
-	src/sgf_file_actions.c src/sgf_file_actions.h src/file_dialog_history.c src/file_dialog_history.h \
-	src/bga_client.c src/bga_client.h \
-	src/window.h \
-	src/style.c src/style.h src/player_controls_panel.c src/player_controls_panel.h \
-	src/analysis_graph.c src/analysis_graph.h \
-	src/sgf_controller.c src/sgf_controller.h src/board_view.c src/board_view.h \
-	src/board_grid.c src/board_grid.h src/board_square.c src/board_square.h src/board_move_overlay.c \
-	src/board_move_overlay.h src/board_selection_controller.c src/board_selection_controller.h \
-	src/piece_palette.c src/piece_palette.h src/man_paintable.c src/man_paintable.h \
-	src/checkers_model.c src/checkers_model.h src/sgf_io.c src/sgf_io.h src/sgf_move_props.c src/sgf_move_props.h \
-	src/sgf_tree.c src/sgf_tree.h \
-	src/sgf_view.c src/sgf_view.h \
+test_window: $(TEST_WINDOW_BIN)
+$(TEST_WINDOW_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_window.c src/window.c $(APP_PATHS_SRCS) \
+	src/new_game_dialog.c src/rulesets.c src/rulesets.h src/import_dialog.c src/sgf_file_actions.c \
+	src/sgf_file_actions.h src/file_dialog_history.c src/file_dialog_history.h src/bga_client.c src/bga_client.h \
+	src/window.h src/style.c src/style.h src/player_controls_panel.c src/player_controls_panel.h \
+	src/analysis_graph.c src/analysis_graph.h src/sgf_controller.c src/sgf_controller.h src/board_view.c \
+	src/board_view.h src/board_grid.c src/board_grid.h src/board_square.c src/board_square.h \
+	src/board_move_overlay.c src/board_move_overlay.h src/board_selection_controller.c \
+	src/board_selection_controller.h src/piece_palette.c src/piece_palette.h src/man_paintable.c \
+	src/man_paintable.h src/checkers_model.c src/checkers_model.h src/sgf_io.c src/sgf_io.h \
+	src/sgf_move_props.c src/sgf_move_props.h src/sgf_tree.c src/sgf_tree.h src/sgf_view.c src/sgf_view.h \
 	src/sgf_view_disc_factory.c src/sgf_view_disc_factory.h src/sgf_view_layout.c src/sgf_view_layout.h \
 	src/sgf_view_link_renderer.c src/sgf_view_link_renderer.h src/sgf_view_scroller.c \
 	src/sgf_view_scroller.h src/sgf_view_selection_controller.c src/sgf_view_selection_controller.h \
 	$(SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_window.c src/window.c $(APP_PATHS_SRCS) \
-		src/new_game_dialog.c \
-		src/import_dialog.c src/file_dialog_history.c \
-		src/sgf_file_actions.c \
-		src/bga_client.c \
-	src/style.c src/player_controls_panel.c src/sgf_controller.c \
-	src/analysis_graph.c \
-	src/board_view.c src/board_grid.c src/board_square.c src/board_move_overlay.c \
-	src/board_selection_controller.c src/piece_palette.c src/man_paintable.c \
-	src/sgf_io.c src/sgf_move_props.c src/sgf_tree.c src/sgf_view.c src/sgf_view_disc_factory.c src/sgf_view_layout.c \
-	src/sgf_view_link_renderer.c src/sgf_view_scroller.c src/sgf_view_selection_controller.c \
-	$(WIDGET_UTILS_SRCS) $(SRCS) $(LDLIBS) $(GTK_LIBS)
+		src/new_game_dialog.c src/import_dialog.c src/file_dialog_history.c src/sgf_file_actions.c src/bga_client.c \
+		src/style.c src/player_controls_panel.c src/sgf_controller.c src/analysis_graph.c src/board_view.c \
+		src/board_grid.c src/board_square.c src/board_move_overlay.c src/board_selection_controller.c \
+		src/piece_palette.c src/man_paintable.c src/sgf_io.c src/sgf_move_props.c src/sgf_tree.c src/sgf_view.c \
+		src/sgf_view_disc_factory.c src/sgf_view_layout.c src/sgf_view_link_renderer.c src/sgf_view_scroller.c \
+		src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(SRCS) $(LDLIBS) $(GTK_LIBS)
 
-test_puzzle_generation: tests/test_puzzle_generation.c src/puzzle_generation.c src/puzzle_generation.h src/ai_alpha_beta.h \
-	src/board.h
+test_puzzle_generation: $(TEST_PUZZLE_GENERATION_BIN)
+$(TEST_PUZZLE_GENERATION_BIN): tests/test_puzzle_generation.c src/puzzle_generation.c src/puzzle_generation.h \
+	src/ai_alpha_beta.h src/board.h
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_puzzle_generation.c src/puzzle_generation.c $(LDLIBS)
 
-gcheckers: $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c src/application.c src/window.c $(APP_PATHS_SRCS) \
-	src/new_game_dialog.c \
-	src/rulesets.c src/rulesets.h \
-	src/import_dialog.c \
-	src/sgf_file_actions.c src/sgf_file_actions.h src/file_dialog_history.c src/file_dialog_history.h \
-	src/bga_client.c src/bga_client.h \
-	src/window.h \
-	src/style.c src/style.h src/player_controls_panel.c src/player_controls_panel.h \
-	src/analysis_graph.c src/analysis_graph.h \
-	src/sgf_controller.c src/sgf_controller.h src/board_view.c src/board_view.h \
-	src/board_grid.c src/board_grid.h src/board_square.c src/board_square.h src/board_move_overlay.c \
-	src/board_move_overlay.h src/board_selection_controller.c src/board_selection_controller.h \
-	src/piece_palette.c src/piece_palette.h src/application.h src/man_paintable.c \
+$(GCHECKERS_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c src/application.c src/window.c $(APP_PATHS_SRCS) \
+	src/new_game_dialog.c src/rulesets.c src/rulesets.h src/import_dialog.c src/sgf_file_actions.c \
+	src/sgf_file_actions.h src/file_dialog_history.c src/file_dialog_history.h src/bga_client.c src/bga_client.h \
+	src/window.h src/style.c src/style.h src/player_controls_panel.c src/player_controls_panel.h \
+	src/analysis_graph.c src/analysis_graph.h src/sgf_controller.c src/sgf_controller.h src/board_view.c \
+	src/board_view.h src/board_grid.c src/board_grid.h src/board_square.c src/board_square.h \
+	src/board_move_overlay.c src/board_move_overlay.h src/board_selection_controller.c \
+	src/board_selection_controller.h src/piece_palette.c src/piece_palette.h src/application.h src/man_paintable.c \
 	src/man_paintable.h src/checkers_model.c src/checkers_model.h src/sgf_io.c src/sgf_io.h \
-	src/sgf_move_props.c src/sgf_move_props.h \
-	src/sgf_tree.c src/sgf_tree.h src/sgf_view.c src/sgf_view.h src/sgf_view_disc_factory.c \
-	src/sgf_view_disc_factory.h \
-	src/sgf_view_layout.c src/sgf_view_layout.h src/sgf_view_link_renderer.c src/sgf_view_link_renderer.h \
-	src/sgf_view_scroller.c src/sgf_view_scroller.h src/sgf_view_selection_controller.c \
-	src/sgf_view_selection_controller.h $(SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
-	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/gcheckers.c src/application.c \
-		$(APP_PATHS_SRCS) src/window.c src/new_game_dialog.c src/import_dialog.c src/file_dialog_history.c src/style.c \
-	src/player_controls_panel.c src/analysis_graph.c src/sgf_file_actions.c src/bga_client.c \
-	src/sgf_controller.c src/board_view.c src/board_grid.c src/board_square.c \
-	src/board_move_overlay.c src/board_selection_controller.c src/piece_palette.c \
-	src/man_paintable.c src/sgf_io.c src/sgf_move_props.c src/sgf_tree.c src/sgf_view.c \
-	src/sgf_view_disc_factory.c \
-	src/sgf_view_layout.c src/sgf_view_link_renderer.c src/sgf_view_scroller.c \
-	src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(SRCS) $(LDLIBS) $(GTK_LIBS)
+	src/sgf_move_props.c src/sgf_move_props.h src/sgf_tree.c src/sgf_tree.h src/sgf_view.c src/sgf_view.h \
+	src/sgf_view_disc_factory.c src/sgf_view_disc_factory.h src/sgf_view_layout.c src/sgf_view_layout.h \
+	src/sgf_view_link_renderer.c src/sgf_view_link_renderer.h src/sgf_view_scroller.c \
+	src/sgf_view_scroller.h src/sgf_view_selection_controller.c src/sgf_view_selection_controller.h \
+	$(SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/gcheckers.c src/application.c $(APP_PATHS_SRCS) src/window.c \
+		src/new_game_dialog.c src/import_dialog.c src/file_dialog_history.c src/style.c src/player_controls_panel.c \
+		src/analysis_graph.c src/sgf_file_actions.c src/bga_client.c src/sgf_controller.c src/board_view.c \
+		src/board_grid.c src/board_square.c src/board_move_overlay.c src/board_selection_controller.c \
+		src/piece_palette.c src/man_paintable.c src/sgf_io.c src/sgf_move_props.c src/sgf_tree.c src/sgf_view.c \
+		src/sgf_view_disc_factory.c src/sgf_view_layout.c src/sgf_view_link_renderer.c src/sgf_view_scroller.c \
+		src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(SRCS) $(LDLIBS) $(GTK_LIBS)
 
 $(GSETTINGS_SCHEMA_COMPILED): $(GSETTINGS_SCHEMA_XML)
 	glib-compile-schemas $(GSETTINGS_SCHEMA_DIR)
 
 install: all $(DESKTOP_FILE) $(METAINFO_FILE) $(ICON_FILE)
 	$(INSTALL) -d $(DESTDIR)$(BINDIR)
-	$(INSTALL) -m 755 gcheckers $(DESTDIR)$(BINDIR)/gcheckers
+	$(INSTALL) -m 755 $(GCHECKERS_BIN) $(DESTDIR)$(BINDIR)/gcheckers
 	$(INSTALL) -d $(DESTDIR)$(APPLICATIONS_DIR)
 	$(INSTALL) -m 644 $(DESKTOP_FILE) $(DESTDIR)$(APPLICATIONS_DIR)/$(APP_ID).desktop
 	$(INSTALL) -d $(DESTDIR)$(METAINFO_DIR)
@@ -307,11 +380,14 @@ validate-desktop-metadata: $(DESKTOP_FILE) $(METAINFO_FILE)
 	fi
 
 clean:
-	rm -f $(OBJS) libgame.a test_game test_game_print test_board test_move_gen test_checkers_model \
-		test_ai_transposition_table test_position_search test_position_predicate test_sgf_tree test_sgf_io test_sgf_view \
-		test_bga_client test_file_dialog_history test_app_paths test_desktop_metadata test_flatpak_manifest \
-		test_board_view test_player_controls_panel test_sgf_controller \
-		test_window find_position gcheckers
+	rm -rf $(BUILD_DIR)
+	rm -f checkers create_puzzles find_position gcheckers libgame.a
+	rm -f test_game test_game_print test_board test_move_gen test_checkers_model test_ai_transposition_table
+	rm -f test_position_search test_position_predicate test_bga_client test_file_dialog_history test_app_paths
+	rm -f test_desktop_metadata test_flatpak_manifest test_create_puzzles_cli test_create_puzzles_check
+	rm -f test_puzzle_generation test_board_view test_player_controls_panel test_sgf_controller test_sgf_io
+	rm -f test_sgf_tree test_sgf_view test_window
+	rm -f src/*.o
 	rm -f $(GSETTINGS_SCHEMA_COMPILED)
 	rm -rf $(COV_DIR)
 
@@ -322,12 +398,9 @@ $(COV_OBJ_DIR)/%.o: %.c src/game.h src/board.h src/checkers_constants.h
 coverage: $(COV_OBJS) $(COV_BOARD_OBJS)
 	@mkdir -p $(COV_BIN_DIR) $(COV_GCOV_DIR) $(COV_REPORT_DIR)
 	$(CC) $(CFLAGS) $(COVERAGE_CFLAGS) -o $(COV_BIN_DIR)/test_game tests/test_game.c $(COV_OBJS) $(LDLIBS)
-	$(CC) $(CFLAGS) $(COVERAGE_CFLAGS) -o $(COV_BIN_DIR)/test_game_print \
-		tests/test_game_print.c $(COV_OBJS) $(LDLIBS)
-	$(CC) $(CFLAGS) $(COVERAGE_CFLAGS) -o $(COV_BIN_DIR)/test_board tests/test_board.c \
-		$(COV_BOARD_OBJS) $(LDLIBS)
-	$(CC) $(CFLAGS) $(COVERAGE_CFLAGS) -o $(COV_BIN_DIR)/test_move_gen tests/test_move_gen.c \
-		$(COV_OBJS) $(LDLIBS)
+	$(CC) $(CFLAGS) $(COVERAGE_CFLAGS) -o $(COV_BIN_DIR)/test_game_print tests/test_game_print.c $(COV_OBJS) $(LDLIBS)
+	$(CC) $(CFLAGS) $(COVERAGE_CFLAGS) -o $(COV_BIN_DIR)/test_board tests/test_board.c $(COV_BOARD_OBJS) $(LDLIBS)
+	$(CC) $(CFLAGS) $(COVERAGE_CFLAGS) -o $(COV_BIN_DIR)/test_move_gen tests/test_move_gen.c $(COV_OBJS) $(LDLIBS)
 	$(COV_BIN_DIR)/test_game
 	$(COV_BIN_DIR)/test_game_print
 	$(COV_BIN_DIR)/test_board

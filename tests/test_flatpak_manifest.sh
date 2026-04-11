@@ -7,6 +7,8 @@ if [ -f "$script_dir/Makefile" ]; then
   repo_root=$script_dir
 elif [ -f "$script_dir/../Makefile" ]; then
   repo_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
+elif [ -f "$script_dir/../../Makefile" ]; then
+  repo_root=$(CDPATH= cd -- "$script_dir/../.." && pwd)
 else
   echo "Unable to locate repository root from $0" >&2
   exit 1

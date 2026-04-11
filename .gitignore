@@ -1,15 +1,4 @@
-*.o
-*.a
-checkers
-gcheckers
-test_game
-test_game_print
-test_board
-test_move_gen
-test_checkers_model
-/test_*
-/find_position
-/create_puzzles
+build/
 coverage/
 gcheckers.png
 data/schemas/gschemas.compiled

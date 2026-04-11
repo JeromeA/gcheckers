@@ -7,6 +7,10 @@
 #include <glib.h>
 #include <glib/gstdio.h>
 
+#ifndef GCHECKERS_CREATE_PUZZLES_PATH
+#define GCHECKERS_CREATE_PUZZLES_PATH "./create_puzzles"
+#endif
+
 typedef struct {
   CheckersMove move;
   CheckersColor color;
@@ -153,7 +157,7 @@ static void test_create_puzzles_check_mode_dry_run_and_delete(void) {
 
   g_autofree char *cwd = g_get_current_dir();
   gchar *dry_run_argv[] = {
-      (gchar *)"./create_puzzles",
+      (gchar *)GCHECKERS_CREATE_PUZZLES_PATH,
       (gchar *)"--check-existing",
       (gchar *)"--dry-run",
       dir_path,
@@ -185,7 +189,7 @@ static void test_create_puzzles_check_mode_dry_run_and_delete(void) {
   g_free(stderr_text);
 
   gchar *delete_argv[] = {
-      (gchar *)"./create_puzzles",
+      (gchar *)GCHECKERS_CREATE_PUZZLES_PATH,
       (gchar *)"--check-existing",
       dir_path,
       NULL,

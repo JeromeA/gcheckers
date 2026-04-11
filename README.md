@@ -49,4 +49,4 @@ Build the upstream Flatpak manifest locally:
 
 Run the GTK application:
 
-  ./gcheckers
+  build/bin/gcheckers
