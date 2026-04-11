@@ -200,6 +200,55 @@ static void test_puzzle_attacker_move_clarity_is_asymmetric(void) {
                                                                            &second_score));
 }
 
+static void test_puzzle_collect_mistake_candidates(void) {
+  CheckersScoredMove white_moves[] = {
+      {.move = {.path = {1, 5}, .length = 2}, .score = 300},
+      {.move = {.path = {2, 6}, .length = 2}, .score = 240},
+      {.move = {.path = {3, 7}, .length = 2}, .score = 200},
+      {.move = {.path = {4, 8}, .length = 2}, .score = 150},
+  };
+  CheckersScoredMoveList white_list = {
+      .moves = white_moves,
+      .count = G_N_ELEMENTS(white_moves),
+  };
+
+  g_autoptr(GArray) candidates = g_array_new(FALSE, FALSE, sizeof(CheckersPuzzleMistakeCandidate));
+  g_assert_true(checkers_puzzle_collect_mistake_candidates(&white_list,
+                                                           CHECKERS_COLOR_WHITE,
+                                                           100,
+                                                           &white_moves[2].move,
+                                                           candidates));
+  g_assert_cmpuint(candidates->len, ==, 1);
+  CheckersPuzzleMistakeCandidate *candidate =
+      &g_array_index(candidates, CheckersPuzzleMistakeCandidate, 0);
+  g_assert_cmpint(candidate->mistake_delta, ==, 150);
+  g_assert_true(memcmp(&candidate->move, &white_moves[3].move, sizeof(candidate->move)) == 0);
+
+  CheckersScoredMove black_moves[] = {
+      {.move = {.path = {10, 14}, .length = 2}, .score = -300},
+      {.move = {.path = {11, 15}, .length = 2}, .score = -240},
+      {.move = {.path = {12, 16}, .length = 2}, .score = -180},
+      {.move = {.path = {13, 17}, .length = 2}, .score = -150},
+  };
+  CheckersScoredMoveList black_list = {
+      .moves = black_moves,
+      .count = G_N_ELEMENTS(black_moves),
+  };
+  g_array_set_size(candidates, 0);
+  g_assert_true(checkers_puzzle_collect_mistake_candidates(&black_list,
+                                                           CHECKERS_COLOR_BLACK,
+                                                           100,
+                                                           NULL,
+                                                           candidates));
+  g_assert_cmpuint(candidates->len, ==, 2);
+  candidate = &g_array_index(candidates, CheckersPuzzleMistakeCandidate, 0);
+  g_assert_cmpint(candidate->mistake_delta, ==, 120);
+  g_assert_true(memcmp(&candidate->move, &black_moves[2].move, sizeof(candidate->move)) == 0);
+  candidate = &g_array_index(candidates, CheckersPuzzleMistakeCandidate, 1);
+  g_assert_cmpint(candidate->mistake_delta, ==, 150);
+  g_assert_true(memcmp(&candidate->move, &black_moves[3].move, sizeof(candidate->move)) == 0);
+}
+
 static void test_puzzle_solution_shape_interest_rules(void) {
   CheckersMove one_move[] = {
       {.length = 2, .captures = 0},
@@ -230,6 +279,18 @@ static void test_puzzle_solution_shape_interest_rules(void) {
       {.length = 2, .captures = 0},
   };
   g_assert_true(checkers_puzzle_solution_shape_is_interesting(move_move_move, G_N_ELEMENTS(move_move_move)));
+}
+
+static void test_puzzle_solution_evaluation_swing_interest_rules(void) {
+  g_assert_true(checkers_puzzle_solution_evaluation_swing_is_interesting(CHECKERS_COLOR_WHITE, -399, -350));
+  g_assert_false(checkers_puzzle_solution_evaluation_swing_is_interesting(CHECKERS_COLOR_WHITE, -400, -301));
+  g_assert_true(checkers_puzzle_solution_evaluation_swing_is_interesting(CHECKERS_COLOR_WHITE, -400, -300));
+  g_assert_true(checkers_puzzle_solution_evaluation_swing_is_interesting(CHECKERS_COLOR_WHITE, -500, -250));
+
+  g_assert_true(checkers_puzzle_solution_evaluation_swing_is_interesting(CHECKERS_COLOR_BLACK, 399, 350));
+  g_assert_false(checkers_puzzle_solution_evaluation_swing_is_interesting(CHECKERS_COLOR_BLACK, 400, 301));
+  g_assert_true(checkers_puzzle_solution_evaluation_swing_is_interesting(CHECKERS_COLOR_BLACK, 400, 300));
+  g_assert_true(checkers_puzzle_solution_evaluation_swing_is_interesting(CHECKERS_COLOR_BLACK, 550, 200));
 }
 
 static void test_puzzle_solution_rejects_immediate_recapture(void) {
@@ -346,7 +407,10 @@ int main(int argc, char **argv) {
   g_test_add_func("/puzzle-generation/unique-best", test_puzzle_unique_best_rules);
   g_test_add_func("/puzzle-generation/attacker-move-clarity",
                   test_puzzle_attacker_move_clarity_is_asymmetric);
+  g_test_add_func("/puzzle-generation/collect-mistake-candidates", test_puzzle_collect_mistake_candidates);
   g_test_add_func("/puzzle-generation/solution-shape", test_puzzle_solution_shape_interest_rules);
+  g_test_add_func("/puzzle-generation/solution-evaluation-swing",
+                  test_puzzle_solution_evaluation_swing_interest_rules);
   g_test_add_func("/puzzle-generation/immediate-recapture",
                   test_puzzle_solution_rejects_immediate_recapture);
   g_test_add_func("/puzzle-generation/solution-key", test_puzzle_solution_key_building);

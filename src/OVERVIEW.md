@@ -257,8 +257,10 @@ reads close to its checkers-language definition.
 The continuation re-analyzes every ply at the configured best-move depth, requires the attacker to keep a single good
 move throughout the line, allows the defender to use any best reply, and stops once static material is better than at
 the puzzle start. Candidate solutions are also filtered to reject boring shapes: a one-move line, or a three-move
-line of move, move, jump. After the solution line ends, the immediate next best reply must also avoid an instant
-recapture, or the candidate is rejected as unstable.
+line of move, move, jump. If the attacker starts 400 or more points behind, the tactical line must bring the score
+back to at worst 300 points behind; otherwise the candidate is rejected as an uninteresting partial comeback. After the
+solution line ends, the immediate next best reply must also avoid an instant recapture, or the candidate is rejected as
+unstable.
 While replaying a generated self-play game, the CLI analyzes each pre-mistake position at the configured best-move
 depth and reuses one shared TT allocation across the whole run. When `--synthetic-candidates` is enabled, it also
 tries any synthetic mistake move that already trails the best move by at least 100 points, so puzzle generation is not
@@ -276,7 +278,8 @@ Role: expose pure functions for mistake delta checks, "enough choice" and "singl
 lists, where "single correct move" means the best score is ahead of the second-best score by a configurable margin,
 plus an attacker/defender move-clarity helper, a collector for all scored moves that qualify as mistakes under a given
 threshold, and next puzzle file index discovery from existing `puzzle-####.sgf` files, plus pure predicates for
-rejecting boring solution-line shapes and immediate recaptures after the solution.
+rejecting boring solution-line shapes, insufficient comeback swings from badly losing positions, and immediate
+recaptures after the solution.
 Collaborates with: `create_puzzles.c` and `tests/test_puzzle_generation.c`.
 
 ## File dialog history helpers (`src/file_dialog_history.c`, `src/file_dialog_history.h`)

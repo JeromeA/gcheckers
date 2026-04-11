@@ -117,6 +117,41 @@ gboolean checkers_puzzle_has_unique_best(const CheckersScoredMoveList *moves,
                                                                 out_second_score);
 }
 
+gboolean checkers_puzzle_collect_mistake_candidates(const CheckersScoredMoveList *moves,
+                                                    CheckersColor turn,
+                                                    gint threshold,
+                                                    const CheckersMove *exclude_move,
+                                                    GArray *out_candidates) {
+  g_return_val_if_fail(moves != NULL, FALSE);
+  g_return_val_if_fail(moves->moves != NULL || moves->count == 0, FALSE);
+  g_return_val_if_fail(turn == CHECKERS_COLOR_WHITE || turn == CHECKERS_COLOR_BLACK, FALSE);
+  g_return_val_if_fail(threshold >= 0, FALSE);
+  g_return_val_if_fail(out_candidates != NULL, FALSE);
+
+  if (moves->count == 0) {
+    return TRUE;
+  }
+
+  gint best_score = moves->moves[0].score;
+  for (guint i = 1; i < moves->count; ++i) {
+    const CheckersScoredMove *entry = &moves->moves[i];
+    if (exclude_move != NULL && memcmp(&entry->move, exclude_move, sizeof(*exclude_move)) == 0) {
+      continue;
+    }
+    if (!checkers_puzzle_is_mistake(turn, best_score, entry->score, threshold)) {
+      continue;
+    }
+
+    CheckersPuzzleMistakeCandidate candidate = {
+        .move = entry->move,
+        .mistake_delta = checkers_puzzle_mistake_delta(turn, best_score, entry->score),
+    };
+    g_array_append_val(out_candidates, candidate);
+  }
+
+  return TRUE;
+}
+
 static gboolean checkers_puzzle_solution_is_a_single_move(const CheckersMove *moves, guint move_count) {
   g_return_val_if_fail(moves != NULL || move_count == 0, FALSE);
 
@@ -134,6 +169,28 @@ gboolean checkers_puzzle_solution_shape_is_interesting(const CheckersMove *moves
 
   return !checkers_puzzle_solution_is_a_single_move(moves, move_count) &&
          !checkers_puzzle_solution_is_move_move_jump(moves, move_count);
+}
+
+gboolean checkers_puzzle_solution_evaluation_swing_is_interesting(CheckersColor attacker,
+                                                                  gint start_static,
+                                                                  gint final_static) {
+  g_return_val_if_fail(attacker == CHECKERS_COLOR_WHITE || attacker == CHECKERS_COLOR_BLACK, FALSE);
+
+  /*
+   * If the attacker is already far behind, only keep the puzzle when the tactical
+   * line brings the position back into a less-lost range.
+   */
+  if (attacker == CHECKERS_COLOR_WHITE) {
+    if (start_static > -400) {
+      return TRUE;
+    }
+    return final_static >= -300;
+  }
+
+  if (start_static < 400) {
+    return TRUE;
+  }
+  return final_static <= 300;
 }
 
 gboolean checkers_puzzle_solution_has_no_immediate_recapture(const CheckersMove *solution_moves,

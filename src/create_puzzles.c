@@ -58,6 +58,7 @@ typedef enum {
   CHECKERS_PUZZLE_REJECTION_SINGLE_MOVE_SOLUTION,
   CHECKERS_PUZZLE_REJECTION_MOVE_MOVE_JUMP_SOLUTION,
   CHECKERS_PUZZLE_REJECTION_UNINTERESTING_SOLUTION,
+  CHECKERS_PUZZLE_REJECTION_INSUFFICIENT_COMEBACK,
   CHECKERS_PUZZLE_REJECTION_MOVE_COLOR_MISMATCH,
   CHECKERS_PUZZLE_REJECTION_MOVE_APPLY_FAILED,
   CHECKERS_PUZZLE_REJECTION_NOT_SERIOUS_MISTAKE,
@@ -135,6 +136,8 @@ static const char *checkers_puzzle_rejection_reason_label(CheckersPuzzleRejectio
       return "solution is move, move, jump";
     case CHECKERS_PUZZLE_REJECTION_UNINTERESTING_SOLUTION:
       return "solution shape is not interesting";
+    case CHECKERS_PUZZLE_REJECTION_INSUFFICIENT_COMEBACK:
+      return "solution does not improve a losing position enough";
     case CHECKERS_PUZZLE_REJECTION_MOVE_COLOR_MISMATCH:
       return "move color does not match side to move";
     case CHECKERS_PUZZLE_REJECTION_MOVE_APPLY_FAILED:
@@ -890,6 +893,17 @@ static gboolean checkers_puzzle_try_build_candidate_from_resulting_position(cons
   if (!checkers_puzzle_solution_is_interesting(line)) {
     checkers_puzzle_log_rejection(CHECKERS_PUZZLE_REJECTION_UNINTERESTING_SOLUTION,
                                   "solution shape is not interesting");
+    checkers_puzzle_position_analysis_clear(&analysis);
+    g_array_unref(line);
+    return FALSE;
+  }
+  if (!checkers_puzzle_solution_evaluation_swing_is_interesting(post_mistake_game->state.turn,
+                                                                analysis.static_score,
+                                                                final_static)) {
+    checkers_puzzle_log_rejection(CHECKERS_PUZZLE_REJECTION_INSUFFICIENT_COMEBACK,
+                                  "attacker was too far behind and only improved from %d to %d",
+                                  analysis.static_score,
+                                  final_static);
     checkers_puzzle_position_analysis_clear(&analysis);
     g_array_unref(line);
     return FALSE;

@@ -12,6 +12,11 @@ typedef enum {
   CHECKERS_PUZZLE_ARG_FILE,
 } CheckersPuzzleArgType;
 
+typedef struct {
+  CheckersMove move;
+  gint mistake_delta;
+} CheckersPuzzleMistakeCandidate;
+
 gint checkers_puzzle_mistake_delta(CheckersColor turn, gint best_score, gint played_score);
 gint checkers_puzzle_score_gap_to_next_best(CheckersColor turn, gint best_score, gint second_score);
 gboolean checkers_puzzle_is_mistake(CheckersColor turn, gint best_score, gint played_score, gint threshold);
@@ -33,7 +38,15 @@ gboolean checkers_puzzle_has_unique_best(const CheckersScoredMoveList *moves,
                                          gint min_score_gap,
                                          gint *out_best_score,
                                          gint *out_second_score);
+gboolean checkers_puzzle_collect_mistake_candidates(const CheckersScoredMoveList *moves,
+                                                    CheckersColor turn,
+                                                    gint threshold,
+                                                    const CheckersMove *exclude_move,
+                                                    GArray *out_candidates);
 gboolean checkers_puzzle_solution_shape_is_interesting(const CheckersMove *moves, guint move_count);
+gboolean checkers_puzzle_solution_evaluation_swing_is_interesting(CheckersColor attacker,
+                                                                  gint start_static,
+                                                                  gint final_static);
 gboolean checkers_puzzle_solution_has_no_immediate_recapture(const CheckersMove *solution_moves,
                                                              guint solution_move_count,
                                                              const CheckersMove *next_move);
