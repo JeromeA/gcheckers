@@ -1,18 +1,18 @@
-A checkers program for playing, studying, and replaying games.
+A checkers program for playing, solving puzzles, and replaying games.
 
-Solve tactical puzzles, analyze positions with move-by-move scores, and browse SGF variations without leaving the same
-desktop app.
+Play against the computer or another human, solve tactical puzzles, analyze full games with move-by-move scores, and
+browse SGF variations without leaving the same desktop app.
 
-| Puzzle analysis | Play against the computer | Variation review |
-| --- | --- | --- |
-| ![Analysis view](doc/Analysis.png) | ![Play against the computer](doc/Play_against_computer.png) | ![Variation browser](doc/Variations.png) |
+| Play against the computer | Puzzle mode | Full-game analysis | Variation review |
+| --- | --- | --- | --- |
+| ![Play against the computer](doc/Play_against_computer.png) | ![Puzzle mode](doc/Puzzle.png) | ![Analysis view](doc/Analysis.png) | ![Variation browser](doc/Variations.png) |
 
 `gcheckers` focuses on the parts that matter once a plain board is not enough anymore:
 
+  - normal play against another human or the computer
   - puzzle solving and verification
   - engine analysis for the current position or a full game
   - SGF review with branching variations
-  - normal play against another human or the computer
 
 Main features:
 
