@@ -1,7 +1,4 @@
-A checkers program for playing, solving puzzles, and replaying games.
-
-Play against the computer or another human, solve tactical puzzles, analyze full games with move-by-move scores, and
-browse SGF variations without leaving the same desktop app.
+A desktop checkers program.
 
 Main features:
 
