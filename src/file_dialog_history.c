@@ -1,6 +1,6 @@
 #include "file_dialog_history.h"
 
-static const char *gcheckers_settings_schema_id = "com.example.gcheckers";
+static const char *gcheckers_settings_schema_id = "io.github.JeromeA.gcheckers";
 
 GSettings *gcheckers_file_dialog_history_create_settings(void) {
   GSettingsSchemaSource *default_source = g_settings_schema_source_get_default();

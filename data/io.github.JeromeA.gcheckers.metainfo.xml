@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.JeromeA.gcheckers</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <name>gcheckers</name>
+  <summary>Play checkers, solve puzzles, and analyze SGF games</summary>
+  <developer id="io.github.jeromea">
+    <name>JeromeA</name>
+  </developer>
+  <launchable type="desktop-id">io.github.JeromeA.gcheckers.desktop</launchable>
+  <provides>
+    <binary>gcheckers</binary>
+  </provides>
+  <description>
+    <p>
+      gcheckers is a GTK desktop checkers program for playing full games, solving tactical puzzles, and reviewing
+      recorded SGF lines.
+    </p>
+    <p>
+      It supports hot-seat play, computer opponents, puzzle training, full-game analysis, and SGF variation browsing
+      in one desktop application.
+    </p>
+  </description>
+  <categories>
+    <category>Game</category>
+    <category>BoardGame</category>
+  </categories>
+  <url type="homepage">https://github.com/JeromeA/gcheckers</url>
+  <url type="bugtracker">https://github.com/JeromeA/gcheckers/issues</url>
+  <url type="vcs-browser">https://github.com/JeromeA/gcheckers</url>
+  <content_rating type="oars-1.1"/>
+  <recommends>
+    <control>keyboard</control>
+    <control>pointing</control>
+  </recommends>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Play against the computer or in hot-seat mode.</caption>
+      <image type="source">https://raw.githubusercontent.com/JeromeA/gcheckers/main/doc/Play_against_computer.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Solve tactical checkers puzzles.</caption>
+      <image type="source">https://raw.githubusercontent.com/JeromeA/gcheckers/main/doc/Puzzle.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Analyze complete games with move-by-move scores.</caption>
+      <image type="source">https://raw.githubusercontent.com/JeromeA/gcheckers/main/doc/Analysis.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Browse SGF variations and review branching lines.</caption>
+      <image type="source">https://raw.githubusercontent.com/JeromeA/gcheckers/main/doc/Variations.png</image>
+    </screenshot>
+  </screenshots>
+</component>

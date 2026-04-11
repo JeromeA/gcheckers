@@ -39,6 +39,10 @@ Build the project:
 
   make
 
+Install the desktop app metadata under a prefix:
+
+  make install PREFIX=/tmp/gcheckers-appdir
+
 Run the GTK application:
 
   ./gcheckers

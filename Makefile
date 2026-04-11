@@ -1,4 +1,5 @@
 CC := cc
+APP_ID := io.github.JeromeA.gcheckers
 CFLAGS := -std=c99 -Wall -Wextra -Werror -Isrc
 CFLAGS += -g3
 COVERAGE_CFLAGS := --coverage -O0 -g
@@ -41,10 +42,22 @@ COV_REPORT_DIR := $(COV_DIR)/report
 COV_OBJS := $(SRCS:%.c=$(COV_OBJ_DIR)/%.o)
 COV_BOARD_OBJS := $(BOARD_SRCS:%.c=$(COV_OBJ_DIR)/%.o)
 GSETTINGS_SCHEMA_DIR := data/schemas
-GSETTINGS_SCHEMA_XML := $(GSETTINGS_SCHEMA_DIR)/com.example.gcheckers.gschema.xml
+GSETTINGS_SCHEMA_XML := $(GSETTINGS_SCHEMA_DIR)/$(APP_ID).gschema.xml
 GSETTINGS_SCHEMA_COMPILED := $(GSETTINGS_SCHEMA_DIR)/gschemas.compiled
+DESKTOP_FILE := data/$(APP_ID).desktop
+METAINFO_FILE := data/$(APP_ID).metainfo.xml
+ICON_FILE := data/icons/hicolor/scalable/apps/$(APP_ID).svg
+PREFIX ?= /usr/local
+DESTDIR ?=
+BINDIR := $(PREFIX)/bin
+DATADIR := $(PREFIX)/share
+APPLICATIONS_DIR := $(DATADIR)/applications
+METAINFO_DIR := $(DATADIR)/metainfo
+ICONS_DIR := $(DATADIR)/icons/hicolor/scalable/apps
+SCHEMAS_INSTALL_DIR := $(DATADIR)/glib-2.0/schemas
+INSTALL ?= install
 
-.PHONY: all clean test coverage
+.PHONY: all clean test coverage install validate-desktop-metadata
 
 all: $(GSETTINGS_SCHEMA_COMPILED) libgame.a create_puzzles find_position gcheckers
 
@@ -58,7 +71,7 @@ test: test_game test_game_print test_board test_move_gen test_checkers_model \
 	test_ai_transposition_table test_position_search \
 	test_position_predicate test_sgf_tree test_sgf_io test_sgf_view test_bga_client \
 	test_file_dialog_history test_board_view test_player_controls_panel test_sgf_controller test_window \
-	test_create_puzzles_cli test_create_puzzles_check \
+	test_create_puzzles_cli test_create_puzzles_check test_desktop_metadata \
 	test_puzzle_generation
 	./test_game
 	./test_game_print
@@ -73,6 +86,7 @@ test: test_game test_game_print test_board test_move_gen test_checkers_model \
 	./test_sgf_view
 	./test_bga_client
 	./test_file_dialog_history
+	./test_desktop_metadata
 	./test_create_puzzles_cli
 	./test_create_puzzles_check
 	./test_puzzle_generation
@@ -131,6 +145,11 @@ test_bga_client: tests/test_bga_client.c src/bga_client.c src/bga_client.h
 test_file_dialog_history: $(GSETTINGS_SCHEMA_COMPILED) tests/test_file_dialog_history.c \
 	src/file_dialog_history.c src/file_dialog_history.h
 	$(CC) $(CFLAGS) -o $@ tests/test_file_dialog_history.c src/file_dialog_history.c $(LDLIBS)
+
+test_desktop_metadata: tests/test_desktop_metadata.sh Makefile $(DESKTOP_FILE) $(METAINFO_FILE) $(ICON_FILE) \
+	$(GSETTINGS_SCHEMA_XML)
+	cp tests/test_desktop_metadata.sh $@
+	chmod +x $@
 
 test_sgf_tree: tests/test_sgf_tree.c $(SGF_TREE_SRCS) src/sgf_tree.h
 	$(CC) $(CFLAGS) -o $@ tests/test_sgf_tree.c $(SGF_TREE_SRCS) $(LDLIBS)
@@ -247,10 +266,35 @@ gcheckers: $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c src/application.c src/wi
 $(GSETTINGS_SCHEMA_COMPILED): $(GSETTINGS_SCHEMA_XML)
 	glib-compile-schemas $(GSETTINGS_SCHEMA_DIR)
 
+install: all $(DESKTOP_FILE) $(METAINFO_FILE) $(ICON_FILE)
+	$(INSTALL) -d $(DESTDIR)$(BINDIR)
+	$(INSTALL) -m 755 gcheckers $(DESTDIR)$(BINDIR)/gcheckers
+	$(INSTALL) -d $(DESTDIR)$(APPLICATIONS_DIR)
+	$(INSTALL) -m 644 $(DESKTOP_FILE) $(DESTDIR)$(APPLICATIONS_DIR)/$(APP_ID).desktop
+	$(INSTALL) -d $(DESTDIR)$(METAINFO_DIR)
+	$(INSTALL) -m 644 $(METAINFO_FILE) $(DESTDIR)$(METAINFO_DIR)/$(APP_ID).metainfo.xml
+	$(INSTALL) -d $(DESTDIR)$(ICONS_DIR)
+	$(INSTALL) -m 644 $(ICON_FILE) $(DESTDIR)$(ICONS_DIR)/$(APP_ID).svg
+	$(INSTALL) -d $(DESTDIR)$(SCHEMAS_INSTALL_DIR)
+	$(INSTALL) -m 644 $(GSETTINGS_SCHEMA_XML) $(DESTDIR)$(SCHEMAS_INSTALL_DIR)/$(APP_ID).gschema.xml
+	glib-compile-schemas $(DESTDIR)$(SCHEMAS_INSTALL_DIR)
+
+validate-desktop-metadata: $(DESKTOP_FILE) $(METAINFO_FILE)
+	@if command -v desktop-file-validate >/dev/null 2>&1; then \
+		desktop-file-validate $(DESKTOP_FILE); \
+	else \
+		echo "desktop-file-validate not found; skipping"; \
+	fi
+	@if command -v appstreamcli >/dev/null 2>&1; then \
+		appstreamcli validate --no-net $(METAINFO_FILE); \
+	else \
+		echo "appstreamcli not found; skipping"; \
+	fi
+
 clean:
 	rm -f $(OBJS) libgame.a test_game test_game_print test_board test_move_gen test_checkers_model \
 		test_ai_transposition_table test_position_search test_position_predicate test_sgf_tree test_sgf_io test_sgf_view \
-		test_bga_client test_file_dialog_history test_board_view test_player_controls_panel test_sgf_controller \
+		test_bga_client test_file_dialog_history test_desktop_metadata test_board_view test_player_controls_panel test_sgf_controller \
 		test_window find_position gcheckers
 	rm -f $(GSETTINGS_SCHEMA_COMPILED)
 	rm -rf $(COV_DIR)

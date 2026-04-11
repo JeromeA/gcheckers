@@ -291,7 +291,8 @@ Collaborates with: `create_puzzles.c` and `tests/test_puzzle_generation.c`.
 ## File dialog history helpers (`src/file_dialog_history.c`, `src/file_dialog_history.h`)
 Module: SGF file dialog folder persistence helpers.
 Role: create `GSettings` with the app schema, read the remembered SGF folder as a `GFile`, and store the parent folder
-of a chosen SGF file so future dialogs can reopen there.
+of a chosen SGF file so future dialogs can reopen there. The helper first probes the installed
+`io.github.JeromeA.gcheckers` schema, then falls back to the in-tree `data/schemas` directory for local builds/tests.
 Collaborates with: `sgf_file_actions.c` and `tests/test_file_dialog_history.c`.
 
 ## GTK application entry (`src/gcheckers.c`, `src/application.c`, `src/application.h`)
@@ -301,6 +302,8 @@ Role: define the GTK application type and activation flow that creates the main 
 publishes a menubar model (`File` -> `New game...`, `Import...`, `Load...`, `Save as...`, `Save position...`, `Quit`;
 `Game` -> `Force move` + navigation section; `Analysis` -> current-position and whole-game analysis; `Puzzle` ->
 `Play puzzles`; `View` -> drawer toggles) with keyboard accelerators.
+The canonical application ID is `io.github.JeromeA.gcheckers`, which is also used by the installed desktop file,
+metainfo, icon name, and GSettings schema.
 Collaborates with: `GCheckersWindow` for UI wiring and new-game dialog presentation.
 
 ## Board view subsystem
