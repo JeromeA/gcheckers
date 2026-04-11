@@ -20,8 +20,9 @@ Board orientation is runtime-only window state: live games choose `follow-player
 orientation based on the new-game player modes, and SGF review/manual navigation switches back to `fixed` so analysis
 navigation does not keep rotating the board.
 Puzzle mode loads a random `puzzle-*.sgf` / `puzzles-*.sgf` from the puzzle directory (`GCHECKERS_PUZZLES_DIR` or the
-default `puzzles/`), hides both drawers, disables SGF/review actions, shows puzzle-only `Next puzzle` and `Analyze`
-buttons, and validates the player's moves against the SGF main-line solution while auto-playing defender replies.
+installed/local application data search path), hides both drawers, disables SGF/review actions, shows puzzle-only
+`Next puzzle` and `Analyze` buttons, and validates the player's moves against the SGF main-line solution while
+auto-playing defender replies.
 Puzzle entry forces a fixed attacker-at-bottom orientation, while puzzle exit restores only layout/drawer state and
 leaves the current board orientation unchanged.
 Adds an `Analysis` menubar submenu for current-position and whole-game analysis, plus a `View` submenu with
@@ -294,6 +295,12 @@ Role: create `GSettings` with the app schema, read the remembered SGF folder as 
 of a chosen SGF file so future dialogs can reopen there. The helper first probes the installed
 `io.github.JeromeA.gcheckers` schema, then falls back to the in-tree `data/schemas` directory for local builds/tests.
 Collaborates with: `sgf_file_actions.c` and `tests/test_file_dialog_history.c`.
+
+## App data path helpers (`src/app_paths.c`, `src/app_paths.h`)
+Module: application data directory lookup helpers.
+Role: resolve installed or local read-only data subdirectories such as `puzzles` by checking an explicit environment
+override first, then `g_get_user_data_dir()`, then `g_get_system_data_dirs()`, then the local checkout fallback.
+Collaborates with: `window.c` for packaging-safe puzzle discovery and `tests/test_app_paths.c`.
 
 ## GTK application entry (`src/gcheckers.c`, `src/application.c`, `src/application.h`)
 Class: `GCheckersApplication` (`GtkApplication`).

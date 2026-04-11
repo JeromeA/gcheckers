@@ -17,6 +17,7 @@ LDLIBS := $(GLIB_LIBS) $(GOBJECT_LIBS) $(GIO_LIBS) $(CURL_LIBS) -lm
 
 CFLAGS += $(GLIB_CFLAGS) $(GOBJECT_CFLAGS) $(GIO_CFLAGS) $(CURL_CFLAGS)
 
+APP_PATHS_SRCS := src/app_paths.c
 SRCS := src/board.c src/game.c src/game_print.c src/move_gen.c src/ai_alpha_beta.c \
 	src/rulesets.c \
 	src/ai_transposition_table.c src/ai_zobrist.c src/checkers_model.c
@@ -47,6 +48,8 @@ GSETTINGS_SCHEMA_COMPILED := $(GSETTINGS_SCHEMA_DIR)/gschemas.compiled
 DESKTOP_FILE := data/$(APP_ID).desktop
 METAINFO_FILE := data/$(APP_ID).metainfo.xml
 ICON_FILE := data/icons/hicolor/scalable/apps/$(APP_ID).svg
+PUZZLE_FILES := $(wildcard puzzles/*.sgf)
+FLATPAK_MANIFEST := $(APP_ID).yaml
 PREFIX ?= /usr/local
 DESTDIR ?=
 BINDIR := $(PREFIX)/bin
@@ -54,6 +57,7 @@ DATADIR := $(PREFIX)/share
 APPLICATIONS_DIR := $(DATADIR)/applications
 METAINFO_DIR := $(DATADIR)/metainfo
 ICONS_DIR := $(DATADIR)/icons/hicolor/scalable/apps
+PUZZLES_INSTALL_DIR := $(DATADIR)/gcheckers/puzzles
 SCHEMAS_INSTALL_DIR := $(DATADIR)/glib-2.0/schemas
 INSTALL ?= install
 
@@ -70,8 +74,8 @@ libgame.a: $(OBJS)
 test: test_game test_game_print test_board test_move_gen test_checkers_model \
 	test_ai_transposition_table test_position_search \
 	test_position_predicate test_sgf_tree test_sgf_io test_sgf_view test_bga_client \
-	test_file_dialog_history test_board_view test_player_controls_panel test_sgf_controller test_window \
-	test_create_puzzles_cli test_create_puzzles_check test_desktop_metadata \
+	test_file_dialog_history test_app_paths test_board_view test_player_controls_panel test_sgf_controller test_window \
+	test_create_puzzles_cli test_create_puzzles_check test_desktop_metadata test_flatpak_manifest \
 	test_puzzle_generation
 	./test_game
 	./test_game_print
@@ -86,7 +90,9 @@ test: test_game test_game_print test_board test_move_gen test_checkers_model \
 	./test_sgf_view
 	./test_bga_client
 	./test_file_dialog_history
+	./test_app_paths
 	./test_desktop_metadata
+	./test_flatpak_manifest
 	./test_create_puzzles_cli
 	./test_create_puzzles_check
 	./test_puzzle_generation
@@ -146,9 +152,16 @@ test_file_dialog_history: $(GSETTINGS_SCHEMA_COMPILED) tests/test_file_dialog_hi
 	src/file_dialog_history.c src/file_dialog_history.h
 	$(CC) $(CFLAGS) -o $@ tests/test_file_dialog_history.c src/file_dialog_history.c $(LDLIBS)
 
+test_app_paths: tests/test_app_paths.c $(APP_PATHS_SRCS) src/app_paths.h
+	$(CC) $(CFLAGS) -o $@ tests/test_app_paths.c $(APP_PATHS_SRCS) $(LDLIBS)
+
 test_desktop_metadata: tests/test_desktop_metadata.sh Makefile $(DESKTOP_FILE) $(METAINFO_FILE) $(ICON_FILE) \
 	$(GSETTINGS_SCHEMA_XML)
 	cp tests/test_desktop_metadata.sh $@
+	chmod +x $@
+
+test_flatpak_manifest: tests/test_flatpak_manifest.sh Makefile $(FLATPAK_MANIFEST)
+	cp tests/test_flatpak_manifest.sh $@
 	chmod +x $@
 
 test_sgf_tree: tests/test_sgf_tree.c $(SGF_TREE_SRCS) src/sgf_tree.h
@@ -196,7 +209,7 @@ test_sgf_controller: tests/test_sgf_controller.c src/sgf_controller.c \
 	src/sgf_view_layout.c src/sgf_view_link_renderer.c src/sgf_view_scroller.c \
 	src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(SRCS) $(LDLIBS) $(GTK_LIBS)
 
-test_window: $(GSETTINGS_SCHEMA_COMPILED) tests/test_window.c src/window.c \
+test_window: $(GSETTINGS_SCHEMA_COMPILED) tests/test_window.c src/window.c $(APP_PATHS_SRCS) \
 	src/new_game_dialog.c \
 	src/rulesets.c src/rulesets.h \
 	src/import_dialog.c \
@@ -216,7 +229,7 @@ test_window: $(GSETTINGS_SCHEMA_COMPILED) tests/test_window.c src/window.c \
 	src/sgf_view_link_renderer.c src/sgf_view_link_renderer.h src/sgf_view_scroller.c \
 	src/sgf_view_scroller.h src/sgf_view_selection_controller.c src/sgf_view_selection_controller.h \
 	$(SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
-	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_window.c src/window.c \
+	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_window.c src/window.c $(APP_PATHS_SRCS) \
 		src/new_game_dialog.c \
 		src/import_dialog.c src/file_dialog_history.c \
 		src/sgf_file_actions.c \
@@ -233,7 +246,7 @@ test_puzzle_generation: tests/test_puzzle_generation.c src/puzzle_generation.c s
 	src/board.h
 	$(CC) $(CFLAGS) -o $@ tests/test_puzzle_generation.c src/puzzle_generation.c $(LDLIBS)
 
-gcheckers: $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c src/application.c src/window.c \
+gcheckers: $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c src/application.c src/window.c $(APP_PATHS_SRCS) \
 	src/new_game_dialog.c \
 	src/rulesets.c src/rulesets.h \
 	src/import_dialog.c \
@@ -254,7 +267,7 @@ gcheckers: $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c src/application.c src/wi
 	src/sgf_view_scroller.c src/sgf_view_scroller.h src/sgf_view_selection_controller.c \
 	src/sgf_view_selection_controller.h $(SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/gcheckers.c src/application.c \
-		src/window.c src/new_game_dialog.c src/import_dialog.c src/file_dialog_history.c src/style.c \
+		$(APP_PATHS_SRCS) src/window.c src/new_game_dialog.c src/import_dialog.c src/file_dialog_history.c src/style.c \
 	src/player_controls_panel.c src/analysis_graph.c src/sgf_file_actions.c src/bga_client.c \
 	src/sgf_controller.c src/board_view.c src/board_grid.c src/board_square.c \
 	src/board_move_overlay.c src/board_selection_controller.c src/piece_palette.c \
@@ -275,6 +288,8 @@ install: all $(DESKTOP_FILE) $(METAINFO_FILE) $(ICON_FILE)
 	$(INSTALL) -m 644 $(METAINFO_FILE) $(DESTDIR)$(METAINFO_DIR)/$(APP_ID).metainfo.xml
 	$(INSTALL) -d $(DESTDIR)$(ICONS_DIR)
 	$(INSTALL) -m 644 $(ICON_FILE) $(DESTDIR)$(ICONS_DIR)/$(APP_ID).svg
+	$(INSTALL) -d $(DESTDIR)$(PUZZLES_INSTALL_DIR)
+	$(INSTALL) -m 644 $(PUZZLE_FILES) $(DESTDIR)$(PUZZLES_INSTALL_DIR)
 	$(INSTALL) -d $(DESTDIR)$(SCHEMAS_INSTALL_DIR)
 	$(INSTALL) -m 644 $(GSETTINGS_SCHEMA_XML) $(DESTDIR)$(SCHEMAS_INSTALL_DIR)/$(APP_ID).gschema.xml
 	glib-compile-schemas $(DESTDIR)$(SCHEMAS_INSTALL_DIR)
@@ -294,7 +309,8 @@ validate-desktop-metadata: $(DESKTOP_FILE) $(METAINFO_FILE)
 clean:
 	rm -f $(OBJS) libgame.a test_game test_game_print test_board test_move_gen test_checkers_model \
 		test_ai_transposition_table test_position_search test_position_predicate test_sgf_tree test_sgf_io test_sgf_view \
-		test_bga_client test_file_dialog_history test_desktop_metadata test_board_view test_player_controls_panel test_sgf_controller \
+		test_bga_client test_file_dialog_history test_app_paths test_desktop_metadata test_flatpak_manifest \
+		test_board_view test_player_controls_panel test_sgf_controller \
 		test_window find_position gcheckers
 	rm -f $(GSETTINGS_SCHEMA_COMPILED)
 	rm -rf $(COV_DIR)

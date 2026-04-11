@@ -1,6 +1,7 @@
 #include "ai_alpha_beta.h"
 #include "window.h"
 
+#include "app_paths.h"
 #include "analysis_graph.h"
 #include "board_view.h"
 #include "rulesets.h"
@@ -188,11 +189,6 @@ static gboolean gcheckers_window_moves_equal(const CheckersMove *left, const Che
 
 static const char *gcheckers_window_color_name(CheckersColor color) {
   return color == CHECKERS_COLOR_BLACK ? "Black" : "White";
-}
-
-static const char *gcheckers_window_puzzles_dir(void) {
-  const char *override = g_getenv("GCHECKERS_PUZZLES_DIR");
-  return override != NULL && *override != '\0' ? override : "puzzles";
 }
 
 static gboolean gcheckers_window_analysis_depth_valid(guint depth) {
@@ -1173,7 +1169,8 @@ static gboolean gcheckers_window_start_random_puzzle_mode(GCheckersWindow *self)
   g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), FALSE);
 
   g_autoptr(GPtrArray) puzzle_paths = g_ptr_array_new_with_free_func(g_free);
-  const char *dir_path = gcheckers_window_puzzles_dir();
+  g_autofree char *dir_path = gcheckers_app_paths_find_data_subdir("GCHECKERS_PUZZLES_DIR", "puzzles");
+  g_return_val_if_fail(dir_path != NULL, FALSE);
   if (!gcheckers_window_collect_puzzle_paths(dir_path, puzzle_paths)) {
     return FALSE;
   }
