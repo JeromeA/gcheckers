@@ -31,8 +31,10 @@ gboolean checkers_create_puzzles_cli_parse(int argc,
   }
 
   *out_options = (CheckersCreatePuzzlesCliOptions) {
+      .mode = CHECKERS_CREATE_PUZZLES_MODE_GENERATE,
       .depth = default_depth,
       .try_forced_mistakes = FALSE,
+      .dry_run = FALSE,
       .arg = NULL,
   };
 
@@ -53,6 +55,16 @@ gboolean checkers_create_puzzles_cli_parse(int argc,
       continue;
     }
 
+    if (g_strcmp0(argv[i], "--check-existing") == 0) {
+      out_options->mode = CHECKERS_CREATE_PUZZLES_MODE_CHECK_EXISTING;
+      continue;
+    }
+
+    if (g_strcmp0(argv[i], "--dry-run") == 0) {
+      out_options->dry_run = TRUE;
+      continue;
+    }
+
     if (argv[i][0] == '-') {
       if (out_error_message != NULL) {
         *out_error_message = g_strdup_printf("Unknown option: %s", argv[i]);
@@ -70,7 +82,24 @@ gboolean checkers_create_puzzles_cli_parse(int argc,
     out_options->arg = argv[i];
   }
 
+  if (out_options->mode == CHECKERS_CREATE_PUZZLES_MODE_CHECK_EXISTING) {
+    if (out_options->try_forced_mistakes) {
+      if (out_error_message != NULL) {
+        *out_error_message = g_strdup("--synthetic-candidates is only valid when generating puzzles");
+      }
+      return FALSE;
+    }
+  } else if (out_options->dry_run) {
+    if (out_error_message != NULL) {
+      *out_error_message = g_strdup("--dry-run is only valid with --check-existing");
+    }
+    return FALSE;
+  }
+
   if (out_options->arg == NULL) {
+    if (out_options->mode == CHECKERS_CREATE_PUZZLES_MODE_CHECK_EXISTING) {
+      return TRUE;
+    }
     if (out_error_message != NULL) {
       *out_error_message = g_strdup("Missing puzzle count or SGF file");
     }

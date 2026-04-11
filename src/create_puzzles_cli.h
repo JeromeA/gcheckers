@@ -3,9 +3,16 @@
 
 #include <glib.h>
 
+typedef enum {
+  CHECKERS_CREATE_PUZZLES_MODE_GENERATE = 0,
+  CHECKERS_CREATE_PUZZLES_MODE_CHECK_EXISTING,
+} CheckersCreatePuzzlesCliMode;
+
 typedef struct {
+  CheckersCreatePuzzlesCliMode mode;
   guint depth;
   gboolean try_forced_mistakes;
+  gboolean dry_run;
   const char *arg;
 } CheckersCreatePuzzlesCliOptions;
 
