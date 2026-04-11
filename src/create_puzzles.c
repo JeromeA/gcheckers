@@ -203,9 +203,13 @@ static void checkers_puzzle_print_final_report(void) {
   g_print("  moves analyzed: %u\n", checkers_puzzle_run_stats.moves_analyzed);
   if (checkers_puzzle_run_stats.existing_puzzles_checked > 0) {
     g_print("  existing puzzles checked: %u\n", checkers_puzzle_run_stats.existing_puzzles_checked);
-    g_print("  existing puzzles removed: %u\n", checkers_puzzle_run_stats.existing_puzzles_removed);
-    g_print("  existing puzzles that would be removed: %u\n",
-            checkers_puzzle_run_stats.existing_puzzles_would_remove);
+    if (checkers_puzzle_run_stats.existing_puzzles_removed > 0) {
+      g_print("  existing puzzles removed: %u\n", checkers_puzzle_run_stats.existing_puzzles_removed);
+    }
+    if (checkers_puzzle_run_stats.existing_puzzles_would_remove > 0) {
+      g_print("  existing puzzles that would be removed: %u\n",
+              checkers_puzzle_run_stats.existing_puzzles_would_remove);
+    }
   }
   g_print("  moves rejected: %u\n", rejected_total);
   for (guint i = 0; i < CHECKERS_PUZZLE_REJECTION_COUNT; ++i) {
