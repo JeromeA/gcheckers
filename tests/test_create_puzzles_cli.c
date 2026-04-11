@@ -16,6 +16,7 @@ static void test_create_puzzles_cli_defaults(void) {
   g_assert_cmpint(options.mode, ==, CHECKERS_CREATE_PUZZLES_MODE_GENERATE);
   g_assert_cmpuint(options.depth, ==, 8);
   g_assert_false(options.try_forced_mistakes);
+  g_assert_false(options.save_games);
   g_assert_false(options.dry_run);
   g_assert_cmpstr(options.arg, ==, "12");
 }
@@ -34,6 +35,7 @@ static void test_create_puzzles_cli_synthetic_candidates_flag(void) {
   g_assert_cmpint(options.mode, ==, CHECKERS_CREATE_PUZZLES_MODE_GENERATE);
   g_assert_cmpuint(options.depth, ==, 8);
   g_assert_true(options.try_forced_mistakes);
+  g_assert_false(options.save_games);
   g_assert_cmpstr(options.arg, ==, "input.sgf");
 }
 
@@ -53,7 +55,24 @@ static void test_create_puzzles_cli_parses_depth_and_synthetic_candidates(void) 
   g_assert_cmpint(options.mode, ==, CHECKERS_CREATE_PUZZLES_MODE_GENERATE);
   g_assert_cmpuint(options.depth, ==, 10);
   g_assert_true(options.try_forced_mistakes);
+  g_assert_false(options.save_games);
   g_assert_cmpstr(options.arg, ==, "3");
+}
+
+static void test_create_puzzles_cli_save_games_flag(void) {
+  char *argv[] = {
+      (char *)"create_puzzles",
+      (char *)"--save-games",
+      (char *)"2",
+  };
+  CheckersCreatePuzzlesCliOptions options = {0};
+  g_autofree char *error = NULL;
+
+  g_assert_true(checkers_create_puzzles_cli_parse(G_N_ELEMENTS(argv), argv, 8, &options, &error));
+  g_assert_null(error);
+  g_assert_cmpint(options.mode, ==, CHECKERS_CREATE_PUZZLES_MODE_GENERATE);
+  g_assert_true(options.save_games);
+  g_assert_cmpstr(options.arg, ==, "2");
 }
 
 static void test_create_puzzles_cli_check_existing_mode(void) {
@@ -71,6 +90,7 @@ static void test_create_puzzles_cli_check_existing_mode(void) {
   g_assert_cmpint(options.mode, ==, CHECKERS_CREATE_PUZZLES_MODE_CHECK_EXISTING);
   g_assert_cmpuint(options.depth, ==, 8);
   g_assert_false(options.try_forced_mistakes);
+  g_assert_false(options.save_games);
   g_assert_true(options.dry_run);
   g_assert_cmpstr(options.arg, ==, "puzzles-alt");
 
@@ -85,6 +105,7 @@ static void test_create_puzzles_cli_check_existing_mode(void) {
                                                   &error));
   g_assert_null(error);
   g_assert_cmpint(options.mode, ==, CHECKERS_CREATE_PUZZLES_MODE_CHECK_EXISTING);
+  g_assert_false(options.save_games);
   g_assert_null(options.arg);
 }
 
@@ -141,6 +162,19 @@ static void test_create_puzzles_cli_rejects_invalid_input(void) {
                                                    &options,
                                                    &error));
   g_assert_cmpstr(error, ==, "--synthetic-candidates is only valid when generating puzzles");
+
+  char *bad_save_games_check_argv[] = {
+      (char *)"create_puzzles",
+      (char *)"--check-existing",
+      (char *)"--save-games",
+  };
+  g_clear_pointer(&error, g_free);
+  g_assert_false(checkers_create_puzzles_cli_parse(G_N_ELEMENTS(bad_save_games_check_argv),
+                                                   bad_save_games_check_argv,
+                                                   8,
+                                                   &options,
+                                                   &error));
+  g_assert_cmpstr(error, ==, "--save-games is only valid when generating puzzles");
 }
 
 int main(int argc, char **argv) {
@@ -151,6 +185,7 @@ int main(int argc, char **argv) {
                   test_create_puzzles_cli_synthetic_candidates_flag);
   g_test_add_func("/create-puzzles-cli/depth-and-synthetic-candidates",
                   test_create_puzzles_cli_parses_depth_and_synthetic_candidates);
+  g_test_add_func("/create-puzzles-cli/save-games", test_create_puzzles_cli_save_games_flag);
   g_test_add_func("/create-puzzles-cli/check-existing", test_create_puzzles_cli_check_existing_mode);
   g_test_add_func("/create-puzzles-cli/rejects-invalid-input", test_create_puzzles_cli_rejects_invalid_input);
 

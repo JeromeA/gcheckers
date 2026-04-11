@@ -248,9 +248,10 @@ SGF files under `puzzles/puzzle-####.sgf` with root setup (`AE/AB/AW/ABK/AWK/PL`
 Validation and emission are now split: one path computes a validated puzzle candidate from a post-mistake position,
 and separate generation/checking paths either save that candidate or compare an existing saved puzzle against it.
 The CLI accepts `--depth N` to override the puzzle-analysis depth, `--synthetic-candidates` to opt into trying
-synthetic bad moves in addition to the played move during generation, and `--check-existing` with optional `--dry-run`
-to re-validate `puzzle-*.sgf` files in a directory and optionally delete stale ones. Without `--check-existing`, it
-uses the built-in default depth 8 and only evaluates the actual game line.
+synthetic bad moves in addition to the played move during generation, `--save-games` to also persist the originating
+`game-####.sgf` companion files, and `--check-existing` with optional `--dry-run` to re-validate `puzzle-*.sgf` files
+in a directory and optionally delete stale ones. Without `--check-existing`, it uses the built-in default depth 8 and
+only evaluates the actual game line.
 Before generating anything, the CLI loads existing `puzzle-*.sgf` files from the output directory and deduplicates by
 solution move sequence, so equivalent puzzles are skipped instead of being saved twice.
 The main validation path is organized as puzzle-rule predicates (`position_follows_a_serious_mistake`,
@@ -272,7 +273,8 @@ The CLI always prints self-play completion, loaded existing solution keys, each 
 indented `->` rejection or keep reasons, and a final aggregated rejection report so puzzle filtering can be followed
 from the terminal. In check-existing mode, it also reports how many puzzle files were checked and how many would be or
 were removed.
-For each emitted puzzle index, also saves the originating full self-play game as `puzzles/game-####.sgf`.
+By default it saves only `puzzles/puzzle-####.sgf`; `puzzles/game-####.sgf` companions are written only when
+`--save-games` is enabled.
 Collaborates with: `ai_alpha_beta.c`, `rulesets.c`, `sgf_tree.c`, `sgf_move_props.c`, `sgf_io.c`,
 and `puzzle_generation.c`.
 

@@ -96,6 +96,7 @@ static gboolean checkers_puzzle_try_forced_mistake_candidates(const Game *before
                                                               const CheckersMove *exclude_move,
                                                               const GArray *game_line,
                                                               guint prefix_len,
+                                                              gboolean save_game_sgf,
                                                               const char *output_dir,
                                                               GHashTable *existing_solution_keys,
                                                               guint *inout_index,
@@ -924,6 +925,7 @@ static gboolean checkers_puzzle_emit_validated_candidate(const GameState *start_
                                                          guint solution_depth,
                                                          const CheckersPuzzleValidatedCandidate *candidate,
                                                          const GArray *game_line,
+                                                         gboolean save_game_sgf,
                                                          const char *output_dir,
                                                          GHashTable *existing_solution_keys,
                                                          guint *inout_index,
@@ -949,9 +951,7 @@ static gboolean checkers_puzzle_emit_validated_candidate(const GameState *start_
   }
 
   g_autofree char *puzzle_path = checkers_puzzle_build_indexed_path(output_dir, "puzzle", *inout_index);
-  g_autofree char *game_path = checkers_puzzle_build_indexed_path(output_dir, "game", *inout_index);
   g_return_val_if_fail(puzzle_path != NULL, FALSE);
-  g_return_val_if_fail(game_path != NULL, FALSE);
 
   if (!checkers_puzzle_save_sgf(puzzle_path,
                                 start_state,
@@ -963,8 +963,14 @@ static gboolean checkers_puzzle_emit_validated_candidate(const GameState *start_
                                 &candidate->solution_move)) {
     return FALSE;
   }
-  if (!checkers_puzzle_save_game_sgf(game_path, game_line)) {
-    return FALSE;
+
+  g_autofree char *game_path = NULL;
+  if (save_game_sgf) {
+    game_path = checkers_puzzle_build_indexed_path(output_dir, "game", *inout_index);
+    g_return_val_if_fail(game_path != NULL, FALSE);
+    if (!checkers_puzzle_save_game_sgf(game_path, game_line)) {
+      return FALSE;
+    }
   }
 
   g_hash_table_add(existing_solution_keys, g_steal_pointer(&solution_key));
@@ -1084,6 +1090,7 @@ static gboolean checkers_puzzle_emit_candidate_if_valid(const Game *post_mistake
                                                         CheckersAiTranspositionTable *tt,
                                                         gint mistake_delta,
                                                         const GArray *game_line,
+                                                        gboolean save_game_sgf,
                                                         const char *output_dir,
                                                         GHashTable *existing_solution_keys,
                                                         guint *inout_index,
@@ -1111,6 +1118,7 @@ static gboolean checkers_puzzle_emit_candidate_if_valid(const Game *post_mistake
                                                 best_move_depth,
                                                 &validated,
                                                 game_line,
+                                                save_game_sgf,
                                                 output_dir,
                                                 existing_solution_keys,
                                                 inout_index,
@@ -1127,7 +1135,11 @@ static gboolean checkers_puzzle_emit_candidate_if_valid(const Game *post_mistake
                                validated.start_static,
                                validated.final_static,
                                validated.line->len);
-  checkers_puzzle_log_progress("  -> saved %s and %s", puzzle_path, game_path);
+  if (game_path != NULL) {
+    checkers_puzzle_log_progress("  -> saved %s and %s", puzzle_path, game_path);
+  } else {
+    checkers_puzzle_log_progress("  -> saved %s", puzzle_path);
+  }
   checkers_puzzle_validated_candidate_clear(&validated);
   return TRUE;
 }
@@ -1138,6 +1150,7 @@ static gboolean checkers_puzzle_try_forced_mistake_candidates(const Game *before
                                                               const CheckersMove *exclude_move,
                                                               const GArray *game_line,
                                                               guint prefix_len,
+                                                              gboolean save_game_sgf,
                                                               const char *output_dir,
                                                               GHashTable *existing_solution_keys,
                                                               guint *inout_index,
@@ -1206,6 +1219,7 @@ static gboolean checkers_puzzle_try_forced_mistake_candidates(const Game *before
                                                   tt,
                                                   candidate->mistake_delta,
                                                   candidate_game_line,
+                                                  save_game_sgf,
                                                   output_dir,
                                                   existing_solution_keys,
                                                   inout_index,
@@ -1219,6 +1233,7 @@ static gboolean checkers_puzzle_emit_from_line(const CheckersRules *rules,
                                                guint best_move_depth,
                                                CheckersAiTranspositionTable *tt,
                                                gboolean try_forced_mistakes,
+                                               gboolean save_game_sgf,
                                                const GArray *game_line,
                                                const char *output_dir,
                                                GHashTable *existing_solution_keys,
@@ -1256,6 +1271,7 @@ static gboolean checkers_puzzle_emit_from_line(const CheckersRules *rules,
                                                          &played->move,
                                                          game_line,
                                                          i,
+                                                         save_game_sgf,
                                                          output_dir,
                                                          existing_solution_keys,
                                                          inout_index,
@@ -1296,6 +1312,7 @@ static gboolean checkers_puzzle_emit_from_line(const CheckersRules *rules,
                                                     tt,
                                                     mistake_delta,
                                                     game_line,
+                                                    save_game_sgf,
                                                     output_dir,
                                                     existing_solution_keys,
                                                     inout_index,
@@ -1739,7 +1756,7 @@ int main(int argc, char **argv) {
                                          &options,
                                          &parse_error)) {
     g_printerr("%s\n", parse_error != NULL ? parse_error : "Invalid arguments");
-    g_printerr("Usage: %s [--depth N] [--synthetic-candidates] <puzzle-count|sgf-file>\n", argv[0]);
+    g_printerr("Usage: %s [--depth N] [--synthetic-candidates] [--save-games] <puzzle-count|sgf-file>\n", argv[0]);
     g_printerr("   or: %s [--depth N] --check-existing [--dry-run] [puzzle-dir]\n", argv[0]);
     return 1;
   }
@@ -1813,6 +1830,7 @@ int main(int argc, char **argv) {
                                         options.depth,
                                         analysis_tt,
                                         options.try_forced_mistakes,
+                                        options.save_games,
                                         game_line,
                                         output_dir,
                                         existing_solution_keys,
@@ -1847,6 +1865,7 @@ int main(int argc, char **argv) {
                                         options.depth,
                                         analysis_tt,
                                         options.try_forced_mistakes,
+                                        options.save_games,
                                         game_line,
                                         output_dir,
                                         existing_solution_keys,

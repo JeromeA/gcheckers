@@ -12,6 +12,7 @@ typedef struct {
   CheckersCreatePuzzlesCliMode mode;
   guint depth;
   gboolean try_forced_mistakes;
+  gboolean save_games;
   gboolean dry_run;
   const char *arg;
 } CheckersCreatePuzzlesCliOptions;

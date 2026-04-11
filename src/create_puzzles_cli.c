@@ -34,6 +34,7 @@ gboolean checkers_create_puzzles_cli_parse(int argc,
       .mode = CHECKERS_CREATE_PUZZLES_MODE_GENERATE,
       .depth = default_depth,
       .try_forced_mistakes = FALSE,
+      .save_games = FALSE,
       .dry_run = FALSE,
       .arg = NULL,
   };
@@ -52,6 +53,11 @@ gboolean checkers_create_puzzles_cli_parse(int argc,
 
     if (g_strcmp0(argv[i], "--synthetic-candidates") == 0) {
       out_options->try_forced_mistakes = TRUE;
+      continue;
+    }
+
+    if (g_strcmp0(argv[i], "--save-games") == 0) {
+      out_options->save_games = TRUE;
       continue;
     }
 
@@ -86,6 +92,12 @@ gboolean checkers_create_puzzles_cli_parse(int argc,
     if (out_options->try_forced_mistakes) {
       if (out_error_message != NULL) {
         *out_error_message = g_strdup("--synthetic-candidates is only valid when generating puzzles");
+      }
+      return FALSE;
+    }
+    if (out_options->save_games) {
+      if (out_error_message != NULL) {
+        *out_error_message = g_strdup("--save-games is only valid when generating puzzles");
       }
       return FALSE;
     }
