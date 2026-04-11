@@ -1,4 +1,5 @@
 #include "ai_alpha_beta.h"
+#include "create_puzzles_cli.h"
 #include "puzzle_generation.h"
 #include "rulesets.h"
 #include "sgf_io.h"
@@ -11,10 +12,14 @@
 #include <stdarg.h>
 #include <string.h>
 
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(CheckersAiTranspositionTable, checkers_ai_tt_free)
+
 enum {
   CHECKERS_PUZZLE_SELF_PLAY_DEPTH = 0,
   CHECKERS_PUZZLE_DEFAULT_BEST_MOVE_DEPTH = 8,
+  CHECKERS_PUZZLE_ANALYSIS_TT_SIZE_MB = 256,
   CHECKERS_PUZZLE_MISTAKE_THRESHOLD = 50,
+  CHECKERS_PUZZLE_FORCED_MISTAKE_THRESHOLD = 100,
   CHECKERS_PUZZLE_SINGLE_MOVE_MARGIN = 50,
   CHECKERS_PUZZLE_MIN_LEGAL_MOVES = 4,
   CHECKERS_PUZZLE_MAX_TACTICAL_PLIES = 200,
@@ -68,8 +73,20 @@ typedef struct {
 
 static gboolean checkers_puzzle_analyze_resulting_position(const Game *game,
                                                            guint best_move_depth,
+                                                           CheckersAiTranspositionTable *tt,
                                                            CheckersPuzzlePositionAnalysis *out_analysis);
 static gboolean checkers_puzzle_load_existing_solution_keys(const char *output_dir, GHashTable *out_keys);
+static gboolean checkers_puzzle_try_forced_mistake_candidates(const Game *before_mistake_game,
+                                                              guint best_move_depth,
+                                                              CheckersAiTranspositionTable *tt,
+                                                              const CheckersMove *exclude_move,
+                                                              const GArray *game_line,
+                                                              guint prefix_len,
+                                                              const char *output_dir,
+                                                              GHashTable *existing_solution_keys,
+                                                              guint *inout_index,
+                                                              guint limit,
+                                                              guint *out_emitted);
 
 static void checkers_puzzle_log_progress(const char *format, ...) G_GNUC_PRINTF(1, 2);
 static void checkers_puzzle_log_rejection(CheckersPuzzleRejectionReason reason,
@@ -210,6 +227,27 @@ static gboolean checkers_puzzle_find_move_score(const CheckersScoredMoveList *mo
   return FALSE;
 }
 
+static gboolean checkers_puzzle_analyze_moves_with_shared_tt(const Game *game,
+                                                             guint depth,
+                                                             CheckersAiTranspositionTable *tt,
+                                                             CheckersScoredMoveList *out_moves) {
+  g_return_val_if_fail(game != NULL, FALSE);
+  g_return_val_if_fail(depth > 0, FALSE);
+  g_return_val_if_fail(out_moves != NULL, FALSE);
+
+  CheckersAiSearchStats stats = {0};
+  checkers_ai_search_stats_clear(&stats);
+  return checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(game,
+                                                                   depth,
+                                                                   out_moves,
+                                                                   NULL,
+                                                                   NULL,
+                                                                   NULL,
+                                                                   NULL,
+                                                                   tt,
+                                                                   &stats);
+}
+
 static gboolean checkers_puzzle_format_setup_point(uint8_t index, uint8_t board_size, char out_point[3]) {
   g_return_val_if_fail(out_point != NULL, FALSE);
   g_return_val_if_fail(board_size > 0, FALSE);
@@ -312,6 +350,29 @@ static gboolean checkers_puzzle_append_move_to_line(Game *game, const CheckersMo
   return game_apply_move(game, &step.move) == 0;
 }
 
+static GArray *checkers_puzzle_build_game_prefix_with_mistake(const GArray *game_line,
+                                                              guint prefix_len,
+                                                              CheckersColor color,
+                                                              const CheckersMove *move) {
+  g_return_val_if_fail(game_line != NULL, NULL);
+  g_return_val_if_fail(prefix_len <= game_line->len, NULL);
+  g_return_val_if_fail(color == CHECKERS_COLOR_WHITE || color == CHECKERS_COLOR_BLACK, NULL);
+  g_return_val_if_fail(move != NULL, NULL);
+
+  GArray *candidate_line = g_array_new(FALSE, FALSE, sizeof(CheckersPuzzleLineMove));
+  for (guint i = 0; i < prefix_len; ++i) {
+    CheckersPuzzleLineMove step = g_array_index(game_line, CheckersPuzzleLineMove, i);
+    g_array_append_val(candidate_line, step);
+  }
+
+  CheckersPuzzleLineMove mistake_step = {
+      .move = *move,
+      .color = color,
+  };
+  g_array_append_val(candidate_line, mistake_step);
+  return candidate_line;
+}
+
 static gboolean checkers_puzzle_append_best_depth_move(Game *game,
                                                        const CheckersPuzzlePositionAnalysis *analysis,
                                                        GArray *line) {
@@ -358,7 +419,8 @@ static gboolean checkers_puzzle_solution_is_interesting(const GArray *line) {
 
 static gboolean checkers_puzzle_solution_ends_before_an_immediate_recapture(const Game *after_solution,
                                                                             const GArray *line,
-                                                                            guint best_move_depth) {
+                                                                            guint best_move_depth,
+                                                                            CheckersAiTranspositionTable *tt) {
   g_return_val_if_fail(after_solution != NULL, FALSE);
   g_return_val_if_fail(line != NULL, FALSE);
   g_return_val_if_fail(best_move_depth > 0, FALSE);
@@ -368,7 +430,7 @@ static gboolean checkers_puzzle_solution_ends_before_an_immediate_recapture(cons
   }
 
   CheckersPuzzlePositionAnalysis analysis = {0};
-  if (!checkers_puzzle_analyze_resulting_position(after_solution, best_move_depth, &analysis)) {
+  if (!checkers_puzzle_analyze_resulting_position(after_solution, best_move_depth, tt, &analysis)) {
     checkers_puzzle_log_rejection(CHECKERS_PUZZLE_REJECTION_ANALYZE_AFTER_SOLUTION,
                                   "failed to analyze the move immediately after the solution");
     return FALSE;
@@ -406,6 +468,7 @@ static char *checkers_puzzle_build_line_solution_key(const GArray *line) {
 static gboolean checkers_puzzle_solution_line_of_best_depth_moves_improves_static_evaluation(
     const Game *start,
     guint best_move_depth,
+    CheckersAiTranspositionTable *tt,
     GArray *out_line,
     gint *out_final_static,
     Game *out_final_game) {
@@ -448,7 +511,7 @@ static gboolean checkers_puzzle_solution_line_of_best_depth_moves_improves_stati
     }
 
     CheckersPuzzlePositionAnalysis analysis = {0};
-    if (!checkers_puzzle_analyze_resulting_position(&line_game, best_move_depth, &analysis)) {
+    if (!checkers_puzzle_analyze_resulting_position(&line_game, best_move_depth, tt, &analysis)) {
       checkers_puzzle_log_rejection(CHECKERS_PUZZLE_REJECTION_LINE_ANALYZE_BEST_MOVES,
                                     "failed to analyze best depth-%u moves while building the line at ply %u",
                                     best_move_depth,
@@ -501,6 +564,7 @@ static gboolean checkers_puzzle_solution_line_of_best_depth_moves_improves_stati
 
 static gboolean checkers_puzzle_position_follows_a_serious_mistake(const Game *before_mistake_game,
                                                                    guint best_move_depth,
+                                                                   CheckersAiTranspositionTable *tt,
                                                                    const CheckersMove *played_move,
                                                                    gint *out_mistake_delta) {
   g_return_val_if_fail(before_mistake_game != NULL, FALSE);
@@ -509,7 +573,7 @@ static gboolean checkers_puzzle_position_follows_a_serious_mistake(const Game *b
   g_return_val_if_fail(out_mistake_delta != NULL, FALSE);
 
   CheckersScoredMoveList analysis = {0};
-  if (!checkers_ai_alpha_beta_analyze_moves(before_mistake_game, best_move_depth, &analysis)) {
+  if (!checkers_puzzle_analyze_moves_with_shared_tt(before_mistake_game, best_move_depth, tt, &analysis)) {
     checkers_scored_move_list_free(&analysis);
     return FALSE;
   }
@@ -535,13 +599,14 @@ static gboolean checkers_puzzle_position_follows_a_serious_mistake(const Game *b
 
 static gboolean checkers_puzzle_analyze_resulting_position(const Game *game,
                                                            guint best_move_depth,
+                                                           CheckersAiTranspositionTable *tt,
                                                            CheckersPuzzlePositionAnalysis *out_analysis) {
   g_return_val_if_fail(game != NULL, FALSE);
   g_return_val_if_fail(best_move_depth > 0, FALSE);
   g_return_val_if_fail(out_analysis != NULL, FALSE);
 
   *out_analysis = (CheckersPuzzlePositionAnalysis) {0};
-  if (!checkers_ai_alpha_beta_analyze_moves(game, best_move_depth, &out_analysis->moves)) {
+  if (!checkers_puzzle_analyze_moves_with_shared_tt(game, best_move_depth, tt, &out_analysis->moves)) {
     checkers_scored_move_list_free(&out_analysis->moves);
     return FALSE;
   }
@@ -749,6 +814,7 @@ static gboolean checkers_puzzle_emit_validated_candidate(const GameState *start_
 
 static gboolean checkers_puzzle_try_build_candidate_from_resulting_position(const Game *post_mistake_game,
                                                                             guint best_move_depth,
+                                                                            CheckersAiTranspositionTable *tt,
                                                                             gint mistake_delta,
                                                                             const GArray *game_line,
                                                                             const char *output_dir,
@@ -764,7 +830,7 @@ static gboolean checkers_puzzle_try_build_candidate_from_resulting_position(cons
   g_return_val_if_fail(out_emitted != NULL, FALSE);
 
   CheckersPuzzlePositionAnalysis analysis = {0};
-  if (!checkers_puzzle_analyze_resulting_position(post_mistake_game, best_move_depth, &analysis)) {
+  if (!checkers_puzzle_analyze_resulting_position(post_mistake_game, best_move_depth, tt, &analysis)) {
     checkers_puzzle_log_rejection(CHECKERS_PUZZLE_REJECTION_RESULT_ANALYSIS_FAILED,
                                   "failed to analyze the resulting position");
     return FALSE;
@@ -799,6 +865,7 @@ static gboolean checkers_puzzle_try_build_candidate_from_resulting_position(cons
   Game final_game = {0};
   if (!checkers_puzzle_solution_line_of_best_depth_moves_improves_static_evaluation(post_mistake_game,
                                                                                     best_move_depth,
+                                                                                    tt,
                                                                                     line,
                                                                                     &final_static,
                                                                                     &final_game)) {
@@ -827,7 +894,10 @@ static gboolean checkers_puzzle_try_build_candidate_from_resulting_position(cons
     g_array_unref(line);
     return FALSE;
   }
-  if (!checkers_puzzle_solution_ends_before_an_immediate_recapture(&final_game, line, best_move_depth)) {
+  if (!checkers_puzzle_solution_ends_before_an_immediate_recapture(&final_game,
+                                                                   line,
+                                                                   best_move_depth,
+                                                                   tt)) {
     checkers_puzzle_position_analysis_clear(&analysis);
     g_array_unref(line);
     return FALSE;
@@ -866,8 +936,93 @@ static gboolean checkers_puzzle_try_build_candidate_from_resulting_position(cons
   return TRUE;
 }
 
+static gboolean checkers_puzzle_try_forced_mistake_candidates(const Game *before_mistake_game,
+                                                              guint best_move_depth,
+                                                              CheckersAiTranspositionTable *tt,
+                                                              const CheckersMove *exclude_move,
+                                                              const GArray *game_line,
+                                                              guint prefix_len,
+                                                              const char *output_dir,
+                                                              GHashTable *existing_solution_keys,
+                                                              guint *inout_index,
+                                                              guint limit,
+                                                              guint *out_emitted) {
+  g_return_val_if_fail(before_mistake_game != NULL, FALSE);
+  g_return_val_if_fail(best_move_depth > 0, FALSE);
+  g_return_val_if_fail(game_line != NULL, FALSE);
+  g_return_val_if_fail(output_dir != NULL, FALSE);
+  g_return_val_if_fail(existing_solution_keys != NULL, FALSE);
+  g_return_val_if_fail(inout_index != NULL, FALSE);
+  g_return_val_if_fail(out_emitted != NULL, FALSE);
+
+  if (*out_emitted >= limit) {
+    return TRUE;
+  }
+
+  CheckersScoredMoveList analysis = {0};
+  if (!checkers_puzzle_analyze_moves_with_shared_tt(before_mistake_game, best_move_depth, tt, &analysis)) {
+    return FALSE;
+  }
+
+  g_autoptr(GArray) candidates = g_array_new(FALSE, FALSE, sizeof(CheckersPuzzleMistakeCandidate));
+  if (!checkers_puzzle_collect_mistake_candidates(&analysis,
+                                                  before_mistake_game->state.turn,
+                                                  CHECKERS_PUZZLE_FORCED_MISTAKE_THRESHOLD,
+                                                  exclude_move,
+                                                  candidates)) {
+    checkers_scored_move_list_free(&analysis);
+    return FALSE;
+  }
+  checkers_scored_move_list_free(&analysis);
+
+  for (guint i = 0; i < candidates->len && *out_emitted < limit; ++i) {
+    const CheckersPuzzleMistakeCandidate *candidate =
+        &g_array_index(candidates, CheckersPuzzleMistakeCandidate, i);
+    checkers_puzzle_run_stats.moves_analyzed++;
+
+    Game post_mistake_game = *before_mistake_game;
+    if (game_apply_move(&post_mistake_game, &candidate->move) != 0) {
+      checkers_puzzle_log_rejection(CHECKERS_PUZZLE_REJECTION_MOVE_APPLY_FAILED,
+                                    "forced mistake move could not be applied to the game");
+      return FALSE;
+    }
+
+    g_autoptr(GArray) candidate_game_line =
+        checkers_puzzle_build_game_prefix_with_mistake(game_line,
+                                                       prefix_len,
+                                                       before_mistake_game->state.turn,
+                                                       &candidate->move);
+    if (candidate_game_line == NULL) {
+      return FALSE;
+    }
+
+    char move_text[128] = {0};
+    if (!checkers_puzzle_format_move(&candidate->move, move_text)) {
+      g_strlcpy(move_text, "?", sizeof(move_text));
+    }
+    checkers_puzzle_log_progress("  -> trying forced mistake %s (delta=%d depth=%u)",
+                                 move_text,
+                                 candidate->mistake_delta,
+                                 best_move_depth);
+
+    (void)checkers_puzzle_try_build_candidate_from_resulting_position(&post_mistake_game,
+                                                                      best_move_depth,
+                                                                      tt,
+                                                                      candidate->mistake_delta,
+                                                                      candidate_game_line,
+                                                                      output_dir,
+                                                                      existing_solution_keys,
+                                                                      inout_index,
+                                                                      out_emitted);
+  }
+
+  return TRUE;
+}
+
 static gboolean checkers_puzzle_emit_from_line(const CheckersRules *rules,
                                                guint best_move_depth,
+                                               CheckersAiTranspositionTable *tt,
+                                               gboolean try_forced_mistakes,
                                                const GArray *game_line,
                                                const char *output_dir,
                                                GHashTable *existing_solution_keys,
@@ -876,6 +1031,7 @@ static gboolean checkers_puzzle_emit_from_line(const CheckersRules *rules,
                                                guint *out_emitted) {
   g_return_val_if_fail(rules != NULL, FALSE);
   g_return_val_if_fail(best_move_depth > 0, FALSE);
+  g_return_val_if_fail(tt != NULL, FALSE);
   g_return_val_if_fail(game_line != NULL, FALSE);
   g_return_val_if_fail(output_dir != NULL, FALSE);
   g_return_val_if_fail(existing_solution_keys != NULL, FALSE);
@@ -897,6 +1053,26 @@ static gboolean checkers_puzzle_emit_from_line(const CheckersRules *rules,
             has_move_text ? move_text : "");
     checkers_puzzle_run_stats.moves_analyzed++;
 
+    if (try_forced_mistakes) {
+      if (!checkers_puzzle_try_forced_mistake_candidates(&before,
+                                                         best_move_depth,
+                                                         tt,
+                                                         &played->move,
+                                                         game_line,
+                                                         i,
+                                                         output_dir,
+                                                         existing_solution_keys,
+                                                         inout_index,
+                                                         limit,
+                                                         out_emitted)) {
+        game_destroy(&game);
+        return FALSE;
+      }
+      if (*out_emitted >= limit) {
+        break;
+      }
+    }
+
     if (played->color != before.state.turn) {
       checkers_puzzle_log_rejection(CHECKERS_PUZZLE_REJECTION_MOVE_COLOR_MISMATCH,
                                     "move color does not match side to move");
@@ -907,6 +1083,7 @@ static gboolean checkers_puzzle_emit_from_line(const CheckersRules *rules,
     gint mistake_delta = 0;
     gboolean is_mistake = checkers_puzzle_position_follows_a_serious_mistake(&before,
                                                                              best_move_depth,
+                                                                             tt,
                                                                              &played->move,
                                                                              &mistake_delta);
 
@@ -920,6 +1097,7 @@ static gboolean checkers_puzzle_emit_from_line(const CheckersRules *rules,
     if (is_mistake) {
       (void)checkers_puzzle_try_build_candidate_from_resulting_position(&game,
                                                                         best_move_depth,
+                                                                        tt,
                                                                         mistake_delta,
                                                                         game_line,
                                                                         output_dir,
@@ -1091,48 +1269,23 @@ static gboolean checkers_puzzle_load_existing_solution_keys(const char *output_d
   return TRUE;
 }
 
-static gboolean checkers_puzzle_parse_depth_option(const char *arg, guint *out_depth) {
-  g_return_val_if_fail(arg != NULL, FALSE);
-  g_return_val_if_fail(out_depth != NULL, FALSE);
-
-  gchar *end = NULL;
-  guint64 value = g_ascii_strtoull(arg, &end, 10);
-  if (end == arg || end == NULL || *end != '\0' || value == 0 || value > G_MAXUINT) {
-    return FALSE;
-  }
-
-  *out_depth = (guint)value;
-  return TRUE;
-}
-
 int main(int argc, char **argv) {
-  guint best_move_depth = CHECKERS_PUZZLE_DEFAULT_BEST_MOVE_DEPTH;
-  const char *arg = NULL;
-  for (gint i = 1; i < argc; ++i) {
-    if (g_strcmp0(argv[i], "--depth") == 0) {
-      if (i + 1 >= argc || !checkers_puzzle_parse_depth_option(argv[i + 1], &best_move_depth)) {
-        g_printerr("Invalid --depth value\n");
-        return 1;
-      }
-      i++;
-      continue;
-    }
-    if (arg != NULL) {
-      g_printerr("Usage: %s [--depth N] <puzzle-count|sgf-file>\n", argv[0]);
-      return 1;
-    }
-    arg = argv[i];
-  }
-
-  if (arg == NULL) {
-    g_printerr("Usage: %s [--depth N] <puzzle-count|sgf-file>\n", argv[0]);
+  CheckersCreatePuzzlesCliOptions options = {0};
+  g_autofree char *parse_error = NULL;
+  if (!checkers_create_puzzles_cli_parse(argc,
+                                         argv,
+                                         CHECKERS_PUZZLE_DEFAULT_BEST_MOVE_DEPTH,
+                                         &options,
+                                         &parse_error)) {
+    g_printerr("%s\n", parse_error != NULL ? parse_error : "Invalid arguments");
+    g_printerr("Usage: %s [--depth N] [--synthetic-candidates] <puzzle-count|sgf-file>\n", argv[0]);
     return 1;
   }
 
   guint wanted = 0;
-  CheckersPuzzleArgType arg_type = checkers_puzzle_parse_arg(arg, &wanted);
+  CheckersPuzzleArgType arg_type = checkers_puzzle_parse_arg(options.arg, &wanted);
   if (arg_type == CHECKERS_PUZZLE_ARG_INVALID) {
-    g_printerr("Invalid argument: %s\n", arg);
+    g_printerr("Invalid argument: %s\n", options.arg);
     return 1;
   }
 
@@ -1156,11 +1309,18 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  g_autoptr(CheckersAiTranspositionTable) analysis_tt =
+      checkers_ai_tt_new(CHECKERS_PUZZLE_ANALYSIS_TT_SIZE_MB);
+  if (analysis_tt == NULL) {
+    g_printerr("Failed to allocate shared analysis TT\n");
+    return 1;
+  }
+
   if (arg_type == CHECKERS_PUZZLE_ARG_FILE) {
     checkers_puzzle_run_stats.games_processed = 1;
     g_autoptr(GArray) game_line = g_array_new(FALSE, FALSE, sizeof(CheckersPuzzleLineMove));
-    if (!checkers_puzzle_load_main_line(arg, game_line)) {
-      g_printerr("Failed to load game line from file: %s\n", arg);
+    if (!checkers_puzzle_load_main_line(options.arg, game_line)) {
+      g_printerr("Failed to load game line from file: %s\n", options.arg);
       return 1;
     }
 
@@ -1172,7 +1332,9 @@ int main(int argc, char **argv) {
 
     guint emitted = 0;
     if (!checkers_puzzle_emit_from_line(rules,
-                                        best_move_depth,
+                                        options.depth,
+                                        analysis_tt,
+                                        options.try_forced_mistakes,
                                         game_line,
                                         output_dir,
                                         existing_solution_keys,
@@ -1182,7 +1344,7 @@ int main(int argc, char **argv) {
       g_printerr("Failed to extract puzzles from file\n");
       return 1;
     }
-    g_print("file=%s\n", arg);
+    g_print("file=%s\n", options.arg);
     checkers_puzzle_print_final_report();
     return 0;
   }
@@ -1204,7 +1366,9 @@ int main(int argc, char **argv) {
 
     guint emitted = 0;
     if (!checkers_puzzle_emit_from_line(rules,
-                                        best_move_depth,
+                                        options.depth,
+                                        analysis_tt,
+                                        options.try_forced_mistakes,
                                         game_line,
                                         output_dir,
                                         existing_solution_keys,

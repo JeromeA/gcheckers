@@ -58,6 +58,7 @@ test: test_game test_game_print test_board test_move_gen test_checkers_model \
 	test_ai_transposition_table test_position_search \
 	test_position_predicate test_sgf_tree test_sgf_io test_sgf_view test_bga_client \
 	test_file_dialog_history test_board_view test_player_controls_panel test_sgf_controller test_window \
+	test_create_puzzles_cli \
 	test_puzzle_generation
 	./test_game
 	./test_game_print
@@ -72,6 +73,7 @@ test: test_game test_game_print test_board test_move_gen test_checkers_model \
 	./test_sgf_view
 	./test_bga_client
 	./test_file_dialog_history
+	./test_create_puzzles_cli
 	./test_puzzle_generation
 	./test_board_view
 	./test_player_controls_panel
@@ -90,11 +92,16 @@ test_board: tests/test_board.c $(BOARD_SRCS) src/board.h src/checkers_constants.
 test_move_gen: tests/test_move_gen.c $(SRCS) src/game.h
 	$(CC) $(CFLAGS) -o $@ tests/test_move_gen.c $(SRCS) $(LDLIBS)
 
-create_puzzles: src/create_puzzles.c src/puzzle_generation.c src/puzzle_generation.h \
+create_puzzles: src/create_puzzles.c src/create_puzzles_cli.c src/create_puzzles_cli.h \
+	src/puzzle_generation.c src/puzzle_generation.h \
 	src/sgf_io.c src/sgf_io.h src/sgf_tree.c src/sgf_tree.h src/sgf_move_props.c src/sgf_move_props.h \
 	$(SRCS)
-	$(CC) $(CFLAGS) -o $@ src/create_puzzles.c src/puzzle_generation.c src/sgf_io.c src/sgf_tree.c \
+	$(CC) $(CFLAGS) -o $@ src/create_puzzles.c src/create_puzzles_cli.c src/puzzle_generation.c src/sgf_io.c \
+		src/sgf_tree.c \
 		src/sgf_move_props.c $(SRCS) $(LDLIBS)
+
+test_create_puzzles_cli: tests/test_create_puzzles_cli.c src/create_puzzles_cli.c src/create_puzzles_cli.h
+	$(CC) $(CFLAGS) -o $@ tests/test_create_puzzles_cli.c src/create_puzzles_cli.c $(LDLIBS)
 
 find_position: src/find_position.c $(POSITION_SRCS) $(SRCS) src/position_search.h src/position_predicate.h \
 	src/position_format.h

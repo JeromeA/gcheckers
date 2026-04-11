@@ -245,7 +245,9 @@ Role: repeatedly self-play games at depth 0, detect mistake positions with confi
 validate each candidate immediately in one pass, require the attacker to have at least four legal moves and a best
 response at least 50 points above the runner-up, then save puzzles as
 SGF files under `puzzles/puzzle-####.sgf` with root setup (`AE/AB/AW/ABK/AWK/PL`) and a tactical continuation line.
-The CLI accepts `--depth N` to override the puzzle-analysis depth; otherwise it uses the built-in default depth 8.
+The CLI accepts `--depth N` to override the puzzle-analysis depth and `--synthetic-candidates` to opt into trying
+synthetic bad moves in addition to the played move; otherwise it uses the built-in default depth 8 and only evaluates
+the actual game line.
 Before generating anything, the CLI loads existing `puzzle-*.sgf` files from the output directory and deduplicates by
 solution move sequence, so equivalent puzzles are skipped instead of being saved twice.
 The main validation path is organized as puzzle-rule predicates (`position_follows_a_serious_mistake`,
@@ -257,8 +259,13 @@ move throughout the line, allows the defender to use any best reply, and stops o
 the puzzle start. Candidate solutions are also filtered to reject boring shapes: a one-move line, or a three-move
 line of move, move, jump. After the solution line ends, the immediate next best reply must also avoid an instant
 recapture, or the candidate is rejected as unstable.
-The CLI always prints self-play completion, loaded existing solution keys, each move considered as a candidate, and
-indented `->` rejection or keep reasons so puzzle filtering can be followed from the terminal.
+While replaying a generated self-play game, the CLI analyzes each pre-mistake position at the configured best-move
+depth and reuses one shared TT allocation across the whole run. When `--synthetic-candidates` is enabled, it also
+tries any synthetic mistake move that already trails the best move by at least 100 points, so puzzle generation is not
+limited to the exact self-play move that happened in the game.
+The CLI always prints self-play completion, loaded existing solution keys, each move considered as a candidate,
+indented `->` rejection or keep reasons, and a final aggregated rejection report so puzzle filtering can be followed
+from the terminal.
 For each emitted puzzle index, also saves the originating full self-play game as `puzzles/game-####.sgf`.
 Collaborates with: `ai_alpha_beta.c`, `rulesets.c`, `sgf_tree.c`, `sgf_move_props.c`, `sgf_io.c`,
 and `puzzle_generation.c`.
@@ -267,8 +274,9 @@ and `puzzle_generation.c`.
 Module: puzzle-selection and output-index helpers.
 Role: expose pure functions for mistake delta checks, "enough choice" and "single correct move" tests from scored move
 lists, where "single correct move" means the best score is ahead of the second-best score by a configurable margin,
-plus an attacker/defender move-clarity helper and next puzzle file index discovery from existing `puzzle-####.sgf`
-files, plus pure predicates for rejecting boring solution-line shapes and immediate recaptures after the solution.
+plus an attacker/defender move-clarity helper, a collector for all scored moves that qualify as mistakes under a given
+threshold, and next puzzle file index discovery from existing `puzzle-####.sgf` files, plus pure predicates for
+rejecting boring solution-line shapes and immediate recaptures after the solution.
 Collaborates with: `create_puzzles.c` and `tests/test_puzzle_generation.c`.
 
 ## File dialog history helpers (`src/file_dialog_history.c`, `src/file_dialog_history.h`)
