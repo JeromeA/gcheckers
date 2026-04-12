@@ -4,13 +4,12 @@
 
 static const double gcheckers_man_viewbox_size = 64.0;
 static const double gcheckers_man_center = gcheckers_man_viewbox_size / 2.0;
-static const double gcheckers_man_height_scale = 0.7;
 static const double gcheckers_man_center_y = gcheckers_man_center;
 static const double gcheckers_man_base_width = 54.0;
-static const double gcheckers_man_base_height = 10.0 * gcheckers_man_height_scale;
-static const double gcheckers_man_outer_radius_y = 12.0 * gcheckers_man_height_scale;
+static const double gcheckers_man_base_height = 8.0;
+static const double gcheckers_man_outer_radius_y = 8.0;
 static const double gcheckers_man_top_inner_radius_x = 14.0;
-static const double gcheckers_man_top_inner_radius_y = 5.0 * gcheckers_man_height_scale;
+static const double gcheckers_man_top_inner_radius_y = 3.5;
 static const double gcheckers_king_stack_offset = gcheckers_man_outer_radius_y;
 
 typedef struct _GCheckersManPaintable {
