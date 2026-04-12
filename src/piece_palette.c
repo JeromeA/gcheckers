@@ -4,10 +4,10 @@
 
 struct _PiecePalette {
   GObject parent_instance;
-  GdkPaintable *white_man_paintable;
-  GdkPaintable *black_man_paintable;
-  GdkPaintable *white_king_paintable;
-  GdkPaintable *black_king_paintable;
+  GdkRGBA white_fill;
+  GdkRGBA white_stroke;
+  GdkRGBA black_fill;
+  GdkRGBA black_stroke;
 };
 
 G_DEFINE_TYPE(PiecePalette, piece_palette, G_TYPE_OBJECT)
@@ -30,49 +30,76 @@ static const char *piece_palette_symbol(CheckersPiece piece) {
   }
 }
 
-static GdkPaintable *piece_palette_build_paintable(const char *fill_color,
-                                                   const char *stroke_color,
-                                                   guint layer_count) {
-  g_return_val_if_fail(fill_color != NULL, NULL);
-  g_return_val_if_fail(stroke_color != NULL, NULL);
+static gboolean piece_palette_parse_color(const char *color_name, GdkRGBA *color) {
+  g_return_val_if_fail(color_name != NULL, FALSE);
+  g_return_val_if_fail(color != NULL, FALSE);
 
-  GdkRGBA fill;
-  GdkRGBA stroke;
-
-  if (!gdk_rgba_parse(&fill, fill_color)) {
-    g_debug("Failed to parse fill color for piece: %s\n", fill_color);
-    return NULL;
-  }
-  if (!gdk_rgba_parse(&stroke, stroke_color)) {
-    g_debug("Failed to parse stroke color for piece: %s\n", stroke_color);
-    return NULL;
+  if (gdk_rgba_parse(color, color_name)) {
+    return TRUE;
   }
 
-  return gcheckers_man_paintable_new(&fill, &stroke, layer_count);
+  g_debug("Failed to parse piece color: %s\n", color_name);
+  return FALSE;
 }
 
-static void piece_palette_dispose(GObject *object) {
-  PiecePalette *self = PIECE_PALETTE(object);
+static gboolean piece_palette_get_style(PiecePalette *self,
+                                        CheckersPiece piece,
+                                        const GdkRGBA **fill_color,
+                                        const GdkRGBA **stroke_color,
+                                        guint *layer_count) {
+  g_return_val_if_fail(PIECE_IS_PALETTE(self), FALSE);
+  g_return_val_if_fail(fill_color != NULL, FALSE);
+  g_return_val_if_fail(stroke_color != NULL, FALSE);
+  g_return_val_if_fail(layer_count != NULL, FALSE);
 
-  g_clear_object(&self->white_man_paintable);
-  g_clear_object(&self->black_man_paintable);
-  g_clear_object(&self->white_king_paintable);
-  g_clear_object(&self->black_king_paintable);
-
-  G_OBJECT_CLASS(piece_palette_parent_class)->dispose(object);
+  switch (piece) {
+    case CHECKERS_PIECE_WHITE_MAN:
+      *fill_color = &self->white_fill;
+      *stroke_color = &self->white_stroke;
+      *layer_count = 1;
+      return TRUE;
+    case CHECKERS_PIECE_BLACK_MAN:
+      *fill_color = &self->black_fill;
+      *stroke_color = &self->black_stroke;
+      *layer_count = 1;
+      return TRUE;
+    case CHECKERS_PIECE_WHITE_KING:
+      *fill_color = &self->white_fill;
+      *stroke_color = &self->white_stroke;
+      *layer_count = 2;
+      return TRUE;
+    case CHECKERS_PIECE_BLACK_KING:
+      *fill_color = &self->black_fill;
+      *stroke_color = &self->black_stroke;
+      *layer_count = 2;
+      return TRUE;
+    default:
+      return FALSE;
+  }
 }
 
-static void piece_palette_class_init(PiecePaletteClass *klass) {
-  GObjectClass *object_class = G_OBJECT_CLASS(klass);
-
-  object_class->dispose = piece_palette_dispose;
+static void piece_palette_class_init(PiecePaletteClass * /*klass*/) {
 }
 
 static void piece_palette_init(PiecePalette *self) {
-  self->white_man_paintable = piece_palette_build_paintable("#ffffff", "#111111", 1);
-  self->black_man_paintable = piece_palette_build_paintable("#111111", "#ffffff", 1);
-  self->white_king_paintable = piece_palette_build_paintable("#ffffff", "#111111", 2);
-  self->black_king_paintable = piece_palette_build_paintable("#111111", "#ffffff", 2);
+  if (!piece_palette_parse_color("#ffffff", &self->white_fill)) {
+    self->white_fill.red = 1.0;
+    self->white_fill.green = 1.0;
+    self->white_fill.blue = 1.0;
+    self->white_fill.alpha = 1.0;
+  }
+  if (!piece_palette_parse_color("#111111", &self->white_stroke)) {
+    self->white_stroke.red = 0.0667;
+    self->white_stroke.green = 0.0667;
+    self->white_stroke.blue = 0.0667;
+    self->white_stroke.alpha = 1.0;
+  }
+  if (!piece_palette_parse_color("#111111", &self->black_fill)) {
+    self->black_fill = self->white_stroke;
+  }
+  if (!piece_palette_parse_color("#ffffff", &self->black_stroke)) {
+    self->black_stroke = self->white_fill;
+  }
 }
 
 PiecePalette *piece_palette_new_default(void) {
@@ -81,33 +108,26 @@ PiecePalette *piece_palette_new_default(void) {
 
 gboolean piece_palette_lookup(PiecePalette *self,
                               CheckersPiece piece,
-                              GdkPaintable **paintable,
                               const char **symbol,
                               gboolean *is_empty) {
   g_return_val_if_fail(PIECE_IS_PALETTE(self), FALSE);
-  g_return_val_if_fail(paintable != NULL, FALSE);
   g_return_val_if_fail(symbol != NULL, FALSE);
   g_return_val_if_fail(is_empty != NULL, FALSE);
 
-  *paintable = NULL;
   *symbol = "";
   *is_empty = FALSE;
 
   switch (piece) {
     case CHECKERS_PIECE_WHITE_MAN:
-      *paintable = self->white_man_paintable;
       *symbol = piece_palette_symbol(piece);
       return TRUE;
     case CHECKERS_PIECE_BLACK_MAN:
-      *paintable = self->black_man_paintable;
       *symbol = piece_palette_symbol(piece);
       return TRUE;
     case CHECKERS_PIECE_WHITE_KING:
-      *paintable = self->white_king_paintable;
       *symbol = piece_palette_symbol(piece);
       return TRUE;
     case CHECKERS_PIECE_BLACK_KING:
-      *paintable = self->black_king_paintable;
       *symbol = piece_palette_symbol(piece);
       return TRUE;
     case CHECKERS_PIECE_EMPTY:
@@ -119,4 +139,33 @@ gboolean piece_palette_lookup(PiecePalette *self,
       *symbol = "?";
       return TRUE;
   }
+}
+
+gboolean piece_palette_can_draw(PiecePalette *self, CheckersPiece piece) {
+  const GdkRGBA *fill_color = NULL;
+  const GdkRGBA *stroke_color = NULL;
+  guint layer_count = 0;
+
+  return piece_palette_get_style(self, piece, &fill_color, &stroke_color, &layer_count);
+}
+
+gboolean piece_palette_draw(PiecePalette *self,
+                            CheckersPiece piece,
+                            cairo_t *cr,
+                            double width,
+                            double height) {
+  g_return_val_if_fail(PIECE_IS_PALETTE(self), FALSE);
+  g_return_val_if_fail(cr != NULL, FALSE);
+  g_return_val_if_fail(width > 0.0, FALSE);
+  g_return_val_if_fail(height > 0.0, FALSE);
+
+  const GdkRGBA *fill_color = NULL;
+  const GdkRGBA *stroke_color = NULL;
+  guint layer_count = 0;
+  if (!piece_palette_get_style(self, piece, &fill_color, &stroke_color, &layer_count)) {
+    return FALSE;
+  }
+
+  gcheckers_man_paintable_draw(cr, width, height, fill_color, stroke_color, layer_count);
+  return TRUE;
 }

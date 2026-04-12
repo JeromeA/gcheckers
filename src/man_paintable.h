@@ -5,6 +5,13 @@
 
 G_BEGIN_DECLS
 
+void gcheckers_man_paintable_draw(cairo_t *cr,
+                                  double width,
+                                  double height,
+                                  const GdkRGBA *fill_color,
+                                  const GdkRGBA *stroke_color,
+                                  guint layer_count);
+
 GdkPaintable *gcheckers_man_paintable_new(const GdkRGBA *fill_color,
                                           const GdkRGBA *stroke_color,
                                           guint layer_count);

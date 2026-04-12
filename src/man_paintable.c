@@ -103,6 +103,38 @@ static void gcheckers_man_paintable_draw_top(GCheckersManPaintable *self, cairo_
   cairo_stroke(cr);
 }
 
+void gcheckers_man_paintable_draw(cairo_t *cr,
+                                  double width,
+                                  double height,
+                                  const GdkRGBA *fill_color,
+                                  const GdkRGBA *stroke_color,
+                                  guint layer_count) {
+  g_return_if_fail(cr != NULL);
+  g_return_if_fail(fill_color != NULL);
+  g_return_if_fail(stroke_color != NULL);
+  g_return_if_fail(layer_count > 0);
+
+  GCheckersManPaintable state = {0};
+  state.fill_color = *fill_color;
+  state.stroke_color = *stroke_color;
+  state.layer_count = layer_count;
+
+  cairo_save(cr);
+  cairo_set_line_width(cr, 2.0);
+  cairo_scale(cr, width / gcheckers_man_viewbox_size, height / gcheckers_man_viewbox_size);
+  cairo_set_antialias(cr, CAIRO_ANTIALIAS_BEST);
+  cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+  cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+
+  for (guint layer = 0; layer < state.layer_count; ++layer) {
+    double y_offset = -(double)layer * gcheckers_king_stack_offset;
+    gcheckers_man_paintable_draw_base(&state, cr, y_offset);
+    gcheckers_man_paintable_draw_top(&state, cr, y_offset);
+  }
+
+  cairo_restore(cr);
+}
+
 static void gcheckers_man_paintable_snapshot(GdkPaintable *paintable,
                                              GdkSnapshot *snapshot,
                                              double width,
@@ -118,17 +150,7 @@ static void gcheckers_man_paintable_snapshot(GdkPaintable *paintable,
   graphene_rect_t bounds = GRAPHENE_RECT_INIT(0.0f, 0.0f, (float)width, (float)height);
   cairo_t *cr = gtk_snapshot_append_cairo(snapshot, &bounds);
 
-  cairo_scale(cr, width / gcheckers_man_viewbox_size, height / gcheckers_man_viewbox_size);
-  cairo_set_line_width(cr, 1.0);
-  cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
-  cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
-
-  for (guint layer = 0; layer < self->layer_count; ++layer) {
-    double y_offset = -(double)layer * gcheckers_king_stack_offset;
-    gcheckers_man_paintable_draw_base(self, cr, y_offset);
-    gcheckers_man_paintable_draw_top(self, cr, y_offset);
-  }
-
+  gcheckers_man_paintable_draw(cr, width, height, &self->fill_color, &self->stroke_color, self->layer_count);
   cairo_destroy(cr);
 }
 

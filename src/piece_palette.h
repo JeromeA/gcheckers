@@ -15,9 +15,16 @@ PiecePalette *piece_palette_new_default(void);
 
 gboolean piece_palette_lookup(PiecePalette *self,
                               CheckersPiece piece,
-                              GdkPaintable **paintable,
                               const char **symbol,
                               gboolean *is_empty);
+
+gboolean piece_palette_can_draw(PiecePalette *self, CheckersPiece piece);
+
+gboolean piece_palette_draw(PiecePalette *self,
+                            CheckersPiece piece,
+                            cairo_t *cr,
+                            double width,
+                            double height);
 
 G_END_DECLS
 

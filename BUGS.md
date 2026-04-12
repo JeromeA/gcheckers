@@ -33,3 +33,15 @@ replay, report `replay skipped`, and end up with missing saved analysis.
 
 The fix centralizes SGF node replay into a shared helper in `sgf_controller.c` that applies setup properties and moves
 from root to the exact node. Full-game analysis now uses that helper instead of a move-only reconstruction path.
+
+## Board men were raster-shrunk through GtkPicture and showed visible source pixels
+
+The checker men should be rasterized at the final square size so their curved edges stay smooth.
+
+`BoardSquare` rendered the procedural `GdkPaintable` men through `GtkPicture`. The paintable advertised a `64x64`
+intrinsic size, but board squares are only `31x31`, so GTK shrank the already-rasterized result during picture
+rendering. That exposed source pixels around ellipses and made the men look un-antialiased.
+
+The fix replaces the `GtkPicture` path with direct cairo drawing in a `GtkDrawingArea` sized to the board square. The
+same man renderer is now shared between the paintable snapshot path and direct square rendering, and a regression test
+checks that the direct renderer produces partially covered edge pixels.
