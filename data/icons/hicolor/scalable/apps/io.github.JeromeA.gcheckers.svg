@@ -1,13 +1,29 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <rect width="128" height="128" rx="24" fill="#1d1f24"/>
+  <defs>
+    <g id="checker-layer">
+      <path d="M5 32H59V40A27 8 0 0 1 5 40Z"/>
+      <ellipse cx="32" cy="32" rx="27" ry="8"/>
+      <ellipse cx="32" cy="32" rx="14" ry="3.5" fill="none"/>
+    </g>
+    <g id="white-man" fill="#ffffff" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <use href="#checker-layer"/>
+    </g>
+    <g id="black-king" fill="#111111" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <use href="#checker-layer"/>
+      <use href="#checker-layer" transform="translate(0 -8)"/>
+    </g>
+  </defs>
+
+  <rect x="12" y="12" width="104" height="104" rx="16" fill="#2a160b" stroke="#000000" stroke-width="2"/>
+
   <g transform="translate(16 16)">
-    <rect width="96" height="96" rx="14" fill="#f3e7c5"/>
-    <path d="M48 0h48v48H48zM0 48h48v48H0zM48 48h48v48H48z" fill="#9f6b3b"/>
-    <circle cx="24" cy="24" r="15" fill="#e03c31"/>
-    <circle cx="24" cy="24" r="9" fill="#f8aaa2" opacity=".45"/>
-    <circle cx="72" cy="72" r="15" fill="#12161f"/>
-    <circle cx="72" cy="72" r="9" fill="#7d8895" opacity=".45"/>
-    <path d="M72 46 77 55l10 1-7 7 2 10-10-5-10 5 2-10-7-7 10-1z" fill="#d8b04c"/>
+    <rect width="48" height="48" fill="#e6d1a8"/>
+    <rect x="48" width="48" height="48" fill="#774433"/>
+    <rect y="48" width="48" height="48" fill="#774433"/>
+    <rect x="48" y="48" width="48" height="48" fill="#e6d1a8"/>
+
+    <use href="#black-king" transform="translate(49.6 1.6) scale(0.70)"/>
+    <use href="#white-man" transform="translate(1.6 49.6) scale(0.70)"/>
   </g>
 </svg>
