@@ -25,7 +25,14 @@ grep -q "^Icon=$app_id\$" "$desktop_file"
 grep -q "^Exec=gcheckers\$" "$desktop_file"
 grep -q "<id>$app_id</id>" "$metainfo_file"
 grep -q "<launchable type=\"desktop-id\">$app_id.desktop</launchable>" "$metainfo_file"
-grep -q "raw.githubusercontent.com/JeromeA/gcheckers/main/doc/Puzzle.png" "$metainfo_file"
+grep -q "<project_license>GPL-3.0-only</project_license>" "$metainfo_file"
+grep -q "<release version=\"0.1.0\" date=\"2026-04-14\"/>" "$metainfo_file"
+grep -q "raw.githubusercontent.com/JeromeA/gcheckers/" "$metainfo_file"
+grep -q "/doc/Puzzle.png" "$metainfo_file"
+if grep -q "raw.githubusercontent.com/JeromeA/gcheckers/main/" "$metainfo_file"; then
+  echo "Metainfo screenshots must use immutable commit or tag URLs, not the main branch." >&2
+  exit 1
+fi
 grep -q "<schema id=\"$app_id\" path=\"/io/github/JeromeA/gcheckers/\">" "$schema_file"
 test -f "$icon_file"
 

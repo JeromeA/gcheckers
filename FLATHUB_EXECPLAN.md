@@ -25,8 +25,10 @@ store-facing review, but the upstream repository should already be doing the rig
   lookup plus installed puzzle assets.
 - [x] (2026-04-11 15:55Z) Confirmed the new puzzle data path and Flatpak manifest with local builds/tests and
   documented the remaining submission blocker.
-- [ ] Finish the submission-readiness metadata: confirm the project license, add release metadata, and decide whether
-  to keep the in-repo manifest as a local-build manifest or mirror it directly into the Flathub packaging repo.
+- [x] (2026-04-14 10:40Z) Added the repository license plus metainfo `project_license`, an initial release entry, and
+  immutable screenshot URLs pinned to a commit.
+- [ ] Run `flatpak-builder-lint` / `appstreamcli` and a real local Flatpak build, then decide whether to keep the
+  in-repo manifest as a local-build manifest or mirror it directly into the Flathub packaging repo.
 
 ## Surprises & Discoveries
 
@@ -36,6 +38,10 @@ store-facing review, but the upstream repository should already be doing the rig
 - Observation: Flatpak readiness is blocked by metadata beyond the manifest itself.
   Evidence: the repository still has no declared project source license, so the metainfo file cannot yet be completed
   with a reliable `<project_license>` value.
+
+- Observation: metadata blockers are now reduced to validation and release policy rather than missing core fields.
+  Evidence: the metainfo now contains `project_license`, a `<releases>` section, and screenshot URLs pinned to commit
+  `97284d7a8dfb8146ed14e4ffad8e83567eec332b`, and the repository metadata tests pass.
 
 - Observation: the Flatpak-prep install path now carries the bundled puzzle SGFs successfully.
   Evidence: `find /tmp/gcheckers-flatpak-appdir/share/gcheckers/puzzles -maxdepth 1 -type f | head` lists
@@ -59,8 +65,9 @@ store-facing review, but the upstream repository should already be doing the rig
 
 The first packaging slice is in place: the repo now contains a Flatpak manifest and the puzzle feature is no longer
 coupled to the source-tree layout. Local validation now covers the new app-data lookup, the manifest contract, the
-desktop metadata install path, and the installed puzzle asset directory. Remaining work is narrowed to store metadata
-and submission policy rather than basic runtime correctness.
+desktop metadata install path, the installed puzzle asset directory, and the metainfo fields needed for Flathub review.
+Remaining work is narrowed to external validation (`flatpak-builder-lint`, `appstreamcli`, local Flatpak build) and
+submission policy rather than basic runtime correctness or missing metadata.
 
 ## Context and Orientation
 
