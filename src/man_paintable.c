@@ -4,13 +4,19 @@
 
 static const double gcheckers_man_viewbox_size = 64.0;
 static const double gcheckers_man_center = gcheckers_man_viewbox_size / 2.0;
-static const double gcheckers_man_center_y = gcheckers_man_center;
 static const double gcheckers_man_base_width = 54.0;
 static const double gcheckers_man_base_height = 8.0;
-static const double gcheckers_man_outer_radius_y = 8.0;
+static const double gcheckers_man_outer_radius_y = 12.0;
 static const double gcheckers_man_top_inner_radius_x = 14.0;
-static const double gcheckers_man_top_inner_radius_y = 3.5;
-static const double gcheckers_king_stack_offset = gcheckers_man_outer_radius_y;
+static const double gcheckers_man_top_inner_radius_y = 5.25;
+static const double gcheckers_king_stack_offset = gcheckers_man_base_height;
+
+typedef struct {
+  GdkRGBA fill_color;
+  GdkRGBA stroke_color;
+  guint layer_count;
+  double center_y;
+} GCheckersManPaintState;
 
 typedef struct _GCheckersManPaintable {
   GObject parent_instance;
@@ -53,11 +59,18 @@ static void gcheckers_man_paintable_class_init(GCheckersManPaintableClass * /*kl
 static void gcheckers_man_paintable_init(GCheckersManPaintable * /*self*/) {
 }
 
-static void gcheckers_man_paintable_draw_base(GCheckersManPaintable *self, cairo_t *cr, double y_offset) {
-  g_return_if_fail(self != NULL);
+static double gcheckers_man_paintable_center_y_for_layers(guint layer_count) {
+  g_return_val_if_fail(layer_count > 0, gcheckers_man_center);
+
+  return gcheckers_man_center - gcheckers_man_base_height / 2.0 +
+         (double)(layer_count - 1) * gcheckers_king_stack_offset / 2.0;
+}
+
+static void gcheckers_man_paintable_draw_base(const GCheckersManPaintState *state, cairo_t *cr, double y_offset) {
+  g_return_if_fail(state != NULL);
   g_return_if_fail(cr != NULL);
 
-  const double top_y = gcheckers_man_center_y + y_offset;
+  const double top_y = state->center_y + y_offset;
   const double base_height = gcheckers_man_base_height;
   const double bottom_y = top_y + base_height;
   const double radius_x = gcheckers_man_base_width / 2.0;
@@ -73,32 +86,32 @@ static void gcheckers_man_paintable_draw_base(GCheckersManPaintable *self, cairo
   cairo_arc(cr, 0.0, 0.0, 1.0, 0.0, G_PI);
   cairo_restore(cr);
   cairo_close_path(cr);
-  gdk_cairo_set_source_rgba(cr, &self->fill_color);
+  gdk_cairo_set_source_rgba(cr, &state->fill_color);
   cairo_fill_preserve(cr);
-  gdk_cairo_set_source_rgba(cr, &self->stroke_color);
+  gdk_cairo_set_source_rgba(cr, &state->stroke_color);
   cairo_stroke(cr);
 }
 
-static void gcheckers_man_paintable_draw_top(GCheckersManPaintable *self, cairo_t *cr, double y_offset) {
-  g_return_if_fail(self != NULL);
+static void gcheckers_man_paintable_draw_top(const GCheckersManPaintState *state, cairo_t *cr, double y_offset) {
+  g_return_if_fail(state != NULL);
   g_return_if_fail(cr != NULL);
 
   cairo_save(cr);
-  cairo_translate(cr, gcheckers_man_center, gcheckers_man_center_y + y_offset);
+  cairo_translate(cr, gcheckers_man_center, state->center_y + y_offset);
   cairo_scale(cr, gcheckers_man_base_width / 2.0, gcheckers_man_outer_radius_y);
   cairo_arc(cr, 0.0, 0.0, 1.0, 0.0, 2.0 * G_PI);
   cairo_restore(cr);
-  gdk_cairo_set_source_rgba(cr, &self->fill_color);
+  gdk_cairo_set_source_rgba(cr, &state->fill_color);
   cairo_fill_preserve(cr);
-  gdk_cairo_set_source_rgba(cr, &self->stroke_color);
+  gdk_cairo_set_source_rgba(cr, &state->stroke_color);
   cairo_stroke(cr);
 
   cairo_save(cr);
-  cairo_translate(cr, gcheckers_man_center, gcheckers_man_center_y + y_offset);
+  cairo_translate(cr, gcheckers_man_center, state->center_y + y_offset);
   cairo_scale(cr, gcheckers_man_top_inner_radius_x, gcheckers_man_top_inner_radius_y);
   cairo_arc(cr, 0.0, 0.0, 1.0, 0.0, 2.0 * G_PI);
   cairo_restore(cr);
-  gdk_cairo_set_source_rgba(cr, &self->stroke_color);
+  gdk_cairo_set_source_rgba(cr, &state->stroke_color);
   cairo_stroke(cr);
 }
 
@@ -113,10 +126,11 @@ void gcheckers_man_paintable_draw(cairo_t *cr,
   g_return_if_fail(stroke_color != NULL);
   g_return_if_fail(layer_count > 0);
 
-  GCheckersManPaintable state = {0};
+  GCheckersManPaintState state = {0};
   state.fill_color = *fill_color;
   state.stroke_color = *stroke_color;
   state.layer_count = layer_count;
+  state.center_y = gcheckers_man_paintable_center_y_for_layers(layer_count);
 
   cairo_save(cr);
   cairo_set_line_width(cr, 2.0);

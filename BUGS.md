@@ -45,3 +45,14 @@ rendering. That exposed source pixels around ellipses and made the men look un-a
 The fix replaces the `GtkPicture` path with direct cairo drawing in a `GtkDrawingArea` sized to the board square. The
 same man renderer is now shared between the paintable snapshot path and direct square rendering, and a regression test
 checks that the direct renderer produces partially covered edge pixels.
+
+## Piece renderer centered men and kings from the same origin, leaving them visibly low
+
+Men and kings should be vertically centered from their actual painted bounds, even though kings are stacked from two
+layers with a different overall height.
+
+The renderer anchored all layers around the same ellipse center. That put single men several logical units below center,
+and the taller stacked king shape needed a different offset again, so both piece types looked low in their squares.
+
+The fix computes the vertical origin from the layer count before drawing. Men and kings now use separate centering math,
+and regression tests verify that both painted bounds are vertically centered.

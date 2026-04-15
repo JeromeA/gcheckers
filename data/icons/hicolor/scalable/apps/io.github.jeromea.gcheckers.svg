@@ -2,16 +2,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
   <defs>
     <g id="checker-layer">
-      <path d="M5 32H59V40A27 8 0 0 1 5 40Z"/>
-      <ellipse cx="32" cy="32" rx="27" ry="8"/>
-      <ellipse cx="32" cy="32" rx="14" ry="3.5" fill="none"/>
+      <path d="M5 32H59V40A27 12 0 0 1 5 40Z"/>
+      <ellipse cx="32" cy="32" rx="27" ry="12"/>
+      <ellipse cx="32" cy="32" rx="14" ry="5.25" fill="none"/>
     </g>
     <g id="white-man" fill="#ffffff" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <use href="#checker-layer"/>
     </g>
-    <g id="black-king" fill="#111111" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <g id="black-man" fill="#111111" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <use href="#checker-layer"/>
-      <use href="#checker-layer" transform="translate(0 -8)"/>
     </g>
   </defs>
 
@@ -23,7 +22,7 @@
     <rect y="48" width="48" height="48" fill="#774433"/>
     <rect x="48" y="48" width="48" height="48" fill="#e6d1a8"/>
 
-    <use href="#black-king" transform="translate(49.6 1.6) scale(0.70)"/>
-    <use href="#white-man" transform="translate(1.6 49.6) scale(0.70)"/>
+    <use href="#black-man" transform="translate(49.6 -1.2) scale(0.70)"/>
+    <use href="#white-man" transform="translate(1.6 46.8) scale(0.70)"/>
   </g>
 </svg>

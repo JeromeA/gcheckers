@@ -358,7 +358,9 @@ Collaborates with: `BoardSquare` and man paintable helpers.
 
 ### Man paintable (`src/man_paintable.c`, `src/man_paintable.h`)
 Module: checker man renderer.
-Role: render checker men and kings either via `GdkPaintable` snapshots or direct cairo drawing at final widget size.
+Role: render checker men and kings either via `GdkPaintable` snapshots or direct cairo drawing at final widget size,
+using taller ellipse radii for the rounded caps and inner ring plus layer-count-aware vertical centering so both men
+and kings sit evenly inside their squares.
 Collaborates with: `PiecePalette` and board rendering.
 
 ## SGF subsystem
