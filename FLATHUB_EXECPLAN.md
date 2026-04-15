@@ -71,7 +71,7 @@ submission policy rather than basic runtime correctness or missing metadata.
 
 ## Context and Orientation
 
-This repository already has a coherent desktop identity under `io.github.JeromeA.gcheckers`. `Makefile` can build and
+This repository already has a coherent desktop identity under `io.github.jeromea.gcheckers`. `Makefile` can build and
 install the app, and `data/` now contains the desktop file, metainfo file, icon, and GSettings schema. However,
 Flathub submission needs more than that. It needs a Flatpak manifest, and it needs the installed app to behave
 correctly when run from packaged data directories instead of the repository checkout.
@@ -106,7 +106,7 @@ shell-based sanity test for the Flatpak manifest. The shell test is intentionall
 manifest still matches the app ID, runtime, command, and permission decisions even when `flatpak-builder` is not
 installed.
 
-Fourth, add `io.github.JeromeA.gcheckers.yaml` at the repository root. The initial manifest should use the GNOME
+Fourth, add `io.github.jeromea.gcheckers.yaml` at the repository root. The initial manifest should use the GNOME
 runtime and SDK, launch the `gcheckers` command, allow network access for the BoardGameArena import feature, and use
 `make install PREFIX=/app` so the Flatpak build consumes the same install layout as the desktop-app work.
 
@@ -155,7 +155,7 @@ Expected result:
 
 If `flatpak-builder` is available locally, the next contributor can build the manifest with:
 
-  flatpak-builder --force-clean flatpak-build io.github.JeromeA.gcheckers.yaml
+  flatpak-builder --force-clean flatpak-build io.github.jeromea.gcheckers.yaml
 
 Expected result:
 
@@ -168,7 +168,7 @@ Acceptance for this slice is:
 
 1. Puzzle mode no longer depends on the repository-relative `puzzles/` path when the app is installed.
 2. `make install PREFIX=...` installs puzzle assets under `share/gcheckers/puzzles`.
-3. The repository contains a Flatpak manifest named `io.github.JeromeA.gcheckers.yaml`.
+3. The repository contains a Flatpak manifest named `io.github.jeromea.gcheckers.yaml`.
 4. Static tests verify that the manifest still matches the app ID, runtime, command, and basic permission decisions.
 5. The remaining blockers for Flathub submission are explicitly documented instead of being left implicit.
 
@@ -212,7 +212,7 @@ At the end of this plan, the following repository-level interfaces must exist:
 
 - `Makefile` installing bundled puzzle SGF assets to `$(PREFIX)/share/gcheckers/puzzles`.
 
-- A Flatpak manifest file at `io.github.JeromeA.gcheckers.yaml`.
+- A Flatpak manifest file at `io.github.jeromea.gcheckers.yaml`.
 
 - Test artifacts:
   `tests/test_app_paths.c` and `tests/test_flatpak_manifest.sh`.

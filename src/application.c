@@ -179,7 +179,7 @@ static void gcheckers_application_init(GCheckersApplication * /*self*/) {}
 GCheckersApplication *gcheckers_application_new(void) {
   return g_object_new(GCHECKERS_TYPE_APPLICATION,
                       "application-id",
-                      "io.github.JeromeA.gcheckers",
+                      "io.github.jeromea.gcheckers",
                       "flags",
                       G_APPLICATION_NON_UNIQUE,
                       NULL);

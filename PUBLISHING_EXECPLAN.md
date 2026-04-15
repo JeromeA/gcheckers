@@ -21,12 +21,15 @@ pass, and the repository should contain all the assets needed for packaging.
 ## Progress
 
 - [x] (2026-04-11 12:57Z) Audited the current repository state for app identity and desktop metadata.
-- [x] (2026-04-11 14:05Z) Chose `io.github.JeromeA.gcheckers` as the final app ID and propagated it through code,
+- [x] (2026-04-11 14:05Z) Chose `io.github.JeromeA.gcheckers` as the initial final app ID and propagated it through
+  code,
   schema, metadata, and filenames.
 - [x] (2026-04-11 14:15Z) Added desktop integration assets: desktop file, scalable icon, and AppStream/metainfo file.
 - [x] (2026-04-11 14:25Z) Added install/build wiring so the metadata can be installed and locally validated from the
   repository.
 - [x] (2026-04-11 14:40Z) Validated the build/install/metadata path locally and updated the repository docs.
+- [x] (2026-04-15 12:55Z) Renamed the published app identity to lowercase `io.github.jeromea.gcheckers`, removed the
+  old local Flatpak install, and reran desktop/Flatpak validation.
 
 ## Surprises & Discoveries
 
@@ -45,8 +48,12 @@ pass, and the repository should contain all the assets needed for packaging.
 
 - Observation: the repository remote already fixes both the app namespace and screenshot hosting path.
   Evidence: `git remote -v` points to `git@github.com:JeromeA/gcheckers.git`, so the chosen app ID
-  `io.github.JeromeA.gcheckers` matches the public repository owner/name and the metainfo screenshot URLs can point to
+  `io.github.jeromea.gcheckers` matches the public repository owner/name and the metainfo screenshot URLs can point to
   `https://raw.githubusercontent.com/JeromeA/gcheckers/main/doc/...`.
+
+- Observation: AppStream still warns pedantically when the component ID contains uppercase letters.
+  Evidence: `appstreamcli validate --no-net --pedantic --explain` reported `cid-contains-uppercase-letter
+  io.github.JeromeA.gcheckers`, which disappears after switching to the lowercase ID.
 
 ## Decision Log
 
@@ -62,14 +69,14 @@ pass, and the repository should contain all the assets needed for packaging.
 
 ## Outcomes & Retrospective
 
-The repository now has one consistent desktop application identity: `io.github.JeromeA.gcheckers`. The `GtkApplication`
+The repository now has one consistent desktop application identity: `io.github.jeromea.gcheckers`. The `GtkApplication`
 ID, GSettings schema filename and XML contents, desktop file, metainfo file, and icon filename all use that same ID.
 
 Desktop integration assets now live directly in-tree:
 
-- `data/io.github.JeromeA.gcheckers.desktop`
-- `data/io.github.JeromeA.gcheckers.metainfo.xml`
-- `data/icons/hicolor/scalable/apps/io.github.JeromeA.gcheckers.svg`
+- `data/io.github.jeromea.gcheckers.desktop`
+- `data/io.github.jeromea.gcheckers.metainfo.xml`
+- `data/icons/hicolor/scalable/apps/io.github.jeromea.gcheckers.svg`
 
 `Makefile` now supports `make install PREFIX=...`, installing the binary, desktop file, metainfo, icon, and GSettings
 schema under a standard prefix layout and compiling the installed schema directory. A metadata consistency test also

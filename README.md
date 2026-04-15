@@ -45,7 +45,7 @@ Install the desktop app metadata under a prefix:
 
 Build the upstream Flatpak manifest locally:
 
-  flatpak-builder --force-clean flatpak-build io.github.JeromeA.gcheckers.yaml
+  flatpak-builder --force-clean flatpak-build io.github.jeromea.gcheckers.yaml
 
 Run the GTK application:
 

@@ -30,7 +30,7 @@ typedef struct {
   GCheckersImportStep step;
 } GCheckersWindowImportDialogData;
 
-static const char *gcheckers_import_schema_id = "io.github.JeromeA.gcheckers";
+static const char *gcheckers_import_schema_id = "io.github.jeromea.gcheckers";
 static const char *gcheckers_import_key_remember = "import-remember";
 static const char *gcheckers_import_key_email = "import-email";
 static const char *gcheckers_import_key_password = "import-password";

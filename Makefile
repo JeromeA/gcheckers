@@ -1,5 +1,5 @@
 CC := cc
-APP_ID := io.github.JeromeA.gcheckers
+APP_ID := io.github.jeromea.gcheckers
 CFLAGS := -std=c99 -Wall -Wextra -Werror -Isrc
 CFLAGS += -g3
 COVERAGE_CFLAGS := --coverage -O0 -g

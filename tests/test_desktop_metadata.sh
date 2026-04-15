@@ -13,7 +13,7 @@ else
   echo "Unable to locate repository root from $0" >&2
   exit 1
 fi
-app_id="io.github.JeromeA.gcheckers"
+app_id="io.github.jeromea.gcheckers"
 desktop_file="$repo_root/data/$app_id.desktop"
 metainfo_file="$repo_root/data/$app_id.metainfo.xml"
 icon_file="$repo_root/data/icons/hicolor/scalable/apps/$app_id.svg"
@@ -33,7 +33,7 @@ if grep -q "raw.githubusercontent.com/JeromeA/gcheckers/main/" "$metainfo_file";
   echo "Metainfo screenshots must use immutable commit or tag URLs, not the main branch." >&2
   exit 1
 fi
-grep -q "<schema id=\"$app_id\" path=\"/io/github/JeromeA/gcheckers/\">" "$schema_file"
+grep -q "<schema id=\"$app_id\" path=\"/io/github/jeromea/gcheckers/\">" "$schema_file"
 test -f "$icon_file"
 
 make -C "$repo_root" install PREFIX="$install_root/prefix" >/dev/null

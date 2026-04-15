@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
-  <schema id="io.github.JeromeA.gcheckers" path="/io/github/JeromeA/gcheckers/">
+  <schema id="io.github.jeromea.gcheckers" path="/io/github/jeromea/gcheckers/">
     <key name="import-remember" type="b">
       <default>false</default>
       <summary>Remember import credentials</summary>

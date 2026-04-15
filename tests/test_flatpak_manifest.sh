@@ -14,11 +14,11 @@ else
   exit 1
 fi
 
-manifest="$repo_root/io.github.JeromeA.gcheckers.yaml"
+manifest="$repo_root/io.github.jeromea.gcheckers.yaml"
 
-grep -q "^id: io.github.JeromeA.gcheckers$" "$manifest"
+grep -q "^id: io.github.jeromea.gcheckers$" "$manifest"
 grep -q "^runtime: org.gnome.Platform$" "$manifest"
-grep -q "^runtime-version: '48'$" "$manifest"
+grep -q "^runtime-version: '50'$" "$manifest"
 grep -q "^sdk: org.gnome.Sdk$" "$manifest"
 grep -q "^command: gcheckers$" "$manifest"
 grep -q "make install PREFIX=/app" "$manifest"
