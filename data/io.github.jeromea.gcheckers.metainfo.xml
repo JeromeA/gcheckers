@@ -30,7 +30,16 @@
   <url type="bugtracker">https://github.com/JeromeA/gcheckers/issues</url>
   <url type="vcs-browser">https://github.com/JeromeA/gcheckers</url>
   <releases>
-    <release version="0.1.0" date="2026-04-14"/>
+    <release version="0.1.0" date="2026-04-15">
+      <description>
+        <p>Initial public release.</p>
+        <ul>
+          <li>Play checkers against another local player or the computer.</li>
+          <li>Solve tactical puzzles and browse SGF variations.</li>
+          <li>Analyze complete games with move-by-move scores.</li>
+        </ul>
+      </description>
+    </release>
   </releases>
   <content_rating type="oars-1.1"/>
   <recommends>
@@ -40,19 +49,19 @@
   <screenshots>
     <screenshot type="default">
       <caption>Play against the computer or in hot-seat mode.</caption>
-      <image type="source">https://raw.githubusercontent.com/JeromeA/gcheckers/97284d7a8dfb8146ed14e4ffad8e83567eec332b/doc/Play_against_computer.png</image>
+      <image type="source">https://raw.githubusercontent.com/JeromeA/gcheckers/v0.1.0/doc/Play_against_computer.png</image>
     </screenshot>
     <screenshot>
       <caption>Solve tactical checkers puzzles.</caption>
-      <image type="source">https://raw.githubusercontent.com/JeromeA/gcheckers/97284d7a8dfb8146ed14e4ffad8e83567eec332b/doc/Puzzle.png</image>
+      <image type="source">https://raw.githubusercontent.com/JeromeA/gcheckers/v0.1.0/doc/Puzzle.png</image>
     </screenshot>
     <screenshot>
       <caption>Analyze complete games with move-by-move scores.</caption>
-      <image type="source">https://raw.githubusercontent.com/JeromeA/gcheckers/97284d7a8dfb8146ed14e4ffad8e83567eec332b/doc/Analysis.png</image>
+      <image type="source">https://raw.githubusercontent.com/JeromeA/gcheckers/v0.1.0/doc/Analysis.png</image>
     </screenshot>
     <screenshot>
       <caption>Browse SGF variations and review branching lines.</caption>
-      <image type="source">https://raw.githubusercontent.com/JeromeA/gcheckers/97284d7a8dfb8146ed14e4ffad8e83567eec332b/doc/Variations.png</image>
+      <image type="source">https://raw.githubusercontent.com/JeromeA/gcheckers/v0.1.0/doc/Variations.png</image>
     </screenshot>
   </screenshots>
 </component>
