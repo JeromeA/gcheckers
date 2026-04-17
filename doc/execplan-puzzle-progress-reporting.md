@@ -116,10 +116,12 @@ The current application entry point is `src/application.c`. `GCheckersApplicatio
 one `GCheckersWindow` in `gcheckers_application_activate()`. It currently owns no custom runtime state beyond the
 window itself.
 
-Puzzle play is implemented in `src/window.c`. The important pieces are:
+Puzzle play is implemented in `src/window.c` with a small entry dialog in `src/puzzle_dialog.c`. The important pieces
+are:
 
-- `gcheckers_window_start_random_puzzle_mode()`, which chooses a random `puzzle-*.sgf` file from the puzzle data
-  directory.
+- `gcheckers_window_present_puzzle_dialog()`, which opens the modal variant chooser.
+- `gcheckers_window_start_random_puzzle_mode_for_ruleset()`, which chooses a random `puzzle-*.sgf` file from
+  `puzzles/<ruleset-short-name>/` under the puzzle data root.
 - `gcheckers_window_enter_puzzle_mode_with_path()`, which loads the SGF, extracts the main-line puzzle steps, and
   enters puzzle mode.
 - `gcheckers_window_apply_player_move()`, which compares the user's move against the expected puzzle step. This is the
@@ -130,10 +132,10 @@ Puzzle play is implemented in `src/window.c`. The important pieces are:
   current exits from an active puzzle attempt.
 - `gcheckers_window_leave_puzzle_mode()`, which tears puzzle mode down and clears puzzle-only runtime fields.
 
-The current code does not have a persistent writable app-state helper. `src/app_paths.c` only resolves data
-subdirectories and is used today for things like the installed `puzzles` directory. The feature in this plan therefore
-needs either new writable-path helpers in `src/app_paths.c` or a new small helper module that creates and returns a
-state directory such as:
+The current code does not have a persistent writable app-state helper. `src/app_paths.c` only resolves read-oriented
+data subdirectories and is used today for things like the installed `puzzles/<ruleset-short-name>` directories. The
+feature in this plan therefore needs either new writable-path helpers in `src/app_paths.c` or a new small helper
+module that creates and returns a state directory such as:
 
     <user-data-dir>/gcheckers/puzzle-progress
 
@@ -187,11 +189,12 @@ Define a small plain C data model in `src/puzzle_progress.h`. At minimum, it sho
 The `attempt_id` is a per-attempt unique identifier generated locally. It is separate from the stable user identifier.
 This matters because the same puzzle may be tried several times and because later calibration work may need
 per-attempt, not just per-puzzle, history. The `puzzle_id` should be stable across packaged files and should not
-depend on the random choice order. Use the loaded puzzle file basename if it matches `puzzle-####.sgf` or
-`puzzles-####.sgf`; that is already how puzzle identity is exposed in the UI and tests today. Keep `puzzle_number` as
-an optional numeric convenience because `window.c` already parses it. The `first_reported_unix_ms` and `report_count`
-fields are local metadata, not gameplay results; they exist so the client can later reason about what has or has not
-been sent without deleting the raw attempt record.
+depend on the random choice order. Use a ruleset-aware identifier derived from the selected variant plus the loaded
+puzzle file basename, for example `international/puzzle-0007.sgf`. That matches the packaged layout under
+`puzzles/<short-name>/` and avoids collisions between variants that may eventually reuse the same file numbers. Keep
+`puzzle_number` as an optional numeric convenience because `window.c` already parses it. The `first_reported_unix_ms`
+and `report_count` fields are local metadata, not gameplay results; they exist so the client can later reason about
+what has or has not been sent without deleting the raw attempt record.
 
 Persist the stable user identifier in `GSettings` under the existing application schema if possible. Add a key such as:
 
@@ -215,8 +218,8 @@ Use one JSON object per line. "JSONL" means JSON Lines: each line is a complete 
 append, inspect manually, and recover from if the last line is partially written. Each stored object must include the
 attempt record and a small schema version. For example:
 
-    {"schema_version":1,"attempt_id":"...","puzzle_id":"puzzle-0007.sgf","puzzle_number":7,
-     "attacker":"white","started_unix_ms":1713300000000,"finished_unix_ms":1713300005000,
+    {"schema_version":1,"attempt_id":"...","puzzle_id":"international/puzzle-0007.sgf","puzzle_number":7,
+     "puzzle_ruleset":"international","attacker":"white","started_unix_ms":1713300000000,"finished_unix_ms":1713300005000,
      "result":"failure","failure_on_first_move":true,"first_reported_unix_ms":0,"report_count":0,
      "failed_first_move":{"length":2,"captures":0,"path":[12,16]}}
 
@@ -250,6 +253,7 @@ must be separate from `puzzle_steps`. Extend `struct _GCheckersWindow` with:
     gboolean puzzle_attempt_started;
     CheckersPuzzleAttemptRecord puzzle_attempt;
     char *puzzle_path;
+    PlayerRuleset puzzle_ruleset;
 
 If ownership becomes awkward, replace the inline record with a pointer and helper init/reset functions. The important
 behavior is:
@@ -266,9 +270,9 @@ behavior is:
 5. If the user makes at least one correct move, then later clicks `Analyze`, mark the attempt as `analyze`, set
    `finished_unix_ms`, and keep `failure_on_first_move = FALSE`.
 6. If the user makes at least one correct move, then later leaves puzzle mode without finishing for another reason,
-   mark the attempt as failure when puzzle mode is abandoned by `Next puzzle`, loading another puzzle, new game,
-   import, or window destruction. In that case `failure_on_first_move = FALSE` and there is no stored first wrong
-   move.
+   mark the attempt as failure when puzzle mode is abandoned by `Next puzzle`, starting another puzzle through the
+   variant chooser, new game, import, or window destruction. In that case `failure_on_first_move = FALSE` and there is
+   no stored first wrong move.
 
 This is the key lifecycle rule that the implementation must make explicit: only puzzle entries with at least one user
 move attempt are recorded, but once recorded they must always end in either success, failure, or analyze before the
@@ -293,7 +297,8 @@ Call them from:
 - `gcheckers_window_on_puzzle_analyze_clicked()` before leaving puzzle mode.
 - `gcheckers_window_leave_puzzle_mode()` before clearing puzzle fields when the exit is not already classified as
   `analyze`.
-- `gcheckers_window_enter_puzzle_mode_with_path()` when replacing one active puzzle with another.
+- `gcheckers_window_enter_puzzle_mode_with_path()` when replacing one active puzzle with another after
+  `gcheckers_window_start_random_puzzle_mode_for_ruleset()`.
 - `gcheckers_window_dispose()` or `gcheckers_window_finalize()` as a final safety net.
 
 The next edit is in `src/application.c` and `src/application.h`. The upload loop belongs at the application level,
@@ -360,9 +365,10 @@ Request:
       "attempts": [
         {
           "attempt_id": "8db8...",
-          "puzzle_id": "puzzle-0007.sgf",
+          "puzzle_id": "international/puzzle-0007.sgf",
           "puzzle_number": 7,
           "puzzle_source_name": "puzzle-0007.sgf",
+          "puzzle_ruleset": "international",
           "attacker": "white",
           "started_unix_ms": 1713300000000,
           "finished_unix_ms": 1713300005000,
@@ -412,7 +418,8 @@ Do not force network access in unit tests. For upload behavior, add a tiny fake 
 drive libcurl against a local loopback server launched from a shell test. If that becomes too heavy, unit-test payload
 building and response parsing separately in C and keep the actual libcurl integration minimal.
 
-Extend `tests/test_window.c` with puzzle integration coverage. Reuse the existing temporary puzzle helper functions.
+Extend `tests/test_window.c` with puzzle integration coverage. Reuse the existing temporary puzzle helper functions and
+the ruleset-aware chooser flow.
 Add tests for:
 
 - solving a puzzle records a resolved success attempt in local history and triggers a flush request stub
@@ -488,7 +495,7 @@ Expected observation:
 
 - after entering puzzle mode and leaving without moving, no history file is created
 - after a wrong first move, the history file contains one failure record with `failure_on_first_move: true`
-- after solving a puzzle, the stored record is marked `success`
+- after solving a puzzle, the stored record is marked `success` and its `puzzle_id` includes the selected ruleset
 - after clicking `Analyze` during a started puzzle, the stored record is marked `analyze`
 
 Manual end-to-end exercise with a fake upload server:
@@ -630,4 +637,5 @@ Change note: created this plan after surveying the existing puzzle runtime in `s
 in `src/application.c`, writable-path gaps in `src/app_paths.c`, and the current `Makefile`/test setup. It was later
 reworked to treat `Analyze` as its own outcome, to prefer `GSettings` for the stable user ID, and to switch from
 delete-on-ack queueing to append-only history with threshold-based full-report sends because those better match the
-current product direction.
+current product direction. It was also updated after puzzle mode became ruleset-aware so the plan now refers to the
+variant chooser flow and to stable puzzle IDs derived from `puzzles/<short-name>/puzzle-####.sgf`.
