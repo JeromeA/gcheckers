@@ -1,15 +1,23 @@
 #include "game.h"
+#include "board_geometry.h"
 
 #include <glib.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 
-static bool is_forward(CheckersColor color, int delta_row) {
+static void forward_direction_range(CheckersColor color, uint8_t *start, uint8_t *end) {
+  g_return_if_fail(start != NULL);
+  g_return_if_fail(end != NULL);
+
   if (color == CHECKERS_COLOR_WHITE) {
-    return delta_row == -1;
+    *start = CHECKERS_DIRECTION_UP_LEFT;
+    *end = CHECKERS_DIRECTION_DOWN_LEFT;
+    return;
   }
-  return delta_row == 1;
+
+  *start = CHECKERS_DIRECTION_DOWN_LEFT;
+  *end = CHECKERS_DIRECTION_COUNT;
 }
 
 static void append_move(MoveList *list, const CheckersMove *move) {
@@ -26,8 +34,12 @@ static void append_move(MoveList *list, const CheckersMove *move) {
   list->count += 1;
 }
 
-static void generate_simple_moves(const Game *game, uint8_t index, MoveList *moves) {
+static void generate_simple_moves(const Game *game,
+                                  const CheckersBoardGeometry *geometry,
+                                  uint8_t index,
+                                  MoveList *moves) {
   g_return_if_fail(game != NULL);
+  g_return_if_fail(geometry != NULL);
   g_return_if_fail(moves != NULL);
 
   CheckersPiece piece = board_get(&game->state.board, index);
@@ -35,26 +47,18 @@ static void generate_simple_moves(const Game *game, uint8_t index, MoveList *mov
     return;
   }
 
-  int row = 0;
-  int col = 0;
-  board_coord_from_index(index, &row, &col, game->rules->board_size);
-
-  int directions[4][2] = {{1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
   bool is_king = piece == CHECKERS_PIECE_WHITE_KING || piece == CHECKERS_PIECE_BLACK_KING;
+  uint8_t start = CHECKERS_DIRECTION_UP_LEFT;
+  uint8_t end = CHECKERS_DIRECTION_COUNT;
+  if (!is_king) {
+    forward_direction_range(board_piece_color(piece), &start, &end);
+  }
 
-  for (size_t i = 0; i < 4; ++i) {
-    int dr = directions[i][0];
-    int dc = directions[i][1];
-    if (!is_king && !is_forward(board_piece_color(piece), dr)) {
-      continue;
-    }
-
-    int step = 1;
-    for (;;) {
-      int nr = row + dr * step;
-      int nc = col + dc * step;
-      int8_t target_index = board_index_from_coord(nr, nc, game->rules->board_size);
-      if (target_index < 0) {
+  for (uint8_t direction = start; direction < end; ++direction) {
+    const int8_t *ray = geometry->rays[index][direction];
+    for (uint8_t step = 0; step < CHECKERS_MAX_DIRECTION_STEPS + 1; ++step) {
+      int8_t target_index = ray[step];
+      if (target_index == CHECKERS_DIRECTION_SENTINEL) {
         break;
       }
       if (board_get(&game->state.board, (uint8_t)target_index) != CHECKERS_PIECE_EMPTY) {
@@ -69,45 +73,38 @@ static void generate_simple_moves(const Game *game, uint8_t index, MoveList *mov
       if (!is_king || !game->rules->kings_can_fly) {
         break;
       }
-      step += 1;
     }
   }
 }
 
 static void dfs_jumps(const Game *game,
+                      const CheckersBoardGeometry *geometry,
                       uint8_t index,
                       CheckersPiece piece,
                       CheckersMove *partial,
                       MoveList *moves,
                       CheckersBoard *board) {
   g_return_if_fail(game != NULL);
+  g_return_if_fail(geometry != NULL);
   g_return_if_fail(partial != NULL);
   g_return_if_fail(moves != NULL);
   g_return_if_fail(board != NULL);
 
   bool extended = false;
-  int row = 0;
-  int col = 0;
-  board_coord_from_index(index, &row, &col, game->rules->board_size);
-  int directions[4][2] = {{1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
   bool is_king = piece == CHECKERS_PIECE_WHITE_KING || piece == CHECKERS_PIECE_BLACK_KING;
+  uint8_t start = CHECKERS_DIRECTION_UP_LEFT;
+  uint8_t end = CHECKERS_DIRECTION_COUNT;
+  if (!is_king && !game->rules->men_can_jump_backwards) {
+    forward_direction_range(board_piece_color(piece), &start, &end);
+  }
 
-  for (size_t i = 0; i < 4; ++i) {
-    int dr = directions[i][0];
-    int dc = directions[i][1];
-    if (!is_king && !game->rules->men_can_jump_backwards &&
-        !is_forward(board_piece_color(piece), dr)) {
-      continue;
-    }
+  for (uint8_t direction = start; direction < end; ++direction) {
+    const int8_t *ray = geometry->rays[index][direction];
 
     if (!is_king || !game->rules->kings_can_fly) {
-      int mid_r = row + dr;
-      int mid_c = col + dc;
-      int land_r = row + dr * 2;
-      int land_c = col + dc * 2;
-      int8_t mid_index = board_index_from_coord(mid_r, mid_c, game->rules->board_size);
-      int8_t land_index = board_index_from_coord(land_r, land_c, game->rules->board_size);
-      if (mid_index < 0 || land_index < 0) {
+      int8_t mid_index = ray[0];
+      int8_t land_index = ray[1];
+      if (mid_index == CHECKERS_DIRECTION_SENTINEL || land_index == CHECKERS_DIRECTION_SENTINEL) {
         continue;
       }
       CheckersPiece middle_piece = (CheckersPiece)board_get_raw(board, (uint8_t)mid_index);
@@ -130,7 +127,7 @@ static void dfs_jumps(const Game *game,
 
       partial->path[partial->length++] = (uint8_t)land_index;
       partial->captures += 1;
-      dfs_jumps(game, (uint8_t)land_index, piece, partial, moves, &next_board);
+      dfs_jumps(game, geometry, (uint8_t)land_index, piece, partial, moves, &next_board);
       partial->length -= 1;
       partial->captures -= 1;
       continue;
@@ -138,11 +135,9 @@ static void dfs_jumps(const Game *game,
 
     bool found_opponent = false;
     uint8_t opponent_index = 0;
-    for (int step = 1;; ++step) {
-      int scan_r = row + dr * step;
-      int scan_c = col + dc * step;
-      int8_t scan_index = board_index_from_coord(scan_r, scan_c, game->rules->board_size);
-      if (scan_index < 0) {
+    for (uint8_t step = 0; step < CHECKERS_MAX_DIRECTION_STEPS + 1; ++step) {
+      int8_t scan_index = ray[step];
+      if (scan_index == CHECKERS_DIRECTION_SENTINEL) {
         break;
       }
       CheckersPiece scan_piece = (CheckersPiece)board_get_raw(board, (uint8_t)scan_index);
@@ -162,7 +157,7 @@ static void dfs_jumps(const Game *game,
 
         partial->path[partial->length++] = (uint8_t)scan_index;
         partial->captures += 1;
-        dfs_jumps(game, (uint8_t)scan_index, piece, partial, moves, &next_board);
+        dfs_jumps(game, geometry, (uint8_t)scan_index, piece, partial, moves, &next_board);
         partial->length -= 1;
         partial->captures -= 1;
         continue;
@@ -182,8 +177,12 @@ static void dfs_jumps(const Game *game,
   }
 }
 
-static void generate_jump_moves(const Game *game, uint8_t index, MoveList *moves) {
+static void generate_jump_moves(const Game *game,
+                                const CheckersBoardGeometry *geometry,
+                                uint8_t index,
+                                MoveList *moves) {
   g_return_if_fail(game != NULL);
+  g_return_if_fail(geometry != NULL);
   g_return_if_fail(moves != NULL);
 
   CheckersPiece piece = board_get(&game->state.board, index);
@@ -194,7 +193,7 @@ static void generate_jump_moves(const Game *game, uint8_t index, MoveList *moves
   CheckersMove move = {.length = 1, .captures = 0};
   move.path[0] = index;
   CheckersBoard board_copy = game->state.board;
-  dfs_jumps(game, index, piece, &move, moves, &board_copy);
+  dfs_jumps(game, geometry, index, piece, &move, moves, &board_copy);
 }
 
 static void filter_longest_captures(MoveList *moves) {
@@ -226,6 +225,9 @@ MoveList game_list_available_moves(const Game *game) {
     return moves;
   }
 
+  const CheckersBoardGeometry *geometry = checkers_board_geometry_get(game->rules->board_size);
+  g_return_val_if_fail(geometry != NULL, moves);
+
   uint8_t squares = board_playable_squares(game->rules->board_size);
   for (uint8_t i = 0; i < squares; ++i) {
     CheckersPiece piece = board_get(&game->state.board, i);
@@ -235,7 +237,7 @@ MoveList game_list_available_moves(const Game *game) {
     if (board_piece_color(piece) != game->state.turn) {
       continue;
     }
-    generate_jump_moves(game, i, &moves);
+    generate_jump_moves(game, geometry, i, &moves);
   }
 
   if (moves.count > 0 && game->rules->capture_mandatory) {
@@ -253,7 +255,7 @@ MoveList game_list_available_moves(const Game *game) {
     if (board_piece_color(piece) != game->state.turn) {
       continue;
     }
-    generate_simple_moves(game, i, &moves);
+    generate_simple_moves(game, geometry, i, &moves);
   }
 
   return moves;

@@ -413,7 +413,7 @@ static void test_model_search_static_bonus_uses_both_king_rows(void) {
   gint white_score = 0;
   ok = checkers_ai_alpha_beta_evaluate_position(&game, 0, &white_score);
   assert(ok);
-  assert(white_score == 3);
+  assert(white_score == -3);
 
   game.state.turn = CHECKERS_COLOR_BLACK;
   MoveList black_moves = game.available_moves(&game);

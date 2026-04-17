@@ -133,7 +133,15 @@ Collaborates with: `GCheckersWindow`, `BoardView`, and SGF view helpers during d
 ## Board primitives (`src/board.c`, `src/board.h`)
 Module: board storage and helpers.
 Role: define board data structures, coordinate conversion helpers, piece helpers, and reset/init logic.
-Collaborates with: `game.c` for rules and state transitions.
+Collaborates with: `game.c` for rules and state transitions, and `board_geometry.c` for one-time directional-ray
+construction.
+
+## Board geometry (`src/board_geometry.c`, `src/board_geometry.h`)
+Module: precomputed directional traversal data.
+Role: build and expose immutable per-board-size direction rays in playable-square index space. Direction order is API:
+up-left, up-right, down-left, down-right.
+Collaborates with: `move_gen.c` for hot-path move enumeration, and `board.c` for one-time index/coordinate conversion
+while initializing the static geometry tables.
 
 ## Constants (`src/checkers_constants.h`)
 Module: shared constants.
@@ -162,7 +170,8 @@ Collaborates with: game/SGF formatting callers.
 ## Move generation (`src/move_gen.c`)
 Module: move generation.
 Role: enumerate simple moves, jumps, and forced-capture rules.
-Collaborates with: `game.c` to validate and apply generated moves.
+Collaborates with: `game.c` to validate and apply generated moves, and `board_geometry.c` for direct index-space
+direction traversal without per-step coordinate conversion.
 
 ## GTK model wrapper (`src/checkers_model.c`, `src/checkers_model.h`)
 Class: `GCheckersModel` (`GObject`).

@@ -21,14 +21,13 @@
 
 # Bugs
 
-- When fixing a bug, add an entry in BUGS.md.
+- When fixing a bug, add an entry in doc/BUGS.md.
 
 # ExecPlans
  
-When writing complex features or significant refactors, use an ExecPlan (as described in PLANS.md) from design to
+When writing complex features or significant refactors, use an ExecPlan (as described in doc/PLANS.md) from design to
 implementation.
 
 # Repository overview
 
-Read (and update) src/OVERVIEW.md for any change in src/.
-
+Read (and update) doc/OVERVIEW.md for any change in src/.

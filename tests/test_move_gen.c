@@ -76,6 +76,45 @@ static void test_move_selection_helpers(void) {
   game_destroy(&game);
 }
 
+static void test_black_simple_move_direction(void) {
+  Game game;
+  test_init_game_with_ruleset(&game, PLAYER_RULESET_AMERICAN);
+  memset(game.state.board.data, 0, sizeof(game.state.board.data));
+  game.state.turn = CHECKERS_COLOR_BLACK;
+
+  int8_t black_index = board_index_from_coord(2, 3, game.rules->board_size);
+  int8_t forward_left = board_index_from_coord(3, 2, game.rules->board_size);
+  int8_t forward_right = board_index_from_coord(3, 4, game.rules->board_size);
+  int8_t backward_left = board_index_from_coord(1, 2, game.rules->board_size);
+  int8_t backward_right = board_index_from_coord(1, 4, game.rules->board_size);
+  assert(black_index >= 0 && forward_left >= 0 && forward_right >= 0);
+  assert(backward_left >= 0 && backward_right >= 0);
+
+  board_set(&game.state.board, (uint8_t)black_index, CHECKERS_PIECE_BLACK_MAN);
+
+  MoveList moves = game_list_available_moves(&game);
+  assert(moves.count == 2);
+  bool saw_forward_left = false;
+  bool saw_forward_right = false;
+  for (size_t i = 0; i < moves.count; ++i) {
+    assert(moves.moves[i].captures == 0);
+    assert(moves.moves[i].path[0] == (uint8_t)black_index);
+    assert(moves.moves[i].path[1] != (uint8_t)backward_left);
+    assert(moves.moves[i].path[1] != (uint8_t)backward_right);
+    if (moves.moves[i].path[1] == (uint8_t)forward_left) {
+      saw_forward_left = true;
+    }
+    if (moves.moves[i].path[1] == (uint8_t)forward_right) {
+      saw_forward_right = true;
+    }
+  }
+  assert(saw_forward_left);
+  assert(saw_forward_right);
+  movelist_free(&moves);
+
+  game_destroy(&game);
+}
+
 static void test_forced_capture_and_removal_moves(void) {
   Game game;
   test_init_game_with_ruleset(&game, PLAYER_RULESET_AMERICAN);
@@ -268,6 +307,7 @@ static void test_kings_can_fly(void) {
 int main(void) {
   test_initial_setup_moves();
   test_move_selection_helpers();
+  test_black_simple_move_direction();
   test_forced_capture_and_removal_moves();
   test_no_capture_over_own_piece();
   test_men_backward_jump_rule();

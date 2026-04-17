@@ -26,7 +26,7 @@ OBJ_DIR := $(BUILD_DIR)/obj
 CALLGRIND_DIR := $(BUILD_DIR)/callgrind
 
 APP_PATHS_SRCS := src/app_paths.c
-SRCS := src/board.c src/game.c src/game_print.c src/move_gen.c src/ai_alpha_beta.c \
+SRCS := src/board.c src/board_geometry.c src/game.c src/game_print.c src/move_gen.c src/ai_alpha_beta.c \
 	src/rulesets.c \
 	src/ai_transposition_table.c src/ai_zobrist.c src/checkers_model.c
 POSITION_SRCS := src/position_search.c src/position_predicate.c src/position_format.c
@@ -76,6 +76,7 @@ FIND_POSITION_BIN := $(TOOLS_DIR)/find_position
 TEST_GAME_BIN := $(TESTS_DIR)/test_game
 TEST_GAME_PRINT_BIN := $(TESTS_DIR)/test_game_print
 TEST_BOARD_BIN := $(TESTS_DIR)/test_board
+TEST_BOARD_GEOMETRY_BIN := $(TESTS_DIR)/test_board_geometry
 TEST_MOVE_GEN_BIN := $(TESTS_DIR)/test_move_gen
 TEST_CREATE_PUZZLES_CLI_BIN := $(TESTS_DIR)/test_create_puzzles_cli
 TEST_CREATE_PUZZLES_CHECK_BIN := $(TESTS_DIR)/test_create_puzzles_check
@@ -105,7 +106,7 @@ PROFILE_CMD = $(PROFILE_BIN) $(PROFILE_ARGS)
 
 .PHONY: all clean test coverage install validate-desktop-metadata \
 	gcheckers create_puzzles find_position libgame.a \
-	test_game test_game_print test_board test_move_gen test_create_puzzles_cli test_create_puzzles_check \
+	test_game test_game_print test_board test_board_geometry test_move_gen test_create_puzzles_cli test_create_puzzles_check \
 	test_checkers_model test_ai_transposition_table test_position_search test_position_predicate test_bga_client \
 	test_file_dialog_history test_app_paths test_desktop_metadata test_flatpak_manifest test_sgf_tree test_sgf_io \
 	test_sgf_view test_board_view test_player_controls_panel test_sgf_controller test_window test_puzzle_generation \
@@ -126,7 +127,8 @@ $(OBJ_DIR)/%.o: %.c src/game.h src/board.h src/checkers_constants.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-test: $(TEST_GAME_BIN) $(TEST_GAME_PRINT_BIN) $(TEST_BOARD_BIN) $(TEST_MOVE_GEN_BIN) $(TEST_CHECKERS_MODEL_BIN) \
+test: $(TEST_GAME_BIN) $(TEST_GAME_PRINT_BIN) $(TEST_BOARD_BIN) $(TEST_BOARD_GEOMETRY_BIN) $(TEST_MOVE_GEN_BIN) \
+	$(TEST_CHECKERS_MODEL_BIN) \
 	$(TEST_AI_TRANSPOSITION_TABLE_BIN) $(TEST_POSITION_SEARCH_BIN) $(TEST_POSITION_PREDICATE_BIN) $(TEST_SGF_TREE_BIN) \
 	$(TEST_SGF_IO_BIN) $(TEST_SGF_VIEW_BIN) $(TEST_BGA_CLIENT_BIN) $(TEST_FILE_DIALOG_HISTORY_BIN) \
 	$(TEST_APP_PATHS_BIN) $(TEST_BOARD_VIEW_BIN) $(TEST_PLAYER_CONTROLS_PANEL_BIN) $(TEST_SGF_CONTROLLER_BIN) \
@@ -135,6 +137,7 @@ test: $(TEST_GAME_BIN) $(TEST_GAME_PRINT_BIN) $(TEST_BOARD_BIN) $(TEST_MOVE_GEN_
 	$(TEST_GAME_BIN)
 	$(TEST_GAME_PRINT_BIN)
 	$(TEST_BOARD_BIN)
+	$(TEST_BOARD_GEOMETRY_BIN)
 	$(TEST_MOVE_GEN_BIN)
 	$(TEST_CHECKERS_MODEL_BIN)
 	$(TEST_AI_TRANSPOSITION_TABLE_BIN)
@@ -171,6 +174,12 @@ test_board: $(TEST_BOARD_BIN)
 $(TEST_BOARD_BIN): tests/test_board.c $(BOARD_SRCS) src/board.h src/checkers_constants.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_board.c $(BOARD_SRCS) $(LDLIBS)
+
+test_board_geometry: $(TEST_BOARD_GEOMETRY_BIN)
+$(TEST_BOARD_GEOMETRY_BIN): tests/test_board_geometry.c src/board_geometry.c src/board_geometry.h src/board.c \
+	src/board.h src/checkers_constants.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -o $@ tests/test_board_geometry.c src/board_geometry.c src/board.c $(LDLIBS)
 
 test_move_gen: $(TEST_MOVE_GEN_BIN)
 $(TEST_MOVE_GEN_BIN): tests/test_move_gen.c $(SRCS) src/game.h

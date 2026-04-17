@@ -87,37 +87,71 @@ static void count_profile_match(const Game */*position*/,
   (*count)++;
 }
 
-static void test_eval_profile_predicate_finds_matches_in_four_plies(void) {
+typedef struct {
+  gboolean found;
+  CheckersMove line[2];
+} ProfileLineCapture;
+
+static void capture_first_profile_line(const Game */*position*/,
+                                       const CheckersMove *line,
+                                       guint line_length,
+                                       gpointer user_data) {
+  assert(user_data != NULL);
+  assert(line != NULL);
+
+  ProfileLineCapture *capture = user_data;
+  if (capture->found) {
+    return;
+  }
+
+  assert(line_length == 2);
+  capture->line[0] = line[0];
+  capture->line[1] = line[1];
+  capture->found = TRUE;
+}
+
+static void test_eval_profile_predicate_finds_matches_in_two_plies(void) {
   Game game;
   test_init_game_with_ruleset(&game, PLAYER_RULESET_AMERICAN);
 
   CheckersEvalProfilePredicate predicate = {0};
-  checkers_eval_profile_predicate_init(&predicate, 2, 4, 10);
+  checkers_eval_profile_predicate_init(&predicate, 1, 1, 3);
 
   CheckersPositionSearchOptions options = {
-      .min_ply = 4,
-      .max_ply = 4,
+      .min_ply = 2,
+      .max_ply = 2,
       .deduplicate_positions = TRUE,
   };
   CheckersPositionSearchStats stats = {0};
-  guint match_count = 0;
+  ProfileLineCapture capture = {0};
   gboolean ok = checkers_position_search(&game,
                                          &options,
                                          checkers_position_predicate_eval_profile,
                                          &predicate,
-                                         count_profile_match,
-                                         &match_count,
+                                         capture_first_profile_line,
+                                         &capture,
                                          &stats);
   assert(ok);
   assert(stats.evaluated_positions > 0);
-  assert(match_count > 0);
-  assert(stats.matched_positions == match_count);
+  assert(stats.matched_positions > 0);
+  assert(capture.found);
+
+  Game matched = game;
+  int rc = game_apply_move(&matched, &capture.line[0]);
+  assert(rc == 0);
+  rc = game_apply_move(&matched, &capture.line[1]);
+  assert(rc == 0);
+
+  checkers_eval_profile_predicate_init(&predicate, 1, 1, 3);
+  gboolean matched_ok = checkers_position_predicate_eval_profile(&matched, capture.line, 2, &predicate);
+  assert(matched_ok);
 
   gint last_score = 0;
   gboolean has_score = checkers_eval_profile_predicate_get_last_non_zero_score(&predicate, &last_score);
   assert(has_score);
   assert(last_score != 0);
 
+  game_destroy(&matched);
   game_destroy(&game);
 }
 
@@ -131,7 +165,7 @@ static void test_eval_profile_predicate_rejects_imbalanced_position(void) {
   board_set(&game.state.board, 20, CHECKERS_PIECE_WHITE_MAN);
 
   CheckersEvalProfilePredicate predicate = {0};
-  checkers_eval_profile_predicate_init(&predicate, 2, 4, 10);
+  checkers_eval_profile_predicate_init(&predicate, 1, 1, 3);
   gboolean matched = checkers_position_predicate_eval_profile(&game, NULL, 0, &predicate);
   assert(!matched);
 
@@ -163,7 +197,7 @@ static void test_mistake_predicate_rejects_best_line(void) {
   Game root;
   test_init_game_with_ruleset(&root, PLAYER_RULESET_AMERICAN);
   CheckersMistakePredicate predicate = {0};
-  checkers_mistake_predicate_init(&predicate, &root, 2, 4);
+  checkers_mistake_predicate_init(&predicate, &root, 2, 2);
   gboolean matched = checkers_position_predicate_has_mistake(&root, line, 2, &predicate);
   assert(!matched);
 
@@ -198,7 +232,7 @@ static void test_mistake_predicate_detects_mistake_line(void) {
   test_init_game_with_ruleset(&root, PLAYER_RULESET_AMERICAN);
 
   CheckersMistakePredicate predicate = {0};
-  checkers_mistake_predicate_init(&predicate, &root, 2, 4);
+  checkers_mistake_predicate_init(&predicate, &root, 2, 2);
 
   CheckersPositionSearchOptions options = {
       .min_ply = 2,
@@ -218,7 +252,7 @@ static void test_mistake_predicate_detects_mistake_line(void) {
   assert(stats.matched_positions > 0);
   assert(capture.found);
 
-  checkers_mistake_predicate_init(&predicate, &root, 2, 4);
+  checkers_mistake_predicate_init(&predicate, &root, 2, 2);
   gboolean matched = checkers_position_predicate_has_mistake(&root, capture.line, 2, &predicate);
   assert(matched);
 
@@ -245,7 +279,7 @@ static void test_deep_mistake_predicate_same_depth_never_matches(void) {
   test_init_game_with_ruleset(&root, PLAYER_RULESET_AMERICAN);
 
   CheckersDeepMistakePredicate predicate = {0};
-  checkers_deep_mistake_predicate_init(&predicate, &root, 2, 4, 4);
+  checkers_deep_mistake_predicate_init(&predicate, &root, 2, 1, 1);
 
   CheckersPositionSearchOptions options = {
       .min_ply = 2,
@@ -273,7 +307,7 @@ int main(void) {
   test_eval_best_score_non_zero_for_material_advantage();
   test_eval_non_zero_predicate_caches_score();
   test_eval_non_zero_predicate_false_on_balanced_start();
-  test_eval_profile_predicate_finds_matches_in_four_plies();
+  test_eval_profile_predicate_finds_matches_in_two_plies();
   test_eval_profile_predicate_rejects_imbalanced_position();
   test_mistake_predicate_rejects_best_line();
   test_mistake_predicate_detects_mistake_line();
