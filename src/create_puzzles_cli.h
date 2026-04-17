@@ -1,6 +1,8 @@
 #ifndef CHECKERS_CREATE_PUZZLES_CLI_H
 #define CHECKERS_CREATE_PUZZLES_CLI_H
 
+#include "ruleset.h"
+
 #include <glib.h>
 
 typedef enum {
@@ -14,6 +16,8 @@ typedef struct {
   gboolean try_forced_mistakes;
   gboolean save_games;
   gboolean dry_run;
+  gboolean has_ruleset;
+  PlayerRuleset ruleset;
   const char *arg;
 } CheckersCreatePuzzlesCliOptions;
 

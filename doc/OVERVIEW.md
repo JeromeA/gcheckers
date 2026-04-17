@@ -19,10 +19,13 @@ the same position source of truth as normal controller navigation.
 Board orientation is runtime-only window state: live games choose `follow-player`, `follow-turn`, or `fixed`
 orientation based on the new-game player modes, and SGF review/manual navigation switches back to `fixed` so analysis
 navigation does not keep rotating the board.
-Puzzle mode loads a random `puzzle-*.sgf` / `puzzles-*.sgf` from the puzzle directory (`GCHECKERS_PUZZLES_DIR` or the
-installed/local application data search path), hides both drawers, disables SGF/review actions, shows puzzle-only
-`Next puzzle` and `Analyze` buttons, and validates the player's moves against the SGF main-line solution while
-auto-playing defender replies.
+Puzzle mode starts with a small modal chooser (`src/puzzle_dialog.c`) that lets the user pick
+American/International/Russian before loading a puzzle. Runtime loading resolves the puzzle root
+(`GCHECKERS_PUZZLES_DIR` or the installed/local application data search path), appends the selected ruleset short name
+such as `american` or `russian`, then loads a random `puzzle-*.sgf` from that variant directory only. While active it
+hides both drawers, disables SGF/review actions, shows puzzle-only `Next puzzle` and `Analyze` buttons, and validates
+the player's moves against the SGF main-line solution while auto-playing defender replies. `Next puzzle` reuses the
+active puzzle ruleset instead of picking from a global pool.
 Puzzle entry forces a fixed attacker-at-bottom orientation, while puzzle exit restores only layout/drawer state and
 leaves the current board orientation unchanged.
 Adds an `Analysis` menubar submenu for current-position and whole-game analysis, plus a `View` submenu with
@@ -157,9 +160,11 @@ before initialization.
 
 ## Ruleset catalog (`src/rulesets.c`, `src/rulesets.h`, `src/ruleset.h`)
 Module: ruleset metadata and presets.
-Role: central single source of truth for ruleset IDs, display names, UI summaries, and `CheckersRules` values in one
-enum-indexed table.
-Collaborates with: `window.c`/`new_game_dialog.c` for UI selection + summaries, and all game creators for explicit
+Role: central single source of truth for ruleset IDs, display names, short names (`american`, `international`,
+`russian`), UI summaries, and `CheckersRules` values in one enum-indexed table. Also exposes reverse lookup from a
+short name back to a `PlayerRuleset`.
+Collaborates with: `window.c`/`new_game_dialog.c`/`puzzle_dialog.c` for UI selection + summaries, `create_puzzles.c`
+and `create_puzzles_cli.c` for ruleset-targeted puzzle generation, and all game creators for explicit
 `game_init_with_rules()` setup.
 
 ## Game printing (`src/game_print.c`)
@@ -254,16 +259,18 @@ Module: CLI front end.
 Role: repeatedly self-play games at depth 0, detect mistake positions with configurable best-move-depth analysis,
 validate each candidate immediately in one pass, require the attacker to have at least four legal moves and a best
 response at least 50 points above the runner-up, then save puzzles as
-SGF files under `puzzles/puzzle-####.sgf` with root setup (`AE/AB/AW/ABK/AWK/PL`) and a tactical continuation line.
+SGF files under `puzzles/<ruleset-short-name>/puzzle-####.sgf` with root setup (`AE/AB/AW/ABK/AWK/PL`) and a tactical
+continuation line.
 Validation and emission are now split: one path computes a validated puzzle candidate from a post-mistake position,
 and separate generation/checking paths either save that candidate or compare an existing saved puzzle against it.
-The CLI accepts `--depth N` to override the puzzle-analysis depth, `--synthetic-candidates` to opt into trying
-synthetic bad moves in addition to the played move during generation, `--save-games` to also persist the originating
-`game-####.sgf` companion files, and `--check-existing` with optional `--dry-run` to re-validate `puzzle-*.sgf` files
-in a directory and optionally delete stale ones. Without `--check-existing`, it uses the built-in default depth 8 and
-only evaluates the actual game line.
-Before generating anything, the CLI loads existing `puzzle-*.sgf` files from the output directory and deduplicates by
-solution move sequence, so equivalent puzzles are skipped instead of being saved twice.
+The CLI requires `--ruleset <short-name>` so generation, checking, deduplication, and logging all target one explicit
+variant at a time. It also accepts `--depth N` to override the puzzle-analysis depth, `--synthetic-candidates` to opt
+into trying synthetic bad moves in addition to the played move during generation, `--save-games` to also persist the
+originating `game-####.sgf` companion files beside the puzzle files, and `--check-existing` with optional `--dry-run`
+to re-validate `puzzle-*.sgf` files in one variant directory and optionally delete stale ones. Without
+`--check-existing`, it uses the built-in default depth 8 and only evaluates the actual game line.
+Before generating anything, the CLI loads existing `puzzle-*.sgf` files from the selected variant directory and
+deduplicates by solution move sequence, so equivalent puzzles are skipped instead of being saved twice.
 The main validation path is organized as puzzle-rule predicates (`position_follows_a_serious_mistake`,
 `position_is_valid`, `attacker_has_enough_choice`, `attacker_has_a_single_good_move`,
 `solution_line_of_best_depth_moves_improves_static_evaluation`) so puzzle selection
@@ -283,8 +290,8 @@ The CLI always prints self-play completion, loaded existing solution keys, each 
 indented `->` rejection or keep reasons, and a final aggregated rejection report so puzzle filtering can be followed
 from the terminal. In check-existing mode, it also reports how many puzzle files were checked and how many would be or
 were removed.
-By default it saves only `puzzles/puzzle-####.sgf`; `puzzles/game-####.sgf` companions are written only when
-`--save-games` is enabled.
+By default it saves only `puzzles/<ruleset-short-name>/puzzle-####.sgf`;
+`puzzles/<ruleset-short-name>/game-####.sgf` companions are written only when `--save-games` is enabled.
 Collaborates with: `ai_alpha_beta.c`, `rulesets.c`, `sgf_tree.c`, `sgf_move_props.c`, `sgf_io.c`,
 and `puzzle_generation.c`.
 

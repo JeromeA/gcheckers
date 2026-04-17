@@ -4,6 +4,7 @@
 #include "app_paths.h"
 #include "analysis_graph.h"
 #include "board_view.h"
+#include "puzzle_dialog.h"
 #include "rulesets.h"
 #include "sgf_file_actions.h"
 #include "sgf_controller.h"
@@ -70,6 +71,7 @@ struct _GCheckersWindow {
   gint puzzle_extra_width;
   GCheckersWindowBoardOrientationMode board_orientation_mode;
   CheckersColor board_bottom_color;
+  PlayerRuleset puzzle_ruleset;
   CheckersColor puzzle_attacker;
   guint puzzle_number;
   guint puzzle_expected_step;
@@ -153,7 +155,6 @@ static gboolean gcheckers_window_on_board_square_action(guint8 index, guint butt
 static void gcheckers_window_sync_board_orientation(GCheckersWindow *self);
 static void gcheckers_window_sync_puzzle_ui(GCheckersWindow *self);
 static void gcheckers_window_leave_puzzle_mode(GCheckersWindow *self, gboolean restore_drawers);
-static gboolean gcheckers_window_start_random_puzzle_mode(GCheckersWindow *self);
 static void gcheckers_window_sync_drawer_ui_with_capture(GCheckersWindow *self, gboolean capture_current_layout);
 static void gcheckers_window_stop_analysis(GCheckersWindow *self);
 static void gcheckers_window_sync_title(GCheckersWindow *self);
@@ -886,6 +887,24 @@ static gboolean gcheckers_window_node_set_prop_has_point(SgfNode *node,
   return TRUE;
 }
 
+static char *gcheckers_window_build_puzzle_ruleset_dir(GCheckersWindow *self, PlayerRuleset ruleset) {
+  g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), NULL);
+
+  g_autofree char *puzzle_root = gcheckers_app_paths_find_data_subdir("GCHECKERS_PUZZLES_DIR", "puzzles");
+  if (puzzle_root == NULL) {
+    g_debug("Failed to resolve puzzle root directory");
+    return NULL;
+  }
+
+  const char *short_name = checkers_ruleset_short_name(ruleset);
+  if (short_name == NULL) {
+    g_debug("Missing short name for ruleset %d", (gint)ruleset);
+    return NULL;
+  }
+
+  return g_build_filename(puzzle_root, short_name, NULL);
+}
+
 static gboolean gcheckers_window_update_node_setup_piece(SgfNode *node, const char *point, CheckersPiece piece) {
   g_return_val_if_fail(node != NULL, FALSE);
   g_return_val_if_fail(point != NULL, FALSE);
@@ -1068,6 +1087,7 @@ static void gcheckers_window_leave_puzzle_mode(GCheckersWindow *self, gboolean r
   self->layout_mode = GCHECKERS_WINDOW_LAYOUT_MODE_NORMAL;
   self->puzzle_finished = FALSE;
   self->puzzle_expected_step = 0;
+  self->puzzle_ruleset = PLAYER_RULESET_INTERNATIONAL;
   self->puzzle_attacker = CHECKERS_COLOR_WHITE;
   self->puzzle_number = 0;
   if (self->puzzle_steps != NULL) {
@@ -1141,6 +1161,7 @@ static gboolean gcheckers_window_enter_puzzle_mode_with_path(GCheckersWindow *se
   self->puzzle_mode = TRUE;
   self->layout_mode = GCHECKERS_WINDOW_LAYOUT_MODE_PUZZLE;
   self->puzzle_finished = FALSE;
+  self->puzzle_ruleset = self->applied_ruleset;
   self->puzzle_attacker = state->turn;
   if (!gcheckers_window_parse_puzzle_number_from_path(path, &self->puzzle_number)) {
     self->puzzle_number = 0;
@@ -1165,11 +1186,11 @@ static gboolean gcheckers_window_enter_puzzle_mode_with_path(GCheckersWindow *se
   return TRUE;
 }
 
-static gboolean gcheckers_window_start_random_puzzle_mode(GCheckersWindow *self) {
+gboolean gcheckers_window_start_random_puzzle_mode_for_ruleset(GCheckersWindow *self, PlayerRuleset ruleset) {
   g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), FALSE);
 
   g_autoptr(GPtrArray) puzzle_paths = g_ptr_array_new_with_free_func(g_free);
-  g_autofree char *dir_path = gcheckers_app_paths_find_data_subdir("GCHECKERS_PUZZLES_DIR", "puzzles");
+  g_autofree char *dir_path = gcheckers_window_build_puzzle_ruleset_dir(self, ruleset);
   g_return_val_if_fail(dir_path != NULL, FALSE);
   if (!gcheckers_window_collect_puzzle_paths(dir_path, puzzle_paths)) {
     return FALSE;
@@ -1182,7 +1203,12 @@ static gboolean gcheckers_window_start_random_puzzle_mode(GCheckersWindow *self)
   guint index = g_random_int_range(0, (gint)puzzle_paths->len);
   const char *path = g_ptr_array_index(puzzle_paths, index);
   g_return_val_if_fail(path != NULL, FALSE);
-  return gcheckers_window_enter_puzzle_mode_with_path(self, path);
+  if (!gcheckers_window_enter_puzzle_mode_with_path(self, path)) {
+    return FALSE;
+  }
+
+  self->puzzle_ruleset = ruleset;
+  return TRUE;
 }
 
 static gboolean gcheckers_window_apply_player_move(const CheckersMove *move, gpointer user_data) {
@@ -2277,9 +2303,7 @@ static void gcheckers_window_on_play_puzzles_action(GSimpleAction * /*action*/,
   GCheckersWindow *self = GCHECKERS_WINDOW(user_data);
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
 
-  if (!gcheckers_window_start_random_puzzle_mode(self)) {
-    g_debug("Failed to start puzzle mode");
-  }
+  gcheckers_window_present_puzzle_dialog(self);
 }
 
 static void gcheckers_window_on_puzzle_next_clicked(GtkButton * /*button*/, gpointer user_data) {
@@ -2289,7 +2313,7 @@ static void gcheckers_window_on_puzzle_next_clicked(GtkButton * /*button*/, gpoi
   if (!self->puzzle_mode || !self->puzzle_finished) {
     return;
   }
-  if (!gcheckers_window_start_random_puzzle_mode(self)) {
+  if (!gcheckers_window_start_random_puzzle_mode_for_ruleset(self, self->puzzle_ruleset)) {
     g_debug("Failed to load next puzzle");
   }
 }
@@ -3004,6 +3028,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   self->puzzle_extra_width = 0;
   self->board_orientation_mode = GCHECKERS_WINDOW_BOARD_ORIENTATION_FIXED;
   self->board_bottom_color = CHECKERS_COLOR_WHITE;
+  self->puzzle_ruleset = PLAYER_RULESET_INTERNATIONAL;
   self->puzzle_attacker = CHECKERS_COLOR_WHITE;
   self->puzzle_number = 0;
   gcheckers_window_sync_drawer_ui(self);

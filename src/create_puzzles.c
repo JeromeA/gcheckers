@@ -107,6 +107,7 @@ static void checkers_puzzle_log_progress(const char *format, ...) G_GNUC_PRINTF(
 static void checkers_puzzle_log_rejection(CheckersPuzzleRejectionReason reason,
                                           const char *format,
                                           ...) G_GNUC_PRINTF(2, 3);
+static char *checkers_puzzle_build_ruleset_output_dir(PlayerRuleset ruleset);
 
 static CheckersPuzzleRunStats checkers_puzzle_run_stats = {0};
 
@@ -1389,19 +1390,6 @@ static gboolean checkers_puzzle_line_replays_from_game(const GArray *game_line, 
   return TRUE;
 }
 
-static const CheckersRules *checkers_puzzle_find_matching_rules(const GArray *game_line) {
-  g_return_val_if_fail(game_line != NULL, NULL);
-
-  guint count = checkers_ruleset_count();
-  for (guint i = 0; i < count; ++i) {
-    const CheckersRules *rules = checkers_ruleset_get_rules((PlayerRuleset)i);
-    if (rules != NULL && checkers_puzzle_line_replays_with_rules(game_line, rules)) {
-      return rules;
-    }
-  }
-  return NULL;
-}
-
 static const CheckersRules *checkers_puzzle_find_matching_rules_for_setup(const SgfNode *root, const GArray *line) {
   g_return_val_if_fail(root != NULL, NULL);
   g_return_val_if_fail(line != NULL, NULL);
@@ -1747,6 +1735,16 @@ static gboolean checkers_puzzle_load_existing_solution_keys(const char *output_d
   return TRUE;
 }
 
+static char *checkers_puzzle_build_ruleset_output_dir(PlayerRuleset ruleset) {
+  const char *short_name = checkers_ruleset_short_name(ruleset);
+  if (short_name == NULL) {
+    g_debug("Missing short name for ruleset %d", (gint)ruleset);
+    return NULL;
+  }
+
+  return g_build_filename("puzzles", short_name, NULL);
+}
+
 int main(int argc, char **argv) {
   CheckersCreatePuzzlesCliOptions options = {0};
   g_autofree char *parse_error = NULL;
@@ -1756,13 +1754,21 @@ int main(int argc, char **argv) {
                                          &options,
                                          &parse_error)) {
     g_printerr("%s\n", parse_error != NULL ? parse_error : "Invalid arguments");
-    g_printerr("Usage: %s [--depth N] [--synthetic-candidates] [--save-games] <puzzle-count|sgf-file>\n", argv[0]);
-    g_printerr("   or: %s [--depth N] --check-existing [--dry-run] [puzzle-dir]\n", argv[0]);
+    g_printerr("Usage: %s --ruleset <short-name> [--depth N] [--synthetic-candidates] [--save-games] ",
+               argv[0]);
+    g_printerr("<puzzle-count|sgf-file>\n");
+    g_printerr("   or: %s --ruleset <short-name> [--depth N] --check-existing [--dry-run] [puzzle-dir]\n", argv[0]);
+    return 1;
+  }
+
+  g_autofree char *ruleset_dir = checkers_puzzle_build_ruleset_output_dir(options.ruleset);
+  if (ruleset_dir == NULL) {
+    g_printerr("Missing ruleset output directory\n");
     return 1;
   }
 
   if (options.mode == CHECKERS_CREATE_PUZZLES_MODE_CHECK_EXISTING) {
-    const char *dir_path = options.arg != NULL ? options.arg : "puzzles";
+    const char *dir_path = options.arg != NULL ? options.arg : ruleset_dir;
     g_autoptr(CheckersAiTranspositionTable) analysis_tt =
         checkers_ai_tt_new(CHECKERS_PUZZLE_ANALYSIS_TT_SIZE_MB);
     if (analysis_tt == NULL) {
@@ -1784,7 +1790,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  const char *output_dir = "puzzles";
+  const char *output_dir = ruleset_dir;
   if (g_mkdir_with_parents(output_dir, 0755) != 0) {
     g_printerr("Failed to create output dir %s: %s\n", output_dir, g_strerror(errno));
     return 1;
@@ -1819,9 +1825,13 @@ int main(int argc, char **argv) {
       return 1;
     }
 
-    const CheckersRules *rules = checkers_puzzle_find_matching_rules(game_line);
+    const CheckersRules *rules = checkers_ruleset_get_rules(options.ruleset);
     if (rules == NULL) {
-      g_printerr("Could not match SGF game line to known rulesets\n");
+      g_printerr("Missing ruleset\n");
+      return 1;
+    }
+    if (!checkers_puzzle_line_replays_with_rules(game_line, rules)) {
+      g_printerr("SGF game line is not compatible with ruleset %s\n", checkers_ruleset_short_name(options.ruleset));
       return 1;
     }
 
@@ -1845,7 +1855,7 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  const CheckersRules *rules = checkers_ruleset_get_rules(PLAYER_RULESET_INTERNATIONAL);
+  const CheckersRules *rules = checkers_ruleset_get_rules(options.ruleset);
   if (rules == NULL) {
     g_printerr("Missing ruleset\n");
     return 1;

@@ -1,4 +1,5 @@
 #include "create_puzzles_cli.h"
+#include "rulesets.h"
 
 #include <string.h>
 
@@ -36,6 +37,8 @@ gboolean checkers_create_puzzles_cli_parse(int argc,
       .try_forced_mistakes = FALSE,
       .save_games = FALSE,
       .dry_run = FALSE,
+      .has_ruleset = FALSE,
+      .ruleset = PLAYER_RULESET_INTERNATIONAL,
       .arg = NULL,
   };
 
@@ -63,6 +66,18 @@ gboolean checkers_create_puzzles_cli_parse(int argc,
 
     if (g_strcmp0(argv[i], "--check-existing") == 0) {
       out_options->mode = CHECKERS_CREATE_PUZZLES_MODE_CHECK_EXISTING;
+      continue;
+    }
+
+    if (g_strcmp0(argv[i], "--ruleset") == 0) {
+      if (i + 1 >= argc || !checkers_ruleset_find_by_short_name(argv[i + 1], &out_options->ruleset)) {
+        if (out_error_message != NULL) {
+          *out_error_message = g_strdup("Invalid --ruleset value");
+        }
+        return FALSE;
+      }
+      out_options->has_ruleset = TRUE;
+      i++;
       continue;
     }
 
@@ -104,6 +119,13 @@ gboolean checkers_create_puzzles_cli_parse(int argc,
   } else if (out_options->dry_run) {
     if (out_error_message != NULL) {
       *out_error_message = g_strdup("--dry-run is only valid with --check-existing");
+    }
+    return FALSE;
+  }
+
+  if (!out_options->has_ruleset) {
+    if (out_error_message != NULL) {
+      *out_error_message = g_strdup("Missing --ruleset <short-name>");
     }
     return FALSE;
   }

@@ -6,6 +6,7 @@
 #include "player_controls_panel.h"
 #include "analysis_graph.h"
 #include "board.h"
+#include "rulesets.h"
 #include "sgf_move_props.h"
 #include "sgf_tree.h"
 
@@ -424,22 +425,38 @@ static GtkWidget *test_gcheckers_window_get_named_widget(GCheckersWindow *window
   return GTK_WIDGET(data);
 }
 
-static gboolean test_gcheckers_window_write_single_move_puzzle(char **out_dir_path,
-                                                               CheckersMove *out_move,
-                                                               CheckersColor attacker) {
-  g_return_val_if_fail(out_dir_path != NULL, FALSE);
+static gboolean test_gcheckers_window_write_single_move_puzzle_for_ruleset(char **inout_dir_path,
+                                                                           PlayerRuleset ruleset,
+                                                                           guint puzzle_number,
+                                                                           CheckersMove *out_move,
+                                                                           CheckersColor attacker) {
+  g_return_val_if_fail(inout_dir_path != NULL, FALSE);
   g_return_val_if_fail(out_move != NULL, FALSE);
   g_return_val_if_fail(attacker == CHECKERS_COLOR_WHITE || attacker == CHECKERS_COLOR_BLACK, FALSE);
 
+  char **dir_path_ptr = inout_dir_path;
   g_autoptr(GError) error = NULL;
-  g_autofree char *dir_path = g_dir_make_tmp("gcheckers-window-puzzles-XXXXXX", &error);
-  g_assert_no_error(error);
-  g_assert_nonnull(dir_path);
+  if (*dir_path_ptr == NULL) {
+    g_autofree char *dir_path = g_dir_make_tmp("gcheckers-window-puzzles-XXXXXX", &error);
+    g_assert_no_error(error);
+    g_assert_nonnull(dir_path);
+    *dir_path_ptr = g_steal_pointer(&dir_path);
+  }
+
+  const char *short_name = checkers_ruleset_short_name(ruleset);
+  g_assert_nonnull(short_name);
+  g_autofree char *ruleset_dir = g_build_filename(*dir_path_ptr, short_name, NULL);
+  g_assert_cmpint(g_mkdir_with_parents(ruleset_dir, 0755), ==, 0);
 
   GCheckersModel *model = gcheckers_model_new();
   g_assert_nonnull(model);
 
+  const CheckersRules *rules = checkers_ruleset_get_rules(ruleset);
+  g_assert_nonnull(rules);
+  gcheckers_model_set_rules(model, rules);
+
   GameState state = *gcheckers_model_peek_state(model);
+  board_init(&state.board, rules->board_size);
   guint8 squares = board_playable_squares(state.board.board_size);
   for (guint8 i = 0; i < squares; ++i) {
     board_set(&state.board, i, CHECKERS_PIECE_EMPTY);
@@ -484,11 +501,11 @@ static gboolean test_gcheckers_window_write_single_move_puzzle(char **out_dir_pa
                       attacker == CHECKERS_COLOR_BLACK ? 'B' : 'W',
                       attacker == CHECKERS_COLOR_BLACK ? 'B' : 'W',
                       notation);
-  g_autofree char *path = g_build_filename(dir_path, "puzzle-0000.sgf", NULL);
+  g_autofree char *file_name = g_strdup_printf("puzzle-%04u.sgf", puzzle_number);
+  g_autofree char *path = g_build_filename(ruleset_dir, file_name, NULL);
   g_assert_true(g_file_set_contents(path, content, -1, &error));
   g_assert_no_error(error);
 
-  *out_dir_path = g_steal_pointer(&dir_path);
   g_clear_object(&model);
   return TRUE;
 }
@@ -781,8 +798,16 @@ static void test_gcheckers_window_analysis_depth_slider_is_independent(void) {
 static void test_gcheckers_window_puzzle_mode_solves_and_exits_to_analysis(void) {
   g_autofree char *dir_path = NULL;
   CheckersMove puzzle_move = {0};
-  CheckersColor attacker = CHECKERS_COLOR_WHITE;
-  g_assert_true(test_gcheckers_window_write_single_move_puzzle(&dir_path, &puzzle_move, attacker));
+  g_assert_true(test_gcheckers_window_write_single_move_puzzle_for_ruleset(&dir_path,
+                                                                           PLAYER_RULESET_AMERICAN,
+                                                                           0,
+                                                                           &puzzle_move,
+                                                                           CHECKERS_COLOR_BLACK));
+  g_assert_true(test_gcheckers_window_write_single_move_puzzle_for_ruleset(&dir_path,
+                                                                           PLAYER_RULESET_RUSSIAN,
+                                                                           0,
+                                                                           &puzzle_move,
+                                                                           CHECKERS_COLOR_WHITE));
 
   g_setenv("GCHECKERS_PUZZLES_DIR", dir_path, TRUE);
 
@@ -798,6 +823,17 @@ static void test_gcheckers_window_puzzle_mode_solves_and_exits_to_analysis(void)
   g_assert_cmpint(initial_board_width, >, 0);
 
   g_action_group_activate_action(G_ACTION_GROUP(window), "puzzle-play", NULL);
+  test_gcheckers_window_drain_main_context(32);
+
+  GtkWindow *dialog = test_gcheckers_window_find_toplevel_by_title("Play puzzles");
+  g_assert_nonnull(dialog);
+  GtkDropDown *ruleset_drop_down = test_gcheckers_window_find_ruleset_dropdown(GTK_WIDGET(dialog));
+  g_assert_nonnull(ruleset_drop_down);
+  gtk_drop_down_set_selected(ruleset_drop_down, PLAYER_RULESET_RUSSIAN);
+  test_gcheckers_window_drain_main_context(8);
+  GtkButton *start_button = test_gcheckers_window_find_button_with_label(GTK_WIDGET(dialog), "Start");
+  g_assert_nonnull(start_button);
+  g_signal_emit_by_name(start_button, "clicked");
   test_gcheckers_window_drain_main_context(32);
 
   GtkWidget *navigation_panel = test_gcheckers_window_get_named_widget(window, "navigation-panel");
@@ -817,8 +853,7 @@ static void test_gcheckers_window_puzzle_mode_solves_and_exits_to_analysis(void)
   g_assert_true(gtk_widget_get_visible(puzzle_panel));
   g_assert_cmpstr(gtk_window_get_title(GTK_WINDOW(window)), ==, "gcheckers - puzzle-0000.sgf");
   g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(puzzle_message)), "Puzzle 0000."));
-  g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(puzzle_message)),
-                          attacker == CHECKERS_COLOR_BLACK ? "Black" : "White"));
+  g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(puzzle_message)), "White"));
   g_assert_false(gtk_widget_is_sensitive(next_button));
   g_assert_true(gtk_widget_is_sensitive(analyze_button));
 
@@ -843,7 +878,7 @@ static void test_gcheckers_window_puzzle_mode_solves_and_exits_to_analysis(void)
   test_gcheckers_window_drain_main_context(32);
 
   g_assert_true(gtk_widget_is_sensitive(next_button));
-  g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(puzzle_message)), ==, "");
+  g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(puzzle_message)), ==, "Puzzle 0000.");
 
   GCheckersSgfController *controller = gcheckers_window_get_sgf_controller(window);
   g_assert_nonnull(controller);
@@ -900,7 +935,62 @@ static void test_gcheckers_window_new_game_clears_loaded_title(void) {
 static void test_gcheckers_window_puzzle_analyze_keeps_black_orientation(void) {
   g_autofree char *dir_path = NULL;
   CheckersMove puzzle_move = {0};
-  g_assert_true(test_gcheckers_window_write_single_move_puzzle(&dir_path, &puzzle_move, CHECKERS_COLOR_BLACK));
+  g_assert_true(test_gcheckers_window_write_single_move_puzzle_for_ruleset(&dir_path,
+                                                                           PLAYER_RULESET_RUSSIAN,
+                                                                           0,
+                                                                           &puzzle_move,
+                                                                           CHECKERS_COLOR_BLACK));
+
+  g_setenv("GCHECKERS_PUZZLES_DIR", dir_path, TRUE);
+
+  GtkApplication *app = test_gcheckers_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersWindow *window = gcheckers_window_new(app, model);
+  gtk_window_present(GTK_WINDOW(window));
+  test_gcheckers_window_drain_main_context(32);
+
+  g_action_group_activate_action(G_ACTION_GROUP(window), "puzzle-play", NULL);
+  test_gcheckers_window_drain_main_context(32);
+  GtkWindow *dialog = test_gcheckers_window_find_toplevel_by_title("Play puzzles");
+  g_assert_nonnull(dialog);
+  GtkDropDown *ruleset_drop_down = test_gcheckers_window_find_ruleset_dropdown(GTK_WIDGET(dialog));
+  g_assert_nonnull(ruleset_drop_down);
+  gtk_drop_down_set_selected(ruleset_drop_down, PLAYER_RULESET_RUSSIAN);
+  test_gcheckers_window_drain_main_context(8);
+  GtkButton *start_button = test_gcheckers_window_find_button_with_label(GTK_WIDGET(dialog), "Start");
+  g_assert_nonnull(start_button);
+  g_signal_emit_by_name(start_button, "clicked");
+  test_gcheckers_window_drain_main_context(32);
+
+  GtkWidget *analyze_button = test_gcheckers_window_get_named_widget(window, "puzzle-analyze-button");
+  g_assert_nonnull(analyze_button);
+  g_assert_cmpuint(gcheckers_window_get_board_bottom_color(window), ==, CHECKERS_COLOR_BLACK);
+
+  g_signal_emit_by_name(analyze_button, "clicked");
+  test_gcheckers_window_drain_main_context(32);
+
+  g_assert_cmpuint(gcheckers_window_get_board_bottom_color(window), ==, CHECKERS_COLOR_BLACK);
+
+  g_unsetenv("GCHECKERS_PUZZLES_DIR");
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
+static void test_gcheckers_window_next_puzzle_stays_in_selected_ruleset(void) {
+  g_autofree char *dir_path = NULL;
+  CheckersMove american_move = {0};
+  CheckersMove russian_move = {0};
+  g_assert_true(test_gcheckers_window_write_single_move_puzzle_for_ruleset(&dir_path,
+                                                                           PLAYER_RULESET_AMERICAN,
+                                                                           0,
+                                                                           &american_move,
+                                                                           CHECKERS_COLOR_BLACK));
+  g_assert_true(test_gcheckers_window_write_single_move_puzzle_for_ruleset(&dir_path,
+                                                                           PLAYER_RULESET_RUSSIAN,
+                                                                           0,
+                                                                           &russian_move,
+                                                                           CHECKERS_COLOR_WHITE));
 
   g_setenv("GCHECKERS_PUZZLES_DIR", dir_path, TRUE);
 
@@ -913,14 +1003,38 @@ static void test_gcheckers_window_puzzle_analyze_keeps_black_orientation(void) {
   g_action_group_activate_action(G_ACTION_GROUP(window), "puzzle-play", NULL);
   test_gcheckers_window_drain_main_context(32);
 
-  GtkWidget *analyze_button = test_gcheckers_window_get_named_widget(window, "puzzle-analyze-button");
-  g_assert_nonnull(analyze_button);
-  g_assert_cmpuint(gcheckers_window_get_board_bottom_color(window), ==, CHECKERS_COLOR_BLACK);
-
-  g_signal_emit_by_name(analyze_button, "clicked");
+  GtkWindow *dialog = test_gcheckers_window_find_toplevel_by_title("Play puzzles");
+  g_assert_nonnull(dialog);
+  GtkDropDown *ruleset_drop_down = test_gcheckers_window_find_ruleset_dropdown(GTK_WIDGET(dialog));
+  g_assert_nonnull(ruleset_drop_down);
+  gtk_drop_down_set_selected(ruleset_drop_down, PLAYER_RULESET_RUSSIAN);
+  test_gcheckers_window_drain_main_context(8);
+  GtkButton *start_button = test_gcheckers_window_find_button_with_label(GTK_WIDGET(dialog), "Start");
+  g_assert_nonnull(start_button);
+  g_signal_emit_by_name(start_button, "clicked");
   test_gcheckers_window_drain_main_context(32);
 
-  g_assert_cmpuint(gcheckers_window_get_board_bottom_color(window), ==, CHECKERS_COLOR_BLACK);
+  GtkWidget *puzzle_message = test_gcheckers_window_get_named_widget(window, "puzzle-message-label");
+  GtkWidget *next_button = test_gcheckers_window_get_named_widget(window, "puzzle-next-button");
+  g_assert_nonnull(puzzle_message);
+  g_assert_nonnull(next_button);
+  g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(puzzle_message)), "White"));
+
+  GtkWidget *from_square = test_gcheckers_window_find_board_square_by_index(GTK_WIDGET(window), russian_move.path[0]);
+  GtkWidget *to_square =
+      test_gcheckers_window_find_board_square_by_index(GTK_WIDGET(window), russian_move.path[russian_move.length - 1]);
+  g_assert_nonnull(from_square);
+  g_assert_nonnull(to_square);
+  g_signal_emit_by_name(from_square, "clicked");
+  g_signal_emit_by_name(to_square, "clicked");
+  test_gcheckers_window_drain_main_context(32);
+
+  g_assert_true(gtk_widget_is_sensitive(next_button));
+  g_signal_emit_by_name(next_button, "clicked");
+  test_gcheckers_window_drain_main_context(32);
+
+  g_assert_cmpstr(gtk_window_get_title(GTK_WINDOW(window)), ==, "gcheckers - puzzle-0000.sgf");
+  g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(puzzle_message)), "White"));
 
   g_unsetenv("GCHECKERS_PUZZLES_DIR");
   g_clear_object(&window);
@@ -1451,6 +1565,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/gcheckers-window/new-game-keeps-computer-controls", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/manual-review-keeps-current-orientation", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/puzzle-analyze-keeps-black-orientation", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/puzzle-next-keeps-selected-ruleset", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/new-game-clears-loaded-title", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/new-game-ruleset-options-russian", test_gcheckers_window_skip);
     return g_test_run();
@@ -1512,6 +1627,8 @@ int main(int argc, char **argv) {
                   test_gcheckers_window_manual_review_keeps_current_orientation);
   g_test_add_func("/gcheckers-window/puzzle-analyze-keeps-black-orientation",
                   test_gcheckers_window_puzzle_analyze_keeps_black_orientation);
+  g_test_add_func("/gcheckers-window/puzzle-next-keeps-selected-ruleset",
+                  test_gcheckers_window_next_puzzle_stays_in_selected_ruleset);
   g_test_add_func("/gcheckers-window/new-game-clears-loaded-title",
                   test_gcheckers_window_new_game_clears_loaded_title);
   g_test_add_func("/gcheckers-window/new-game-ruleset-options-russian",

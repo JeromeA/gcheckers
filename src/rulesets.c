@@ -2,6 +2,7 @@
 
 typedef struct {
   const char *name;
+  const char *short_name;
   const char *summary;
   CheckersRules rules;
 } CheckersRulesetInfo;
@@ -9,6 +10,7 @@ typedef struct {
 static const CheckersRulesetInfo checkers_rulesets[] = {
   [PLAYER_RULESET_AMERICAN] =
       {.name = "American (8x8)",
+       .short_name = "american",
        .summary = "8x8 board, mandatory captures, short kings, and no backward captures for men.",
        .rules =
            {
@@ -20,6 +22,7 @@ static const CheckersRulesetInfo checkers_rulesets[] = {
            }},
   [PLAYER_RULESET_INTERNATIONAL] =
       {.name = "International (10x10)",
+       .short_name = "international",
        .summary = "10x10 board, mandatory longest captures, flying kings, and backward captures for men.",
        .rules =
            {
@@ -31,6 +34,7 @@ static const CheckersRulesetInfo checkers_rulesets[] = {
            }},
   [PLAYER_RULESET_RUSSIAN] =
       {.name = "Russian (8x8)",
+       .short_name = "russian",
        .summary = "8x8 board, mandatory longest captures, flying kings, and backward captures for men.",
        .rules =
            {
@@ -68,6 +72,15 @@ const char *checkers_ruleset_name(PlayerRuleset ruleset) {
   return info->name;
 }
 
+const char *checkers_ruleset_short_name(PlayerRuleset ruleset) {
+  const CheckersRulesetInfo *info = checkers_ruleset_info(ruleset);
+  if (info == NULL) {
+    return NULL;
+  }
+
+  return info->short_name;
+}
+
 const char *checkers_ruleset_summary(PlayerRuleset ruleset) {
   const CheckersRulesetInfo *info = checkers_ruleset_info(ruleset);
   if (info == NULL) {
@@ -85,4 +98,22 @@ const CheckersRules *checkers_ruleset_get_rules(PlayerRuleset ruleset) {
   }
 
   return &info->rules;
+}
+
+gboolean checkers_ruleset_find_by_short_name(const char *short_name, PlayerRuleset *out_ruleset) {
+  g_return_val_if_fail(short_name != NULL, FALSE);
+
+  guint count = checkers_ruleset_count();
+  for (guint i = 0; i < count; ++i) {
+    PlayerRuleset ruleset = (PlayerRuleset)i;
+    const char *candidate = checkers_ruleset_short_name(ruleset);
+    if (candidate != NULL && g_strcmp0(candidate, short_name) == 0) {
+      if (out_ruleset != NULL) {
+        *out_ruleset = ruleset;
+      }
+      return TRUE;
+    }
+  }
+
+  return FALSE;
 }

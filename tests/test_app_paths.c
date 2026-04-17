@@ -20,6 +20,10 @@ static void test_app_paths_env_override_wins(void) {
   g_autofree char *resolved =
       gcheckers_app_paths_find_data_subdir("GCHECKERS_TEST_OVERRIDE", "puzzles");
   g_assert_cmpstr(resolved, ==, override);
+
+  g_autofree char *variant_dir = g_build_filename(resolved, "american", NULL);
+  g_autofree char *expected_variant_dir = g_build_filename(override, "american", NULL);
+  g_assert_cmpstr(variant_dir, ==, expected_variant_dir);
 }
 
 static void test_app_paths_system_data_dir_is_used(void) {
@@ -39,6 +43,10 @@ static void test_app_paths_system_data_dir_is_used(void) {
   g_autofree char *resolved =
       gcheckers_app_paths_find_data_subdir("GCHECKERS_TEST_OVERRIDE", "puzzles");
   g_assert_cmpstr(resolved, ==, puzzles_dir);
+
+  g_autofree char *variant_dir = g_build_filename(resolved, "international", NULL);
+  g_autofree char *expected_variant_dir = g_build_filename(puzzles_dir, "international", NULL);
+  g_assert_cmpstr(variant_dir, ==, expected_variant_dir);
 }
 
 int main(int argc, char **argv) {

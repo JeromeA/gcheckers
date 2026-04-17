@@ -148,19 +148,23 @@ static void test_create_puzzles_check_mode_dry_run_and_delete(void) {
   g_autofree char *dir_path = g_dir_make_tmp("gcheckers-check-puzzles-XXXXXX", &error);
   g_assert_no_error(error);
   g_assert_nonnull(dir_path);
-  g_assert_true(test_create_puzzles_check_write_invalid_single_move_puzzle(dir_path));
+  g_autofree char *ruleset_dir = g_build_filename(dir_path, "international", NULL);
+  g_assert_cmpint(g_mkdir_with_parents(ruleset_dir, 0755), ==, 0);
+  g_assert_true(test_create_puzzles_check_write_invalid_single_move_puzzle(ruleset_dir));
 
-  g_autofree char *puzzle_path = g_build_filename(dir_path, "puzzle-0000.sgf", NULL);
-  g_autofree char *game_path = g_build_filename(dir_path, "game-0000.sgf", NULL);
+  g_autofree char *puzzle_path = g_build_filename(ruleset_dir, "puzzle-0000.sgf", NULL);
+  g_autofree char *game_path = g_build_filename(ruleset_dir, "game-0000.sgf", NULL);
   g_assert_true(g_file_test(puzzle_path, G_FILE_TEST_EXISTS));
   g_assert_true(g_file_test(game_path, G_FILE_TEST_EXISTS));
 
   g_autofree char *cwd = g_get_current_dir();
   gchar *dry_run_argv[] = {
       (gchar *)GCHECKERS_CREATE_PUZZLES_PATH,
+      (gchar *)"--ruleset",
+      (gchar *)"international",
       (gchar *)"--check-existing",
       (gchar *)"--dry-run",
-      dir_path,
+      ruleset_dir,
       NULL,
   };
   gchar *stdout_text = NULL;
@@ -190,8 +194,10 @@ static void test_create_puzzles_check_mode_dry_run_and_delete(void) {
 
   gchar *delete_argv[] = {
       (gchar *)GCHECKERS_CREATE_PUZZLES_PATH,
+      (gchar *)"--ruleset",
+      (gchar *)"international",
       (gchar *)"--check-existing",
-      dir_path,
+      ruleset_dir,
       NULL,
   };
   stdout_text = NULL;
@@ -218,6 +224,7 @@ static void test_create_puzzles_check_mode_dry_run_and_delete(void) {
   g_free(stdout_text);
   g_free(stderr_text);
 
+  g_assert_cmpint(g_rmdir(ruleset_dir), ==, 0);
   g_assert_cmpint(g_rmdir(dir_path), ==, 0);
 }
 

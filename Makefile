@@ -56,7 +56,7 @@ GSETTINGS_SCHEMA_COMPILED := $(GSETTINGS_SCHEMA_DIR)/gschemas.compiled
 DESKTOP_FILE := data/$(APP_ID).desktop
 METAINFO_FILE := data/$(APP_ID).metainfo.xml
 ICON_FILE := data/icons/hicolor/scalable/apps/$(APP_ID).svg
-PUZZLE_FILES := $(wildcard puzzles/*.sgf)
+PUZZLE_VARIANTS := american international russian
 FLATPAK_MANIFEST := $(APP_ID).yaml
 PREFIX ?= /usr/local
 DESTDIR ?=
@@ -194,9 +194,10 @@ $(CREATE_PUZZLES_BIN): src/create_puzzles.c src/create_puzzles_cli.c src/create_
 		src/sgf_tree.c src/sgf_move_props.c $(SRCS) $(LDLIBS)
 
 test_create_puzzles_cli: $(TEST_CREATE_PUZZLES_CLI_BIN)
-$(TEST_CREATE_PUZZLES_CLI_BIN): tests/test_create_puzzles_cli.c src/create_puzzles_cli.c src/create_puzzles_cli.h
+$(TEST_CREATE_PUZZLES_CLI_BIN): tests/test_create_puzzles_cli.c src/create_puzzles_cli.c src/create_puzzles_cli.h \
+	src/rulesets.c src/rulesets.h
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ tests/test_create_puzzles_cli.c src/create_puzzles_cli.c $(LDLIBS)
+	$(CC) $(CFLAGS) -o $@ tests/test_create_puzzles_cli.c src/create_puzzles_cli.c src/rulesets.c $(LDLIBS)
 
 test_create_puzzles_check: $(TEST_CREATE_PUZZLES_CHECK_BIN)
 $(TEST_CREATE_PUZZLES_CHECK_BIN): $(CREATE_PUZZLES_BIN) tests/test_create_puzzles_check.c src/sgf_io.c \
@@ -323,7 +324,8 @@ $(TEST_SGF_CONTROLLER_BIN): tests/test_sgf_controller.c src/sgf_controller.c src
 
 test_window: $(TEST_WINDOW_BIN)
 $(TEST_WINDOW_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_window.c src/window.c $(APP_PATHS_SRCS) \
-	src/new_game_dialog.c src/rulesets.c src/rulesets.h src/import_dialog.c src/sgf_file_actions.c \
+	src/new_game_dialog.c src/puzzle_dialog.c src/puzzle_dialog.h src/rulesets.c src/rulesets.h \
+	src/import_dialog.c src/sgf_file_actions.c \
 	src/sgf_file_actions.h src/file_dialog_history.c src/file_dialog_history.h src/bga_client.c src/bga_client.h \
 	src/window.h src/style.c src/style.h src/player_controls_panel.c src/player_controls_panel.h \
 	src/analysis_graph.c src/analysis_graph.h src/sgf_controller.c src/sgf_controller.h src/board_view.c \
@@ -338,11 +340,12 @@ $(TEST_WINDOW_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_window.c src/window.
 	$(SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_window.c src/window.c $(APP_PATHS_SRCS) \
-		src/new_game_dialog.c src/import_dialog.c src/file_dialog_history.c src/sgf_file_actions.c src/bga_client.c \
-		src/style.c src/player_controls_panel.c src/sgf_controller.c src/analysis_graph.c src/board_view.c \
-		src/board_grid.c src/board_square.c src/board_move_overlay.c src/board_selection_controller.c \
-		src/piece_palette.c src/man_paintable.c src/sgf_io.c src/sgf_move_props.c src/sgf_tree.c src/sgf_view.c \
-		src/sgf_view_disc_factory.c src/sgf_view_layout.c src/sgf_view_link_renderer.c src/sgf_view_scroller.c \
+		src/new_game_dialog.c src/puzzle_dialog.c src/import_dialog.c src/file_dialog_history.c \
+		src/sgf_file_actions.c src/bga_client.c src/style.c src/player_controls_panel.c \
+		src/sgf_controller.c src/analysis_graph.c src/board_view.c src/board_grid.c src/board_square.c \
+		src/board_move_overlay.c src/board_selection_controller.c src/piece_palette.c src/man_paintable.c \
+		src/sgf_io.c src/sgf_move_props.c src/sgf_tree.c src/sgf_view.c src/sgf_view_disc_factory.c \
+		src/sgf_view_layout.c src/sgf_view_link_renderer.c src/sgf_view_scroller.c \
 		src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(SRCS) $(LDLIBS) $(GTK_LIBS)
 
 test_puzzle_generation: $(TEST_PUZZLE_GENERATION_BIN)
@@ -359,7 +362,8 @@ $(TEST_PIECE_PALETTE_BIN): tests/test_piece_palette.c src/piece_palette.c src/pi
 		src/man_paintable.c $(LDLIBS) $(GTK_LIBS)
 
 $(GCHECKERS_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c src/application.c src/window.c $(APP_PATHS_SRCS) \
-	src/new_game_dialog.c src/rulesets.c src/rulesets.h src/import_dialog.c src/sgf_file_actions.c \
+	src/new_game_dialog.c src/puzzle_dialog.c src/puzzle_dialog.h src/rulesets.c src/rulesets.h \
+	src/import_dialog.c src/sgf_file_actions.c \
 	src/sgf_file_actions.h src/file_dialog_history.c src/file_dialog_history.h src/bga_client.c src/bga_client.h \
 	src/window.h src/style.c src/style.h src/player_controls_panel.c src/player_controls_panel.h \
 	src/analysis_graph.c src/analysis_graph.h src/sgf_controller.c src/sgf_controller.h src/board_view.c \
@@ -374,11 +378,12 @@ $(GCHECKERS_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c src/application.c
 	$(SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/gcheckers.c src/application.c $(APP_PATHS_SRCS) src/window.c \
-		src/new_game_dialog.c src/import_dialog.c src/file_dialog_history.c src/style.c src/player_controls_panel.c \
-		src/analysis_graph.c src/sgf_file_actions.c src/bga_client.c src/sgf_controller.c src/board_view.c \
-		src/board_grid.c src/board_square.c src/board_move_overlay.c src/board_selection_controller.c \
-		src/piece_palette.c src/man_paintable.c src/sgf_io.c src/sgf_move_props.c src/sgf_tree.c src/sgf_view.c \
-		src/sgf_view_disc_factory.c src/sgf_view_layout.c src/sgf_view_link_renderer.c src/sgf_view_scroller.c \
+		src/new_game_dialog.c src/puzzle_dialog.c src/import_dialog.c src/file_dialog_history.c src/style.c \
+		src/player_controls_panel.c src/analysis_graph.c src/sgf_file_actions.c src/bga_client.c \
+		src/sgf_controller.c src/board_view.c src/board_grid.c src/board_square.c src/board_move_overlay.c \
+		src/board_selection_controller.c src/piece_palette.c src/man_paintable.c src/sgf_io.c \
+		src/sgf_move_props.c src/sgf_tree.c src/sgf_view.c src/sgf_view_disc_factory.c src/sgf_view_layout.c \
+		src/sgf_view_link_renderer.c src/sgf_view_scroller.c \
 		src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(SRCS) $(LDLIBS) $(GTK_LIBS)
 
 $(GSETTINGS_SCHEMA_COMPILED): $(GSETTINGS_SCHEMA_XML)
@@ -394,7 +399,16 @@ install: all $(DESKTOP_FILE) $(METAINFO_FILE) $(ICON_FILE)
 	$(INSTALL) -d $(DESTDIR)$(ICONS_DIR)
 	$(INSTALL) -m 644 $(ICON_FILE) $(DESTDIR)$(ICONS_DIR)/$(APP_ID).svg
 	$(INSTALL) -d $(DESTDIR)$(PUZZLES_INSTALL_DIR)
-	$(INSTALL) -m 644 $(PUZZLE_FILES) $(DESTDIR)$(PUZZLES_INSTALL_DIR)
+	@for dir in $(PUZZLE_VARIANTS); do \
+		$(INSTALL) -d $(DESTDIR)$(PUZZLES_INSTALL_DIR)/$$dir; \
+		if test -d puzzles/$$dir; then \
+			for file in puzzles/$$dir/*.sgf; do \
+				if test -f "$$file"; then \
+					$(INSTALL) -m 644 "$$file" "$(DESTDIR)$(PUZZLES_INSTALL_DIR)/$$dir/"; \
+				fi; \
+			done; \
+		fi; \
+	done
 	$(INSTALL) -d $(DESTDIR)$(SCHEMAS_INSTALL_DIR)
 	$(INSTALL) -m 644 $(GSETTINGS_SCHEMA_XML) $(DESTDIR)$(SCHEMAS_INSTALL_DIR)/$(APP_ID).gschema.xml
 	glib-compile-schemas $(DESTDIR)$(SCHEMAS_INSTALL_DIR)
