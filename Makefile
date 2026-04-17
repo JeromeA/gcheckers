@@ -23,6 +23,7 @@ TOOLS_DIR := $(BUILD_DIR)/tools
 TESTS_DIR := $(BUILD_DIR)/tests
 LIB_DIR := $(BUILD_DIR)/lib
 OBJ_DIR := $(BUILD_DIR)/obj
+CALLGRIND_DIR := $(BUILD_DIR)/callgrind
 
 APP_PATHS_SRCS := src/app_paths.c
 SRCS := src/board.c src/game.c src/game_print.c src/move_gen.c src/ai_alpha_beta.c \
@@ -96,6 +97,11 @@ TEST_SGF_CONTROLLER_BIN := $(TESTS_DIR)/test_sgf_controller
 TEST_WINDOW_BIN := $(TESTS_DIR)/test_window
 TEST_PUZZLE_GENERATION_BIN := $(TESTS_DIR)/test_puzzle_generation
 TEST_PIECE_PALETTE_BIN := $(TESTS_DIR)/test_piece_palette
+CALLGRIND_OUT := $(CALLGRIND_DIR)/callgrind.out
+CALLGRIND_ANNOTATION := $(CALLGRIND_DIR)/callgrind.annotated
+PROFILE_BIN ?= $(CREATE_PUZZLES_BIN)
+PROFILE_ARGS ?= 1
+PROFILE_CMD = $(PROFILE_BIN) $(PROFILE_ARGS)
 
 .PHONY: all clean test coverage install validate-desktop-metadata \
 	gcheckers create_puzzles find_position libgame.a \
@@ -103,7 +109,7 @@ TEST_PIECE_PALETTE_BIN := $(TESTS_DIR)/test_piece_palette
 	test_checkers_model test_ai_transposition_table test_position_search test_position_predicate test_bga_client \
 	test_file_dialog_history test_app_paths test_desktop_metadata test_flatpak_manifest test_sgf_tree test_sgf_io \
 	test_sgf_view test_board_view test_player_controls_panel test_sgf_controller test_window test_puzzle_generation \
-	test_piece_palette
+	test_piece_palette callgrind-run callgrind-annotate
 
 all: $(GSETTINGS_SCHEMA_COMPILED) $(LIBGAME_A) $(CREATE_PUZZLES_BIN) $(FIND_POSITION_BIN) $(GCHECKERS_BIN)
 
@@ -425,3 +431,24 @@ coverage: $(COV_OBJS) $(COV_BOARD_OBJS)
 	gcov -o $(COV_OBJ_DIR)/src $(SRCS)
 	mv *.gcov $(COV_GCOV_DIR)/
 	python3 tools/coverage_report.py --gcov-dir $(COV_GCOV_DIR) --output-dir $(COV_REPORT_DIR)
+
+# Split the profiling flow so an interrupted callgrind run can still be
+# annotated later with `make callgrind-annotate` if $(CALLGRIND_OUT) exists.
+callgrind-run: $(PROFILE_BIN)
+	@mkdir -p $(CALLGRIND_DIR)
+	@if ! command -v valgrind >/dev/null 2>&1; then \
+		echo "valgrind not found"; \
+		exit 1; \
+	fi
+	valgrind --tool=callgrind --dump-instr=yes --collect-jumps=yes --callgrind-out-file=$(CALLGRIND_OUT) $(PROFILE_CMD)
+
+callgrind-annotate:
+	@if ! command -v callgrind_annotate >/dev/null 2>&1; then \
+		echo "callgrind_annotate not found"; \
+		exit 1; \
+	fi
+	@if [ ! -s $(CALLGRIND_OUT) ]; then \
+		echo "$(CALLGRIND_OUT) was not created"; \
+		exit 1; \
+	fi
+	callgrind_annotate --auto=yes $(CALLGRIND_OUT) | tee $(CALLGRIND_ANNOTATION)
