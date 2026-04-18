@@ -24,6 +24,7 @@ void gcheckers_window_present_new_game_dialog(GCheckersWindow *self);
 void gcheckers_window_present_puzzle_dialog(GCheckersWindow *self);
 void gcheckers_window_present_import_dialog(GCheckersWindow *self);
 void gcheckers_window_set_loaded_source_path(GCheckersWindow *self, const char *path);
+void gcheckers_window_set_loaded_ruleset(GCheckersWindow *self, PlayerRuleset ruleset);
 void gcheckers_window_force_move(GCheckersWindow *self);
 char *gcheckers_window_format_analysis_score(gint score);
 char *gcheckers_window_format_analysis_report(const SgfNodeAnalysis *analysis);

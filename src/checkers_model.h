@@ -26,6 +26,7 @@ gboolean gcheckers_model_copy_game(GCheckersModel *self, Game *out_game);
 gboolean gcheckers_model_set_state(GCheckersModel *self, const GameState *state);
 char *gcheckers_model_format_status(GCheckersModel *self);
 const GameState *gcheckers_model_peek_state(GCheckersModel *self);
+const CheckersRules *gcheckers_model_peek_rules(GCheckersModel *self);
 const CheckersMove *gcheckers_model_peek_last_move(GCheckersModel *self);
 
 G_END_DECLS

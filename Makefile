@@ -268,10 +268,10 @@ $(TEST_SGF_TREE_BIN): tests/test_sgf_tree.c $(SGF_TREE_SRCS) src/sgf_tree.h
 
 test_sgf_io: $(TEST_SGF_IO_BIN)
 $(TEST_SGF_IO_BIN): tests/test_sgf_io.c src/sgf_io.c src/sgf_io.h src/sgf_tree.c src/sgf_tree.h src/sgf_move_props.c \
-	src/sgf_move_props.h src/game.h src/game_print.c src/board.c
+	src/sgf_move_props.h src/game.h src/game_print.c src/board.c src/rulesets.c src/rulesets.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_sgf_io.c src/sgf_io.c src/sgf_tree.c src/sgf_move_props.c src/game_print.c \
-		src/board.c $(LDLIBS)
+		src/board.c src/rulesets.c $(LDLIBS)
 
 test_sgf_view: $(TEST_SGF_VIEW_BIN)
 $(TEST_SGF_VIEW_BIN): tests/test_sgf_view.c $(SGF_VIEW_SRCS) $(SGF_TREE_SRCS) $(WIDGET_UTILS_SRCS) \

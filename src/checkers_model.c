@@ -228,6 +228,12 @@ const GameState *gcheckers_model_peek_state(GCheckersModel *self) {
   return &self->game.state;
 }
 
+const CheckersRules *gcheckers_model_peek_rules(GCheckersModel *self) {
+  g_return_val_if_fail(GCHECKERS_IS_MODEL(self), NULL);
+
+  return self->game.rules;
+}
+
 const CheckersMove *gcheckers_model_peek_last_move(GCheckersModel *self) {
   g_return_val_if_fail(GCHECKERS_IS_MODEL(self), NULL);
 

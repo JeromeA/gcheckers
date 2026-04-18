@@ -493,7 +493,8 @@ static gboolean test_gcheckers_window_write_single_move_puzzle_for_ruleset(char 
   g_assert_no_error(error);
 
   g_autofree char *content =
-      g_strdup_printf("(;FF[4]CA[UTF-8]GM[40]AE[1:32]AW[%u]AWK[%u]AB[%u]ABK[%u]PL[%c];%c[%s])",
+      g_strdup_printf("(;FF[4]CA[UTF-8]GM[40]RU[%s]AE[1:32]AW[%u]AWK[%u]AB[%u]ABK[%u]PL[%c];%c[%s])",
+                      short_name,
                       white_square + 1,
                       white_square + 1,
                       black_square + 1,

@@ -8,6 +8,7 @@
 #include "rulesets.h"
 #include "sgf_file_actions.h"
 #include "sgf_controller.h"
+#include "sgf_io.h"
 #include "sgf_move_props.h"
 #include "style.h"
 #include "player_controls_panel.h"
@@ -1123,6 +1124,10 @@ static gboolean gcheckers_window_enter_puzzle_mode_with_path(GCheckersWindow *se
     g_debug("Puzzle file load did not produce an SGF tree");
     return FALSE;
   }
+  PlayerRuleset loaded_ruleset = PLAYER_RULESET_INTERNATIONAL;
+  if (sgf_io_tree_get_ruleset(tree, &loaded_ruleset, NULL)) {
+    gcheckers_window_set_loaded_ruleset(self, loaded_ruleset);
+  }
 
   g_autoptr(GArray) steps = g_array_new(FALSE, FALSE, sizeof(GCheckersWindowPuzzleStep));
   if (!gcheckers_window_load_puzzle_steps_from_tree(tree, steps)) {
@@ -1333,6 +1338,12 @@ static void gcheckers_window_set_ruleset(GCheckersWindow *self, PlayerRuleset ru
   gcheckers_model_set_rules(self->model, rules);
   board_view_clear_selection(self->board_view);
   gcheckers_sgf_controller_new_game(self->sgf_controller);
+  self->applied_ruleset = ruleset;
+}
+
+void gcheckers_window_set_loaded_ruleset(GCheckersWindow *self, PlayerRuleset ruleset) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+
   self->applied_ruleset = ruleset;
 }
 

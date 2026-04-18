@@ -1,6 +1,7 @@
 #include "sgf_io.h"
 
 #include "game.h"
+#include "rulesets.h"
 #include "sgf_move_props.h"
 
 #include <string.h>
@@ -14,6 +15,7 @@
  * - AP[gcheckers]
  *               : application identifier.
  * - GM[40]      : game id marker used by gcheckers for checkers/draughts.
+ * - RU[short]   : gcheckers ruleset short name, e.g. international or american.
  *
  * Move properties:
  * - B[move]     : black move in gcheckers move notation, e.g. 12-16 or 23x18.
@@ -49,6 +51,64 @@ static const char *SGF_IO_PROP_ANALYSIS_MOVE = "GCAN";
 
 static GQuark sgf_io_error_quark(void) {
   return g_quark_from_static_string("sgf-io-error");
+}
+
+gboolean sgf_io_tree_get_ruleset(const SgfTree *tree, PlayerRuleset *out_ruleset, GError **error) {
+  g_return_val_if_fail(SGF_IS_TREE((SgfTree *)tree), FALSE);
+
+  const SgfNode *root = sgf_tree_get_root((SgfTree *)tree);
+  if (root == NULL) {
+    g_set_error_literal(error, sgf_io_error_quark(), 21, "Missing SGF root node");
+    return FALSE;
+  }
+
+  const char *ru = sgf_node_get_property_first(root, "RU");
+  if (ru == NULL) {
+    g_set_error_literal(error, sgf_io_error_quark(), 23, "Missing SGF RU value");
+    return FALSE;
+  }
+  if (ru[0] == '\0') {
+    g_set_error_literal(error, sgf_io_error_quark(), 24, "Empty SGF RU value");
+    return FALSE;
+  }
+
+  PlayerRuleset ruleset = PLAYER_RULESET_INTERNATIONAL;
+  if (!checkers_ruleset_find_by_short_name(ru, &ruleset)) {
+    g_set_error(error, sgf_io_error_quark(), 22, "Unknown SGF RU value: %s", ru);
+    return FALSE;
+  }
+
+  if (out_ruleset != NULL) {
+    *out_ruleset = ruleset;
+  }
+  return TRUE;
+}
+
+gboolean sgf_io_tree_set_ruleset(SgfTree *tree, PlayerRuleset ruleset) {
+  g_return_val_if_fail(SGF_IS_TREE(tree), FALSE);
+
+  const char *short_name = checkers_ruleset_short_name(ruleset);
+  if (short_name == NULL) {
+    g_debug("Unable to map ruleset to SGF RU value");
+    return FALSE;
+  }
+
+  SgfNode *root = (SgfNode *)sgf_tree_get_root(tree);
+  if (root == NULL) {
+    g_debug("Missing SGF root node");
+    return FALSE;
+  }
+
+  if (sgf_node_get_property_first(root, "RU") != NULL && !sgf_node_clear_property(root, "RU")) {
+    g_debug("Failed to clear existing SGF RU property");
+    return FALSE;
+  }
+  if (!sgf_node_add_property(root, "RU", short_name)) {
+    g_debug("Failed to write SGF RU property");
+    return FALSE;
+  }
+
+  return TRUE;
 }
 
 static void sgf_io_destroy_property_values(gpointer data) {

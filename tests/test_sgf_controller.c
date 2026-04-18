@@ -408,7 +408,7 @@ static void test_gcheckers_sgf_controller_load_applies_setup_properties(void) {
   gcheckers_sgf_controller_set_model(controller, model);
 
   const char *content =
-      "(;FF[4]CA[UTF-8]AP[gcheckers]GM[40]AE[af]AB[af]ABK[af]PL[B];AE[af]AW[af]AWK[af]PL[W])";
+      "(;FF[4]CA[UTF-8]AP[gcheckers]GM[40]RU[international]AE[af]AB[af]ABK[af]PL[B];AE[af]AW[af]AWK[af]PL[W])";
   gchar *path = g_strdup_printf("%s/test-gcheckers-setup-%u.sgf", g_get_tmp_dir(), g_random_int());
   g_assert_nonnull(path);
   g_assert_true(g_file_set_contents(path, content, -1, NULL));
@@ -429,6 +429,27 @@ static void test_gcheckers_sgf_controller_load_applies_setup_properties(void) {
   g_assert_nonnull(state);
   g_assert_cmpuint(state->turn, ==, CHECKERS_COLOR_WHITE);
   g_assert_cmpint(board_get(&state->board, (guint8)setup_index), ==, CHECKERS_PIECE_WHITE_KING);
+
+  g_remove(path);
+  g_free(path);
+  g_clear_object(&controller);
+  g_clear_object(&model);
+  g_clear_object(&board_view);
+}
+
+static void test_gcheckers_sgf_controller_load_file_requires_ru(void) {
+  BoardView *board_view = board_view_new();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersSgfController *controller = gcheckers_sgf_controller_new(board_view);
+  gcheckers_sgf_controller_set_model(controller, model);
+
+  gchar *path = g_strdup_printf("%s/test-gcheckers-load-missing-ru-%u.sgf", g_get_tmp_dir(), g_random_int());
+  g_assert_nonnull(path);
+  g_assert_true(g_file_set_contents(path, "(;FF[4]CA[UTF-8]AP[gcheckers]GM[40];B[12-16])", -1, NULL));
+
+  g_autoptr(GError) error = NULL;
+  g_assert_false(gcheckers_sgf_controller_load_file(controller, path, &error));
+  g_assert_error(error, g_quark_from_static_string("sgf-io-error"), 23);
 
   g_remove(path);
   g_free(path);
@@ -482,6 +503,7 @@ static void test_gcheckers_sgf_controller_save_position_file(void) {
   g_assert_true(g_file_get_contents(path, &saved, &saved_len, &error));
   g_assert_no_error(error);
   g_assert_true(saved_len > 0);
+  g_assert_nonnull(strstr(saved, "RU[american]"));
   g_assert_nonnull(strstr(saved, "PL[B]"));
   g_assert_nonnull(strstr(saved, "ABK["));
   g_assert_nonnull(strstr(saved, "AWK["));
@@ -515,6 +537,34 @@ static void test_gcheckers_sgf_controller_save_position_file(void) {
   g_assert_cmpint(board_get(&loaded_state->board, black_man_square), ==, CHECKERS_PIECE_BLACK_MAN);
   g_assert_cmpint(board_get(&loaded_state->board, white_king_square), ==, CHECKERS_PIECE_WHITE_KING);
   g_assert_cmpint(board_get(&loaded_state->board, white_man_square), ==, CHECKERS_PIECE_WHITE_MAN);
+
+  g_remove(path);
+  g_free(path);
+  g_clear_object(&controller);
+  g_clear_object(&model);
+  g_clear_object(&board_view);
+}
+
+static void test_gcheckers_sgf_controller_load_file_applies_ruleset_from_ru(void) {
+  BoardView *board_view = board_view_new();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersSgfController *controller = gcheckers_sgf_controller_new(board_view);
+  gcheckers_sgf_controller_set_model(controller, model);
+
+  gchar *path = g_strdup_printf("%s/test-gcheckers-load-ruleset-%u.sgf", g_get_tmp_dir(), g_random_int());
+  g_assert_nonnull(path);
+
+  const char *content = "(;FF[4]CA[UTF-8]AP[gcheckers]GM[40]RU[american]AE[1:32]AW[1]AB[2]PL[B])";
+  g_autoptr(GError) error = NULL;
+  g_assert_true(g_file_set_contents(path, content, -1, &error));
+  g_assert_no_error(error);
+
+  g_assert_true(gcheckers_sgf_controller_load_file(controller, path, &error));
+  g_assert_no_error(error);
+
+  const CheckersRules *rules = gcheckers_model_peek_rules(model);
+  g_assert_nonnull(rules);
+  g_assert_cmpuint(rules->board_size, ==, 8);
 
   g_remove(path);
   g_free(path);
@@ -572,8 +622,10 @@ int main(int argc, char **argv) {
     g_test_add_func("/sgf-controller/navigation-forward-to-branch-and-end", test_gcheckers_sgf_controller_skip);
     g_test_add_func("/sgf-controller/select-node-emits-node-changed", test_gcheckers_sgf_controller_skip);
     g_test_add_func("/sgf-controller/load-applies-setup-properties", test_gcheckers_sgf_controller_skip);
+    g_test_add_func("/sgf-controller/load-file-requires-ru", test_gcheckers_sgf_controller_skip);
     g_test_add_func("/sgf-controller/replay-node-into-game-applies-setup-root", test_gcheckers_sgf_controller_skip);
     g_test_add_func("/sgf-controller/save-position-file", test_gcheckers_sgf_controller_skip);
+    g_test_add_func("/sgf-controller/load-file-applies-ruleset-from-ru", test_gcheckers_sgf_controller_skip);
     return g_test_run();
   }
 
@@ -593,8 +645,11 @@ int main(int argc, char **argv) {
                   test_gcheckers_sgf_controller_select_node_emits_node_changed);
   g_test_add_func("/sgf-controller/load-applies-setup-properties",
                   test_gcheckers_sgf_controller_load_applies_setup_properties);
+  g_test_add_func("/sgf-controller/load-file-requires-ru", test_gcheckers_sgf_controller_load_file_requires_ru);
   g_test_add_func("/sgf-controller/replay-node-into-game-applies-setup-root",
                   test_gcheckers_sgf_controller_replay_node_into_game_applies_setup_root);
   g_test_add_func("/sgf-controller/save-position-file", test_gcheckers_sgf_controller_save_position_file);
+  g_test_add_func("/sgf-controller/load-file-applies-ruleset-from-ru",
+                  test_gcheckers_sgf_controller_load_file_applies_ruleset_from_ru);
   return g_test_run();
 }

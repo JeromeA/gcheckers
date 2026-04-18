@@ -83,7 +83,10 @@ Move application is SGF-first: validate model move, append under SGF current, se
 transition to the model (`single move` if parent->child, otherwise reset+replay from root).
 Replay applies SGF setup properties (`AB`, `AE`, `AW`) and side-to-play (`PL`) on every visited node before move
 replay, so loading/setup-only SGF nodes can drive board state and turn correctly. Custom king markers (`ABK`, `AWK`)
-are validated as subsets of `AB`/`AW` and then applied as kings.
+are validated as subsets of `AB`/`AW` and then applied as kings. Root `RU[<ruleset-short-name>]` is now read on load
+to switch the model to the matching ruleset before replay, and SGF loads now fail if `RU` is missing or unknown
+instead of falling back to the current model rules. `RU` is stamped back onto fresh trees and saved SGFs so
+variant-specific files round-trip explicitly.
 `gcheckers_sgf_controller_set_model()` only binds/disconnects model references; timeline clearing is explicit via
 `gcheckers_sgf_controller_new_game()`. Exposes SGF navigation helpers used by window actions: rewind to root, step
 backward, step forward on main line, step to next branch point, and step to main-line end.
@@ -258,9 +261,9 @@ Collaborates with: `position_search.c`, `position_predicate.c`, and `position_fo
 Module: CLI front end.
 Role: repeatedly self-play games at depth 0, detect mistake positions with configurable best-move-depth analysis,
 validate each candidate immediately in one pass, require the attacker to have at least four legal moves and a best
-response at least 50 points above the runner-up, then save puzzles as
-SGF files under `puzzles/<ruleset-short-name>/puzzle-####.sgf` with root setup (`AE/AB/AW/ABK/AWK/PL`) and a tactical
-continuation line.
+response at least 50 points above the runner-up, then save puzzles as SGF files under
+`puzzles/<ruleset-short-name>/puzzle-####.sgf` with root setup (`AE/AB/AW/ABK/AWK/PL`), explicit
+`RU[<ruleset-short-name>]`, and a tactical continuation line.
 Validation and emission are now split: one path computes a validated puzzle candidate from a post-mistake position,
 and separate generation/checking paths either save that candidate or compare an existing saved puzzle against it.
 The CLI requires `--ruleset <short-name>` so generation, checking, deduplication, and logging all target one explicit
@@ -400,7 +403,10 @@ Collaborates with: `sgf_io` and `GCheckersSgfController`.
 Module: SGF load/save core.
 Role: serialize and deserialize SGF trees using SGF syntax (`(`, `)`, `;`, `PROP[...]`) with move properties
 `B[...]`/`W[...]` and standard SGF variation nesting for branches. gcheckers writes SGF metadata (`FF`, `CA`, `AP`,
-`GM`) and does not persist current UI selection. Node analysis persists through custom properties:
+`GM`, `RU`) and does not persist current UI selection. `RU` stores the gcheckers ruleset short name and is exposed
+through small tree helpers so controllers and puzzle tooling can parse or stamp the active variant. Loaders that open
+playable SGFs now require `RU` to be present and valid instead of inferring a variant heuristically. Node analysis
+persists through custom properties:
 `GCAD[depth]`, `GCAS[nodes=...;tt_probes=...;tt_hits=...;tt_cutoffs=...]`, and repeated
 `GCAN[move:score:nodes]` for scored moves, while still accepting older `GCAN[move:score]` data when loading. This
 layer is GTK-free so it can be reused by both GUI actions and future CLI commands.

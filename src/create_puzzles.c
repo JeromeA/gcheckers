@@ -835,6 +835,7 @@ static SgfColor checkers_puzzle_sgf_color(CheckersColor color) {
 }
 
 static gboolean checkers_puzzle_save_sgf(const char *path,
+                                         PlayerRuleset ruleset,
                                          const GameState *start_state,
                                          const GArray *line,
                                          gint mistake_delta,
@@ -854,6 +855,10 @@ static gboolean checkers_puzzle_save_sgf(const char *path,
 
   if (!checkers_puzzle_add_setup_properties(root, start_state)) {
     g_debug("Failed to encode puzzle root setup properties");
+    return FALSE;
+  }
+  if (!sgf_io_tree_set_ruleset(tree, ruleset)) {
+    g_debug("Failed to encode puzzle SGF RU property");
     return FALSE;
   }
 
@@ -896,11 +901,15 @@ static gboolean checkers_puzzle_save_sgf(const char *path,
   return TRUE;
 }
 
-static gboolean checkers_puzzle_save_game_sgf(const char *path, const GArray *game_line) {
+static gboolean checkers_puzzle_save_game_sgf(const char *path, PlayerRuleset ruleset, const GArray *game_line) {
   g_return_val_if_fail(path != NULL, FALSE);
   g_return_val_if_fail(game_line != NULL, FALSE);
 
   g_autoptr(SgfTree) tree = sgf_tree_new();
+  if (!sgf_io_tree_set_ruleset(tree, ruleset)) {
+    g_debug("Failed to encode game SGF RU property");
+    return FALSE;
+  }
   for (guint i = 0; i < game_line->len; ++i) {
     const CheckersPuzzleLineMove *entry = &g_array_index(game_line, CheckersPuzzleLineMove, i);
     SgfNode *node = (SgfNode *)sgf_tree_append_node(tree);
@@ -922,6 +931,7 @@ static gboolean checkers_puzzle_save_game_sgf(const char *path, const GArray *ga
 }
 
 static gboolean checkers_puzzle_emit_validated_candidate(const GameState *start_state,
+                                                         PlayerRuleset ruleset,
                                                          gint mistake_delta,
                                                          guint solution_depth,
                                                          const CheckersPuzzleValidatedCandidate *candidate,
@@ -955,6 +965,7 @@ static gboolean checkers_puzzle_emit_validated_candidate(const GameState *start_
   g_return_val_if_fail(puzzle_path != NULL, FALSE);
 
   if (!checkers_puzzle_save_sgf(puzzle_path,
+                                ruleset,
                                 start_state,
                                 candidate->line,
                                 mistake_delta,
@@ -969,7 +980,7 @@ static gboolean checkers_puzzle_emit_validated_candidate(const GameState *start_
   if (save_game_sgf) {
     game_path = checkers_puzzle_build_indexed_path(output_dir, "game", *inout_index);
     g_return_val_if_fail(game_path != NULL, FALSE);
-    if (!checkers_puzzle_save_game_sgf(game_path, game_line)) {
+    if (!checkers_puzzle_save_game_sgf(game_path, ruleset, game_line)) {
       return FALSE;
     }
   }
@@ -1112,9 +1123,17 @@ static gboolean checkers_puzzle_emit_candidate_if_valid(const Game *post_mistake
     return FALSE;
   }
 
+  PlayerRuleset ruleset = PLAYER_RULESET_INTERNATIONAL;
+  if (!checkers_ruleset_find_by_rules(post_mistake_game->rules, &ruleset)) {
+    g_debug("Unable to map puzzle candidate rules to a known ruleset");
+    checkers_puzzle_validated_candidate_clear(&validated);
+    return FALSE;
+  }
+
   g_autofree char *puzzle_path = NULL;
   g_autofree char *game_path = NULL;
   if (!checkers_puzzle_emit_validated_candidate(&post_mistake_game->state,
+                                                ruleset,
                                                 mistake_delta,
                                                 best_move_depth,
                                                 &validated,
@@ -1394,28 +1413,39 @@ static const CheckersRules *checkers_puzzle_find_matching_rules_for_setup(const 
   g_return_val_if_fail(root != NULL, NULL);
   g_return_val_if_fail(line != NULL, NULL);
 
-  guint count = checkers_ruleset_count();
-  for (guint i = 0; i < count; ++i) {
-    const CheckersRules *rules = checkers_ruleset_get_rules((PlayerRuleset)i);
-    if (rules == NULL) {
-      continue;
-    }
-
-    Game game = {0};
-    game_init_with_rules(&game, rules);
-    g_autoptr(GError) setup_error = NULL;
-    if (!checkers_puzzle_apply_setup_properties(&game.state, root, &setup_error)) {
-      game_destroy(&game);
-      continue;
-    }
-    gboolean matches = checkers_puzzle_line_replays_from_game(line, &game);
-    game_destroy(&game);
-    if (matches) {
-      return rules;
-    }
+  const char *ru = sgf_node_get_property_first(root, "RU");
+  g_autoptr(SgfTree) ru_tree = sgf_tree_new();
+  SgfNode *ru_root = (SgfNode *)sgf_tree_get_root(ru_tree);
+  g_return_val_if_fail(ru_root != NULL, NULL);
+  if (ru != NULL) {
+    g_return_val_if_fail(sgf_node_add_property(ru_root, "RU", ru), NULL);
   }
 
-  return NULL;
+  PlayerRuleset ru_ruleset = PLAYER_RULESET_INTERNATIONAL;
+  g_autoptr(GError) ru_error = NULL;
+  if (!sgf_io_tree_get_ruleset(ru_tree, &ru_ruleset, &ru_error)) {
+    if (ru_error != NULL) {
+      g_debug("Invalid puzzle SGF RU value: %s", ru_error->message);
+    }
+    return NULL;
+  }
+
+  const CheckersRules *rules = checkers_ruleset_get_rules(ru_ruleset);
+  if (rules == NULL) {
+    return NULL;
+  }
+
+  Game game = {0};
+  game_init_with_rules(&game, rules);
+  g_autoptr(GError) setup_error = NULL;
+  if (!checkers_puzzle_apply_setup_properties(&game.state, root, &setup_error)) {
+    game_destroy(&game);
+    return NULL;
+  }
+
+  gboolean matches = checkers_puzzle_line_replays_from_game(line, &game);
+  game_destroy(&game);
+  return matches ? rules : NULL;
 }
 
 static gboolean checkers_puzzle_load_main_line(const char *path, GArray *out_line) {

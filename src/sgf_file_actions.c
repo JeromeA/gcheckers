@@ -1,6 +1,7 @@
 #include "sgf_file_actions.h"
 
 #include "file_dialog_history.h"
+#include "sgf_io.h"
 
 static const char *gcheckers_sgf_last_folder_key = "sgf-last-folder";
 
@@ -88,6 +89,11 @@ static void gcheckers_window_on_sgf_load_dialog_finish(GObject *source_object,
         g_strdup_printf("Unable to load SGF file.\n%s", error != NULL ? error->message : "Unknown error");
     gcheckers_window_show_file_error_dialog(self, "Load failed", text);
   } else {
+    PlayerRuleset loaded_ruleset = PLAYER_RULESET_INTERNATIONAL;
+    SgfTree *tree = gcheckers_sgf_controller_get_tree(controller);
+    if (tree != NULL && sgf_io_tree_get_ruleset(tree, &loaded_ruleset, NULL)) {
+      gcheckers_window_set_loaded_ruleset(self, loaded_ruleset);
+    }
     gcheckers_window_set_loaded_source_path(self, path);
     gcheckers_window_set_board_orientation_mode(self, GCHECKERS_WINDOW_BOARD_ORIENTATION_FIXED);
   }

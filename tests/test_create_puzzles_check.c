@@ -127,6 +127,7 @@ static gboolean test_create_puzzles_check_write_invalid_single_move_puzzle(const
   g_autoptr(SgfTree) puzzle_tree = sgf_tree_new();
   SgfNode *root = (SgfNode *)sgf_tree_get_root(puzzle_tree);
   g_assert_nonnull(root);
+  g_assert_true(sgf_io_tree_set_ruleset(puzzle_tree, PLAYER_RULESET_INTERNATIONAL));
   g_assert_true(test_create_puzzles_check_add_setup_properties(root, &state));
   SgfNode *puzzle_move_node = (SgfNode *)sgf_tree_append_node(puzzle_tree);
   g_assert_nonnull(puzzle_move_node);
@@ -134,6 +135,7 @@ static gboolean test_create_puzzles_check_write_invalid_single_move_puzzle(const
   g_assert_true(sgf_io_save_file(puzzle_path, puzzle_tree, NULL));
 
   g_autoptr(SgfTree) game_tree = sgf_tree_new();
+  g_assert_true(sgf_io_tree_set_ruleset(game_tree, PLAYER_RULESET_INTERNATIONAL));
   SgfNode *game_move_node = (SgfNode *)sgf_tree_append_node(game_tree);
   g_assert_nonnull(game_move_node);
   g_assert_true(sgf_move_props_set_move(game_move_node, SGF_COLOR_WHITE, &chosen, NULL));
@@ -228,8 +230,62 @@ static void test_create_puzzles_check_mode_dry_run_and_delete(void) {
   g_assert_cmpint(g_rmdir(dir_path), ==, 0);
 }
 
+static void test_create_puzzles_check_mode_rejects_missing_ru(void) {
+  g_autoptr(GError) error = NULL;
+  g_autofree char *dir_path = g_dir_make_tmp("gcheckers-check-puzzles-missing-ru-XXXXXX", &error);
+  g_assert_no_error(error);
+  g_assert_nonnull(dir_path);
+  g_autofree char *ruleset_dir = g_build_filename(dir_path, "international", NULL);
+  g_assert_cmpint(g_mkdir_with_parents(ruleset_dir, 0755), ==, 0);
+
+  g_autofree char *puzzle_path = g_build_filename(ruleset_dir, "puzzle-0000.sgf", NULL);
+  g_assert_true(g_file_set_contents(puzzle_path,
+                                    "(;FF[4]CA[UTF-8]AP[gcheckers]GM[40]AE[1:50]AW[31]AWK[31]AB[8]ABK[8]PL[W];W[31-27])",
+                                    -1,
+                                    &error));
+  g_assert_no_error(error);
+
+  g_autofree char *cwd = g_get_current_dir();
+  gchar *argv[] = {
+      (gchar *)GCHECKERS_CREATE_PUZZLES_PATH,
+      (gchar *)"--ruleset",
+      (gchar *)"international",
+      (gchar *)"--check-existing",
+      (gchar *)"--dry-run",
+      ruleset_dir,
+      NULL,
+  };
+  gchar *stdout_text = NULL;
+  gchar *stderr_text = NULL;
+  gint wait_status = 0;
+  g_assert_true(g_spawn_sync(cwd,
+                             argv,
+                             NULL,
+                             G_SPAWN_SEARCH_PATH,
+                             NULL,
+                             NULL,
+                             &stdout_text,
+                             &stderr_text,
+                             &wait_status,
+                             &error));
+  g_assert_no_error(error);
+  g_assert_true(g_spawn_check_wait_status(wait_status, &error));
+  g_assert_no_error(error);
+  g_assert_nonnull(stdout_text);
+  g_assert_nonnull(strstr(stdout_text, "Checking"));
+  g_assert_nonnull(strstr(stdout_text, "failed to load puzzle file"));
+  g_assert_nonnull(strstr(stdout_text, "  -> invalid"));
+  g_free(stdout_text);
+  g_free(stderr_text);
+
+  g_assert_cmpint(g_remove(puzzle_path), ==, 0);
+  g_assert_cmpint(g_rmdir(ruleset_dir), ==, 0);
+  g_assert_cmpint(g_rmdir(dir_path), ==, 0);
+}
+
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   g_test_add_func("/create-puzzles-check/dry-run-and-delete", test_create_puzzles_check_mode_dry_run_and_delete);
+  g_test_add_func("/create-puzzles-check/rejects-missing-ru", test_create_puzzles_check_mode_rejects_missing_ru);
   return g_test_run();
 }

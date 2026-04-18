@@ -1,6 +1,7 @@
 #include <glib.h>
 
 #include "../src/game.h"
+#include "../src/rulesets.h"
 #include "../src/sgf_io.h"
 #include "../src/sgf_move_props.h"
 
@@ -343,6 +344,51 @@ static void test_sgf_io_roundtrip_node_analysis_properties(void) {
   g_assert_cmpuint(loaded_analysis->moves->len, ==, 1);
 }
 
+static void test_sgf_io_roundtrip_ruleset_property(void) {
+  g_autoptr(SgfTree) tree = sgf_tree_new();
+  g_assert_true(sgf_io_tree_set_ruleset(tree, PLAYER_RULESET_RUSSIAN));
+
+  g_autoptr(GError) error = NULL;
+  g_autofree char *serialized = sgf_io_save_data(tree, &error);
+  g_assert_no_error(error);
+  g_assert_nonnull(serialized);
+  g_assert_nonnull(strstr(serialized, "RU[russian]"));
+
+  g_autoptr(SgfTree) loaded = NULL;
+  g_assert_true(sgf_io_load_data(serialized, &loaded, &error));
+  g_assert_no_error(error);
+  g_assert_nonnull(loaded);
+
+  PlayerRuleset ruleset = PLAYER_RULESET_INTERNATIONAL;
+  g_assert_true(sgf_io_tree_get_ruleset(loaded, &ruleset, &error));
+  g_assert_no_error(error);
+  g_assert_cmpuint(ruleset, ==, PLAYER_RULESET_RUSSIAN);
+}
+
+static void test_sgf_io_rejects_unknown_ruleset_property(void) {
+  g_autoptr(SgfTree) tree = NULL;
+  g_autoptr(GError) error = NULL;
+  g_assert_true(sgf_io_load_data("(;FF[4]CA[UTF-8]AP[gcheckers]GM[40]RU[unknown])", &tree, &error));
+  g_assert_no_error(error);
+  g_assert_nonnull(tree);
+
+  PlayerRuleset ruleset = PLAYER_RULESET_INTERNATIONAL;
+  g_assert_false(sgf_io_tree_get_ruleset(tree, &ruleset, &error));
+  g_assert_error(error, g_quark_from_static_string("sgf-io-error"), 22);
+}
+
+static void test_sgf_io_rejects_missing_ruleset_property(void) {
+  g_autoptr(SgfTree) tree = NULL;
+  g_autoptr(GError) error = NULL;
+  g_assert_true(sgf_io_load_data("(;FF[4]CA[UTF-8]AP[gcheckers]GM[40])", &tree, &error));
+  g_assert_no_error(error);
+  g_assert_nonnull(tree);
+
+  PlayerRuleset ruleset = PLAYER_RULESET_INTERNATIONAL;
+  g_assert_false(sgf_io_tree_get_ruleset(tree, &ruleset, &error));
+  g_assert_error(error, g_quark_from_static_string("sgf-io-error"), 23);
+}
+
 static void test_sgf_io_load_setup_and_player_to_play_properties(void) {
   const char *content =
       "(;FF[4]CA[UTF-8]AP[gcheckers]GM[40]AB[ab][cd]AW[bc]ABK[ab]AE[ef]PL[B];AE[ab]AW[ab]AWK[ab]PL[W])";
@@ -433,6 +479,9 @@ int main(int argc, char **argv) {
   g_test_add_func("/sgf-io/roundtrip-branches", test_sgf_io_roundtrip_branches);
   g_test_add_func("/sgf-io/load-invalid-header", test_sgf_io_load_rejects_invalid_header);
   g_test_add_func("/sgf-io/repeated-property-values", test_sgf_io_preserves_repeated_property_values);
+  g_test_add_func("/sgf-io/ruleset-roundtrip", test_sgf_io_roundtrip_ruleset_property);
+  g_test_add_func("/sgf-io/ruleset-invalid", test_sgf_io_rejects_unknown_ruleset_property);
+  g_test_add_func("/sgf-io/ruleset-missing", test_sgf_io_rejects_missing_ruleset_property);
   g_test_add_func("/sgf-io/analysis-roundtrip", test_sgf_io_roundtrip_node_analysis_properties);
   g_test_add_func("/sgf-io/load-legacy-analysis-move", test_sgf_io_load_legacy_analysis_move_properties);
   g_test_add_func("/sgf-io/load-setup-and-pl", test_sgf_io_load_setup_and_player_to_play_properties);

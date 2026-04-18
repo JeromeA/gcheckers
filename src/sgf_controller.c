@@ -1,6 +1,7 @@
 #include "sgf_controller.h"
 #include "sgf_io.h"
 #include "sgf_move_props.h"
+#include "rulesets.h"
 
 #include <string.h>
 
@@ -12,6 +13,28 @@ struct _GCheckersSgfController {
   SgfView *sgf_view;
   gboolean is_replaying;
 };
+
+static gboolean gcheckers_sgf_controller_sync_tree_ruleset_from_model(GCheckersSgfController *self) {
+  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+
+  if (!GCHECKERS_IS_MODEL(self->model) || !SGF_IS_TREE(self->sgf_tree)) {
+    return TRUE;
+  }
+
+  const CheckersRules *rules = gcheckers_model_peek_rules(self->model);
+  if (rules == NULL) {
+    g_debug("Missing model rules while syncing SGF RU");
+    return FALSE;
+  }
+
+  PlayerRuleset ruleset = PLAYER_RULESET_INTERNATIONAL;
+  if (!checkers_ruleset_find_by_rules(rules, &ruleset)) {
+    g_debug("Unable to map model rules to a known SGF RU value");
+    return FALSE;
+  }
+
+  return sgf_io_tree_set_ruleset(self->sgf_tree, ruleset);
+}
 
 G_DEFINE_TYPE(GCheckersSgfController, gcheckers_sgf_controller, G_TYPE_OBJECT)
 
@@ -646,6 +669,9 @@ void gcheckers_sgf_controller_new_game(GCheckersSgfController *self) {
   g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self));
 
   sgf_tree_reset(self->sgf_tree);
+  if (!gcheckers_sgf_controller_sync_tree_ruleset_from_model(self)) {
+    g_debug("Failed to stamp SGF RU on new game tree");
+  }
   sgf_view_set_tree(self->sgf_view, self->sgf_tree);
   board_view_clear_selection(self->board_view);
   self->is_replaying = FALSE;
@@ -861,6 +887,23 @@ gboolean gcheckers_sgf_controller_load_file(GCheckersSgfController *self, const 
 
   const SgfNode *selected = sgf_tree_get_current(self->sgf_tree);
   if (self->model != NULL) {
+    PlayerRuleset loaded_ruleset = PLAYER_RULESET_INTERNATIONAL;
+    g_autoptr(GError) ruleset_error = NULL;
+    if (!sgf_io_tree_get_ruleset(self->sgf_tree, &loaded_ruleset, &ruleset_error)) {
+      g_propagate_error(error, g_steal_pointer(&ruleset_error));
+      return FALSE;
+    }
+
+    const CheckersRules *rules = checkers_ruleset_get_rules(loaded_ruleset);
+    if (rules == NULL) {
+      g_set_error_literal(error,
+                          g_quark_from_static_string("gcheckers-sgf-controller-error"),
+                          3,
+                          "Loaded SGF references an unknown ruleset");
+      return FALSE;
+    }
+    gcheckers_model_set_rules(self->model, rules);
+
     if (selected == NULL || !gcheckers_sgf_controller_replay_to_node(self, selected)) {
       g_set_error_literal(error, g_quark_from_static_string("gcheckers-sgf-controller-error"), 1,
                           "Unable to replay loaded SGF tree");
@@ -924,6 +967,14 @@ gboolean gcheckers_sgf_controller_save_file(GCheckersSgfController *self, const 
   g_return_val_if_fail(path != NULL, FALSE);
   g_return_val_if_fail(SGF_IS_TREE(self->sgf_tree), FALSE);
 
+  if (!gcheckers_sgf_controller_sync_tree_ruleset_from_model(self)) {
+    g_set_error_literal(error,
+                        g_quark_from_static_string("gcheckers-sgf-controller-error"),
+                        5,
+                        "Unable to determine SGF ruleset metadata");
+    return FALSE;
+  }
+
   return sgf_io_save_file(path, self->sgf_tree, error);
 }
 
@@ -938,6 +989,33 @@ gboolean gcheckers_sgf_controller_save_position_file(GCheckersSgfController *sel
                         g_quark_from_static_string("gcheckers-sgf-controller-error"),
                         2,
                         "Missing game state for SGF position save");
+    return FALSE;
+  }
+
+  const CheckersRules *rules = gcheckers_model_peek_rules(self->model);
+  if (rules == NULL) {
+    g_set_error_literal(error,
+                        g_quark_from_static_string("gcheckers-sgf-controller-error"),
+                        6,
+                        "Missing game rules for SGF position save");
+    return FALSE;
+  }
+
+  PlayerRuleset ruleset = PLAYER_RULESET_INTERNATIONAL;
+  if (!checkers_ruleset_find_by_rules(rules, &ruleset)) {
+    g_set_error_literal(error,
+                        g_quark_from_static_string("gcheckers-sgf-controller-error"),
+                        7,
+                        "Unable to determine SGF RU value for current rules");
+    return FALSE;
+  }
+
+  const char *ru_value = checkers_ruleset_short_name(ruleset);
+  if (ru_value == NULL) {
+    g_set_error_literal(error,
+                        g_quark_from_static_string("gcheckers-sgf-controller-error"),
+                        8,
+                        "Unable to encode SGF RU value");
     return FALSE;
   }
 
@@ -985,7 +1063,7 @@ gboolean gcheckers_sgf_controller_save_position_file(GCheckersSgfController *sel
   }
 
   GString *content = g_string_new("(;");
-  g_string_append(content, "FF[4]CA[UTF-8]AP[gcheckers]GM[40]");
+  g_string_append_printf(content, "FF[4]CA[UTF-8]AP[gcheckers]GM[40]RU[%s]", ru_value);
   if (!gcheckers_sgf_controller_append_prop_values(content, "AE", ae_values, error) ||
       !gcheckers_sgf_controller_append_prop_values(content, "AB", ab_values, error) ||
       !gcheckers_sgf_controller_append_prop_values(content, "AW", aw_values, error) ||

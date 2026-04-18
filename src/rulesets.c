@@ -117,3 +117,29 @@ gboolean checkers_ruleset_find_by_short_name(const char *short_name, PlayerRules
 
   return FALSE;
 }
+
+gboolean checkers_ruleset_find_by_rules(const CheckersRules *rules, PlayerRuleset *out_ruleset) {
+  g_return_val_if_fail(rules != NULL, FALSE);
+
+  guint count = checkers_ruleset_count();
+  for (guint i = 0; i < count; ++i) {
+    PlayerRuleset ruleset = (PlayerRuleset)i;
+    const CheckersRules *candidate = checkers_ruleset_get_rules(ruleset);
+    if (candidate == NULL) {
+      continue;
+    }
+
+    if (candidate->board_size == rules->board_size &&
+        candidate->men_can_jump_backwards == rules->men_can_jump_backwards &&
+        candidate->capture_mandatory == rules->capture_mandatory &&
+        candidate->longest_capture_mandatory == rules->longest_capture_mandatory &&
+        candidate->kings_can_fly == rules->kings_can_fly) {
+      if (out_ruleset != NULL) {
+        *out_ruleset = ruleset;
+      }
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
