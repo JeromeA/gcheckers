@@ -111,7 +111,6 @@ typedef struct {
   GCheckersWindowAnalysisMode mode;
   gboolean done;
   gboolean canceled;
-  gboolean is_status;
   gboolean is_payload;
   char *status_text;
   SgfNodeAnalysis *analysis;
@@ -1474,12 +1473,12 @@ static gboolean gcheckers_window_analysis_dispatch_cb(gpointer user_data) {
               current_generation,
               event->mode,
               event->is_payload,
-              event->is_status);
+              event->status_text != NULL);
       gcheckers_window_analysis_event_free(event);
       continue;
     }
 
-    if (event->is_status && event->status_text != NULL) {
+    if (event->status_text != NULL) {
       gcheckers_window_set_analysis_text(self, event->status_text);
       if (event->mode == GCHECKERS_WINDOW_ANALYSIS_MODE_FULL_GAME && !event->done) {
         self->analysis_processed_nodes++;
@@ -1537,7 +1536,6 @@ static void gcheckers_window_analysis_publish_status(GCheckersWindow *self,
   event->done = done;
   event->canceled = canceled;
   if (text != NULL) {
-    event->is_status = TRUE;
     event->status_text = g_strdup(text);
   }
   gcheckers_window_analysis_enqueue_event(self, event);
@@ -1956,8 +1954,7 @@ static gpointer gcheckers_window_full_analysis_thread(gpointer user_data) {
                                            GCHECKERS_WINDOW_ANALYSIS_MODE_FULL_GAME,
                                            TRUE,
                                            canceled,
-                                           canceled ? "Full-game analysis canceled."
-                                                    : "Full-game analysis complete.");
+                                           canceled ? "Full-game analysis canceled." : NULL);
 
   g_ptr_array_unref(task->jobs);
   checkers_ai_tt_free(task->tt);
