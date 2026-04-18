@@ -22,17 +22,24 @@ fires.
 
 ## Progress
 
-- [ ] (2026-04-17 00:00Z) Write this ExecPlan after surveying the current puzzle runtime, storage helpers, build
+- [x] (2026-04-17 00:00Z) Write this ExecPlan after surveying the current puzzle runtime, storage helpers, build
       system, and tests.
-- [ ] Add a dedicated puzzle progress domain module for persistent user identity, local attempt-history storage, and
-      payload construction.
-- [ ] Integrate puzzle attempt lifecycle recording into `src/window.c` so attempts are created when a puzzle is tried,
-      resolved on success, failure, or `Analyze`, and preserved across `Next puzzle`, app shutdown, and restart.
-- [ ] Add asynchronous threshold-based upload handling plus startup and shutdown flush hooks in the application.
-- [ ] Add focused tests for identity persistence, attempt-history persistence, JSON payload formatting, upload retry
-      and threshold decisions, and puzzle-window integration.
-- [ ] Update `doc/OVERVIEW.md` to describe the new runtime puzzle progress pipeline and the future use of this data for
-      puzzle difficulty calibration.
+- [x] (2026-04-18 09:10Z) Add `src/puzzle_progress.c` and `src/puzzle_progress.h` for stable user identity, JSONL
+      attempt-history storage, threshold decisions, report marking, and full-history payload construction.
+- [x] (2026-04-18 09:35Z) Integrate puzzle attempt lifecycle recording into `src/window.c` so attempts start on the
+      first move attempt, terminal outcomes are persisted exactly once, and unresolved started attempts fall back to
+      `failure` on puzzle replacement or window shutdown.
+- [x] (2026-04-18 09:55Z) Add application-owned async threshold-based upload handling plus startup and shutdown flush
+      requests in `src/application.c`.
+- [x] (2026-04-18 10:20Z) Add focused tests for user ID persistence, history rewrite/report marking, payload
+      formatting, threshold decisions, writable path creation, and compile-checked puzzle-window integration cases.
+- [x] (2026-04-18 10:35Z) Update `doc/OVERVIEW.md` and `doc/BUGS.md` to describe the new runtime puzzle progress
+      pipeline and the persistence/reporting bug that this change fixes.
+- [x] (2026-04-18 10:50Z) Run `make all` and `env -u DISPLAY -u WAYLAND_DISPLAY -u GNOME_SETUP_DISPLAY make test`.
+- [x] (2026-04-18 20:21Z) Add `tests/puzzle_progress_report_server.php` as a simple PHP receiver and verify it live
+      with `php -S` plus loopback `curl`, including creation of a UUID-named report file.
+- [x] (2026-04-18 20:58Z) Add `make test_puzzle_progress_report_server` to start a temporary PHP server, run the
+      server-dependent shell test, and tear the server down automatically.
 
 ## Surprises & Discoveries
 
@@ -57,6 +64,23 @@ fires.
   clears puzzle state.
   Evidence: `src/window.c:gcheckers_window_on_puzzle_analyze_clicked()` calls `gcheckers_window_leave_puzzle_mode()`
   before rewinding and starting full-game analysis.
+
+- Observation: The repository’s standard displayless test command still skips all GTK-heavy window cases, including the
+  new puzzle persistence assertions, on this machine.
+  Evidence: `env -u DISPLAY -u WAYLAND_DISPLAY -u GNOME_SETUP_DISPLAY make test` reported `ok ... # SKIP GTK display
+  not available.` for all `test_window` puzzle cases after compiling them successfully.
+
+- Observation: PHP 8.3 is available locally, so the fake reporting server can be tested directly with `php -S`
+  without adding a separate runtime dependency or external service.
+  Evidence: `php -v` reported `PHP 8.3.6`, and `php -S 127.0.0.1:18081 tests/puzzle_progress_report_server.php`
+  accepted a sample `/puzzle-report` POST that wrote
+  `tests/puzzle-progress-report-data/3c98f7b2-1111-4111-8111-123456789abc.jsonl`.
+
+- Observation: A dedicated Makefile target can own the entire temporary PHP server lifecycle without needing a helper
+  process manager.
+  Evidence: `make test_puzzle_progress_report_server` successfully copied the shell test, started a temporary PHP
+  server on an available loopback port, ran the POST/verification script, and exited cleanly with `Puzzle progress PHP
+  server test passed.`.
 
 ## Decision Log
 
@@ -102,13 +126,34 @@ fires.
   for light puzzle usage but still ensures stale local data is not left unsent indefinitely.
   Date/Author: 2026-04-17 / Codex
 
+- Decision: Treat the first terminal puzzle outcome as authoritative for a puzzle entry even if the current UI still
+  lets the user keep clicking inside the same puzzle after a wrong move.
+  Rationale: Puzzle mode behavior was intentionally left unchanged, but the reporting model needs one stable terminal
+  result per entry. Recording the first resolved outcome preserves the user’s actual first success/failure/analyze
+  performance without turning later retries inside the same entry into history rewrites.
+  Date/Author: 2026-04-18 / Codex
+
+- Decision: Keep the upload worker in `src/application.c` and limit `src/puzzle_progress.c` to storage, thresholding,
+  and payload preparation.
+  Rationale: The application already owns process-wide lifecycle and startup/shutdown hooks. Keeping HTTP orchestration
+  there avoids turning the storage module into a mixed persistence/network layer while still leaving the domain logic in
+  one reusable module.
+  Date/Author: 2026-04-18 / Codex
+
 ## Outcomes & Retrospective
 
-No implementation work has started yet. The main outcome of this planning pass is a concrete design that fits the
-current architecture: puzzle runtime stays in `src/window.c`, identity/storage/upload live in a new module, and the
-application object gains a small amount of lifecycle wiring. The main implementation risk is not the data model; it is
-making threshold-based uploads reliable without blocking GTK interactions while preserving complete local history. The
-plan below therefore keeps puzzle recording fully local and synchronous, while upload is asynchronous and best-effort.
+Implementation is complete. Puzzle attempts now persist to JSONL under the user data directory once the player makes a
+move, terminal outcomes are stored exactly once per puzzle entry, the application owns a shared background uploader
+with threshold-based flush requests, and the new `test_puzzle_progress` suite covers the
+persistence/payload/threshold logic directly. `make all` and `env -u DISPLAY -u WAYLAND_DISPLAY -u
+GNOME_SETUP_DISPLAY make test` both succeeded in this workspace.
+
+The main remaining limitation is environmental rather than code-level: the repository’s standard headless GTK run on
+this machine compiles the new `test_window` puzzle cases but skips executing them because no display backend is
+available. That is now documented in `Surprises & Discoveries`, while the storage-layer tests remain mandatory and
+passing. A simple PHP fake receiver now also exists under `tests/puzzle_progress_report_server.php`, a reusable
+production endpoint lives under `tools/puzzle_progress_report_server.php`, and
+`make test_puzzle_progress_report_server` now exercises the temporary-server path end to end.
 
 ## Context and Orientation
 
@@ -638,4 +683,5 @@ in `src/application.c`, writable-path gaps in `src/app_paths.c`, and the current
 reworked to treat `Analyze` as its own outcome, to prefer `GSettings` for the stable user ID, and to switch from
 delete-on-ack queueing to append-only history with threshold-based full-report sends because those better match the
 current product direction. It was also updated after puzzle mode became ruleset-aware so the plan now refers to the
-variant chooser flow and to stable puzzle IDs derived from `puzzles/<short-name>/puzzle-####.sgf`.
+variant chooser flow and to stable puzzle IDs derived from `puzzles/<short-name>/puzzle-####.sgf`. This revision also
+records the completed implementation, validation results, and the headless GTK skip behavior observed on this machine.

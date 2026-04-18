@@ -1,6 +1,7 @@
 #include "app_paths.h"
 
 #include <glib.h>
+#include <glib/gstdio.h>
 
 static gboolean gcheckers_app_paths_is_directory(const char *path) {
   g_return_val_if_fail(path != NULL, FALSE);
@@ -45,4 +46,35 @@ char *gcheckers_app_paths_find_data_subdir(const char *env_name, const char *sub
   }
 
   return g_steal_pointer(&local_dir);
+}
+
+char *gcheckers_app_paths_get_user_state_subdir(const char *env_name,
+                                                const char *subdir_name,
+                                                GError **error) {
+  g_return_val_if_fail(subdir_name != NULL, NULL);
+
+  const char *override = NULL;
+  if (env_name != NULL) {
+    override = g_getenv(env_name);
+  }
+
+  g_autofree char *path = NULL;
+  if (override != NULL && *override != '\0') {
+    path = g_strdup(override);
+  } else {
+    path = g_build_filename(g_get_user_data_dir(), "gcheckers", subdir_name, NULL);
+  }
+
+  if (g_mkdir_with_parents(path, 0755) != 0) {
+    int saved_errno = errno;
+    g_set_error(error,
+                G_FILE_ERROR,
+                g_file_error_from_errno(saved_errno),
+                "Failed to create state directory %s: %s",
+                path,
+                g_strerror(saved_errno));
+    return NULL;
+  }
+
+  return g_steal_pointer(&path);
 }

@@ -21,5 +21,25 @@
       <summary>Last SGF folder</summary>
       <description>Most recently used folder for loading and saving SGF files.</description>
     </key>
+    <key name="puzzle-user-id" type="s">
+      <default>""</default>
+      <summary>Puzzle progress user ID</summary>
+      <description>Stable locally generated identifier for puzzle progress uploads.</description>
+    </key>
+    <key name="send-puzzle-usage-data" type="b">
+      <default>true</default>
+      <summary>Send anonymized puzzle usage data</summary>
+      <description>When true, gcheckers may upload anonymized puzzle usage data.</description>
+    </key>
+    <key name="send-application-usage-data" type="b">
+      <default>true</default>
+      <summary>Send anonymized application usage data</summary>
+      <description>When true, gcheckers may upload anonymized application usage data.</description>
+    </key>
+    <key name="privacy-settings-shown" type="b">
+      <default>false</default>
+      <summary>Privacy settings shown</summary>
+      <description>Whether the privacy settings dialog has already been shown to the user.</description>
+    </key>
   </schema>
 </schemalist>

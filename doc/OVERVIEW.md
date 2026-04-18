@@ -26,6 +26,11 @@ such as `american` or `russian`, then loads a random `puzzle-*.sgf` from that va
 hides both drawers, disables SGF/review actions, shows puzzle-only `Next puzzle` and `Analyze` buttons, and validates
 the player's moves against the SGF main-line solution while auto-playing defender replies. `Next puzzle` reuses the
 active puzzle ruleset instead of picking from a global pool.
+Puzzle mode now also records local progress for each started puzzle entry. The first completed move attempt creates an
+append-only attempt record, terminal outcomes are `success`, `failure`, or `analyze`, and the first wrong move is
+stored only when the failure happened on the very first attempted move. A started-but-unfinished puzzle entry is
+resolved as `failure` when the user starts a different puzzle, starts a new game, imports another game, or closes the
+window.
 Puzzle entry forces a fixed attacker-at-bottom orientation, while puzzle exit restores only layout/drawer state and
 leaves the current board orientation unchanged.
 Adds an `Analysis` menubar submenu for current-position and whole-game analysis, plus a `View` submenu with
@@ -129,6 +134,43 @@ Module: `gcheckers_style_init()` (style helper, not a class).
 Role: installs application CSS once per process using `g_once_init_enter/leave`, including SGF disc colors.
 Owns: CSS string and `GtkCssProvider` setup.
 Collaborates with: `GdkDisplay`/`GtkStyleContext` and is invoked by `GCheckersWindow`.
+
+## `GCheckersApplication` (`src/application.c`)
+Class: `GCheckersApplication` (`GtkApplication`).
+Role: top-level application shell that installs menu actions, creates the main window, and now owns shared puzzle
+progress reporting state.
+Owns: the application menubar/actions plus one `CheckersPuzzleProgressStore` for the process, the configured report
+URL (`GCHECKERS_PUZZLE_REPORT_URL`), the privacy/settings action, and the single in-flight background upload task.
+Collaborates with: `GCheckersWindow`, which asks for the shared store indirectly by attaching to this application, and
+`puzzle_progress.c`, which provides history storage, threshold decisions, and upload JSON formatting. Puzzle uploads are
+also gated by the `send-puzzle-usage-data` application setting before any network request is attempted.
+
+## Application Settings (`src/app_settings.c`, `src/app_settings.h`, `src/settings_dialog.c`, `src/settings_dialog.h`)
+Module: GSettings-backed application preferences and the modal settings UI.
+Role: load the shared `io.github.jeromea.gcheckers` schema, expose the new privacy keys, and present the `Settings`
+dialog from the File menu.
+Settings: `send-puzzle-usage-data` defaults to true and is consulted before puzzle progress uploads; `send-
+application-usage-data` also defaults to true and is stored for future telemetry work but is not consumed yet; and
+`privacy-settings-shown` records whether the privacy dialog has already been presented to this user.
+UI: the settings dialog is a small modal window with two checkboxes and `Cancel`/`Save` actions, following the same
+simple GTK window pattern as the new-game and import dialogs. On first launch, `GCheckersApplication` presents this
+dialog automatically after creating the main window so the user can review the privacy controls before continuing.
+
+## Puzzle Progress Reporting (`src/puzzle_progress.c`, `data/schemas/io.github.jeromea.gcheckers.gschema.xml`)
+Module: persistent puzzle attempt storage and report payload preparation.
+Role: keep a stable per-user identifier, store local puzzle attempt history, decide when unsent data is old or large
+enough to send, and build the full-history JSON payload for the reporting server.
+Storage layout: the preferred user ID storage is the `puzzle-user-id` GSettings key in
+`data/schemas/io.github.jeromea.gcheckers.gschema.xml`. Local history lives under
+`~/.local/share/gcheckers/puzzle-progress/attempt-history.jsonl` by default, or under
+`GCHECKERS_PUZZLE_PROGRESS_DIR` when that override is set for tests/manual runs.
+History format: one JSON object per line with schema version, puzzle identity, timestamps, terminal result,
+first-wrong-move metadata, and local report metadata (`first_reported_unix_ms`, `report_count`). The history is never
+deleted after successful upload; successful sends only mark previously unreported resolved attempts as reported.
+Reporting policy: the application sends the full local resolved history when there are at least 10 unsent attempts, or
+when there are at least 5 unsent attempts and the oldest unsent one is more than 24 hours old. Uploads are best-effort
+and asynchronous so puzzle interaction stays responsive. This data is intended both for operational reporting and for
+later puzzle-difficulty calibration work.
 
 ## Widget utilities (`src/widget_utils.c`, `src/widget_utils.h`)
 Module: parent-removal helpers.

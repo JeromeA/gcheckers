@@ -49,9 +49,27 @@ static void test_app_paths_system_data_dir_is_used(void) {
   g_assert_cmpstr(variant_dir, ==, expected_variant_dir);
 }
 
+static void test_app_paths_user_state_dir_is_created(void) {
+  g_autoptr(GError) error = NULL;
+  g_autofree char *root = g_dir_make_tmp("gcheckers-app-paths-state-XXXXXX", &error);
+  g_assert_no_error(error);
+  g_assert_nonnull(root);
+
+  g_autofree char *override = g_build_filename(root, "puzzle-progress", NULL);
+  g_setenv("GCHECKERS_PUZZLE_PROGRESS_DIR", override, TRUE);
+
+  g_autofree char *resolved = gcheckers_app_paths_get_user_state_subdir("GCHECKERS_PUZZLE_PROGRESS_DIR",
+                                                                        "ignored",
+                                                                        &error);
+  g_assert_no_error(error);
+  g_assert_cmpstr(resolved, ==, override);
+  g_assert_true(g_file_test(resolved, G_FILE_TEST_IS_DIR));
+}
+
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   g_test_add_func("/app-paths/env-override-wins", test_app_paths_env_override_wins);
   g_test_add_func("/app-paths/system-data-dir-is-used", test_app_paths_system_data_dir_is_used);
+  g_test_add_func("/app-paths/user-state-dir-is-created", test_app_paths_user_state_dir_is_created);
   return g_test_run();
 }

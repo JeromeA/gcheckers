@@ -56,3 +56,16 @@ and the taller stacked king shape needed a different offset again, so both piece
 
 The fix computes the vertical origin from the layer count before drawing. Men and kings now use separate centering math,
 and regression tests verify that both painted bounds are vertically centered.
+
+## Puzzle attempts vanished on restart and could not be reported later
+
+Puzzle mode should retain every started attempt so a wrong move, success, or Analyze abandonment survives shutdown and
+can be uploaded later once the local threshold is met.
+
+The original puzzle runtime lived only in `src/window.c` and kept no persistent attempt state. Once the user left the
+puzzle, started another one, or quit the app, the result was gone. There was also no stable per-user identifier or
+local history file for later reporting.
+
+The fix adds a dedicated `src/puzzle_progress.c` module with a stable user ID, JSONL attempt history, threshold logic,
+and upload payload construction. `GCheckersApplication` now owns the shared store and background flush requests, while
+`GCheckersWindow` records one attempt per puzzle entry once the user actually makes a move.
