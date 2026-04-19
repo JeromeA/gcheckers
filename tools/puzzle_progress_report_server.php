@@ -42,19 +42,7 @@ function gcheckers_report_server_append_report(string $store_dir, string $user_i
 
 function gcheckers_report_server_handle_request(): void
 {
-  $request_uri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
   $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-
-  if ($request_uri === '/health') {
-    gcheckers_report_server_send_json(200, ['ok' => true]);
-    return;
-  }
-
-  if ($request_uri !== '/puzzle-report') {
-    gcheckers_report_server_send_json(404, ['ok' => false, 'error' => 'Unknown path']);
-    return;
-  }
-
   if ($method !== 'POST') {
     header('Allow: POST');
     gcheckers_report_server_send_json(405, ['ok' => false, 'error' => 'Only POST is supported']);

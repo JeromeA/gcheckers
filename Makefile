@@ -282,11 +282,12 @@ test_puzzle_progress_report_server: $(TEST_PUZZLE_PROGRESS_REPORT_SERVER_BIN)
 	}; \
 	trap cleanup EXIT INT TERM; \
 	for port in 18082 18083 18084 18085; do \
-		GCHECKERS_PUZZLE_REPORT_STORE_DIR="$$store_dir" php -S 127.0.0.1:$$port tests/puzzle_progress_report_server.php >"$$log_file" 2>&1 & \
+		GCHECKERS_PUZZLE_REPORT_STORE_DIR="$$store_dir" php -S 127.0.0.1:$$port -t tests >"$$log_file" 2>&1 & \
 		server_pid=$$!; \
 		ready=0; \
 		for _attempt in 1 2 3 4 5 6 7 8 9 10; do \
-			if curl -fsS "http://127.0.0.1:$$port/health" >/dev/null 2>&1; then \
+			if code=$$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:$$port/puzzle_progress_report_server.php" 2>/dev/null) && \
+				[ "$$code" = "405" ]; then \
 				ready=1; \
 				break; \
 			fi; \
@@ -296,7 +297,7 @@ test_puzzle_progress_report_server: $(TEST_PUZZLE_PROGRESS_REPORT_SERVER_BIN)
 			sleep 0.2; \
 		done; \
 		if [ "$$ready" -eq 1 ]; then \
-			GCHECKERS_PUZZLE_REPORT_URL="http://127.0.0.1:$$port/puzzle-report" \
+			GCHECKERS_PUZZLE_REPORT_URL="http://127.0.0.1:$$port/puzzle_progress_report_server.php" \
 			GCHECKERS_PUZZLE_REPORT_STORE_DIR="$$store_dir" \
 			"$(TEST_PUZZLE_PROGRESS_REPORT_SERVER_BIN)"; \
 			exit 0; \

@@ -7,11 +7,8 @@ set -eu
 
 uuid='3c98f7b2-1111-4111-8111-123456789abc'
 report_file="${GCHECKERS_PUZZLE_REPORT_STORE_DIR}/${uuid}.jsonl"
-health_url=$(printf '%s' "${GCHECKERS_PUZZLE_REPORT_URL}" | sed 's#/puzzle-report$#/health#')
 
 rm -f "${report_file}"
-
-curl -fsS "${health_url}" >/dev/null
 
 response=$(
   curl -fsS -X POST "${GCHECKERS_PUZZLE_REPORT_URL}" \
