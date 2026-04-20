@@ -19,13 +19,16 @@ the same position source of truth as normal controller navigation.
 Board orientation is runtime-only window state: live games choose `follow-player`, `follow-turn`, or `fixed`
 orientation based on the new-game player modes, and SGF review/manual navigation switches back to `fixed` so analysis
 navigation does not keep rotating the board.
-Puzzle mode starts with a small modal chooser (`src/puzzle_dialog.c`) that lets the user pick
-American/International/Russian before loading a puzzle. Runtime loading resolves the puzzle root
+Puzzle mode starts with a modal chooser (`src/puzzle_dialog.c`) that lets the user pick
+American/International/Russian and then click a numbered puzzle square from a ten-column grid. The grid is built from
+the selected ruleset directory only and shows local status per puzzle: untried squares are white, solved squares are
+green, and tried-without-success squares are red. Runtime loading resolves the puzzle root
 (`GCHECKERS_PUZZLES_DIR` or the installed/local application data search path), appends the selected ruleset short name
-such as `american` or `russian`, then loads a random `puzzle-*.sgf` from that variant directory only. While active it
-hides both drawers, disables SGF/review actions, shows puzzle-only `Next puzzle` and `Analyze` buttons, and validates
-the player's moves against the SGF main-line solution while auto-playing defender replies. `Next puzzle` reuses the
-active puzzle ruleset instead of picking from a global pool.
+such as `american` or `russian`, and then loads the exact clicked `puzzle-*.sgf`. While active it hides both drawers,
+disables SGF/review actions, shows puzzle-only `Next puzzle` and `Analyze` buttons, and validates the player's moves
+against the SGF main-line solution while auto-playing defender replies. `Next puzzle` now advances through the sorted
+catalog for the active ruleset, wrapping to the first puzzle after the last one, and no longer selects a random
+puzzle.
 Puzzle mode now also records local progress for each started puzzle entry. The first completed move attempt creates an
 append-only attempt record, terminal outcomes are `success`, `failure`, or `analyze`, and the first wrong move is
 stored only when the failure happened on the very first attempted move. A started-but-unfinished puzzle entry is
@@ -129,9 +132,17 @@ Signals: `control-changed` for window-level coordination.
 Collaborates with: `GCheckersWindow` (signal handlers and `player_controls_panel_set_all_user()`) and GTK widgets
 (`GtkDropDown`, `GtkScale`).
 
+## `Puzzle Catalog` (`src/puzzle_catalog.c`, `src/puzzle_catalog.h`)
+Module: ruleset-aware puzzle discovery helpers.
+Role: scan one variant directory under the puzzle root, keep only `puzzle-####.sgf` files, parse their numeric puzzle
+numbers, sort them ascending, and return explicit catalog entries with basename, full path, and stable `puzzle_id`.
+Collaborates with: `puzzle_dialog.c` for the numbered chooser grid and `window.c` for random-next selection inside the
+active ruleset.
+
 ## `gcheckers_style_init()` (`src/style.c`)
 Module: `gcheckers_style_init()` (style helper, not a class).
-Role: installs application CSS once per process using `g_once_init_enter/leave`, including SGF disc colors.
+Role: installs application CSS once per process using `g_once_init_enter/leave`, including SGF disc colors and the
+colored puzzle-picker square styles.
 Owns: CSS string and `GtkCssProvider` setup.
 Collaborates with: `GdkDisplay`/`GtkStyleContext` and is invoked by `GCheckersWindow`.
 
@@ -158,15 +169,20 @@ dialog automatically after creating the main window so the user can review the p
 
 ## Puzzle Progress Reporting (`src/puzzle_progress.c`, `data/schemas/io.github.jeromea.gcheckers.gschema.xml`)
 Module: persistent puzzle attempt storage and report payload preparation.
-Role: keep a stable per-user identifier, store local puzzle attempt history, decide when unsent data is old or large
-enough to send, and build the full-history JSON payload for the reporting server.
+Role: keep a stable per-user identifier, store local puzzle attempt history, maintain a derived per-puzzle status
+cache for the chooser grid, decide when unsent data is old or large enough to send, and build the full-history JSON
+payload for the reporting server.
 Storage layout: the preferred user ID storage is the `puzzle-user-id` GSettings key in
 `data/schemas/io.github.jeromea.gcheckers.gschema.xml`. Local history lives under
 `~/.local/share/gcheckers/puzzle-progress/attempt-history.jsonl` by default, or under
-`GCHECKERS_PUZZLE_PROGRESS_DIR` when that override is set for tests/manual runs.
+`GCHECKERS_PUZZLE_PROGRESS_DIR` when that override is set for tests/manual runs. The derived chooser-status cache
+lives beside it as `puzzle-status.json` in the same directory; no extra nested per-file directories are used.
 History format: one JSON object per line with schema version, puzzle identity, timestamps, terminal result,
 first-wrong-move metadata, and local report metadata (`first_reported_unix_ms`, `report_count`). The history is never
 deleted after successful upload; successful sends only mark previously unreported resolved attempts as reported.
+Status-cache format: one JSON document keyed by stable `puzzle_id` values such as `russian/puzzle-0007.sgf`, storing
+reduced `untried`/`failed`/`solved` state plus minimal metadata. If the cache is missing or corrupt,
+`puzzle_progress.c` rebuilds it from `attempt-history.jsonl`.
 Reporting policy: the application sends the full local resolved history when there are at least 10 unsent attempts, or
 when there are at least 5 unsent attempts and the oldest unsent one is more than 24 hours old. Uploads are best-effort
 and asynchronous so puzzle interaction stays responsive. This data is intended both for operational reporting and for

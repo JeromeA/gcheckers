@@ -5,6 +5,7 @@
 #include "app_paths.h"
 #include "analysis_graph.h"
 #include "board_view.h"
+#include "puzzle_catalog.h"
 #include "puzzle_dialog.h"
 #include "rulesets.h"
 #include "sgf_file_actions.h"
@@ -172,6 +173,7 @@ static gboolean gcheckers_window_puzzle_attempt_finish_failure(GCheckersWindow *
                                                                const CheckersMove *failed_first_move);
 static gboolean gcheckers_window_puzzle_attempt_finish_analyze(GCheckersWindow *self);
 static void gcheckers_window_puzzle_attempt_reset(GCheckersWindow *self);
+static gboolean gcheckers_window_start_next_puzzle_mode_for_ruleset(GCheckersWindow *self, PlayerRuleset ruleset);
 
 enum {
   GCHECKERS_WINDOW_DEFAULT_BOARD_PANEL_WIDTH = 500,
@@ -507,30 +509,6 @@ static gboolean gcheckers_window_parse_puzzle_number_from_path(const char *path,
   }
 
   *out_number = (guint)number;
-  return TRUE;
-}
-
-static gboolean gcheckers_window_collect_puzzle_paths(const char *dir_path, GPtrArray *out_paths) {
-  g_return_val_if_fail(dir_path != NULL, FALSE);
-  g_return_val_if_fail(out_paths != NULL, FALSE);
-
-  g_autoptr(GError) error = NULL;
-  GDir *dir = g_dir_open(dir_path, 0, &error);
-  if (dir == NULL) {
-    g_debug("Failed to open puzzle dir %s: %s", dir_path, error != NULL ? error->message : "unknown error");
-    return FALSE;
-  }
-
-  const char *name = NULL;
-  while ((name = g_dir_read_name(dir)) != NULL) {
-    if (!gcheckers_window_puzzle_name_matches(name)) {
-      continue;
-    }
-
-    g_ptr_array_add(out_paths, g_build_filename(dir_path, name, NULL));
-  }
-
-  g_dir_close(dir);
   return TRUE;
 }
 
@@ -1388,29 +1366,67 @@ static gboolean gcheckers_window_enter_puzzle_mode_with_path(GCheckersWindow *se
   return TRUE;
 }
 
-gboolean gcheckers_window_start_random_puzzle_mode_for_ruleset(GCheckersWindow *self, PlayerRuleset ruleset) {
+gboolean gcheckers_window_start_puzzle_mode_for_path(GCheckersWindow *self,
+                                                     PlayerRuleset ruleset,
+                                                     const char *path) {
   g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), FALSE);
-
-  g_autoptr(GPtrArray) puzzle_paths = g_ptr_array_new_with_free_func(g_free);
-  g_autofree char *dir_path = gcheckers_window_build_puzzle_ruleset_dir(self, ruleset);
-  g_return_val_if_fail(dir_path != NULL, FALSE);
-  if (!gcheckers_window_collect_puzzle_paths(dir_path, puzzle_paths)) {
-    return FALSE;
-  }
-  if (puzzle_paths->len == 0) {
-    g_debug("No puzzle files found in %s", dir_path);
-    return FALSE;
-  }
-
-  guint index = g_random_int_range(0, (gint)puzzle_paths->len);
-  const char *path = g_ptr_array_index(puzzle_paths, index);
   g_return_val_if_fail(path != NULL, FALSE);
+
+  g_autofree char *ruleset_dir = gcheckers_window_build_puzzle_ruleset_dir(self, ruleset);
+  g_return_val_if_fail(ruleset_dir != NULL, FALSE);
+  if (!g_str_has_prefix(path, ruleset_dir)) {
+    g_debug("Puzzle path %s does not match ruleset directory %s", path, ruleset_dir);
+    return FALSE;
+  }
   if (!gcheckers_window_enter_puzzle_mode_with_path(self, path)) {
     return FALSE;
   }
 
   self->puzzle_ruleset = ruleset;
   return TRUE;
+}
+
+static gboolean gcheckers_window_start_next_puzzle_mode_for_ruleset(GCheckersWindow *self, PlayerRuleset ruleset) {
+  g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), FALSE);
+  g_return_val_if_fail(self->puzzle_path != NULL, FALSE);
+
+  g_autoptr(GError) error = NULL;
+  g_autoptr(GPtrArray) puzzle_entries = checkers_puzzle_catalog_load_for_ruleset(ruleset, &error);
+  if (puzzle_entries == NULL) {
+    g_debug("Failed to load puzzle catalog: %s", error != NULL ? error->message : "unknown error");
+    return FALSE;
+  }
+  if (puzzle_entries->len == 0) {
+    g_autofree char *dir_path = gcheckers_window_build_puzzle_ruleset_dir(self, ruleset);
+    g_debug("No puzzle files found in %s", dir_path != NULL ? dir_path : "(unknown)");
+    return FALSE;
+  }
+
+  guint current_index = G_MAXUINT;
+  for (guint i = 0; i < puzzle_entries->len; i++) {
+    CheckersPuzzleCatalogEntry *entry = g_ptr_array_index(puzzle_entries, i);
+    g_return_val_if_fail(entry != NULL, FALSE);
+    if (g_strcmp0(entry->path, self->puzzle_path) == 0) {
+      current_index = i;
+      break;
+    }
+  }
+
+  if (current_index == G_MAXUINT) {
+    g_debug("Current puzzle path %s was not found in the %s puzzle catalog", self->puzzle_path,
+            checkers_ruleset_short_name(ruleset));
+    return FALSE;
+  }
+
+  guint next_index = current_index + 1;
+  if (next_index >= puzzle_entries->len) {
+    next_index = 0;
+  }
+
+  CheckersPuzzleCatalogEntry *entry = g_ptr_array_index(puzzle_entries, next_index);
+  g_return_val_if_fail(entry != NULL, FALSE);
+  g_return_val_if_fail(entry->path != NULL, FALSE);
+  return gcheckers_window_start_puzzle_mode_for_path(self, ruleset, entry->path);
 }
 
 static gboolean gcheckers_window_apply_player_move(const CheckersMove *move, gpointer user_data) {
@@ -2522,7 +2538,7 @@ static void gcheckers_window_on_puzzle_next_clicked(GtkButton * /*button*/, gpoi
   if (!self->puzzle_mode || !self->puzzle_finished) {
     return;
   }
-  if (!gcheckers_window_start_random_puzzle_mode_for_ruleset(self, self->puzzle_ruleset)) {
+  if (!gcheckers_window_start_next_puzzle_mode_for_ruleset(self, self->puzzle_ruleset)) {
     g_debug("Failed to load next puzzle");
   }
 }

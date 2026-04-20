@@ -23,6 +23,10 @@ enum {
 static const char *checkers_puzzle_progress_user_id_key = "puzzle-user-id";
 static const char *checkers_puzzle_progress_user_id_fallback_name = "user-id";
 static const char *checkers_puzzle_progress_history_name = "attempt-history.jsonl";
+static const char *checkers_puzzle_progress_status_name = "puzzle-status.json";
+
+static GPtrArray *checkers_puzzle_progress_store_load_attempt_history_locked(CheckersPuzzleProgressStore *store,
+                                                                             GError **error);
 
 static char *checkers_puzzle_progress_store_build_path(CheckersPuzzleProgressStore *store, const char *name) {
   g_return_val_if_fail(store != NULL, NULL);
@@ -100,6 +104,39 @@ static const char *checkers_puzzle_progress_result_to_string(CheckersPuzzleAttem
     default:
       return NULL;
   }
+}
+
+static const char *checkers_puzzle_progress_status_to_string(CheckersPuzzleStatus status) {
+  switch (status) {
+    case CHECKERS_PUZZLE_STATUS_UNTRIED:
+      return "untried";
+    case CHECKERS_PUZZLE_STATUS_FAILED:
+      return "failed";
+    case CHECKERS_PUZZLE_STATUS_SOLVED:
+      return "solved";
+    default:
+      return NULL;
+  }
+}
+
+static gboolean checkers_puzzle_progress_status_from_string(const char *text, CheckersPuzzleStatus *out_status) {
+  g_return_val_if_fail(text != NULL, FALSE);
+  g_return_val_if_fail(out_status != NULL, FALSE);
+
+  if (g_strcmp0(text, "untried") == 0) {
+    *out_status = CHECKERS_PUZZLE_STATUS_UNTRIED;
+    return TRUE;
+  }
+  if (g_strcmp0(text, "failed") == 0) {
+    *out_status = CHECKERS_PUZZLE_STATUS_FAILED;
+    return TRUE;
+  }
+  if (g_strcmp0(text, "solved") == 0) {
+    *out_status = CHECKERS_PUZZLE_STATUS_SOLVED;
+    return TRUE;
+  }
+
+  return FALSE;
 }
 
 static gboolean checkers_puzzle_progress_result_from_string(const char *text,
@@ -548,6 +585,260 @@ static gboolean checkers_puzzle_progress_append_record_json(GString *buffer,
   return TRUE;
 }
 
+static gboolean checkers_puzzle_progress_append_status_entry_json(GString *buffer,
+                                                                  const CheckersPuzzleStatusEntry *entry) {
+  g_return_val_if_fail(buffer != NULL, FALSE);
+  g_return_val_if_fail(entry != NULL, FALSE);
+  g_return_val_if_fail(entry->puzzle_id != NULL, FALSE);
+
+  const char *status = checkers_puzzle_progress_status_to_string(entry->status);
+  const char *ruleset_short_name = checkers_ruleset_short_name(entry->puzzle_ruleset);
+  g_return_val_if_fail(status != NULL, FALSE);
+  g_return_val_if_fail(ruleset_short_name != NULL, FALSE);
+
+  g_string_append(buffer, "{\"puzzle_id\":");
+  checkers_puzzle_progress_append_json_string(buffer, entry->puzzle_id);
+  g_string_append(buffer, ",\"puzzle_ruleset\":");
+  checkers_puzzle_progress_append_json_string(buffer, ruleset_short_name);
+  g_string_append_printf(buffer, ",\"puzzle_number\":%u,\"status\":", entry->puzzle_number);
+  checkers_puzzle_progress_append_json_string(buffer, status);
+  g_string_append_printf(buffer, ",\"last_finished_unix_ms\":%" G_GINT64_FORMAT "}", entry->last_finished_unix_ms);
+  return TRUE;
+}
+
+static gboolean checkers_puzzle_progress_parse_status_entry(const char **cursor, CheckersPuzzleStatusEntry *out_entry) {
+  g_return_val_if_fail(cursor != NULL, FALSE);
+  g_return_val_if_fail(*cursor != NULL, FALSE);
+  g_return_val_if_fail(out_entry != NULL, FALSE);
+
+  *out_entry = (CheckersPuzzleStatusEntry){0};
+  if (!checkers_puzzle_progress_consume_char(cursor, '{')) {
+    return FALSE;
+  }
+
+  g_autofree char *key = NULL;
+  g_autofree char *string_value = NULL;
+
+  if (!checkers_puzzle_progress_parse_json_string(cursor, &key) || g_strcmp0(key, "puzzle_id") != 0 ||
+      !checkers_puzzle_progress_consume_char(cursor, ':') ||
+      !checkers_puzzle_progress_parse_json_string(cursor, &out_entry->puzzle_id) ||
+      !checkers_puzzle_progress_consume_char(cursor, ',')) {
+    return FALSE;
+  }
+
+  g_clear_pointer(&key, g_free);
+  if (!checkers_puzzle_progress_parse_json_string(cursor, &key) || g_strcmp0(key, "puzzle_ruleset") != 0 ||
+      !checkers_puzzle_progress_consume_char(cursor, ':') ||
+      !checkers_puzzle_progress_parse_json_string(cursor, &string_value) ||
+      !checkers_puzzle_progress_consume_char(cursor, ',')) {
+    return FALSE;
+  }
+  if (!checkers_ruleset_find_by_short_name(string_value, &out_entry->puzzle_ruleset)) {
+    return FALSE;
+  }
+
+  g_clear_pointer(&key, g_free);
+  g_clear_pointer(&string_value, g_free);
+  if (!checkers_puzzle_progress_parse_json_string(cursor, &key) || g_strcmp0(key, "puzzle_number") != 0 ||
+      !checkers_puzzle_progress_consume_char(cursor, ':') ||
+      !checkers_puzzle_progress_parse_uint(cursor, &out_entry->puzzle_number) ||
+      !checkers_puzzle_progress_consume_char(cursor, ',')) {
+    return FALSE;
+  }
+
+  g_clear_pointer(&key, g_free);
+  if (!checkers_puzzle_progress_parse_json_string(cursor, &key) || g_strcmp0(key, "status") != 0 ||
+      !checkers_puzzle_progress_consume_char(cursor, ':') ||
+      !checkers_puzzle_progress_parse_json_string(cursor, &string_value) ||
+      !checkers_puzzle_progress_consume_char(cursor, ',')) {
+    return FALSE;
+  }
+  if (!checkers_puzzle_progress_status_from_string(string_value, &out_entry->status)) {
+    return FALSE;
+  }
+
+  g_clear_pointer(&key, g_free);
+  g_clear_pointer(&string_value, g_free);
+  if (!checkers_puzzle_progress_parse_json_string(cursor, &key) ||
+      g_strcmp0(key, "last_finished_unix_ms") != 0 || !checkers_puzzle_progress_consume_char(cursor, ':') ||
+      !checkers_puzzle_progress_parse_int64(cursor, &out_entry->last_finished_unix_ms) ||
+      !checkers_puzzle_progress_consume_char(cursor, '}')) {
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
+static GHashTable *checkers_puzzle_progress_build_status_map_from_attempts(const GPtrArray *records) {
+  g_return_val_if_fail(records != NULL, NULL);
+
+  GHashTable *status_map =
+      g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)checkers_puzzle_status_entry_free);
+  for (guint i = 0; i < records->len; i++) {
+    CheckersPuzzleAttemptRecord *record = g_ptr_array_index((GPtrArray *)records, i);
+    if (!checkers_puzzle_attempt_record_is_resolved(record) || record->puzzle_id == NULL) {
+      continue;
+    }
+
+    CheckersPuzzleStatusEntry *entry = g_hash_table_lookup(status_map, record->puzzle_id);
+    if (entry == NULL) {
+      entry = g_new0(CheckersPuzzleStatusEntry, 1);
+      entry->puzzle_id = g_strdup(record->puzzle_id);
+      entry->puzzle_ruleset = record->puzzle_ruleset;
+      entry->puzzle_number = record->puzzle_number;
+      entry->status = CHECKERS_PUZZLE_STATUS_UNTRIED;
+      g_hash_table_insert(status_map, g_strdup(entry->puzzle_id), entry);
+    }
+
+    entry->puzzle_ruleset = record->puzzle_ruleset;
+    entry->puzzle_number = record->puzzle_number;
+    if (record->finished_unix_ms > entry->last_finished_unix_ms) {
+      entry->last_finished_unix_ms = record->finished_unix_ms;
+    }
+    if (record->result == CHECKERS_PUZZLE_ATTEMPT_RESULT_SUCCESS) {
+      entry->status = CHECKERS_PUZZLE_STATUS_SOLVED;
+      continue;
+    }
+    if (entry->status != CHECKERS_PUZZLE_STATUS_SOLVED) {
+      entry->status = CHECKERS_PUZZLE_STATUS_FAILED;
+    }
+  }
+
+  return status_map;
+}
+
+static gint checkers_puzzle_progress_status_entry_compare(gconstpointer left, gconstpointer right) {
+  const CheckersPuzzleStatusEntry *entry_left = *(const CheckersPuzzleStatusEntry *const *)left;
+  const CheckersPuzzleStatusEntry *entry_right = *(const CheckersPuzzleStatusEntry *const *)right;
+  g_return_val_if_fail(entry_left != NULL, 0);
+  g_return_val_if_fail(entry_right != NULL, 0);
+
+  if (entry_left->puzzle_ruleset < entry_right->puzzle_ruleset) {
+    return -1;
+  }
+  if (entry_left->puzzle_ruleset > entry_right->puzzle_ruleset) {
+    return 1;
+  }
+  if (entry_left->puzzle_number < entry_right->puzzle_number) {
+    return -1;
+  }
+  if (entry_left->puzzle_number > entry_right->puzzle_number) {
+    return 1;
+  }
+
+  return g_strcmp0(entry_left->puzzle_id, entry_right->puzzle_id);
+}
+
+static gboolean checkers_puzzle_progress_store_write_status_locked(CheckersPuzzleProgressStore *store,
+                                                                  GHashTable *status_map,
+                                                                  GError **error) {
+  g_return_val_if_fail(store != NULL, FALSE);
+  g_return_val_if_fail(status_map != NULL, FALSE);
+
+  g_autofree char *status_path = checkers_puzzle_progress_store_build_path(store, checkers_puzzle_progress_status_name);
+  g_autoptr(GString) content = g_string_new("{\"schema_version\":1,\"puzzles\":[");
+  g_autoptr(GPtrArray) entries =
+      g_ptr_array_new_with_free_func((GDestroyNotify)checkers_puzzle_status_entry_free);
+  GHashTableIter iter;
+  gpointer value = NULL;
+  g_hash_table_iter_init(&iter, status_map);
+  while (g_hash_table_iter_next(&iter, NULL, &value)) {
+    CheckersPuzzleStatusEntry *entry = value;
+    g_ptr_array_add(entries, checkers_puzzle_status_entry_copy(entry));
+  }
+  g_ptr_array_sort(entries, checkers_puzzle_progress_status_entry_compare);
+  for (guint i = 0; i < entries->len; i++) {
+    CheckersPuzzleStatusEntry *entry = g_ptr_array_index(entries, i);
+    if (i > 0) {
+      g_string_append_c(content, ',');
+    }
+    if (!checkers_puzzle_progress_append_status_entry_json(content, entry)) {
+      g_set_error(error, G_FILE_ERROR, G_FILE_ERROR_INVAL, "Failed to serialize puzzle status entry");
+      return FALSE;
+    }
+  }
+  g_string_append(content, "]}");
+  return checkers_puzzle_progress_store_write_text(store, status_path, content->str, error);
+}
+
+static GHashTable *checkers_puzzle_progress_store_load_status_file_locked(CheckersPuzzleProgressStore *store,
+                                                                          GError **error) {
+  g_return_val_if_fail(store != NULL, NULL);
+
+  g_autofree char *status_path = checkers_puzzle_progress_store_build_path(store, checkers_puzzle_progress_status_name);
+  if (!g_file_test(status_path, G_FILE_TEST_EXISTS)) {
+    return NULL;
+  }
+
+  g_autofree char *contents = NULL;
+  if (!g_file_get_contents(status_path, &contents, NULL, error)) {
+    return NULL;
+  }
+
+  const char *cursor = contents;
+  guint schema_version = 0;
+  g_autofree char *key = NULL;
+  if (!checkers_puzzle_progress_consume_char(&cursor, '{') ||
+      !checkers_puzzle_progress_parse_json_string(&cursor, &key) || g_strcmp0(key, "schema_version") != 0 ||
+      !checkers_puzzle_progress_consume_char(&cursor, ':') ||
+      !checkers_puzzle_progress_parse_uint(&cursor, &schema_version) || schema_version != 1 ||
+      !checkers_puzzle_progress_consume_char(&cursor, ',') ||
+      !checkers_puzzle_progress_parse_json_string(&cursor, &key) || g_strcmp0(key, "puzzles") != 0 ||
+      !checkers_puzzle_progress_consume_char(&cursor, ':') ||
+      !checkers_puzzle_progress_consume_char(&cursor, '[')) {
+    g_set_error(error, G_FILE_ERROR, G_FILE_ERROR_INVAL, "Failed to parse puzzle status cache");
+    return NULL;
+  }
+
+  GHashTable *status_map =
+      g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)checkers_puzzle_status_entry_free);
+  checkers_puzzle_progress_skip_ws(&cursor);
+  while (*cursor != ']') {
+    CheckersPuzzleStatusEntry *entry = g_new0(CheckersPuzzleStatusEntry, 1);
+    if (!checkers_puzzle_progress_parse_status_entry(&cursor, entry)) {
+      checkers_puzzle_status_entry_free(entry);
+      g_hash_table_unref(status_map);
+      g_set_error(error, G_FILE_ERROR, G_FILE_ERROR_INVAL, "Failed to parse puzzle status entry");
+      return NULL;
+    }
+    g_hash_table_insert(status_map, g_strdup(entry->puzzle_id), entry);
+    checkers_puzzle_progress_skip_ws(&cursor);
+    if (*cursor == ',') {
+      cursor++;
+      checkers_puzzle_progress_skip_ws(&cursor);
+    } else if (*cursor != ']') {
+      g_hash_table_unref(status_map);
+      g_set_error(error, G_FILE_ERROR, G_FILE_ERROR_INVAL, "Malformed puzzle status cache");
+      return NULL;
+    }
+  }
+
+  if (!checkers_puzzle_progress_consume_char(&cursor, ']') ||
+      !checkers_puzzle_progress_consume_char(&cursor, '}')) {
+    g_hash_table_unref(status_map);
+    g_set_error(error, G_FILE_ERROR, G_FILE_ERROR_INVAL, "Malformed puzzle status cache trailer");
+    return NULL;
+  }
+  return status_map;
+}
+
+static void checkers_puzzle_progress_store_sync_status_from_history_locked(CheckersPuzzleProgressStore *store) {
+  g_return_if_fail(store != NULL);
+
+  g_autoptr(GError) error = NULL;
+  g_autoptr(GPtrArray) records = checkers_puzzle_progress_store_load_attempt_history_locked(store, &error);
+  if (records == NULL) {
+    g_debug("Failed to rebuild puzzle status cache from history: %s",
+            error != NULL ? error->message : "unknown error");
+    return;
+  }
+
+  g_autoptr(GHashTable) status_map = checkers_puzzle_progress_build_status_map_from_attempts(records);
+  if (!checkers_puzzle_progress_store_write_status_locked(store, status_map, &error)) {
+    g_debug("Failed to write puzzle status cache: %s", error != NULL ? error->message : "unknown error");
+  }
+}
+
 static gboolean checkers_puzzle_progress_store_write_history_locked(CheckersPuzzleProgressStore *store,
                                                                    const GPtrArray *records,
                                                                    GError **error) {
@@ -662,6 +953,15 @@ char *checkers_puzzle_progress_store_get_history_path(CheckersPuzzleProgressStor
   return g_steal_pointer(&path);
 }
 
+char *checkers_puzzle_progress_store_get_status_path(CheckersPuzzleProgressStore *store) {
+  g_return_val_if_fail(store != NULL, NULL);
+
+  g_mutex_lock(&store->mutex);
+  g_autofree char *path = checkers_puzzle_progress_store_build_path(store, checkers_puzzle_progress_status_name);
+  g_mutex_unlock(&store->mutex);
+  return g_steal_pointer(&path);
+}
+
 char *checkers_puzzle_progress_store_get_or_create_user_id(CheckersPuzzleProgressStore *store, GError **error) {
   g_return_val_if_fail(store != NULL, NULL);
 
@@ -718,6 +1018,9 @@ gboolean checkers_puzzle_progress_store_append_attempt(CheckersPuzzleProgressSto
 
   g_ptr_array_add(records, checkers_puzzle_attempt_record_copy(record));
   gboolean ok = checkers_puzzle_progress_store_write_history_locked(store, records, error);
+  if (ok) {
+    checkers_puzzle_progress_store_sync_status_from_history_locked(store);
+  }
   g_mutex_unlock(&store->mutex);
   return ok;
 }
@@ -761,6 +1064,9 @@ gboolean checkers_puzzle_progress_store_replace_attempt(CheckersPuzzleProgressSt
   }
 
   gboolean ok = checkers_puzzle_progress_store_write_history_locked(store, records, error);
+  if (ok) {
+    checkers_puzzle_progress_store_sync_status_from_history_locked(store);
+  }
   g_mutex_unlock(&store->mutex);
   return ok;
 }
@@ -830,6 +1136,33 @@ gboolean checkers_puzzle_progress_store_mark_reported(CheckersPuzzleProgressStor
   return ok;
 }
 
+GHashTable *checkers_puzzle_progress_store_load_status_map(CheckersPuzzleProgressStore *store, GError **error) {
+  g_return_val_if_fail(store != NULL, NULL);
+
+  g_mutex_lock(&store->mutex);
+  g_autoptr(GError) local_error = NULL;
+  GHashTable *status_map = checkers_puzzle_progress_store_load_status_file_locked(store, &local_error);
+  if (status_map == NULL) {
+    if (local_error != NULL) {
+      g_debug("Rebuilding puzzle status cache from history: %s", local_error->message);
+    }
+
+    g_autoptr(GPtrArray) records = checkers_puzzle_progress_store_load_attempt_history_locked(store, error);
+    if (records == NULL) {
+      g_mutex_unlock(&store->mutex);
+      return NULL;
+    }
+    status_map = checkers_puzzle_progress_build_status_map_from_attempts(records);
+    g_autoptr(GError) write_error = NULL;
+    if (!checkers_puzzle_progress_store_write_status_locked(store, status_map, &write_error)) {
+      g_debug("Failed to persist rebuilt puzzle status cache: %s",
+              write_error != NULL ? write_error->message : "unknown error");
+    }
+  }
+  g_mutex_unlock(&store->mutex);
+  return status_map;
+}
+
 CheckersPuzzleAttemptRecord *checkers_puzzle_attempt_record_copy(const CheckersPuzzleAttemptRecord *record) {
   g_return_val_if_fail(record != NULL, NULL);
 
@@ -859,12 +1192,50 @@ void checkers_puzzle_attempt_record_clear(CheckersPuzzleAttemptRecord *record) {
   *record = (CheckersPuzzleAttemptRecord){0};
 }
 
+CheckersPuzzleStatusEntry *checkers_puzzle_status_entry_copy(const CheckersPuzzleStatusEntry *entry) {
+  g_return_val_if_fail(entry != NULL, NULL);
+
+  CheckersPuzzleStatusEntry *copy = g_new0(CheckersPuzzleStatusEntry, 1);
+  *copy = *entry;
+  copy->puzzle_id = g_strdup(entry->puzzle_id);
+  return copy;
+}
+
+void checkers_puzzle_status_entry_free(CheckersPuzzleStatusEntry *entry) {
+  if (entry == NULL) {
+    return;
+  }
+
+  g_clear_pointer(&entry->puzzle_id, g_free);
+  g_free(entry);
+}
+
 gboolean checkers_puzzle_attempt_record_is_resolved(const CheckersPuzzleAttemptRecord *record) {
   g_return_val_if_fail(record != NULL, FALSE);
 
   return record->result == CHECKERS_PUZZLE_ATTEMPT_RESULT_SUCCESS ||
          record->result == CHECKERS_PUZZLE_ATTEMPT_RESULT_FAILURE ||
          record->result == CHECKERS_PUZZLE_ATTEMPT_RESULT_ANALYZE;
+}
+
+CheckersPuzzleStatus checkers_puzzle_progress_reduce_status_for_attempts(const GPtrArray *attempts,
+                                                                         const char *puzzle_id) {
+  g_return_val_if_fail(attempts != NULL, CHECKERS_PUZZLE_STATUS_UNTRIED);
+  g_return_val_if_fail(puzzle_id != NULL, CHECKERS_PUZZLE_STATUS_UNTRIED);
+
+  gboolean saw_failure_like_attempt = FALSE;
+  for (guint i = 0; i < attempts->len; i++) {
+    CheckersPuzzleAttemptRecord *record = g_ptr_array_index((GPtrArray *)attempts, i);
+    if (g_strcmp0(record->puzzle_id, puzzle_id) != 0 || !checkers_puzzle_attempt_record_is_resolved(record)) {
+      continue;
+    }
+    if (record->result == CHECKERS_PUZZLE_ATTEMPT_RESULT_SUCCESS) {
+      return CHECKERS_PUZZLE_STATUS_SOLVED;
+    }
+    saw_failure_like_attempt = TRUE;
+  }
+
+  return saw_failure_like_attempt ? CHECKERS_PUZZLE_STATUS_FAILED : CHECKERS_PUZZLE_STATUS_UNTRIED;
 }
 
 char *checkers_puzzle_progress_build_upload_json(const char *user_id, const GPtrArray *attempt_history) {

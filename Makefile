@@ -27,6 +27,7 @@ CALLGRIND_DIR := $(BUILD_DIR)/callgrind
 
 APP_PATHS_SRCS := src/app_paths.c
 PUZZLE_PROGRESS_SRCS := src/puzzle_progress.c
+PUZZLE_CATALOG_SRCS := src/puzzle_catalog.c
 SRCS := src/board.c src/board_geometry.c src/game.c src/game_print.c src/move_gen.c src/ai_alpha_beta.c \
 	src/rulesets.c \
 	src/ai_transposition_table.c src/ai_zobrist.c src/checkers_model.c
@@ -99,6 +100,7 @@ TEST_PLAYER_CONTROLS_PANEL_BIN := $(TESTS_DIR)/test_player_controls_panel
 TEST_SGF_CONTROLLER_BIN := $(TESTS_DIR)/test_sgf_controller
 TEST_WINDOW_BIN := $(TESTS_DIR)/test_window
 TEST_PUZZLE_GENERATION_BIN := $(TESTS_DIR)/test_puzzle_generation
+TEST_PUZZLE_CATALOG_BIN := $(TESTS_DIR)/test_puzzle_catalog
 TEST_PIECE_PALETTE_BIN := $(TESTS_DIR)/test_piece_palette
 TEST_PUZZLE_PROGRESS_BIN := $(TESTS_DIR)/test_puzzle_progress
 TEST_PUZZLE_PROGRESS_REPORT_SERVER_BIN := $(TESTS_DIR)/test_puzzle_progress_report_server
@@ -113,8 +115,9 @@ PROFILE_CMD = $(PROFILE_BIN) $(PROFILE_ARGS)
 	test_game test_game_print test_board test_board_geometry test_move_gen test_create_puzzles_cli test_create_puzzles_check \
 	test_checkers_model test_ai_transposition_table test_position_search test_position_predicate test_bga_client \
 	test_file_dialog_history test_app_settings test_app_paths test_desktop_metadata test_flatpak_manifest test_sgf_tree test_sgf_io \
-	test_sgf_view test_board_view test_player_controls_panel test_sgf_controller test_window test_puzzle_generation \
-	test_piece_palette test_puzzle_progress test_puzzle_progress_report_server callgrind-run callgrind-annotate
+	test_sgf_view test_board_view test_player_controls_panel test_sgf_controller test_window test_puzzle_generation test_puzzle_catalog \
+	test_piece_palette test_puzzle_progress test_puzzle_progress_report_server callgrind-run \
+	callgrind-annotate
 
 all: $(GSETTINGS_SCHEMA_COMPILED) $(LIBGAME_A) $(CREATE_PUZZLES_BIN) $(FIND_POSITION_BIN) $(GCHECKERS_BIN)
 
@@ -137,7 +140,7 @@ test: $(TEST_GAME_BIN) $(TEST_GAME_PRINT_BIN) $(TEST_BOARD_BIN) $(TEST_BOARD_GEO
 	$(TEST_SGF_IO_BIN) $(TEST_SGF_VIEW_BIN) $(TEST_BGA_CLIENT_BIN) $(TEST_FILE_DIALOG_HISTORY_BIN) \
 	$(TEST_APP_SETTINGS_BIN) $(TEST_APP_PATHS_BIN) $(TEST_BOARD_VIEW_BIN) $(TEST_PLAYER_CONTROLS_PANEL_BIN) $(TEST_SGF_CONTROLLER_BIN) \
 	$(TEST_WINDOW_BIN) $(TEST_CREATE_PUZZLES_CLI_BIN) $(TEST_CREATE_PUZZLES_CHECK_BIN) $(TEST_DESKTOP_METADATA_BIN) \
-	$(TEST_FLATPAK_MANIFEST_BIN) $(TEST_PUZZLE_GENERATION_BIN) $(TEST_PIECE_PALETTE_BIN)
+	$(TEST_FLATPAK_MANIFEST_BIN) $(TEST_PUZZLE_GENERATION_BIN) $(TEST_PUZZLE_CATALOG_BIN) $(TEST_PIECE_PALETTE_BIN)
 	$(TEST_GAME_BIN)
 	$(TEST_GAME_PRINT_BIN)
 	$(TEST_BOARD_BIN)
@@ -159,6 +162,7 @@ test: $(TEST_GAME_BIN) $(TEST_GAME_PRINT_BIN) $(TEST_BOARD_BIN) $(TEST_BOARD_GEO
 	$(TEST_CREATE_PUZZLES_CLI_BIN)
 	$(TEST_CREATE_PUZZLES_CHECK_BIN)
 	$(TEST_PUZZLE_GENERATION_BIN)
+	$(TEST_PUZZLE_CATALOG_BIN)
 	$(TEST_BOARD_VIEW_BIN)
 	$(TEST_PLAYER_CONTROLS_PANEL_BIN)
 	$(TEST_SGF_CONTROLLER_BIN)
@@ -392,7 +396,8 @@ $(TEST_SGF_CONTROLLER_BIN): tests/test_sgf_controller.c src/sgf_controller.c src
 
 test_window: $(TEST_WINDOW_BIN)
 $(TEST_WINDOW_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_window.c src/window.c src/application.c \
-	src/application.h $(APP_PATHS_SRCS) $(PUZZLE_PROGRESS_SRCS) src/app_settings.c src/app_settings.h \
+	src/application.h $(APP_PATHS_SRCS) $(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c \
+	src/app_settings.h \
 	src/new_game_dialog.c src/puzzle_dialog.c src/puzzle_dialog.h src/rulesets.c src/rulesets.h \
 	src/import_dialog.c src/settings_dialog.c src/settings_dialog.h src/sgf_file_actions.c \
 	src/sgf_file_actions.h src/file_dialog_history.c src/file_dialog_history.h src/bga_client.c src/bga_client.h \
@@ -409,7 +414,7 @@ $(TEST_WINDOW_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_window.c src/window.
 	$(SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_window.c src/application.c src/window.c \
-		$(APP_PATHS_SRCS) $(PUZZLE_PROGRESS_SRCS) src/app_settings.c \
+		$(APP_PATHS_SRCS) $(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c \
 		src/new_game_dialog.c src/puzzle_dialog.c src/import_dialog.c src/settings_dialog.c src/file_dialog_history.c \
 		src/sgf_file_actions.c src/bga_client.c src/style.c src/player_controls_panel.c \
 		src/sgf_controller.c src/analysis_graph.c src/board_view.c src/board_grid.c src/board_square.c \
@@ -424,6 +429,13 @@ $(TEST_PUZZLE_GENERATION_BIN): tests/test_puzzle_generation.c src/puzzle_generat
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_puzzle_generation.c src/puzzle_generation.c $(LDLIBS)
 
+test_puzzle_catalog: $(TEST_PUZZLE_CATALOG_BIN)
+$(TEST_PUZZLE_CATALOG_BIN): tests/test_puzzle_catalog.c $(APP_PATHS_SRCS) $(PUZZLE_CATALOG_SRCS) \
+	src/puzzle_catalog.h src/app_paths.h src/rulesets.c src/rulesets.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -o $@ tests/test_puzzle_catalog.c $(APP_PATHS_SRCS) $(PUZZLE_CATALOG_SRCS) src/rulesets.c \
+		$(LDLIBS)
+
 test_piece_palette: $(TEST_PIECE_PALETTE_BIN)
 $(TEST_PIECE_PALETTE_BIN): tests/test_piece_palette.c src/piece_palette.c src/piece_palette.h \
 	src/man_paintable.c src/man_paintable.h src/board.h src/checkers_constants.h
@@ -432,7 +444,8 @@ $(TEST_PIECE_PALETTE_BIN): tests/test_piece_palette.c src/piece_palette.c src/pi
 		src/man_paintable.c $(LDLIBS) $(GTK_LIBS)
 
 $(GCHECKERS_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c src/application.c src/window.c $(APP_PATHS_SRCS) \
-	$(PUZZLE_PROGRESS_SRCS) src/app_settings.c src/app_settings.h src/settings_dialog.c src/settings_dialog.h \
+	$(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c src/app_settings.h src/settings_dialog.c \
+	src/settings_dialog.h \
 	src/new_game_dialog.c src/puzzle_dialog.c src/puzzle_dialog.h src/rulesets.c src/rulesets.h \
 	src/import_dialog.c src/sgf_file_actions.c \
 	src/sgf_file_actions.h src/file_dialog_history.c src/file_dialog_history.h src/bga_client.c src/bga_client.h \
@@ -449,7 +462,7 @@ $(GCHECKERS_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c src/application.c
 	$(SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/gcheckers.c src/application.c $(APP_PATHS_SRCS) \
-		$(PUZZLE_PROGRESS_SRCS) src/app_settings.c src/window.c src/settings_dialog.c \
+		$(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c src/window.c src/settings_dialog.c \
 		src/new_game_dialog.c src/puzzle_dialog.c src/import_dialog.c src/file_dialog_history.c src/style.c \
 		src/player_controls_panel.c src/analysis_graph.c src/sgf_file_actions.c src/bga_client.c \
 		src/sgf_controller.c src/board_view.c src/board_grid.c src/board_square.c src/board_move_overlay.c \

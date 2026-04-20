@@ -30,7 +30,9 @@ void gcheckers_window_force_move(GCheckersWindow *self);
 char *gcheckers_window_format_analysis_score(gint score);
 char *gcheckers_window_format_analysis_report(const SgfNodeAnalysis *analysis);
 PlayerRuleset gcheckers_window_get_ruleset(GCheckersWindow *self);
-gboolean gcheckers_window_start_random_puzzle_mode_for_ruleset(GCheckersWindow *self, PlayerRuleset ruleset);
+gboolean gcheckers_window_start_puzzle_mode_for_path(GCheckersWindow *self,
+                                                     PlayerRuleset ruleset,
+                                                     const char *path);
 void gcheckers_window_apply_new_game_settings(GCheckersWindow *self,
                                               PlayerRuleset ruleset,
                                               PlayerControlMode white_mode,

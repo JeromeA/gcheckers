@@ -69,3 +69,15 @@ local history file for later reporting.
 The fix adds a dedicated `src/puzzle_progress.c` module with a stable user ID, JSONL attempt history, threshold logic,
 and upload payload construction. `GCheckersApplication` now owns the shared store and background flush requests, while
 `GCheckersWindow` records one attempt per puzzle entry once the user actually makes a move.
+
+## Puzzle continuation still used a random chooser after direct puzzle selection landed
+
+Once the puzzle picker grid let the user choose an exact numbered puzzle, continuing from `Next puzzle` should have
+stayed inside that ordered puzzle list instead of jumping to an unrelated random puzzle.
+
+The dialog flow was updated to launch an explicit path, but the `Next puzzle` button still called the older random
+ruleset helper. That left one remaining runtime path that ignored the selected puzzle order, so finishing puzzle 1
+could jump straight to puzzle 27.
+
+The fix removes that random continuation path and makes `Next puzzle` walk the sorted ruleset catalog in order,
+wrapping only after the last puzzle in that variant.

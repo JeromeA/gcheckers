@@ -36,6 +36,13 @@ static CheckersPuzzleAttemptRecord test_puzzle_progress_make_record(const char *
   return record;
 }
 
+static CheckersPuzzleStatusEntry *test_puzzle_progress_lookup_status(GHashTable *status_map, const char *puzzle_id) {
+  g_return_val_if_fail(status_map != NULL, NULL);
+  g_return_val_if_fail(puzzle_id != NULL, NULL);
+
+  return g_hash_table_lookup(status_map, puzzle_id);
+}
+
 static void test_puzzle_progress_user_id_persists(void) {
   g_setenv("GSETTINGS_BACKEND", "memory", TRUE);
   g_autofree char *state_dir = test_puzzle_progress_make_state_dir();
@@ -251,6 +258,102 @@ static void test_puzzle_progress_build_upload_json_formats_expected_records(void
   checkers_puzzle_attempt_record_clear(&analyze);
 }
 
+static void test_puzzle_progress_reduce_status_prefers_success(void) {
+  g_autoptr(GPtrArray) history =
+      g_ptr_array_new_with_free_func((GDestroyNotify)checkers_puzzle_attempt_record_free);
+
+  CheckersPuzzleAttemptRecord failure =
+      test_puzzle_progress_make_record("attempt-failure", CHECKERS_PUZZLE_ATTEMPT_RESULT_FAILURE);
+  CheckersPuzzleAttemptRecord success =
+      test_puzzle_progress_make_record("attempt-success", CHECKERS_PUZZLE_ATTEMPT_RESULT_SUCCESS);
+  g_ptr_array_add(history, checkers_puzzle_attempt_record_copy(&failure));
+  g_ptr_array_add(history, checkers_puzzle_attempt_record_copy(&success));
+
+  g_assert_cmpint(checkers_puzzle_progress_reduce_status_for_attempts(history, "international/puzzle-0007.sgf"),
+                  ==,
+                  CHECKERS_PUZZLE_STATUS_SOLVED);
+
+  checkers_puzzle_attempt_record_clear(&failure);
+  checkers_puzzle_attempt_record_clear(&success);
+}
+
+static void test_puzzle_progress_status_map_tracks_terminal_results(void) {
+  g_autofree char *state_dir = test_puzzle_progress_make_state_dir();
+  CheckersPuzzleProgressStore *store = checkers_puzzle_progress_store_new(state_dir);
+  g_autoptr(GError) error = NULL;
+
+  CheckersPuzzleAttemptRecord unresolved =
+      test_puzzle_progress_make_record("attempt-status", CHECKERS_PUZZLE_ATTEMPT_RESULT_UNRESOLVED);
+  g_assert_true(checkers_puzzle_progress_store_append_attempt(store, &unresolved, &error));
+  g_assert_no_error(error);
+
+  g_autoptr(GHashTable) status_map = checkers_puzzle_progress_store_load_status_map(store, &error);
+  g_assert_no_error(error);
+  g_assert_null(test_puzzle_progress_lookup_status(status_map, "international/puzzle-0007.sgf"));
+
+  CheckersPuzzleAttemptRecord analyze =
+      test_puzzle_progress_make_record("attempt-status", CHECKERS_PUZZLE_ATTEMPT_RESULT_ANALYZE);
+  g_assert_true(checkers_puzzle_progress_store_replace_attempt(store, &analyze, &error));
+  g_assert_no_error(error);
+
+  g_clear_pointer(&status_map, g_hash_table_unref);
+  status_map = checkers_puzzle_progress_store_load_status_map(store, &error);
+  g_assert_no_error(error);
+  CheckersPuzzleStatusEntry *entry =
+      test_puzzle_progress_lookup_status(status_map, "international/puzzle-0007.sgf");
+  g_assert_nonnull(entry);
+  g_assert_cmpint(entry->status, ==, CHECKERS_PUZZLE_STATUS_FAILED);
+
+  CheckersPuzzleAttemptRecord success =
+      test_puzzle_progress_make_record("attempt-status", CHECKERS_PUZZLE_ATTEMPT_RESULT_SUCCESS);
+  g_assert_true(checkers_puzzle_progress_store_replace_attempt(store, &success, &error));
+  g_assert_no_error(error);
+
+  g_clear_pointer(&status_map, g_hash_table_unref);
+  status_map = checkers_puzzle_progress_store_load_status_map(store, &error);
+  g_assert_no_error(error);
+  entry = test_puzzle_progress_lookup_status(status_map, "international/puzzle-0007.sgf");
+  g_assert_nonnull(entry);
+  g_assert_cmpint(entry->status, ==, CHECKERS_PUZZLE_STATUS_SOLVED);
+
+  checkers_puzzle_attempt_record_clear(&unresolved);
+  checkers_puzzle_attempt_record_clear(&analyze);
+  checkers_puzzle_attempt_record_clear(&success);
+  checkers_puzzle_progress_store_unref(store);
+  g_unsetenv("GCHECKERS_PUZZLE_PROGRESS_DIR");
+}
+
+static void test_puzzle_progress_status_map_rebuilds_from_corrupt_cache(void) {
+  g_autofree char *state_dir = test_puzzle_progress_make_state_dir();
+  CheckersPuzzleProgressStore *store = checkers_puzzle_progress_store_new(state_dir);
+  g_autoptr(GError) error = NULL;
+
+  CheckersPuzzleAttemptRecord success =
+      test_puzzle_progress_make_record("attempt-corrupt", CHECKERS_PUZZLE_ATTEMPT_RESULT_SUCCESS);
+  g_assert_true(checkers_puzzle_progress_store_append_attempt(store, &success, &error));
+  g_assert_no_error(error);
+
+  g_autofree char *status_path = checkers_puzzle_progress_store_get_status_path(store);
+  g_assert_true(g_file_set_contents(status_path, "{not-json", -1, &error));
+  g_assert_no_error(error);
+
+  g_autoptr(GHashTable) status_map = checkers_puzzle_progress_store_load_status_map(store, &error);
+  g_assert_no_error(error);
+  CheckersPuzzleStatusEntry *entry =
+      test_puzzle_progress_lookup_status(status_map, "international/puzzle-0007.sgf");
+  g_assert_nonnull(entry);
+  g_assert_cmpint(entry->status, ==, CHECKERS_PUZZLE_STATUS_SOLVED);
+
+  g_autofree char *rebuilt_text = NULL;
+  g_assert_true(g_file_get_contents(status_path, &rebuilt_text, NULL, &error));
+  g_assert_no_error(error);
+  g_assert_nonnull(strstr(rebuilt_text, "\"status\":\"solved\""));
+
+  checkers_puzzle_attempt_record_clear(&success);
+  checkers_puzzle_progress_store_unref(store);
+  g_unsetenv("GCHECKERS_PUZZLE_PROGRESS_DIR");
+}
+
 static void test_puzzle_progress_empty_history_is_safe(void) {
   g_autofree char *state_dir = test_puzzle_progress_make_state_dir();
   CheckersPuzzleProgressStore *store = checkers_puzzle_progress_store_new(state_dir);
@@ -278,6 +381,12 @@ int main(int argc, char **argv) {
   g_test_add_func("/puzzle-progress/unsent-and-thresholds", test_puzzle_progress_collect_unsent_and_thresholds);
   g_test_add_func("/puzzle-progress/mark-reported", test_puzzle_progress_mark_reported_without_deleting_history);
   g_test_add_func("/puzzle-progress/build-upload-json", test_puzzle_progress_build_upload_json_formats_expected_records);
+  g_test_add_func("/puzzle-progress/reduce-status-prefers-success",
+                  test_puzzle_progress_reduce_status_prefers_success);
+  g_test_add_func("/puzzle-progress/status-map-tracks-terminal-results",
+                  test_puzzle_progress_status_map_tracks_terminal_results);
+  g_test_add_func("/puzzle-progress/status-map-rebuilds-from-corrupt-cache",
+                  test_puzzle_progress_status_map_rebuilds_from_corrupt_cache);
   g_test_add_func("/puzzle-progress/empty-history", test_puzzle_progress_empty_history_is_safe);
   return g_test_run();
 }

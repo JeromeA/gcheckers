@@ -15,6 +15,12 @@ typedef enum {
   CHECKERS_PUZZLE_ATTEMPT_RESULT_ANALYZE,
 } CheckersPuzzleAttemptResult;
 
+typedef enum {
+  CHECKERS_PUZZLE_STATUS_UNTRIED = 0,
+  CHECKERS_PUZZLE_STATUS_FAILED,
+  CHECKERS_PUZZLE_STATUS_SOLVED,
+} CheckersPuzzleStatus;
+
 typedef struct {
   char *attempt_id;
   char *puzzle_id;
@@ -32,6 +38,14 @@ typedef struct {
   guint report_count;
 } CheckersPuzzleAttemptRecord;
 
+typedef struct {
+  char *puzzle_id;
+  PlayerRuleset puzzle_ruleset;
+  guint puzzle_number;
+  CheckersPuzzleStatus status;
+  gint64 last_finished_unix_ms;
+} CheckersPuzzleStatusEntry;
+
 typedef struct _CheckersPuzzleProgressStore CheckersPuzzleProgressStore;
 
 CheckersPuzzleProgressStore *checkers_puzzle_progress_store_new(const char *state_dir);
@@ -40,6 +54,7 @@ void checkers_puzzle_progress_store_unref(CheckersPuzzleProgressStore *store);
 
 char *checkers_puzzle_progress_store_dup_state_dir(CheckersPuzzleProgressStore *store);
 char *checkers_puzzle_progress_store_get_history_path(CheckersPuzzleProgressStore *store);
+char *checkers_puzzle_progress_store_get_status_path(CheckersPuzzleProgressStore *store);
 char *checkers_puzzle_progress_store_get_or_create_user_id(CheckersPuzzleProgressStore *store, GError **error);
 
 gboolean checkers_puzzle_progress_store_append_attempt(CheckersPuzzleProgressStore *store,
@@ -53,12 +68,17 @@ GPtrArray *checkers_puzzle_progress_store_collect_unsent_attempts(CheckersPuzzle
 gboolean checkers_puzzle_progress_store_mark_reported(CheckersPuzzleProgressStore *store,
                                                       gint64 reported_unix_ms,
                                                       GError **error);
+GHashTable *checkers_puzzle_progress_store_load_status_map(CheckersPuzzleProgressStore *store, GError **error);
 
 CheckersPuzzleAttemptRecord *checkers_puzzle_attempt_record_copy(const CheckersPuzzleAttemptRecord *record);
 void checkers_puzzle_attempt_record_free(CheckersPuzzleAttemptRecord *record);
 void checkers_puzzle_attempt_record_clear(CheckersPuzzleAttemptRecord *record);
 gboolean checkers_puzzle_attempt_record_is_resolved(const CheckersPuzzleAttemptRecord *record);
 
+CheckersPuzzleStatusEntry *checkers_puzzle_status_entry_copy(const CheckersPuzzleStatusEntry *entry);
+void checkers_puzzle_status_entry_free(CheckersPuzzleStatusEntry *entry);
+CheckersPuzzleStatus checkers_puzzle_progress_reduce_status_for_attempts(const GPtrArray *attempts,
+                                                                         const char *puzzle_id);
 char *checkers_puzzle_progress_build_upload_json(const char *user_id, const GPtrArray *attempt_history);
 gboolean checkers_puzzle_progress_should_send_report(const GPtrArray *attempt_history, gint64 now_unix_ms);
 
