@@ -20,6 +20,11 @@ typedef struct {
   char *path;
 } GCheckersWindowPuzzleButtonData;
 
+typedef struct {
+  GtkScrolledWindow *scroller;
+  guint row;
+} GCheckersWindowPuzzleScrollData;
+
 static void gcheckers_window_puzzle_button_data_free(GCheckersWindowPuzzleButtonData *data) {
   if (data == NULL) {
     return;
@@ -27,6 +32,32 @@ static void gcheckers_window_puzzle_button_data_free(GCheckersWindowPuzzleButton
 
   g_clear_pointer(&data->path, g_free);
   g_free(data);
+}
+
+static void gcheckers_window_puzzle_scroll_data_free(GCheckersWindowPuzzleScrollData *data) {
+  if (data == NULL) {
+    return;
+  }
+
+  g_clear_object(&data->scroller);
+  g_free(data);
+}
+
+static gboolean gcheckers_window_puzzle_dialog_scroll_to_row_cb(gpointer user_data) {
+  GCheckersWindowPuzzleScrollData *data = user_data;
+  g_return_val_if_fail(data != NULL, G_SOURCE_REMOVE);
+  g_return_val_if_fail(GTK_IS_SCROLLED_WINDOW(data->scroller), G_SOURCE_REMOVE);
+
+  GtkAdjustment *adjustment = gtk_scrolled_window_get_vadjustment(data->scroller);
+  g_return_val_if_fail(GTK_IS_ADJUSTMENT(adjustment), G_SOURCE_REMOVE);
+
+  double target = 8.0 + (double)data->row * (52.0 + 8.0);
+  double lower = gtk_adjustment_get_lower(adjustment);
+  double upper = gtk_adjustment_get_upper(adjustment);
+  double page_size = gtk_adjustment_get_page_size(adjustment);
+  double max_value = MAX(lower, upper - page_size);
+  gtk_adjustment_set_value(adjustment, CLAMP(target, lower, max_value));
+  return G_SOURCE_REMOVE;
 }
 
 static void gcheckers_window_puzzle_dialog_data_free(GCheckersWindowPuzzleDialogData *data) {
@@ -198,6 +229,8 @@ static void gcheckers_window_puzzle_dialog_rebuild_grid(GCheckersWindowPuzzleDia
   gtk_widget_set_margin_end(grid, 2);
   gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroller), grid);
 
+  guint first_untried_row = 0;
+  gboolean have_first_untried = FALSE;
   for (guint i = 0; i < entries->len; i++) {
     CheckersPuzzleCatalogEntry *entry = g_ptr_array_index(entries, i);
     g_return_if_fail(entry != NULL);
@@ -209,11 +242,25 @@ static void gcheckers_window_puzzle_dialog_rebuild_grid(GCheckersWindowPuzzleDia
         status = status_entry->status;
       }
     }
+    if (!have_first_untried && status == CHECKERS_PUZZLE_STATUS_UNTRIED) {
+      first_untried_row = i / 10;
+      have_first_untried = TRUE;
+    }
 
     GtkWidget *button =
         gcheckers_window_puzzle_dialog_create_puzzle_button(entry, ruleset, status, data);
     g_signal_connect(button, "clicked", G_CALLBACK(gcheckers_window_on_puzzle_button_clicked), NULL);
     gtk_grid_attach(GTK_GRID(grid), button, (gint)(i % 10), (gint)(i / 10), 1, 1);
+  }
+
+  if (have_first_untried && first_untried_row > 0) {
+    GCheckersWindowPuzzleScrollData *scroll_data = g_new0(GCheckersWindowPuzzleScrollData, 1);
+    scroll_data->scroller = g_object_ref(GTK_SCROLLED_WINDOW(scroller));
+    scroll_data->row = first_untried_row;
+    g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,
+                    gcheckers_window_puzzle_dialog_scroll_to_row_cb,
+                    scroll_data,
+                    (GDestroyNotify)gcheckers_window_puzzle_scroll_data_free);
   }
 }
 
