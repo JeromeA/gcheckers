@@ -1147,7 +1147,7 @@ static void test_gcheckers_window_node_selection_updates_report(void) {
 
   g_autofree char *root_text = test_gcheckers_window_get_analysis_text(window);
   g_assert_nonnull(root_text);
-  g_assert_cmpstr(root_text, ==, "No analysis saved for this node.");
+  g_assert_cmpstr(root_text, ==, "");
 
   g_clear_object(&window);
   g_clear_object(&model);

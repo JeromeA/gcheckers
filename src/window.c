@@ -1610,7 +1610,7 @@ static void gcheckers_window_show_analysis_for_current_node(GCheckersWindow *sel
     return;
   }
 
-  gcheckers_window_set_analysis_text(self, "No analysis saved for this node.");
+  gcheckers_window_set_analysis_text(self, "");
 }
 
 static gboolean gcheckers_window_should_cancel_analysis(gpointer user_data) {
