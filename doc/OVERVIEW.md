@@ -30,7 +30,8 @@ against the SGF main-line solution while auto-playing defender replies. `Next pu
 catalog for the active ruleset, wrapping to the first puzzle after the last one, and no longer selects a random
 puzzle. Puzzle `Analyze` exits puzzle mode, rewinds fully to move 0, and then starts the same full-game analysis path
 used by the Analysis menu. The current node report still follows normal SGF selection instead of being replaced by a
-generic completion message.
+generic completion message. Picker squares keep custom status colors and now define an explicit darker `:active` state
+so mouse presses remain visible even with the custom button styling.
 Puzzle mode now also records local progress for each started puzzle entry. The first completed move attempt creates an
 append-only attempt record, terminal outcomes are `success`, `failure`, or `analyze`, and the first wrong move is
 stored only when the failure happened on the very first attempted move. A started-but-unfinished puzzle entry is
