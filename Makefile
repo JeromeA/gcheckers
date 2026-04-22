@@ -315,7 +315,7 @@ test_puzzle_progress_report_server: $(TEST_PUZZLE_PROGRESS_REPORT_SERVER_BIN)
 	exit 1
 
 $(TEST_PUZZLE_PROGRESS_REPORT_SERVER_BIN): tests/test_puzzle_progress_report_server.sh \
-	tests/puzzle_progress_report_server.php tools/puzzle_progress_report_server.php
+	tests/puzzle_progress_report_server.php
 	@mkdir -p $(dir $@)
 	cp tests/test_puzzle_progress_report_server.sh $@
 	chmod +x $@

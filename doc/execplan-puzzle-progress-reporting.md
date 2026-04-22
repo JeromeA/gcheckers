@@ -151,9 +151,8 @@ GNOME_SETUP_DISPLAY make test` both succeeded in this workspace.
 The main remaining limitation is environmental rather than code-level: the repository’s standard headless GTK run on
 this machine compiles the new `test_window` puzzle cases but skips executing them because no display backend is
 available. That is now documented in `Surprises & Discoveries`, while the storage-layer tests remain mandatory and
-passing. A simple PHP fake receiver now also exists under `tests/puzzle_progress_report_server.php`, a reusable
-production endpoint lives under `tools/puzzle_progress_report_server.php`, and
-`make test_puzzle_progress_report_server` now exercises the temporary-server path end to end.
+passing. A simple PHP fake receiver now exists under `tests/puzzle_progress_report_server.php`, and
+`make test_puzzle_progress_report_server` exercises the temporary-server path end to end.
 
 ## Context and Orientation
 
