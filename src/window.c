@@ -1900,7 +1900,22 @@ static void gcheckers_window_analysis_append_scored_moves(GString *text, const S
   g_return_if_fail(analysis != NULL);
   g_return_if_fail(analysis->moves != NULL);
 
-  g_string_append(text, "Best to worst:\n");
+  gsize score_width = 0;
+  for (guint i = 0; i < analysis->moves->len; ++i) {
+    const SgfNodeScoredMove *entry = g_ptr_array_index(analysis->moves, i);
+    if (entry == NULL) {
+      continue;
+    }
+
+    g_autofree char *score_text = gcheckers_window_format_analysis_score(entry->score);
+    if (score_text == NULL) {
+      g_debug("Failed to format analysis score");
+      continue;
+    }
+
+    score_width = MAX(score_width, strlen(score_text));
+  }
+
   for (guint i = 0; i < analysis->moves->len; ++i) {
     const SgfNodeScoredMove *entry = g_ptr_array_index(analysis->moves, i);
     if (entry == NULL) {
@@ -1917,12 +1932,7 @@ static void gcheckers_window_analysis_append_scored_moves(GString *text, const S
       g_debug("Failed to format analysis score");
       continue;
     }
-    g_string_append_printf(text,
-                           "%u. %s : %s (%" G_GUINT64_FORMAT " nodes)\n",
-                           i + 1,
-                           notation,
-                           score_text,
-                           entry->nodes);
+    g_string_append_printf(text, "%*s  %s\n", (gint)score_width, score_text, notation);
   }
 }
 
@@ -1932,7 +1942,6 @@ char *gcheckers_window_format_analysis_report(const SgfNodeAnalysis *analysis) {
 
   GString *text = g_string_new(NULL);
   g_string_append_printf(text, "Analysis depth: %u\n", analysis->depth);
-  g_string_append_printf(text, "Nodes: %" G_GUINT64_FORMAT "\n", analysis->nodes);
   gcheckers_window_analysis_append_scored_moves(text, analysis);
   return g_string_free(text, FALSE);
 }

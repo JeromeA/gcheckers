@@ -58,8 +58,10 @@ static void test_analysis_report_includes_per_move_nodes(void) {
 
   g_autofree char *report = gcheckers_window_format_analysis_report(analysis);
   g_assert_nonnull(report);
-  g_assert_nonnull(strstr(report, "Nodes: 123456"));
-  g_assert_nonnull(strstr(report, "1. 13-17 : +42 (10 nodes)"));
+  g_assert_nonnull(strstr(report, "Analysis depth: 7"));
+  g_assert_nonnull(strstr(report, "+42  13-17"));
+  g_assert_null(strstr(report, "Nodes:"));
+  g_assert_null(strstr(report, " nodes)"));
 }
 
 static void test_analysis_graph_axis_range_minimum_window(void) {
@@ -1140,7 +1142,8 @@ static void test_gcheckers_window_node_selection_updates_report(void) {
   g_autofree char *analysis_text = test_gcheckers_window_get_analysis_text(window);
   g_assert_nonnull(analysis_text);
   g_assert_nonnull(strstr(analysis_text, "Analysis depth: 6"));
-  g_assert_nonnull(strstr(analysis_text, "Nodes: 321"));
+  g_assert_nonnull(strstr(analysis_text, "+42  22-18"));
+  g_assert_null(strstr(analysis_text, "Nodes:"));
 
   g_assert_true(gcheckers_sgf_controller_select_node(controller, root));
   test_gcheckers_window_drain_main_context(8);
@@ -1262,6 +1265,7 @@ static void test_gcheckers_window_puzzle_mode_solves_and_exits_to_analysis(void)
   g_assert_null(strstr(analysis_text, "Analyzing current position"));
   const char *status_text = gtk_label_get_text(GTK_LABEL(analysis_status));
   g_assert_nonnull(status_text);
+  g_assert_nonnull(strstr(status_text, "Analysis: 0/"));
   g_assert_null(strstr(status_text, "Best to worst"));
 
   g_autoptr(GPtrArray) history = test_gcheckers_window_load_attempt_history(progress_dir);
