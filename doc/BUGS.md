@@ -81,3 +81,40 @@ could jump straight to puzzle 27.
 
 The fix removes that random continuation path and makes `Next puzzle` walk the sorted ruleset catalog in order,
 wrapping only after the last puzzle in that variant.
+
+## Puzzle Analyze launched full-game analysis from the wrong node and hid the current move report
+
+Puzzle `Analyze` should leave puzzle mode, rewind to move 0, start the normal analysis flow from there, and keep
+showing whatever saved report belongs to the node currently selected.
+
+The old button handler first launched the wrong analysis mode, and later still forced an extra step to move 1 after
+the rewind. That replaced the panel text with generic whole-game progress messages such as “all moves analyzed” or
+made move 1 behave like a special case, even though puzzle analysis should follow the same full-game path as the
+regular Analysis menu.
+
+The fix rewinds fully to move 0 and starts the shared full-game analysis path. The analysis panel now preserves the
+selected node’s saved report while analysis runs, rather than replacing it with a generic full-game status message.
+
+## Analysis progress text replaced the current node report
+
+The analysis drawer should always show the saved report for the currently selected SGF node. Transient progress belongs
+in separate status UI and must not overwrite the node report itself.
+
+The window reused the same text view both for saved analysis reports and for runtime status strings such as
+“Analyzing full game...”. That meant starting analysis from a puzzle, or from any other node, could hide the current
+node’s report behind progress text until the analysis session ended.
+
+The fix adds a dedicated status label under the graph for progress updates and moves report refresh onto the normal
+SGF node-changed path. The text view now consistently follows the selected node, while status updates stay separate.
+
+## Puzzle Analyze still launched single-node analysis instead of the shared full-game path
+
+Leaving puzzle mode through `Analyze` should use the same full-game analysis path as the regular Analysis menu after a
+full rewind to the puzzle root.
+
+The puzzle button was rewinding to the first puzzle move, but then it called the current-position analysis starter
+instead of the normal full-game starter. That made move 1 look like a special case, filled the status label with the
+single-node progress/report text, and left every other node without saved analysis.
+
+The fix reuses the shared full-game analysis entry point from the puzzle button, so puzzle Analyze now produces the
+same status updates and per-node reports as a normal full-game analysis run.

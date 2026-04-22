@@ -34,6 +34,7 @@ struct _GCheckersWindow {
   GtkWidget *navigation_panel;
   GtkWidget *analysis_panel;
   GtkScale *analysis_depth_scale;
+  GtkLabel *analysis_status_label;
   GtkTextBuffer *analysis_buffer;
   BoardView *board_view;
   PlayerControlsPanel *controls_panel;
@@ -165,6 +166,8 @@ static void gcheckers_window_leave_puzzle_mode(GCheckersWindow *self, gboolean r
 static void gcheckers_window_sync_drawer_ui_with_capture(GCheckersWindow *self, gboolean capture_current_layout);
 static void gcheckers_window_stop_analysis(GCheckersWindow *self);
 static void gcheckers_window_sync_title(GCheckersWindow *self);
+static void gcheckers_window_set_analysis_status(GCheckersWindow *self, const char *text);
+static void gcheckers_window_show_analysis_for_current_node(GCheckersWindow *self);
 static gboolean gcheckers_window_puzzle_attempt_ensure_started(GCheckersWindow *self,
                                                                const CheckersMove *first_move_attempt);
 static gboolean gcheckers_window_puzzle_attempt_finish_success(GCheckersWindow *self);
@@ -174,6 +177,7 @@ static gboolean gcheckers_window_puzzle_attempt_finish_failure(GCheckersWindow *
 static gboolean gcheckers_window_puzzle_attempt_finish_analyze(GCheckersWindow *self);
 static void gcheckers_window_puzzle_attempt_reset(GCheckersWindow *self);
 static gboolean gcheckers_window_start_next_puzzle_mode_for_ruleset(GCheckersWindow *self, PlayerRuleset ruleset);
+static char *gcheckers_window_analysis_format_complete(const SgfNodeAnalysis *analysis);
 
 enum {
   GCHECKERS_WINDOW_DEFAULT_BOARD_PANEL_WIDTH = 500,
@@ -904,6 +908,7 @@ static void gcheckers_window_analysis_begin_session(GCheckersWindow *self,
   self->analysis_mode = mode;
   gcheckers_window_analysis_reset_runtime_state(self);
   self->analysis_expected_nodes = expected_nodes;
+  gcheckers_window_set_analysis_status(self, "");
   gcheckers_window_analysis_sync_ui(self);
 }
 
@@ -912,6 +917,7 @@ static void gcheckers_window_analysis_finish_session(GCheckersWindow *self) {
 
   self->analysis_mode = GCHECKERS_WINDOW_ANALYSIS_MODE_NONE;
   gcheckers_window_analysis_reset_runtime_state(self);
+  gcheckers_window_set_analysis_status(self, "");
   gcheckers_window_analysis_sync_ui(self);
 }
 
@@ -1575,6 +1581,38 @@ static void gcheckers_window_set_analysis_text(GCheckersWindow *self, const char
   gtk_text_buffer_set_text(self->analysis_buffer, text, -1);
 }
 
+static void gcheckers_window_set_analysis_status(GCheckersWindow *self, const char *text) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+
+  if (self->analysis_status_label == NULL) {
+    g_debug("Missing analysis status label");
+    return;
+  }
+
+  gtk_label_set_text(self->analysis_status_label, text != NULL ? text : "");
+}
+
+static void gcheckers_window_show_analysis_for_current_node(GCheckersWindow *self) {
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+
+  SgfTree *tree = gcheckers_sgf_controller_get_tree(self->sgf_controller);
+  const SgfNode *node = tree != NULL ? sgf_tree_get_current(tree) : NULL;
+  if (node == NULL) {
+    return;
+  }
+
+  g_autoptr(SgfNodeAnalysis) analysis = sgf_node_get_analysis(node);
+  if (analysis != NULL) {
+    g_autofree char *text = gcheckers_window_analysis_format_complete(analysis);
+    if (text != NULL) {
+      gcheckers_window_set_analysis_text(self, text);
+    }
+    return;
+  }
+
+  gcheckers_window_set_analysis_text(self, "No analysis saved for this node.");
+}
+
 static gboolean gcheckers_window_should_cancel_analysis(gpointer user_data) {
   GCheckersWindowAnalysisTask *task = user_data;
   g_return_val_if_fail(task != NULL, TRUE);
@@ -1696,7 +1734,7 @@ static gboolean gcheckers_window_analysis_dispatch_cb(gpointer user_data) {
     }
 
     if (event->status_text != NULL) {
-      gcheckers_window_set_analysis_text(self, event->status_text);
+      gcheckers_window_set_analysis_status(self, event->status_text);
       if (event->mode == GCHECKERS_WINDOW_ANALYSIS_MODE_FULL_GAME && !event->done) {
         self->analysis_processed_nodes++;
       }
@@ -1711,6 +1749,10 @@ static gboolean gcheckers_window_analysis_dispatch_cb(gpointer user_data) {
           self->analysis_last_updated_node = event->node;
         }
         gcheckers_window_refresh_analysis_graph(self);
+        SgfTree *tree = gcheckers_sgf_controller_get_tree(self->sgf_controller);
+        if (tree != NULL && sgf_tree_get_current(tree) == event->node) {
+          gcheckers_window_show_analysis_for_current_node(self);
+        }
       }
     }
 
@@ -2222,7 +2264,7 @@ static void gcheckers_window_start_analysis(GCheckersWindow *self) {
 
   gint generation = g_atomic_int_add(&self->analysis_generation, 1) + 1;
   gcheckers_window_analysis_begin_session(self, GCHECKERS_WINDOW_ANALYSIS_MODE_CURRENT, 0);
-  gcheckers_window_set_analysis_text(self, "Analyzing...");
+  gcheckers_window_set_analysis_status(self, "Analyzing current position...");
 
   GCheckersWindowAnalysisTask *task = g_new0(GCheckersWindowAnalysisTask, 1);
   task->self = g_object_ref(self);
@@ -2270,7 +2312,7 @@ static void gcheckers_window_start_full_game_analysis(GCheckersWindow *self) {
   guint depth = gcheckers_window_get_analysis_depth(self);
   gint generation = g_atomic_int_add(&self->analysis_generation, 1) + 1;
   gcheckers_window_analysis_begin_session(self, GCHECKERS_WINDOW_ANALYSIS_MODE_FULL_GAME, jobs->len);
-  gcheckers_window_set_analysis_text(self, "Analyzing full game...");
+  gcheckers_window_set_analysis_status(self, "Analyzing full game...");
 
   GCheckersWindowFullAnalysisTask *task = g_new0(GCheckersWindowFullAnalysisTask, 1);
   task->self = g_object_ref(self);
@@ -2448,20 +2490,6 @@ static void gcheckers_window_on_manual_requested(GCheckersSgfController * /*cont
   gcheckers_window_set_board_orientation_mode(self, GCHECKERS_WINDOW_BOARD_ORIENTATION_FIXED);
   player_controls_panel_set_all_user(self->controls_panel);
   gcheckers_window_update_control_state(self);
-
-  SgfTree *tree = gcheckers_sgf_controller_get_tree(self->sgf_controller);
-  const SgfNode *node = tree != NULL ? sgf_tree_get_current(tree) : NULL;
-  if (node != NULL) {
-    g_autoptr(SgfNodeAnalysis) analysis = sgf_node_get_analysis(node);
-    if (analysis != NULL) {
-      g_autofree char *text = gcheckers_window_analysis_format_complete(analysis);
-      if (text != NULL) {
-        gcheckers_window_set_analysis_text(self, text);
-      }
-    } else {
-      gcheckers_window_set_analysis_text(self, "No analysis saved for this node.");
-    }
-  }
   gcheckers_window_refresh_analysis_graph(self);
 }
 
@@ -2472,6 +2500,7 @@ static void gcheckers_window_on_sgf_node_changed(GCheckersSgfController * /*cont
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
   g_return_if_fail(node != NULL);
 
+  gcheckers_window_show_analysis_for_current_node(self);
   gcheckers_window_refresh_analysis_graph(self);
 }
 
@@ -3229,6 +3258,15 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   g_object_set_data(G_OBJECT(self), "analysis-graph", self->analysis_graph);
   gtk_box_append(GTK_BOX(analysis_panel), graph_widget);
 
+  GtkWidget *analysis_status = gtk_label_new("");
+  gtk_widget_add_css_class(analysis_status, "analysis-status");
+  gtk_widget_set_halign(analysis_status, GTK_ALIGN_START);
+  gtk_label_set_wrap(GTK_LABEL(analysis_status), TRUE);
+  gtk_label_set_xalign(GTK_LABEL(analysis_status), 0.0f);
+  gtk_box_append(GTK_BOX(analysis_panel), analysis_status);
+  self->analysis_status_label = GTK_LABEL(analysis_status);
+  g_object_set_data(G_OBJECT(self), "analysis-status-label", analysis_status);
+
   GtkWidget *analysis_scroller = gtk_scrolled_window_new();
   gtk_widget_set_hexpand(analysis_scroller, TRUE);
   gtk_widget_set_vexpand(analysis_scroller, TRUE);
@@ -3268,7 +3306,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   gcheckers_window_sync_puzzle_ui(self);
   gcheckers_window_sync_mode_ui(self);
   gcheckers_window_analysis_sync_ui(self);
-  gcheckers_window_set_analysis_text(self, "Use the Analysis menu to analyze this move or the whole game.");
+  gcheckers_window_show_analysis_for_current_node(self);
   gcheckers_window_refresh_analysis_graph(self);
 }
 

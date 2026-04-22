@@ -28,7 +28,9 @@ such as `american` or `russian`, and then loads the exact clicked `puzzle-*.sgf`
 disables SGF/review actions, shows puzzle-only `Next puzzle` and `Analyze` buttons, and validates the player's moves
 against the SGF main-line solution while auto-playing defender replies. `Next puzzle` now advances through the sorted
 catalog for the active ruleset, wrapping to the first puzzle after the last one, and no longer selects a random
-puzzle.
+puzzle. Puzzle `Analyze` exits puzzle mode, rewinds fully to move 0, and then starts the same full-game analysis path
+used by the Analysis menu. The current node report still follows normal SGF selection instead of being replaced by a
+generic completion message.
 Puzzle mode now also records local progress for each started puzzle entry. The first completed move attempt creates an
 append-only attempt record, terminal outcomes are `success`, `failure`, or `analyze`, and the first wrong move is
 stored only when the failure happened on the very first attempted move. A started-but-unfinished puzzle entry is
@@ -38,7 +40,9 @@ Puzzle entry forces a fixed attacker-at-bottom orientation, while puzzle exit re
 leaves the current board orientation unchanged.
 Adds an `Analysis` menubar submenu for current-position and whole-game analysis, plus a `View` submenu with
 independent toggles for the navigation drawer and analysis drawer; hiding both removes the entire right-side drawer
-split while preserving the board pane.
+split while preserving the board pane. The analysis drawer keeps the text report bound to the currently selected SGF
+node, and shows transient analysis progress in a separate status label under the graph instead of overwriting the
+report text.
 Panel width state is retained for the board, navigation drawer, and analysis drawer, and drawer show/hide transitions
 recompute window width plus paned positions so visible panels keep their prior widths instead of stretching.
 Puzzle mode also owns the toplevel default width while active, so foreign GTK/default-size changes are reasserted back

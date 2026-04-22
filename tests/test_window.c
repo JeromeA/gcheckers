@@ -494,6 +494,24 @@ static GtkWidget *test_gcheckers_window_get_named_widget(GCheckersWindow *window
   return GTK_WIDGET(data);
 }
 
+static char *test_gcheckers_window_get_analysis_text(GCheckersWindow *window) {
+  g_return_val_if_fail(GCHECKERS_IS_WINDOW(window), NULL);
+
+  GtkWidget *analysis_panel = test_gcheckers_window_get_named_widget(window, "analysis-panel");
+  g_return_val_if_fail(analysis_panel != NULL, NULL);
+
+  GtkWidget *analysis_view = test_gcheckers_window_find_by_type(analysis_panel, GTK_TYPE_TEXT_VIEW);
+  g_return_val_if_fail(analysis_view != NULL, NULL);
+
+  GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(analysis_view));
+  g_return_val_if_fail(buffer != NULL, NULL);
+
+  GtkTextIter start_iter;
+  GtkTextIter end_iter;
+  gtk_text_buffer_get_bounds(buffer, &start_iter, &end_iter);
+  return gtk_text_buffer_get_text(buffer, &start_iter, &end_iter, FALSE);
+}
+
 static char *test_gcheckers_window_make_progress_dir(void) {
   g_autoptr(GError) error = NULL;
   char *dir_path = g_dir_make_tmp("gcheckers-window-progress-XXXXXX", &error);
@@ -1090,6 +1108,52 @@ static void test_gcheckers_window_analysis_depth_slider_is_independent(void) {
   g_clear_object(&app);
 }
 
+static void test_gcheckers_window_node_selection_updates_report(void) {
+  GtkApplication *app = test_gcheckers_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GCheckersWindow *window = gcheckers_window_new(app, model);
+
+  GCheckersSgfController *controller = gcheckers_window_get_sgf_controller(window);
+  g_assert_nonnull(controller);
+  SgfTree *tree = gcheckers_sgf_controller_get_tree(controller);
+  g_assert_nonnull(tree);
+
+  const SgfNode *root = sgf_tree_get_root(tree);
+  g_assert_nonnull(root);
+  const SgfNode *first = sgf_tree_append_move(tree, SGF_COLOR_WHITE, "22-18");
+  g_assert_nonnull(first);
+
+  g_autoptr(SgfNodeAnalysis) analysis = sgf_node_analysis_new();
+  g_assert_nonnull(analysis);
+  analysis->depth = 6;
+  analysis->nodes = 321;
+  CheckersMove move = {0};
+  move.length = 2;
+  move.path[0] = 21;
+  move.path[1] = 17;
+  g_assert_true(sgf_node_analysis_add_scored_move(analysis, &move, 42, 11));
+  g_assert_true(sgf_node_set_analysis((SgfNode *)first, analysis));
+
+  g_assert_true(gcheckers_sgf_controller_select_node(controller, first));
+  test_gcheckers_window_drain_main_context(8);
+
+  g_autofree char *analysis_text = test_gcheckers_window_get_analysis_text(window);
+  g_assert_nonnull(analysis_text);
+  g_assert_nonnull(strstr(analysis_text, "Analysis depth: 6"));
+  g_assert_nonnull(strstr(analysis_text, "Nodes: 321"));
+
+  g_assert_true(gcheckers_sgf_controller_select_node(controller, root));
+  test_gcheckers_window_drain_main_context(8);
+
+  g_autofree char *root_text = test_gcheckers_window_get_analysis_text(window);
+  g_assert_nonnull(root_text);
+  g_assert_cmpstr(root_text, ==, "No analysis saved for this node.");
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
 static void test_gcheckers_window_puzzle_mode_solves_and_exits_to_analysis(void) {
   g_autofree char *dir_path = NULL;
   g_autofree char *progress_dir = test_gcheckers_window_make_progress_dir();
@@ -1190,16 +1254,15 @@ static void test_gcheckers_window_puzzle_mode_solves_and_exits_to_analysis(void)
   g_assert_cmpint(test_gcheckers_window_get_size_request_width(board_panel), ==, initial_board_width);
   g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 0);
   g_assert_cmpstr(gtk_window_get_title(GTK_WINDOW(window)), ==, "gcheckers - puzzle-0000.sgf");
-  GtkWidget *analysis_view = test_gcheckers_window_find_by_type(analysis_panel, GTK_TYPE_TEXT_VIEW);
-  g_assert_nonnull(analysis_view);
-  GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(analysis_view));
-  g_assert_nonnull(buffer);
-  GtkTextIter start_iter;
-  GtkTextIter end_iter;
-  gtk_text_buffer_get_bounds(buffer, &start_iter, &end_iter);
-  g_autofree char *analysis_text = gtk_text_buffer_get_text(buffer, &start_iter, &end_iter, FALSE);
+  GtkWidget *analysis_status = test_gcheckers_window_get_named_widget(window, "analysis-status-label");
+  g_assert_nonnull(analysis_status);
+  g_autofree char *analysis_text = test_gcheckers_window_get_analysis_text(window);
   g_assert_nonnull(analysis_text);
-  g_assert_nonnull(strstr(analysis_text, "Analyzing full game"));
+  g_assert_null(strstr(analysis_text, "Analyzing full game"));
+  g_assert_null(strstr(analysis_text, "Analyzing current position"));
+  const char *status_text = gtk_label_get_text(GTK_LABEL(analysis_status));
+  g_assert_nonnull(status_text);
+  g_assert_null(strstr(status_text, "Best to worst"));
 
   g_autoptr(GPtrArray) history = test_gcheckers_window_load_attempt_history(progress_dir);
   g_assert_cmpuint(history->len, ==, 1);
@@ -2072,6 +2135,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/gcheckers-window/sgf-actions-navigate", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/analysis-actions", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/analysis-depth-slider", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/node-selection-updates-report", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/settings-dialog", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/puzzle-mode", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/puzzle-first-move-failure", test_gcheckers_window_skip);
@@ -2128,6 +2192,8 @@ int main(int argc, char **argv) {
   g_test_add_func("/gcheckers-window/analysis-actions", test_gcheckers_window_analysis_actions_exist);
   g_test_add_func("/gcheckers-window/analysis-depth-slider",
                   test_gcheckers_window_analysis_depth_slider_is_independent);
+  g_test_add_func("/gcheckers-window/node-selection-updates-report",
+                  test_gcheckers_window_node_selection_updates_report);
   g_test_add_func("/gcheckers-window/settings-dialog",
                   test_gcheckers_window_settings_dialog_persists_preferences);
   g_test_add_func("/gcheckers-window/puzzle-mode", test_gcheckers_window_puzzle_mode_solves_and_exits_to_analysis);
