@@ -141,6 +141,9 @@ typedef struct {
   guint depth;
   CheckersAiTranspositionTable *tt;
   GPtrArray *jobs;
+  guint64 explored_nodes;
+  guint current_job_index;
+  gint64 last_progress_publish_us;
 } GCheckersWindowFullAnalysisTask;
 
 static void gcheckers_window_analysis_sync_ui(GCheckersWindow *self);
@@ -1940,14 +1943,22 @@ static char *gcheckers_window_analysis_format_complete(const SgfNodeAnalysis *an
 
 static char *gcheckers_window_analysis_format_full_game_status(guint completed_nodes,
                                                                guint total_nodes,
+                                                               guint64 explored_nodes,
                                                                const char *detail) {
   g_return_val_if_fail(total_nodes > 0, NULL);
 
   if (detail != NULL && *detail != '\0') {
-    return g_strdup_printf("Full-game analysis: %u/%u %s.", completed_nodes, total_nodes, detail);
+    return g_strdup_printf("Analysis: %u/%u (%" G_GUINT64_FORMAT ") %s.",
+                           completed_nodes,
+                           total_nodes,
+                           explored_nodes,
+                           detail);
   }
 
-  return g_strdup_printf("Full-game analysis: %u/%u.", completed_nodes, total_nodes);
+  return g_strdup_printf("Analysis: %u/%u (%" G_GUINT64_FORMAT ").",
+                         completed_nodes,
+                         total_nodes,
+                         explored_nodes);
 }
 
 static char *gcheckers_window_analysis_format_progress(const GCheckersWindowAnalysisTask *task,
@@ -1992,6 +2003,37 @@ static void gcheckers_window_analysis_on_progress(const CheckersAiSearchStats *s
   gcheckers_window_analysis_publish_status(task->self,
                                            task->generation,
                                            GCHECKERS_WINDOW_ANALYSIS_MODE_CURRENT,
+                                           FALSE,
+                                           FALSE,
+                                           text);
+}
+
+static void gcheckers_window_full_analysis_on_progress(const CheckersAiSearchStats *stats, gpointer user_data) {
+  GCheckersWindowFullAnalysisTask *task = user_data;
+  g_return_if_fail(stats != NULL);
+  g_return_if_fail(task != NULL);
+  g_return_if_fail(GCHECKERS_IS_WINDOW(task->self));
+  g_return_if_fail(task->jobs != NULL);
+
+  const gint64 interval_us = (gint64)GCHECKERS_WINDOW_ANALYSIS_PROGRESS_INTERVAL_MS * 1000;
+  gint64 now = g_get_monotonic_time();
+  if (task->last_progress_publish_us != 0 && now - task->last_progress_publish_us < interval_us) {
+    return;
+  }
+
+  task->last_progress_publish_us = now;
+  g_autofree char *text = gcheckers_window_analysis_format_full_game_status(task->current_job_index,
+                                                                            task->jobs->len,
+                                                                            task->explored_nodes + stats->nodes,
+                                                                            NULL);
+  if (text == NULL) {
+    g_debug("Failed to format full-game analysis progress text");
+    return;
+  }
+
+  gcheckers_window_analysis_publish_status(task->self,
+                                           task->generation,
+                                           GCHECKERS_WINDOW_ANALYSIS_MODE_FULL_GAME,
                                            FALSE,
                                            FALSE,
                                            text);
@@ -2124,6 +2166,9 @@ static gpointer gcheckers_window_full_analysis_thread(gpointer user_data) {
       break;
     }
 
+    task->current_job_index = i;
+    task->last_progress_publish_us = 0;
+
     GCheckersWindowFullNodeJob *job = g_ptr_array_index(task->jobs, i);
     g_return_val_if_fail(job != NULL, NULL);
 
@@ -2137,8 +2182,10 @@ static gpointer gcheckers_window_full_analysis_thread(gpointer user_data) {
       g_debug("Skipping full analysis for SGF node %u: %s",
               sgf_node_get_move_number(job->node),
               replay_error != NULL ? replay_error->message : "unknown error");
-      g_autofree char *text =
-          gcheckers_window_analysis_format_full_game_status(i + 1, task->jobs->len, "nodes processed (replay skipped)");
+      g_autofree char *text = gcheckers_window_analysis_format_full_game_status(i + 1,
+                                                                                task->jobs->len,
+                                                                                task->explored_nodes,
+                                                                                "replay skipped");
       gcheckers_window_analysis_publish_status(task->self,
                                                task->generation,
                                                GCHECKERS_WINDOW_ANALYSIS_MODE_FULL_GAME,
@@ -2150,21 +2197,25 @@ static gpointer gcheckers_window_full_analysis_thread(gpointer user_data) {
 
     CheckersScoredMoveList moves = {0};
     CheckersAiSearchStats stats = {0};
+    gcheckers_window_full_analysis_on_progress(&stats, task);
     gboolean ok = checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(
         &game,
         task->depth,
         &moves,
         gcheckers_window_should_cancel_full_analysis,
         task,
-        NULL,
-        NULL,
+        gcheckers_window_full_analysis_on_progress,
+        task,
         task->tt,
         &stats);
     game_destroy(&game);
     if (!ok) {
       checkers_scored_move_list_free(&moves);
-      g_autofree char *text =
-          gcheckers_window_analysis_format_full_game_status(i + 1, task->jobs->len, "nodes processed (no legal moves)");
+      task->explored_nodes += stats.nodes;
+      g_autofree char *text = gcheckers_window_analysis_format_full_game_status(i + 1,
+                                                                                task->jobs->len,
+                                                                                task->explored_nodes,
+                                                                                "no legal moves");
       gcheckers_window_analysis_publish_status(task->self,
                                                task->generation,
                                                GCHECKERS_WINDOW_ANALYSIS_MODE_FULL_GAME,
@@ -2176,10 +2227,12 @@ static gpointer gcheckers_window_full_analysis_thread(gpointer user_data) {
 
     g_autoptr(SgfNodeAnalysis) analysis = gcheckers_window_analysis_from_scored_moves(&moves, task->depth, &stats);
     checkers_scored_move_list_free(&moves);
+    task->explored_nodes += stats.nodes;
     if (analysis == NULL) {
       g_autofree char *text = gcheckers_window_analysis_format_full_game_status(i + 1,
                                                                                 task->jobs->len,
-                                                                                "nodes processed (analysis payload failed)");
+                                                                                task->explored_nodes,
+                                                                                "analysis payload failed");
       gcheckers_window_analysis_publish_status(task->self,
                                                task->generation,
                                                GCHECKERS_WINDOW_ANALYSIS_MODE_FULL_GAME,
@@ -2190,7 +2243,7 @@ static gpointer gcheckers_window_full_analysis_thread(gpointer user_data) {
     }
 
     g_autofree char *text =
-        gcheckers_window_analysis_format_full_game_status(i + 1, task->jobs->len, NULL);
+        gcheckers_window_analysis_format_full_game_status(i + 1, task->jobs->len, task->explored_nodes, NULL);
     gint first_score = 0;
     gboolean has_first_score = FALSE;
     if (analysis->moves != NULL && analysis->moves->len > 0) {
@@ -2320,7 +2373,7 @@ static void gcheckers_window_start_full_game_analysis(GCheckersWindow *self) {
   guint depth = gcheckers_window_get_analysis_depth(self);
   gint generation = g_atomic_int_add(&self->analysis_generation, 1) + 1;
   gcheckers_window_analysis_begin_session(self, GCHECKERS_WINDOW_ANALYSIS_MODE_FULL_GAME, jobs->len);
-  g_autofree char *initial_status = gcheckers_window_analysis_format_full_game_status(0, jobs->len, NULL);
+  g_autofree char *initial_status = gcheckers_window_analysis_format_full_game_status(0, jobs->len, 0, NULL);
   if (initial_status == NULL) {
     g_debug("Failed to format initial full-game analysis status");
     return;
