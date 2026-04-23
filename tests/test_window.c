@@ -37,10 +37,10 @@ static void test_analysis_score_formatting(void) {
   g_assert_cmpstr(negative, ==, "-200");
 
   g_autofree char *white_win = gcheckers_window_format_analysis_score(2997);
-  g_assert_cmpstr(white_win, ==, "White win in 3");
+  g_assert_cmpstr(white_win, ==, "W#3");
 
   g_autofree char *black_win = gcheckers_window_format_analysis_score(-2994);
-  g_assert_cmpstr(black_win, ==, "Black win in 6");
+  g_assert_cmpstr(black_win, ==, "B#6");
 }
 
 static void test_analysis_report_includes_per_move_nodes(void) {

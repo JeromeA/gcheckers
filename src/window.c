@@ -1937,7 +1937,7 @@ char *gcheckers_window_format_analysis_score(gint score) {
   gint abs_score = ABS(score);
   if (abs_score >= 2900 && abs_score <= 3000) {
     gint distance = 3000 - abs_score;
-    return g_strdup_printf("%s win in %d", score > 0 ? "White" : "Black", distance);
+    return g_strdup_printf("%c#%d", score > 0 ? 'W' : 'B', distance);
   }
 
   return g_strdup_printf("%+d", score);

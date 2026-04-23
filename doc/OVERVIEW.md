@@ -59,7 +59,7 @@ main thread every 100ms while analysis is active. During iterative deepening, in
 published and shown with a temporary `(searching...)` marker. Completed results are converted to `SgfNodeAnalysis` and
 attached to SGF nodes on the main thread, while text in the panel is formatted from that structured node analysis.
 Analysis score text always shows an explicit `+` sign for positive centipawn-style values and converts terminal
-`2900..3000` magnitudes into `White win in X` / `Black win in X`.
+`2900..3000` magnitudes into compact `W#X` / `B#X` mate-distance-style labels.
 Per-move analysis lines also include the root-search node count used to score that move, making TT-assisted shortcuts
 visible in the report text.
 Static material in search also values man advancement: men gain `+1/+2/+3` as they get within three rows of
