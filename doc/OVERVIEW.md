@@ -20,9 +20,10 @@ Board orientation is runtime-only window state: live games choose `follow-player
 orientation based on the new-game player modes, and SGF review/manual navigation switches back to `fixed` so analysis
 navigation does not keep rotating the board.
 Puzzle mode starts with a modal chooser (`src/puzzle_dialog.c`) that lets the user pick
-American/International/Russian and then click a numbered puzzle square from a ten-column grid. The grid is built from
-the selected ruleset directory only and shows local status per puzzle: untried squares are white, solved squares are
-green, and tried-without-success squares are red. Runtime loading resolves the puzzle root
+American/International/Russian and then click a numbered puzzle square from a ten-column grid. The dialog only reports
+cancel-or-selected results back to `GCheckersWindow`; the window owns opening the selected puzzle and starting progress
+tracking. The grid is built from the selected ruleset directory only and shows local status per puzzle: untried squares
+are white, solved squares are green, and tried-without-success squares are red. Runtime loading resolves the puzzle root
 (`GCHECKERS_PUZZLES_DIR` or the installed/local application data search path), appends the selected ruleset short name
 such as `american` or `russian`, and then loads the exact clicked `puzzle-*.sgf`. While active it hides both drawers,
 disables SGF/review actions, shows puzzle-only `Next puzzle` and `Analyze` buttons, and validates the player's moves
@@ -32,11 +33,11 @@ puzzle. Puzzle `Analyze` exits puzzle mode, rewinds fully to move 0, and then st
 used by the Analysis menu. The current node report still follows normal SGF selection instead of being replaced by a
 generic completion message. Picker squares keep custom status colors and now define an explicit darker `:active` state
 so mouse presses remain visible even with the custom button styling.
-Puzzle mode now also records local progress for each started puzzle entry. The first completed move attempt creates an
-append-only attempt record, terminal outcomes are `success`, `failure`, or `analyze`, and the first wrong move is
-stored only when the failure happened on the very first attempted move. A started-but-unfinished puzzle entry is
-resolved as `failure` when the user starts a different puzzle, starts a new game, imports another game, or closes the
-window.
+Puzzle mode now also records local progress for each opened puzzle entry. Opening the puzzle creates an append-only
+attempt record with `started_unix_ms`, terminal outcomes are `success`, `failure`, or `analyze`, and the first wrong
+move is stored only when the failure happened on the very first attempted move. A started-but-unfinished puzzle entry
+is resolved as `failure` when the user starts a different puzzle, starts a new game, imports another game, or closes
+the window.
 Puzzle entry forces a fixed attacker-at-bottom orientation, while puzzle exit restores only layout/drawer state and
 leaves the current board orientation unchanged.
 Adds an `Analysis` menubar submenu for current-position and whole-game analysis, plus a `View` submenu with
@@ -161,7 +162,9 @@ Owns: the application menubar/actions plus one `CheckersPuzzleProgressStore` for
 URL (`GCHECKERS_PUZZLE_REPORT_URL`), the privacy/settings action, and the single in-flight background upload task.
 Collaborates with: `GCheckersWindow`, which asks for the shared store indirectly by attaching to this application, and
 `puzzle_progress.c`, which provides history storage, threshold decisions, and upload JSON formatting. Puzzle uploads are
-also gated by the `send-puzzle-usage-data` application setting before any network request is attempted.
+also gated by the `send-puzzle-usage-data` application setting before any network request is attempted. The shared
+progress store accessor refreshes the store if `GCHECKERS_PUZZLE_PROGRESS_DIR` resolves to a different state directory,
+which keeps test and manual override sessions isolated.
 
 ## Application Settings (`src/app_settings.c`, `src/app_settings.h`, `src/settings_dialog.c`, `src/settings_dialog.h`)
 Module: GSettings-backed application preferences and the modal settings UI.

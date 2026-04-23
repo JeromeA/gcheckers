@@ -1,17 +1,17 @@
 #include "puzzle_dialog.h"
 
-#include "application.h"
 #include "puzzle_catalog.h"
-#include "puzzle_progress.h"
 #include "rulesets.h"
 
 typedef struct {
-  GCheckersWindow *self;
   GtkWindow *dialog;
   GtkDropDown *ruleset;
   GtkLabel *ruleset_summary;
   GtkWidget *puzzle_area;
   GHashTable *status_map;
+  GCheckersPuzzleDialogDoneFunc done_func;
+  gpointer user_data;
+  GDestroyNotify user_data_destroy;
 } GCheckersWindowPuzzleDialogData;
 
 typedef struct {
@@ -24,6 +24,15 @@ typedef struct {
   GtkScrolledWindow *scroller;
   guint row;
 } GCheckersWindowPuzzleScrollData;
+
+static gboolean gcheckers_window_puzzle_dialog_destroy_hidden_cb(gpointer user_data) {
+  GtkWindow *dialog = user_data;
+  g_return_val_if_fail(GTK_IS_WINDOW(dialog), G_SOURCE_REMOVE);
+
+  gtk_window_destroy(dialog);
+  g_object_unref(dialog);
+  return G_SOURCE_REMOVE;
+}
 
 static void gcheckers_window_puzzle_button_data_free(GCheckersWindowPuzzleButtonData *data) {
   if (data == NULL) {
@@ -66,7 +75,9 @@ static void gcheckers_window_puzzle_dialog_data_free(GCheckersWindowPuzzleDialog
   }
 
   g_clear_pointer(&data->status_map, g_hash_table_unref);
-  g_clear_object(&data->self);
+  if (data->user_data_destroy != NULL) {
+    data->user_data_destroy(data->user_data);
+  }
   g_free(data);
 }
 
@@ -74,6 +85,9 @@ static void gcheckers_window_on_puzzle_dialog_destroy(GtkWindow * /*dialog*/, gp
   GCheckersWindowPuzzleDialogData *data = user_data;
   g_return_if_fail(data != NULL);
 
+  if (data->done_func != NULL) {
+    data->done_func(FALSE, PLAYER_RULESET_INTERNATIONAL, NULL, data->user_data);
+  }
   gcheckers_window_puzzle_dialog_data_free(data);
 }
 
@@ -173,17 +187,30 @@ static void gcheckers_window_on_puzzle_button_clicked(GtkButton *button, gpointe
       g_object_get_data(G_OBJECT(button), "gcheckers-puzzle-button-data");
   g_return_if_fail(button_data != NULL);
   g_return_if_fail(button_data->dialog_data != NULL);
-  g_return_if_fail(GCHECKERS_IS_WINDOW(button_data->dialog_data->self));
   g_return_if_fail(GTK_IS_WINDOW(button_data->dialog_data->dialog));
 
-  if (!gcheckers_window_start_puzzle_mode_for_path(button_data->dialog_data->self,
-                                                   button_data->ruleset,
-                                                   button_data->path)) {
-    g_debug("Failed to start puzzle mode for path %s", button_data->path);
-    return;
-  }
+  GCheckersWindowPuzzleDialogData *data = button_data->dialog_data;
+  GCheckersPuzzleDialogDoneFunc done_func = data->done_func;
+  gpointer callback_user_data = data->user_data;
+  GDestroyNotify callback_user_data_destroy = data->user_data_destroy;
+  PlayerRuleset ruleset = button_data->ruleset;
+  g_autofree char *path = g_strdup(button_data->path);
 
-  gtk_window_destroy(button_data->dialog_data->dialog);
+  data->done_func = NULL;
+  data->user_data = NULL;
+  data->user_data_destroy = NULL;
+
+  gtk_widget_set_visible(GTK_WIDGET(data->dialog), FALSE);
+  if (done_func != NULL) {
+    done_func(TRUE, ruleset, path, callback_user_data);
+  }
+  if (callback_user_data_destroy != NULL) {
+    callback_user_data_destroy(callback_user_data);
+  }
+  g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,
+                  gcheckers_window_puzzle_dialog_destroy_hidden_cb,
+                  g_object_ref(data->dialog),
+                  NULL);
 }
 
 static void gcheckers_window_puzzle_dialog_rebuild_grid(GCheckersWindowPuzzleDialogData *data) {
@@ -274,16 +301,26 @@ static void gcheckers_window_on_puzzle_dialog_ruleset_selected(GObject * /*objec
   gcheckers_window_puzzle_dialog_rebuild_grid(data);
 }
 
-static void gcheckers_window_on_puzzle_dialog_cancel_clicked(GtkButton * /*button*/, gpointer user_data) {
+static void gcheckers_window_on_puzzle_dialog_cancel_clicked(GtkButton *button, gpointer user_data) {
   GCheckersWindowPuzzleDialogData *data = user_data;
   g_return_if_fail(data != NULL);
+  g_return_if_fail(GTK_IS_BUTTON(button));
   g_return_if_fail(GTK_IS_WINDOW(data->dialog));
 
-  gtk_window_destroy(data->dialog);
+  gtk_widget_set_visible(GTK_WIDGET(data->dialog), FALSE);
+  g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,
+                  gcheckers_window_puzzle_dialog_destroy_hidden_cb,
+                  g_object_ref(data->dialog),
+                  NULL);
 }
 
-void gcheckers_window_present_puzzle_dialog(GCheckersWindow *self) {
-  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+void gcheckers_puzzle_dialog_present(GtkWindow *parent,
+                                     PlayerRuleset initial_ruleset,
+                                     CheckersPuzzleProgressStore *store,
+                                     GCheckersPuzzleDialogDoneFunc done_func,
+                                     gpointer user_data,
+                                     GDestroyNotify user_data_destroy) {
+  g_return_if_fail(GTK_IS_WINDOW(parent));
 
   guint ruleset_count = checkers_ruleset_count();
   g_return_if_fail(ruleset_count > 0);
@@ -292,7 +329,7 @@ void gcheckers_window_present_puzzle_dialog(GCheckersWindow *self) {
   GtkWidget *dialog = gtk_window_new();
   gtk_window_set_title(GTK_WINDOW(dialog), "Play puzzles");
   gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
-  gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(self));
+  gtk_window_set_transient_for(GTK_WINDOW(dialog), parent);
   gtk_window_set_destroy_with_parent(GTK_WINDOW(dialog), TRUE);
   gtk_window_set_resizable(GTK_WINDOW(dialog), FALSE);
   gtk_window_set_default_size(GTK_WINDOW(dialog), 640, 420);
@@ -331,7 +368,7 @@ void gcheckers_window_present_puzzle_dialog(GCheckersWindow *self) {
 
   GtkDropDown *ruleset = GTK_DROP_DOWN(
       gtk_drop_down_new_from_strings((const char *const *)ruleset_options));
-  gtk_drop_down_set_selected(ruleset, gcheckers_window_get_ruleset(self));
+  gtk_drop_down_set_selected(ruleset, initial_ruleset);
 
   gtk_grid_attach(GTK_GRID(grid), ruleset_label, 0, 0, 1, 1);
   gtk_grid_attach(GTK_GRID(grid), GTK_WIDGET(ruleset), 1, 0, 1, 1);
@@ -349,21 +386,19 @@ void gcheckers_window_present_puzzle_dialog(GCheckersWindow *self) {
   gtk_box_append(GTK_BOX(actions), cancel_button);
 
   GCheckersWindowPuzzleDialogData *data = g_new0(GCheckersWindowPuzzleDialogData, 1);
-  data->self = g_object_ref(self);
   data->dialog = GTK_WINDOW(dialog);
   data->ruleset = ruleset;
   data->ruleset_summary = GTK_LABEL(ruleset_summary);
   data->puzzle_area = puzzle_area;
+  data->done_func = done_func;
+  data->user_data = user_data;
+  data->user_data_destroy = user_data_destroy;
 
-  GCheckersApplication *app = GCHECKERS_APPLICATION(gtk_window_get_application(GTK_WINDOW(self)));
-  if (app != NULL) {
-    CheckersPuzzleProgressStore *store = gcheckers_application_get_puzzle_progress_store(app);
-    if (store != NULL) {
-      g_autoptr(GError) error = NULL;
-      data->status_map = checkers_puzzle_progress_store_load_status_map(store, &error);
-      if (data->status_map == NULL) {
-        g_debug("Failed to load puzzle status map: %s", error != NULL ? error->message : "unknown error");
-      }
+  if (store != NULL) {
+    g_autoptr(GError) error = NULL;
+    data->status_map = checkers_puzzle_progress_store_load_status_map(store, &error);
+    if (data->status_map == NULL) {
+      g_debug("Failed to load puzzle status map: %s", error != NULL ? error->message : "unknown error");
     }
   }
 

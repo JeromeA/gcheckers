@@ -1511,7 +1511,7 @@ static void test_gcheckers_window_puzzle_wrong_first_move_records_failure(void) 
   g_assert_cmpuint(record->failed_first_move.path[0], ==, wrong_move.path[0]);
   g_assert_cmpuint(record->failed_first_move.path[1], ==, wrong_move.path[1]);
   g_autoptr(GHashTable) status_map = test_gcheckers_window_load_status_map(progress_dir);
-  CheckersPuzzleStatusEntry *status_entry = g_hash_table_lookup(status_map, "russian/puzzle-0000.sgf");
+  CheckersPuzzleStatusEntry *status_entry = g_hash_table_lookup(status_map, "american/puzzle-0000.sgf");
   g_assert_nonnull(status_entry);
   g_assert_cmpint(status_entry->status, ==, CHECKERS_PUZZLE_STATUS_FAILED);
 
@@ -1521,7 +1521,7 @@ static void test_gcheckers_window_puzzle_wrong_first_move_records_failure(void) 
   g_assert_nonnull(dialog);
   ruleset_drop_down = test_gcheckers_window_find_ruleset_dropdown(GTK_WIDGET(dialog));
   g_assert_nonnull(ruleset_drop_down);
-  gtk_drop_down_set_selected(ruleset_drop_down, PLAYER_RULESET_RUSSIAN);
+  gtk_drop_down_set_selected(ruleset_drop_down, PLAYER_RULESET_AMERICAN);
   test_gcheckers_window_drain_main_context(8);
   puzzle_button = test_gcheckers_window_find_puzzle_picker_button(GTK_WIDGET(dialog), 0);
   g_assert_nonnull(puzzle_button);
@@ -1593,7 +1593,7 @@ static void test_gcheckers_window_puzzle_analyze_records_analyze_result(void) {
   g_clear_object(&app);
 }
 
-static void test_gcheckers_window_puzzle_leave_without_move_records_nothing(void) {
+static void test_gcheckers_window_puzzle_open_without_move_records_failure_on_leave(void) {
   g_autofree char *dir_path = NULL;
   g_autofree char *progress_dir = test_gcheckers_window_make_progress_dir();
   CheckersMove puzzle_move = {0};
@@ -1623,6 +1623,13 @@ static void test_gcheckers_window_puzzle_leave_without_move_records_nothing(void
   g_signal_emit_by_name(puzzle_button, "clicked");
   test_gcheckers_window_drain_main_context(32);
 
+  g_autoptr(GPtrArray) opened_history = test_gcheckers_window_load_attempt_history(progress_dir);
+  g_assert_cmpuint(opened_history->len, ==, 1);
+  CheckersPuzzleAttemptRecord *opened_record = g_ptr_array_index(opened_history, 0);
+  g_assert_cmpint(opened_record->result, ==, CHECKERS_PUZZLE_ATTEMPT_RESULT_UNRESOLVED);
+  g_assert_cmpint(opened_record->started_unix_ms, >, 0);
+  g_assert_cmpint(opened_record->finished_unix_ms, ==, 0);
+
   gcheckers_window_apply_new_game_settings(window,
                                            PLAYER_RULESET_INTERNATIONAL,
                                            PLAYER_CONTROL_MODE_USER,
@@ -1631,7 +1638,11 @@ static void test_gcheckers_window_puzzle_leave_without_move_records_nothing(void
   test_gcheckers_window_drain_main_context(32);
 
   g_autoptr(GPtrArray) history = test_gcheckers_window_load_attempt_history(progress_dir);
-  g_assert_cmpuint(history->len, ==, 0);
+  g_assert_cmpuint(history->len, ==, 1);
+  CheckersPuzzleAttemptRecord *record = g_ptr_array_index(history, 0);
+  g_assert_cmpint(record->result, ==, CHECKERS_PUZZLE_ATTEMPT_RESULT_FAILURE);
+  g_assert_false(record->failure_on_first_move);
+  g_assert_cmpint(record->finished_unix_ms, >=, record->started_unix_ms);
 
   g_unsetenv("GCHECKERS_PUZZLES_DIR");
   g_unsetenv("GCHECKERS_PUZZLE_PROGRESS_DIR");
@@ -2230,7 +2241,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/gcheckers-window/puzzle-dialog-scrolls-to-first-untried", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/puzzle-first-move-failure", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/puzzle-analyze-records-analyze", test_gcheckers_window_skip);
-    g_test_add_func("/gcheckers-window/puzzle-no-move-records-nothing", test_gcheckers_window_skip);
+    g_test_add_func("/gcheckers-window/puzzle-open-no-move-records-failure", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/drawer-visibility-actions", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/drawer-width-preservation", test_gcheckers_window_skip);
     g_test_add_func("/gcheckers-window/edit-mode-disables-navigation", test_gcheckers_window_skip);
@@ -2293,8 +2304,8 @@ int main(int argc, char **argv) {
                   test_gcheckers_window_puzzle_wrong_first_move_records_failure);
   g_test_add_func("/gcheckers-window/puzzle-analyze-records-analyze",
                   test_gcheckers_window_puzzle_analyze_records_analyze_result);
-  g_test_add_func("/gcheckers-window/puzzle-no-move-records-nothing",
-                  test_gcheckers_window_puzzle_leave_without_move_records_nothing);
+  g_test_add_func("/gcheckers-window/puzzle-open-no-move-records-failure",
+                  test_gcheckers_window_puzzle_open_without_move_records_failure_on_leave);
   g_test_add_func("/gcheckers-window/drawer-visibility-actions",
                   test_gcheckers_window_drawer_visibility_actions);
   g_test_add_func("/gcheckers-window/drawer-width-preservation",

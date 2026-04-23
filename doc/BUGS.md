@@ -68,7 +68,7 @@ local history file for later reporting.
 
 The fix adds a dedicated `src/puzzle_progress.c` module with a stable user ID, JSONL attempt history, threshold logic,
 and upload payload construction. `GCheckersApplication` now owns the shared store and background flush requests, while
-`GCheckersWindow` records one attempt per puzzle entry once the user actually makes a move.
+`GCheckersWindow` records one attempt per opened puzzle entry.
 
 ## Puzzle continuation still used a random chooser after direct puzzle selection landed
 
@@ -118,3 +118,15 @@ single-node progress/report text, and left every other node without saved analys
 
 The fix reuses the shared full-game analysis entry point from the puzzle button, so puzzle Analyze now produces the
 same status updates and per-node reports as a normal full-game analysis run.
+
+## Puzzle attempt timing started only after the first move
+
+Puzzle attempt timing should include the time spent looking at the opened puzzle before choosing the first move.
+
+The window created the persistent attempt record from the move handler, so `started_unix_ms` represented the first
+player move attempt rather than the puzzle-open time. Leaving a puzzle without moving also produced no history entry
+because no attempt had been started yet.
+
+The fix starts the unresolved attempt record as soon as a puzzle is opened. Terminal updates still replace that same
+record with `success`, `failure`, or `analyze`, and first-move failure detection now tracks whether the player has
+attempted any move separately from whether the record already exists.

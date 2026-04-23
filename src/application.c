@@ -479,6 +479,25 @@ GCheckersApplication *gcheckers_application_new(void) {
 CheckersPuzzleProgressStore *gcheckers_application_get_puzzle_progress_store(GCheckersApplication *self) {
   g_return_val_if_fail(GCHECKERS_IS_APPLICATION(self), NULL);
 
+  g_autoptr(GError) error = NULL;
+  g_autofree char *state_dir =
+      gcheckers_app_paths_get_user_state_subdir("GCHECKERS_PUZZLE_PROGRESS_DIR", "puzzle-progress", &error);
+  if (state_dir == NULL) {
+    g_debug("Failed to resolve puzzle progress storage: %s", error != NULL ? error->message : "unknown error");
+    return self->puzzle_progress_store;
+  }
+
+  g_autofree char *current_state_dir =
+      self->puzzle_progress_store != NULL
+          ? checkers_puzzle_progress_store_dup_state_dir(self->puzzle_progress_store)
+          : NULL;
+  if (g_strcmp0(current_state_dir, state_dir) != 0) {
+    if (self->puzzle_progress_store != NULL) {
+      checkers_puzzle_progress_store_unref(self->puzzle_progress_store);
+    }
+    self->puzzle_progress_store = checkers_puzzle_progress_store_new(state_dir);
+  }
+
   return self->puzzle_progress_store;
 }
 
