@@ -1136,6 +1136,22 @@ gboolean checkers_puzzle_progress_store_mark_reported(CheckersPuzzleProgressStor
   return ok;
 }
 
+gboolean checkers_puzzle_progress_store_clear_progress(CheckersPuzzleProgressStore *store, GError **error) {
+  g_return_val_if_fail(store != NULL, FALSE);
+
+  g_mutex_lock(&store->mutex);
+  g_autoptr(GPtrArray) empty_history =
+      g_ptr_array_new_with_free_func((GDestroyNotify)checkers_puzzle_attempt_record_free);
+  gboolean ok = checkers_puzzle_progress_store_write_history_locked(store, empty_history, error);
+  if (ok) {
+    g_autoptr(GHashTable) empty_status =
+        g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)checkers_puzzle_status_entry_free);
+    ok = checkers_puzzle_progress_store_write_status_locked(store, empty_status, error);
+  }
+  g_mutex_unlock(&store->mutex);
+  return ok;
+}
+
 GHashTable *checkers_puzzle_progress_store_load_status_map(CheckersPuzzleProgressStore *store, GError **error) {
   g_return_val_if_fail(store != NULL, NULL);
 

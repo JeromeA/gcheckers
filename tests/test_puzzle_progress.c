@@ -354,6 +354,38 @@ static void test_puzzle_progress_status_map_rebuilds_from_corrupt_cache(void) {
   g_unsetenv("GCHECKERS_PUZZLE_PROGRESS_DIR");
 }
 
+static void test_puzzle_progress_clear_progress_removes_history_and_status(void) {
+  g_autofree char *state_dir = test_puzzle_progress_make_state_dir();
+  CheckersPuzzleProgressStore *store = checkers_puzzle_progress_store_new(state_dir);
+  g_assert_nonnull(store);
+
+  CheckersPuzzleAttemptRecord success =
+      test_puzzle_progress_make_record("attempt-clear", CHECKERS_PUZZLE_ATTEMPT_RESULT_SUCCESS);
+  g_autoptr(GError) error = NULL;
+  g_assert_true(checkers_puzzle_progress_store_append_attempt(store, &success, &error));
+  g_assert_no_error(error);
+
+  g_autoptr(GHashTable) status_map = checkers_puzzle_progress_store_load_status_map(store, &error);
+  g_assert_no_error(error);
+  g_assert_nonnull(test_puzzle_progress_lookup_status(status_map, "international/puzzle-0007.sgf"));
+
+  g_assert_true(checkers_puzzle_progress_store_clear_progress(store, &error));
+  g_assert_no_error(error);
+
+  g_autoptr(GPtrArray) history = checkers_puzzle_progress_store_load_attempt_history(store, &error);
+  g_assert_no_error(error);
+  g_assert_cmpuint(history->len, ==, 0);
+
+  g_clear_pointer(&status_map, g_hash_table_unref);
+  status_map = checkers_puzzle_progress_store_load_status_map(store, &error);
+  g_assert_no_error(error);
+  g_assert_cmpuint(g_hash_table_size(status_map), ==, 0);
+
+  checkers_puzzle_attempt_record_clear(&success);
+  checkers_puzzle_progress_store_unref(store);
+  g_unsetenv("GCHECKERS_PUZZLE_PROGRESS_DIR");
+}
+
 static void test_puzzle_progress_empty_history_is_safe(void) {
   g_autofree char *state_dir = test_puzzle_progress_make_state_dir();
   CheckersPuzzleProgressStore *store = checkers_puzzle_progress_store_new(state_dir);
@@ -387,6 +419,7 @@ int main(int argc, char **argv) {
                   test_puzzle_progress_status_map_tracks_terminal_results);
   g_test_add_func("/puzzle-progress/status-map-rebuilds-from-corrupt-cache",
                   test_puzzle_progress_status_map_rebuilds_from_corrupt_cache);
+  g_test_add_func("/puzzle-progress/clear-progress", test_puzzle_progress_clear_progress_removes_history_and_status);
   g_test_add_func("/puzzle-progress/empty-history", test_puzzle_progress_empty_history_is_safe);
   return g_test_run();
 }

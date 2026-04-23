@@ -68,6 +68,7 @@ GPtrArray *checkers_puzzle_progress_store_collect_unsent_attempts(CheckersPuzzle
 gboolean checkers_puzzle_progress_store_mark_reported(CheckersPuzzleProgressStore *store,
                                                       gint64 reported_unix_ms,
                                                       GError **error);
+gboolean checkers_puzzle_progress_store_clear_progress(CheckersPuzzleProgressStore *store, GError **error);
 GHashTable *checkers_puzzle_progress_store_load_status_map(CheckersPuzzleProgressStore *store, GError **error);
 
 CheckersPuzzleAttemptRecord *checkers_puzzle_attempt_record_copy(const CheckersPuzzleAttemptRecord *record);

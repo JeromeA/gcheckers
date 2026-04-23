@@ -1,5 +1,6 @@
 #include <gtk/gtk.h>
 
+#include "app_settings.h"
 #include "application.h"
 #include "checkers_model.h"
 #include "puzzle_progress.h"
@@ -338,6 +339,11 @@ static gboolean test_gcheckers_window_menu_contains_item(GMenuModel *menu, const
   for (gint i = 0; i < items; i++) {
     g_autoptr(GVariant) item_label = g_menu_model_get_item_attribute_value(menu, i, G_MENU_ATTRIBUTE_LABEL, NULL);
     if (item_label != NULL && g_strcmp0(g_variant_get_string(item_label, NULL), label) == 0) {
+      return TRUE;
+    }
+
+    g_autoptr(GMenuModel) section = g_menu_model_get_item_link(menu, i, G_MENU_LINK_SECTION);
+    if (section != NULL && test_gcheckers_window_menu_contains_item(section, label)) {
       return TRUE;
     }
   }
@@ -1001,6 +1007,30 @@ static void test_gcheckers_window_toolbar_actions_exist(void) {
 
 static void test_gcheckers_window_settings_dialog_persists_preferences(void) {
   g_setenv("GSETTINGS_BACKEND", "memory", TRUE);
+  g_autoptr(GSettings) settings = gcheckers_app_settings_create();
+  if (G_IS_SETTINGS(settings)) {
+    g_settings_set_boolean(settings, GCHECKERS_APP_SETTINGS_KEY_SEND_PUZZLE_USAGE, TRUE);
+    g_settings_set_boolean(settings, GCHECKERS_APP_SETTINGS_KEY_SEND_APPLICATION_USAGE, TRUE);
+  }
+
+  g_autofree char *dir_path = NULL;
+  g_autofree char *progress_dir = test_gcheckers_window_make_progress_dir();
+  CheckersMove puzzle_move = {0};
+  g_assert_true(test_gcheckers_window_write_single_move_puzzle_for_ruleset(&dir_path,
+                                                                           PLAYER_RULESET_AMERICAN,
+                                                                           0,
+                                                                           &puzzle_move,
+                                                                           CHECKERS_COLOR_WHITE));
+  g_assert_true(test_gcheckers_window_write_single_move_puzzle_for_ruleset(&dir_path,
+                                                                           PLAYER_RULESET_RUSSIAN,
+                                                                           0,
+                                                                           &puzzle_move,
+                                                                           CHECKERS_COLOR_WHITE));
+  test_gcheckers_window_store_resolved_puzzle_result(progress_dir,
+                                                     PLAYER_RULESET_AMERICAN,
+                                                     0,
+                                                     CHECKERS_PUZZLE_ATTEMPT_RESULT_SUCCESS);
+  g_setenv("GCHECKERS_PUZZLES_DIR", dir_path, TRUE);
 
   GtkApplication *app = test_gcheckers_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
@@ -1032,12 +1062,23 @@ static void test_gcheckers_window_settings_dialog_persists_preferences(void) {
   g_assert_nonnull(application_usage_check);
   g_assert_true(gtk_check_button_get_active(puzzle_usage_check));
   g_assert_true(gtk_check_button_get_active(application_usage_check));
+  g_assert_nonnull(test_gcheckers_window_find_label_with_text(GTK_WIDGET(dialog), "Puzzle Progress"));
+  g_assert_nonnull(test_gcheckers_window_find_label_with_text(GTK_WIDGET(dialog), "1 of 2 puzzles solved"));
+
+  GtkButton *clear_progress_button = test_gcheckers_window_find_button_with_label(GTK_WIDGET(dialog), "Clear Progress");
+  g_assert_nonnull(clear_progress_button);
+  g_signal_emit_by_name(clear_progress_button, "clicked");
+  test_gcheckers_window_drain_main_context(16);
+  g_assert_nonnull(test_gcheckers_window_find_label_with_text(GTK_WIDGET(dialog), "0 of 2 puzzles solved"));
+
+  g_autoptr(GPtrArray) cleared_history = test_gcheckers_window_load_attempt_history(progress_dir);
+  g_assert_cmpuint(cleared_history->len, ==, 0);
 
   gtk_check_button_set_active(puzzle_usage_check, FALSE);
   gtk_check_button_set_active(application_usage_check, FALSE);
   GtkButton *save_button = test_gcheckers_window_find_button_with_label(GTK_WIDGET(dialog), "Save");
   g_assert_nonnull(save_button);
-  g_signal_emit_by_name(save_button, "clicked");
+  g_assert_true(gtk_widget_activate(GTK_WIDGET(save_button)));
   test_gcheckers_window_drain_main_context(32);
 
   g_action_group_activate_action(G_ACTION_GROUP(app), "settings", NULL);
@@ -1057,9 +1098,11 @@ static void test_gcheckers_window_settings_dialog_persists_preferences(void) {
 
   GtkButton *cancel_button = test_gcheckers_window_find_button_with_label(GTK_WIDGET(dialog), "Cancel");
   g_assert_nonnull(cancel_button);
-  g_signal_emit_by_name(cancel_button, "clicked");
+  g_assert_true(gtk_widget_activate(GTK_WIDGET(cancel_button)));
   test_gcheckers_window_drain_main_context(16);
 
+  g_unsetenv("GCHECKERS_PUZZLES_DIR");
+  g_unsetenv("GCHECKERS_PUZZLE_PROGRESS_DIR");
   g_clear_object(&window);
   g_clear_object(&model);
   g_clear_object(&app);

@@ -174,8 +174,10 @@ Settings: `send-puzzle-usage-data` defaults to true and is consulted before puzz
 application-usage-data` also defaults to true and is stored for future telemetry work but is not consumed yet; and
 `privacy-settings-shown` records whether the privacy dialog has already been presented to this user.
 UI: the settings dialog is a small modal window with two checkboxes and `Cancel`/`Save` actions, following the same
-simple GTK window pattern as the new-game and import dialogs. On first launch, `GCheckersApplication` presents this
-dialog automatically after creating the main window so the user can review the privacy controls before continuing.
+simple GTK window pattern as the new-game and import dialogs. It also shows a `Puzzle Progress` section with the
+number of solved puzzles out of the currently available puzzle catalog and a `Clear Progress` button that clears local
+attempt history plus the chooser status cache. On first launch, `GCheckersApplication` presents this dialog
+automatically after creating the main window so the user can review the privacy controls before continuing.
 
 ## Puzzle Progress Reporting (`src/puzzle_progress.c`, `data/schemas/io.github.jeromea.gcheckers.gschema.xml`)
 Module: persistent puzzle attempt storage and report payload preparation.
@@ -189,7 +191,8 @@ Storage layout: the preferred user ID storage is the `puzzle-user-id` GSettings 
 lives beside it as `puzzle-status.json` in the same directory; no extra nested per-file directories are used.
 History format: one JSON object per line with schema version, puzzle identity, timestamps, terminal result,
 first-wrong-move metadata, and local report metadata (`first_reported_unix_ms`, `report_count`). The history is never
-deleted after successful upload; successful sends only mark previously unreported resolved attempts as reported.
+deleted after successful upload; successful sends only mark previously unreported resolved attempts as reported. The
+settings dialog can explicitly clear local progress, which rewrites both the history and status cache as empty.
 Status-cache format: one JSON document keyed by stable `puzzle_id` values such as `russian/puzzle-0007.sgf`, storing
 reduced `untried`/`failed`/`solved` state plus minimal metadata. If the cache is missing or corrupt,
 `puzzle_progress.c` rebuilds it from `attempt-history.jsonl`.
