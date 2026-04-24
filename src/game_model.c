@@ -151,6 +151,18 @@ void ggame_model_reset(GGameModel *self, const GameBackendVariant *variant_or_nu
   ggame_model_emit_state_changed(self);
 }
 
+gboolean ggame_model_set_position(GGameModel *self, gconstpointer position) {
+  g_return_val_if_fail(GGAME_IS_MODEL(self), FALSE);
+  g_return_val_if_fail(self->backend != NULL, FALSE);
+  g_return_val_if_fail(self->position != NULL, FALSE);
+  g_return_val_if_fail(position != NULL, FALSE);
+  g_return_val_if_fail(self->backend->position_copy != NULL, FALSE);
+
+  self->backend->position_copy(self->position, position);
+  ggame_model_emit_state_changed(self);
+  return TRUE;
+}
+
 GameBackendMoveList ggame_model_list_moves(GGameModel *self) {
   GameBackendMoveList empty = {0};
 

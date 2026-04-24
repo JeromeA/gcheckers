@@ -53,9 +53,51 @@ static void test_backend_position_and_move_flow(void) {
   g_free(position);
 }
 
+static void test_backend_move_path_length_only_query(void) {
+  const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
+  assert(backend != NULL);
+  assert(backend->square_grid_move_get_path != NULL);
+
+  gpointer position = g_malloc0(backend->position_size);
+  assert(position != NULL);
+
+  const GameBackendVariant *american = backend->variant_by_short_name("american");
+  assert(american != NULL);
+  backend->position_init(position, american);
+
+  GameBackendMoveList moves = backend->list_moves(position);
+  assert(moves.count > 0);
+
+  gboolean found_simple_move = FALSE;
+  for (gsize i = 0; i < moves.count; ++i) {
+    const void *move = backend->move_list_get(&moves, i);
+    assert(move != NULL);
+
+    guint move_length = 0;
+    assert(backend->square_grid_move_get_path(move, &move_length, NULL, 0));
+    if (move_length != 2) {
+      continue;
+    }
+
+    guint path[2] = {0};
+    assert(backend->square_grid_move_get_path(move, &move_length, path, G_N_ELEMENTS(path)));
+    assert(move_length == 2);
+    assert(path[0] != path[1]);
+    found_simple_move = TRUE;
+    break;
+  }
+
+  assert(found_simple_move);
+
+  backend->move_list_free(&moves);
+  backend->position_clear(position);
+  g_free(position);
+}
+
 int main(void) {
   test_backend_metadata();
   test_backend_position_and_move_flow();
+  test_backend_move_path_length_only_query();
 
   printf("All tests passed.\n");
   return 0;

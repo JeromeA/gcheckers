@@ -1,10 +1,9 @@
 #include <gtk/gtk.h>
 
-#include "board.h"
+#include "active_game_backend.h"
 #include "board_move_overlay.h"
 #include "board_view.h"
-#include "checkers_model.h"
-#include "game.h"
+#include "game_model.h"
 
 static void test_board_view_skip(void) {
   g_test_skip("GTK display not available.");
@@ -30,7 +29,7 @@ static void test_board_view_collect_indexed_buttons(GtkWidget *root, GHashTable 
   }
 }
 
-static gboolean test_board_view_count_square_click(guint8 /*index*/, guint /*button*/, gpointer user_data) {
+static gboolean test_board_view_count_square_click(guint /*index*/, guint /*button*/, gpointer user_data) {
   guint *count = user_data;
   g_return_val_if_fail(count != NULL, FALSE);
   *count += 1;
@@ -38,34 +37,44 @@ static gboolean test_board_view_count_square_click(guint8 /*index*/, guint /*but
 }
 
 static void test_board_move_overlay_winner_banner_text(void) {
-  g_assert_null(board_move_overlay_get_winner_banner_text(CHECKERS_WINNER_NONE));
-  g_assert_cmpstr(board_move_overlay_get_winner_banner_text(CHECKERS_WINNER_WHITE), ==, "White wins!");
-  g_assert_cmpstr(board_move_overlay_get_winner_banner_text(CHECKERS_WINNER_BLACK), ==, "Black wins!");
-  g_assert_cmpstr(board_move_overlay_get_winner_banner_text(CHECKERS_WINNER_DRAW), ==, "Draw!");
+  const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
+
+  g_assert_nonnull(backend);
+  g_assert_null(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_ONGOING));
+  g_assert_cmpstr(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_SIDE_0_WIN),
+                  ==,
+                  "White wins!");
+  g_assert_cmpstr(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_SIDE_1_WIN),
+                  ==,
+                  "Black wins!");
+  g_assert_cmpstr(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_DRAW), ==, "Draw!");
 }
 
 static void test_board_view_highlights_black_turn_moves(void) {
-  GCheckersModel *model = gcheckers_model_new();
+  const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
+  GGameModel *model = ggame_model_new(backend);
   BoardView *view = board_view_new();
   board_view_set_model(view, model);
 
-  MoveList white_moves = gcheckers_model_list_moves(model);
+  GameBackendMoveList white_moves = ggame_model_list_moves(model);
   g_assert_cmpuint(white_moves.count, >, 0);
-  g_assert_true(gcheckers_model_apply_move(model, &white_moves.moves[0]));
-  movelist_free(&white_moves);
+  gconstpointer first_move = backend->move_list_get(&white_moves, 0);
+  g_assert_nonnull(first_move);
+  g_assert_true(ggame_model_apply_move(model, first_move));
+  backend->move_list_free(&white_moves);
 
-  const GameState *state = gcheckers_model_peek_state(model);
-  g_assert_nonnull(state);
-  g_assert_cmpint(state->turn, ==, CHECKERS_COLOR_BLACK);
+  gconstpointer position = ggame_model_peek_position(model);
+  g_assert_nonnull(position);
+  g_assert_cmpuint(backend->position_turn(position), ==, 1);
 
   board_view_clear_selection(view);
   board_view_update(view);
 
-  MoveList black_moves = gcheckers_model_list_moves(model);
+  GameBackendMoveList black_moves = ggame_model_list_moves(model);
   g_assert_cmpuint(black_moves.count, >, 0);
 
-  bool expected_starts[CHECKERS_MAX_SQUARES] = {false};
-  game_moves_collect_starts(&black_moves, expected_starts);
+  gboolean expected_starts[128] = {FALSE};
+  backend->square_grid_moves_collect_starts(&black_moves, expected_starts, G_N_ELEMENTS(expected_starts));
 
   GtkWidget *root = board_view_get_widget(view);
   g_assert_nonnull(root);
@@ -74,8 +83,16 @@ static void test_board_view_highlights_black_turn_moves(void) {
       g_hash_table_new(g_direct_hash, g_direct_equal);
   test_board_view_collect_indexed_buttons(root, buttons_by_index);
 
-  int squares = board_playable_squares(state->board.board_size);
-  for (int idx = 0; idx < squares; ++idx) {
+  guint rows = backend->square_grid_rows(position);
+  guint cols = backend->square_grid_cols(position);
+  for (guint row = 0; row < rows; ++row) {
+    for (guint col = 0; col < cols; ++col) {
+      guint idx = 0;
+      if (!backend->square_grid_square_playable(position, row, col) ||
+          !backend->square_grid_square_index(position, row, col, &idx)) {
+        continue;
+      }
+
     GtkWidget *button = g_hash_table_lookup(buttons_by_index, GINT_TO_POINTER(idx));
     g_assert_nonnull(button);
 
@@ -85,15 +102,16 @@ static void test_board_view_highlights_black_turn_moves(void) {
     } else {
       g_assert_false(has_halo);
     }
+    }
   }
 
-  movelist_free(&black_moves);
+  backend->move_list_free(&black_moves);
   g_clear_object(&view);
   g_clear_object(&model);
 }
 
 static void test_board_view_repeated_primary_clicks_are_processed(void) {
-  GCheckersModel *model = gcheckers_model_new();
+  GGameModel *model = ggame_model_new(GGAME_ACTIVE_GAME_BACKEND);
   BoardView *view = board_view_new();
   board_view_set_model(view, model);
 

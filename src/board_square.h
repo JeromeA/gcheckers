@@ -3,7 +3,7 @@
 
 #include <gtk/gtk.h>
 
-#include "board.h"
+#include "game_backend.h"
 #include "piece_palette.h"
 
 G_BEGIN_DECLS
@@ -15,7 +15,7 @@ G_DECLARE_FINAL_TYPE(BoardSquare, board_square, BOARD, SQUARE, GObject)
 BoardSquare *board_square_new(guint square_size);
 GtkWidget *board_square_get_widget(BoardSquare *self);
 void board_square_set_index(BoardSquare *self, guint index);
-void board_square_set_piece(BoardSquare *self, CheckersPiece piece, PiecePalette *palette);
+void board_square_set_piece(BoardSquare *self, const GameBackendSquarePieceView *piece, PiecePalette *palette);
 void board_square_set_highlight(BoardSquare *self,
                                 gboolean is_selected,
                                 gboolean is_selectable,

@@ -1,5 +1,6 @@
 #include <gtk/gtk.h>
 
+#include "active_game_backend.h"
 #include "app_settings.h"
 #include "application.h"
 #include "checkers_model.h"
@@ -351,17 +352,29 @@ static gboolean test_gcheckers_window_menu_contains_item(GMenuModel *menu, const
   return FALSE;
 }
 
-static GtkDropDown *test_gcheckers_window_find_ruleset_dropdown(GtkWidget *root) {
+static GtkDropDown *test_gcheckers_window_find_variant_dropdown(GtkWidget *root) {
+  const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
+
   g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
+  g_return_val_if_fail(backend != NULL, NULL);
+  g_return_val_if_fail(backend->variant_count > 0, NULL);
+  g_return_val_if_fail(backend->variant_at != NULL, NULL);
 
   if (GTK_IS_DROP_DOWN(root)) {
     GListModel *model = gtk_drop_down_get_model(GTK_DROP_DOWN(root));
-    if (GTK_IS_STRING_LIST(model) && g_list_model_get_n_items(model) == 3) {
-      const char *first = gtk_string_list_get_string(GTK_STRING_LIST(model), 0);
-      const char *second = gtk_string_list_get_string(GTK_STRING_LIST(model), 1);
-      const char *third = gtk_string_list_get_string(GTK_STRING_LIST(model), 2);
-      if (g_strcmp0(first, "American (8x8)") == 0 && g_strcmp0(second, "International (10x10)") == 0 &&
-          g_strcmp0(third, "Russian (8x8)") == 0) {
+    if (GTK_IS_STRING_LIST(model) && g_list_model_get_n_items(model) == backend->variant_count) {
+      gboolean matches = TRUE;
+
+      for (guint i = 0; i < backend->variant_count; ++i) {
+        const GameBackendVariant *variant = backend->variant_at(i);
+        const char *item = gtk_string_list_get_string(GTK_STRING_LIST(model), i);
+        if (variant == NULL || g_strcmp0(item, variant->name) != 0) {
+          matches = FALSE;
+          break;
+        }
+      }
+
+      if (matches) {
         return GTK_DROP_DOWN(root);
       }
     }
@@ -369,13 +382,17 @@ static GtkDropDown *test_gcheckers_window_find_ruleset_dropdown(GtkWidget *root)
 
   for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
        child = gtk_widget_get_next_sibling(child)) {
-    GtkDropDown *match = test_gcheckers_window_find_ruleset_dropdown(child);
+    GtkDropDown *match = test_gcheckers_window_find_variant_dropdown(child);
     if (match != NULL) {
       return match;
     }
   }
 
   return NULL;
+}
+
+static GtkDropDown *test_gcheckers_window_find_ruleset_dropdown(GtkWidget *root) {
+  return test_gcheckers_window_find_variant_dropdown(root);
 }
 
 static GtkDropDown *test_gcheckers_window_find_mode_dropdown(GtkWidget *root) {
@@ -866,7 +883,7 @@ static void test_gcheckers_window_computer_selection_keeps_board_enabled(void) {
   PlayerControlsPanel *panel = gcheckers_window_get_controls_panel(window);
   g_assert_nonnull(panel);
 
-  player_controls_panel_set_mode(panel, CHECKERS_COLOR_WHITE, PLAYER_CONTROL_MODE_COMPUTER);
+  player_controls_panel_set_mode(panel, 0, PLAYER_CONTROL_MODE_COMPUTER);
   test_gcheckers_window_drain_main_context(8);
 
   GtkWidget *square = test_gcheckers_window_find_board_square(GTK_WIDGET(window));
@@ -886,8 +903,8 @@ static void test_gcheckers_window_auto_moves_when_next_player_is_computer(void) 
   PlayerControlsPanel *panel = gcheckers_window_get_controls_panel(window);
   g_assert_nonnull(panel);
 
-  player_controls_panel_set_mode(panel, CHECKERS_COLOR_WHITE, PLAYER_CONTROL_MODE_USER);
-  player_controls_panel_set_mode(panel, CHECKERS_COLOR_BLACK, PLAYER_CONTROL_MODE_COMPUTER);
+  player_controls_panel_set_mode(panel, 0, PLAYER_CONTROL_MODE_USER);
+  player_controls_panel_set_mode(panel, 1, PLAYER_CONTROL_MODE_COMPUTER);
   player_controls_panel_set_computer_depth(panel, 4);
 
   GCheckersSgfController *controller = gcheckers_window_get_sgf_controller(window);
@@ -914,8 +931,8 @@ static void test_gcheckers_window_sgf_navigation_resets_controls_to_user(void) {
   PlayerControlsPanel *panel = gcheckers_window_get_controls_panel(window);
   g_assert_nonnull(panel);
 
-  player_controls_panel_set_mode(panel, CHECKERS_COLOR_WHITE, PLAYER_CONTROL_MODE_USER);
-  player_controls_panel_set_mode(panel, CHECKERS_COLOR_BLACK, PLAYER_CONTROL_MODE_COMPUTER);
+  player_controls_panel_set_mode(panel, 0, PLAYER_CONTROL_MODE_USER);
+  player_controls_panel_set_mode(panel, 1, PLAYER_CONTROL_MODE_COMPUTER);
   player_controls_panel_set_computer_depth(panel, 8);
 
   GCheckersSgfController *controller = gcheckers_window_get_sgf_controller(window);
@@ -933,8 +950,8 @@ static void test_gcheckers_window_sgf_navigation_resets_controls_to_user(void) {
   g_signal_emit_by_name(view, "node-selected", node);
   test_gcheckers_window_drain_main_context(16);
 
-  g_assert_true(player_controls_panel_is_user_control(panel, CHECKERS_COLOR_WHITE));
-  g_assert_true(player_controls_panel_is_user_control(panel, CHECKERS_COLOR_BLACK));
+  g_assert_true(player_controls_panel_is_user_control(panel, 0));
+  g_assert_true(player_controls_panel_is_user_control(panel, 1));
 
   g_clear_object(&window);
   g_clear_object(&model);
@@ -948,8 +965,8 @@ static void test_gcheckers_window_force_move_works_on_user_turn(void) {
 
   PlayerControlsPanel *panel = gcheckers_window_get_controls_panel(window);
   g_assert_nonnull(panel);
-  g_assert_true(player_controls_panel_is_user_control(panel, CHECKERS_COLOR_WHITE));
-  g_assert_true(player_controls_panel_is_user_control(panel, CHECKERS_COLOR_BLACK));
+  g_assert_true(player_controls_panel_is_user_control(panel, 0));
+  g_assert_true(player_controls_panel_is_user_control(panel, 1));
 
   gcheckers_window_force_move(window);
   test_gcheckers_window_drain_main_context(16);
@@ -2080,8 +2097,8 @@ static void test_gcheckers_window_new_game_keeps_computer_controls(void) {
 
   PlayerControlsPanel *panel = gcheckers_window_get_controls_panel(window);
   g_assert_nonnull(panel);
-  g_assert_cmpuint(player_controls_panel_get_mode(panel, CHECKERS_COLOR_WHITE), ==, PLAYER_CONTROL_MODE_COMPUTER);
-  g_assert_cmpuint(player_controls_panel_get_mode(panel, CHECKERS_COLOR_BLACK), ==, PLAYER_CONTROL_MODE_COMPUTER);
+  g_assert_cmpuint(player_controls_panel_get_mode(panel, 0), ==, PLAYER_CONTROL_MODE_COMPUTER);
+  g_assert_cmpuint(player_controls_panel_get_mode(panel, 1), ==, PLAYER_CONTROL_MODE_COMPUTER);
   g_assert_cmpuint(player_controls_panel_get_computer_depth(panel), ==, 4);
 
   gcheckers_window_apply_new_game_settings(window,
@@ -2092,8 +2109,8 @@ static void test_gcheckers_window_new_game_keeps_computer_controls(void) {
   test_gcheckers_window_drain_main_context(16);
 
   g_assert_cmpuint(gcheckers_window_get_ruleset(window), ==, PLAYER_RULESET_AMERICAN);
-  g_assert_cmpuint(player_controls_panel_get_mode(panel, CHECKERS_COLOR_WHITE), ==, PLAYER_CONTROL_MODE_COMPUTER);
-  g_assert_cmpuint(player_controls_panel_get_mode(panel, CHECKERS_COLOR_BLACK), ==, PLAYER_CONTROL_MODE_COMPUTER);
+  g_assert_cmpuint(player_controls_panel_get_mode(panel, 0), ==, PLAYER_CONTROL_MODE_COMPUTER);
+  g_assert_cmpuint(player_controls_panel_get_mode(panel, 1), ==, PLAYER_CONTROL_MODE_COMPUTER);
   g_assert_cmpuint(player_controls_panel_get_computer_depth(panel), ==, 6);
 
   const GameState *state = gcheckers_model_peek_state(model);
@@ -2190,9 +2207,15 @@ static void test_gcheckers_window_manual_review_keeps_current_orientation(void) 
 }
 
 static void test_gcheckers_window_new_game_dialog_ruleset_options_and_russian_apply(void) {
+  const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   GtkApplication *app = test_gcheckers_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
   GCheckersWindow *window = gcheckers_window_new(app, model);
+
+  g_assert_nonnull(backend);
+  g_assert_nonnull(backend->variant_at);
+  g_assert_cmpuint(backend->variant_count, ==, 3);
+  g_assert_nonnull(backend->side_label);
 
   gcheckers_window_apply_new_game_settings(window,
                                            PLAYER_RULESET_AMERICAN,
@@ -2210,30 +2233,40 @@ static void test_gcheckers_window_new_game_dialog_ruleset_options_and_russian_ap
   GtkWindow *dialog = test_gcheckers_window_find_toplevel_by_title("New game");
   g_assert_nonnull(dialog);
 
-  const char *american_summary =
-      "8x8 board, mandatory captures, short kings, and no backward captures for men.";
-  GtkLabel *summary_label = test_gcheckers_window_find_label_with_text(GTK_WIDGET(dialog), american_summary);
+  GtkLabel *variant_label = test_gcheckers_window_find_label_with_text(GTK_WIDGET(dialog), "Variant");
+  g_assert_nonnull(variant_label);
+
+  GtkLabel *side0_label =
+      test_gcheckers_window_find_label_with_text(GTK_WIDGET(dialog), backend->side_label(0));
+  GtkLabel *side1_label =
+      test_gcheckers_window_find_label_with_text(GTK_WIDGET(dialog), backend->side_label(1));
+  g_assert_nonnull(side0_label);
+  g_assert_nonnull(side1_label);
+
+  const GameBackendVariant *american_variant = backend->variant_at(PLAYER_RULESET_AMERICAN);
+  g_assert_nonnull(american_variant);
+  GtkLabel *summary_label = test_gcheckers_window_find_label_with_text(GTK_WIDGET(dialog), american_variant->summary);
   g_assert_nonnull(summary_label);
   int initial_height = gtk_widget_get_height(GTK_WIDGET(dialog));
   g_assert_cmpint(initial_height, >, 0);
 
-  GtkDropDown *ruleset_dropdown = test_gcheckers_window_find_ruleset_dropdown(GTK_WIDGET(dialog));
-  g_assert_nonnull(ruleset_dropdown);
-  gtk_drop_down_set_selected(ruleset_dropdown, PLAYER_RULESET_INTERNATIONAL);
+  GtkDropDown *variant_dropdown = test_gcheckers_window_find_variant_dropdown(GTK_WIDGET(dialog));
+  g_assert_nonnull(variant_dropdown);
+  gtk_drop_down_set_selected(variant_dropdown, PLAYER_RULESET_INTERNATIONAL);
   test_gcheckers_window_drain_main_context(16);
 
-  const char *international_summary =
-      "10x10 board, mandatory longest captures, flying kings, and backward captures for men.";
-  summary_label = test_gcheckers_window_find_label_with_text(GTK_WIDGET(dialog), international_summary);
+  const GameBackendVariant *international_variant = backend->variant_at(PLAYER_RULESET_INTERNATIONAL);
+  g_assert_nonnull(international_variant);
+  summary_label = test_gcheckers_window_find_label_with_text(GTK_WIDGET(dialog), international_variant->summary);
   g_assert_nonnull(summary_label);
   g_assert_cmpint(gtk_widget_get_height(GTK_WIDGET(dialog)), ==, initial_height);
 
-  gtk_drop_down_set_selected(ruleset_dropdown, PLAYER_RULESET_RUSSIAN);
+  gtk_drop_down_set_selected(variant_dropdown, PLAYER_RULESET_RUSSIAN);
   test_gcheckers_window_drain_main_context(16);
 
-  const char *russian_summary =
-      "8x8 board, mandatory longest captures, flying kings, and backward captures for men.";
-  summary_label = test_gcheckers_window_find_label_with_text(GTK_WIDGET(dialog), russian_summary);
+  const GameBackendVariant *russian_variant = backend->variant_at(PLAYER_RULESET_RUSSIAN);
+  g_assert_nonnull(russian_variant);
+  summary_label = test_gcheckers_window_find_label_with_text(GTK_WIDGET(dialog), russian_variant->summary);
   g_assert_nonnull(summary_label);
   g_assert_cmpint(gtk_widget_get_height(GTK_WIDGET(dialog)), ==, initial_height);
 

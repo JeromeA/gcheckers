@@ -19,6 +19,8 @@ the same position source of truth as normal controller navigation.
 Board orientation is runtime-only window state: live games choose `follow-player`, `follow-turn`, or `fixed`
 orientation based on the new-game player modes, and SGF review/manual navigation switches back to `fixed` so analysis
 navigation does not keep rotating the board.
+Those shared board-orientation and board-input-enable decisions now come from the cached `GGameModel` through backend
+`position_turn()` and `position_outcome()` callbacks rather than directly inspecting checkers state.
 Puzzle mode starts with a modal chooser (`src/puzzle_dialog.c`) that lets the user pick
 American/International/Russian and then click a numbered puzzle square from a ten-column grid. The dialog only reports
 cancel-or-selected results back to `GCheckersWindow`; the window owns opening the selected puzzle and starting progress
@@ -77,10 +79,12 @@ Top-level menu actions are
 also exposed in a toolbar
 (`New game...`, `Force move`, `Save position...`, SGF timeline rewind/step/skip actions) via GTK actions.
 Owns modal flows for `New game` and `Import games` wizards.
-`New game` shows a ruleset dropdown (American/International/Russian) with a concise summary label below it.
-Ruleset names, summaries, and `CheckersRules` construction are defined in one shared catalog (`rulesets.c`).
-The modal is non-resizable and renders the ruleset summary as a single-line ellipsized label so switching rulesets
-does not trigger dialog height growth or leave extra blank space below action buttons.
+`New game` now builds its optional `Variant` dropdown and summary label from the active backend metadata rather than
+hard-coding checkers names in the dialog. The current checkers path still maps the selected variant index back to the
+existing ruleset API, but side labels (`White`/`Black` today) and variant display text now come from the backend.
+When a backend exposes no variants, the dialog omits that row and keeps the current game setup. The modal remains
+non-resizable and renders the summary as a single-line ellipsized label so variant switches do not change dialog
+height or leave extra blank space below the action buttons.
 Import wizard persists BoardGameArena email/password and remember flag with `GSettings` when fetching history, and
 prefills credentials on the credentials step from stored values. Parsed login responses drive in-memory result
 handling; status/error responses trigger an error dialog and close the wizard. Successful login advances to a history
@@ -91,6 +95,8 @@ Default panel widths target about `500/300/300` pixels at the default window wid
 Lifecycle: sinks and retains an owned `PlayerControlsPanel` reference, removes it from its current `GtkBox` parent
 during dispose via `gcheckers_widget_remove_from_parent()`, and then clears its references.
 during dispose, cancels any pending auto-move idle source, and then clears its references.
+At construction time it also pushes the active backend's side labels into `PlayerControlsPanel`, so the shared board
+UI keeps generic two-side semantics while the compiled backend decides how those sides are named.
 
 ## `GCheckersSgfController` (`src/sgf_controller.c`)
 Class: `GCheckersSgfController` (`GObject`).
@@ -133,9 +139,10 @@ Collaborates with: `GCheckersWindow` (data binding) and `GCheckersSgfController`
 
 ## `PlayerControlsPanel` (`src/player_controls_panel.c`)
 Class: `PlayerControlsPanel` (`GtkBox`).
-Role: encapsulates player mode controls.
-Modes: white/black each select `User` or `Computer`, plus a shared `Computer depth` slider (`0..16`).
-Defaults: both white and black controls start as `User`.
+Role: encapsulate two-side player mode controls.
+Modes: side 0 / side 1 each select `User` or `Computer`, plus a shared `Computer depth` slider (`0..16`).
+Defaults: both side controls start as `User`, and labels are backend-supplied by the window (`White`/`Black` for the
+current checkers backend).
 Signals: `control-changed` for window-level coordination.
 Collaborates with: `GCheckersWindow` (signal handlers and `player_controls_panel_set_all_user()`) and GTK widgets
 (`GtkDropDown`, `GtkScale`).
@@ -257,8 +264,9 @@ Class: `GCheckersModel` (`GObject`).
 Role: wrap the engine for GTK, including move validation, alpha-beta move selection, state-change signals, and
 last-move caching for board overlay rendering. Exposes structured move-analysis API
 (`gcheckers_model_analyze_moves`) returning scored moves plus search stats. Also exposes `gcheckers_model_set_state()`
-to publish replayed SGF positions (for setup/property-driven nodes) into the GTK model.
-Collaborates with: `GCheckersWindow` and SGF controllers via signals and high-level move APIs.
+to publish replayed SGF positions (for setup/property-driven nodes) into the GTK model. It now also owns a synced
+`GGameModel` mirror so shared square-grid UI can consume backend-driven state without pulling checkers headers.
+Collaborates with: `GCheckersWindow`, SGF controllers, and shared square-grid board widgets.
 
 ## Generic AI search (`src/ai_search.c`, `src/ai_search.h`)
 Module: backend-driven alpha-beta search.
@@ -411,11 +419,10 @@ Collaborates with: `Makefile` backend selection, `tests/test_game_backend.c`, an
 Class: `GGameModel` (`GObject`).
 Role: wrap one active `GameBackend` plus one opaque current position behind a GTK-friendly state container with a
 `state-changed` signal. The model owns backend-sized position storage, initializes it from the backend's first
-variant when one exists, exposes generic move listing and move application, and leaves the existing
-`GCheckersModel` untouched for current UI code.
-Scope: this is a Milestone 2 compatibility layer for backend-oriented tests and future refactors. It is not yet wired
-into `window.c` or the visible application shell.
-Collaborates with: `src/game_backend.h`, `src/games/checkers/checkers_backend.c`, and `tests/test_game_model.c`.
+variant when one exists, exposes generic move listing, application, and whole-position replacement, and now backs the
+shared square-grid UI through `GCheckersModel`'s compatibility bridge.
+Collaborates with: `src/game_backend.h`, `src/games/checkers/checkers_backend.c`, `src/checkers_model.c`, and
+`tests/test_game_model.c`.
 
 ## GTK application entry (`src/gcheckers.c`, `src/application.c`, `src/application.h`)
 Class: `GCheckersApplication` (`GtkApplication`).
@@ -432,43 +439,49 @@ Collaborates with: `GCheckersWindow` for UI wiring and new-game dialog presentat
 
 ### `BoardView` (`src/board_view.c`, `src/board_view.h`)
 Class: `BoardView` (`GtkWidget`).
-Role: coordinate rendering updates, input handling, and active-turn move highlighting for the board.
+Role: coordinate rendering updates, input handling, and active-turn move highlighting for the shared square-grid board
+path. It now consumes backend-provided square-grid callbacks (rows/cols, playable squares, dense square indexes, piece
+views, move-path prefixes, and start/destination highlight sets) through `GGameModel`, while still accepting the
+legacy `GCheckersModel` via an internal compatibility bridge.
 Primary-click input is routed through each square button's `clicked` signal, and right-click input uses a dedicated
 secondary-button `GtkGestureClick`. A button-aware square callback allows window-level edit-mode logic to intercept
 square actions (left/right) before play-mode move-selection handling.
-Board orientation is driven by a bottom-color property; the grid and last-move overlay both use
-`board_coord_transform_for_bottom_color()` so rotated boards keep pieces and arrows aligned.
+Board orientation is driven by a generic two-side bottom-index property; the grid and last-move overlay both mirror
+rows/columns when the bottom side is side 1 so rotated boards keep pieces and arrows aligned.
 Collaborates with: selection, overlays, and square/grid helpers.
 
 ### `BoardGrid` (`src/board_grid.c`, `src/board_grid.h`)
 Module: board grid helpers.
-Role: construct the square layout grid and maintain square bookkeeping.
+Role: construct the optional shared square-grid layout from backend callbacks instead of hard-coded checkers parity and
+index math.
 Dark squares wire primary `clicked` and optional secondary `pressed` callbacks separately to avoid gesture arbitration
 conflicts with `GtkButton` activation.
 Collaborates with: `BoardView` and `BoardSquare`.
 
 ### `BoardSquare` (`src/board_square.c`, `src/board_square.h`)
 Class: `BoardSquare` (`GtkWidget`).
-Role: represent individual squares and update piece/index rendering state. Piece artwork is drawn directly with a
-`GtkDrawingArea` at the square's allocated size so checker men avoid `GtkPicture` downscaling artifacts.
+Role: represent individual dense playable squares and update piece/index rendering state from a generic
+`GameBackendSquarePieceView`. Piece artwork is drawn directly with a `GtkDrawingArea` at the square's allocated size so
+checker men avoid `GtkPicture` downscaling artifacts.
 Collaborates with: `BoardGrid` and `PiecePalette`.
 
 ### Last move overlay (`src/board_move_overlay.c`, `src/board_move_overlay.h`)
 Module: move overlay renderer.
-Role: draw the selected SGF node's move arrow via cairo on top of the board and, when the game is over, a centered
-winner banner
-(`White wins!`, `Black wins!`, or `Draw!`) across the board.
-Collaborates with: `BoardView`, `GCheckersModel` for board state, and `GCheckersSgfController` for the selected-node
-move.
+Role: draw the selected SGF node's move arrow via cairo on top of the shared square-grid board and, when the game is
+over, a centered backend-provided winner banner across the board.
+Collaborates with: `BoardView`, `GGameModel` for backend-driven board state, and `GCheckersSgfController` for the
+selected-node move.
 
 ### Selection controller (`src/board_selection_controller.c`, `src/board_selection_controller.h`)
 Module: selection path logic.
-Role: manage click-path selection and move application orchestration.
-Collaborates with: `BoardView` and `GCheckersModel` for applying moves.
+Role: manage click-path selection and move application orchestration using backend move-path prefix callbacks rather
+than direct `CheckersMove` inspection.
+Collaborates with: `BoardView` and `GGameModel` for applying moves.
 
 ### Piece palette (`src/piece_palette.c`, `src/piece_palette.h`)
 Module: piece palette.
-Role: provide direct cairo rendering data plus fallback symbols for checker men and kings.
+Role: provide direct cairo rendering data plus fallback symbols for backend-provided square-grid piece views. The
+current shared palette still draws the checkers side-0/side-1 man/king style.
 Collaborates with: `BoardSquare` and man paintable helpers.
 
 ### Man paintable (`src/man_paintable.c`, `src/man_paintable.h`)

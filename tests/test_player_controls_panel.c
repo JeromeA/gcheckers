@@ -17,10 +17,10 @@ static PlayerControlsPanel *test_player_controls_panel_new_owned(void) {
 static void test_player_controls_panel_defaults(void) {
   PlayerControlsPanel *panel = test_player_controls_panel_new_owned();
 
-  g_assert_cmpuint(player_controls_panel_get_selected(panel, CHECKERS_COLOR_WHITE), ==, PLAYER_CONTROL_MODE_USER);
-  g_assert_cmpuint(player_controls_panel_get_selected(panel, CHECKERS_COLOR_BLACK), ==, PLAYER_CONTROL_MODE_USER);
-  g_assert_true(player_controls_panel_is_user_control(panel, CHECKERS_COLOR_WHITE));
-  g_assert_true(player_controls_panel_is_user_control(panel, CHECKERS_COLOR_BLACK));
+  g_assert_cmpuint(player_controls_panel_get_selected(panel, 0), ==, PLAYER_CONTROL_MODE_USER);
+  g_assert_cmpuint(player_controls_panel_get_selected(panel, 1), ==, PLAYER_CONTROL_MODE_USER);
+  g_assert_true(player_controls_panel_is_user_control(panel, 0));
+  g_assert_true(player_controls_panel_is_user_control(panel, 1));
   g_assert_cmpuint(player_controls_panel_get_computer_depth(panel), ==, PLAYER_COMPUTER_DEPTH_DEFAULT);
 
   g_clear_object(&panel);
@@ -37,7 +37,7 @@ static void test_player_controls_panel_control_signal(void) {
   guint count = 0;
 
   g_signal_connect(panel, "control-changed", G_CALLBACK(on_control_changed), &count);
-  player_controls_panel_set_mode(panel, CHECKERS_COLOR_BLACK, PLAYER_CONTROL_MODE_COMPUTER);
+  player_controls_panel_set_mode(panel, 1, PLAYER_CONTROL_MODE_COMPUTER);
 
   g_assert_cmpuint(count, >, 0);
 

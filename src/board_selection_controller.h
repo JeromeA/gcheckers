@@ -1,7 +1,7 @@
 #ifndef BOARD_SELECTION_CONTROLLER_H
 #define BOARD_SELECTION_CONTROLLER_H
 
-#include "checkers_model.h"
+#include "game_model.h"
 
 G_BEGIN_DECLS
 
@@ -13,19 +13,19 @@ G_DECLARE_FINAL_TYPE(BoardSelectionController,
                      SELECTION_CONTROLLER,
                      GObject)
 
-typedef gboolean (*BoardSelectionControllerMoveHandler)(const CheckersMove *move, gpointer user_data);
+typedef gboolean (*BoardSelectionControllerMoveHandler)(gconstpointer move, gpointer user_data);
 
 BoardSelectionController *board_selection_controller_new(void);
-void board_selection_controller_set_model(BoardSelectionController *self, GCheckersModel *model);
+void board_selection_controller_set_model(BoardSelectionController *self, GGameModel *model);
 void board_selection_controller_set_move_handler(BoardSelectionController *self,
                                                  BoardSelectionControllerMoveHandler handler,
                                                  gpointer user_data);
 void board_selection_controller_clear(BoardSelectionController *self);
-const uint8_t *board_selection_controller_peek_path(BoardSelectionController *self, uint8_t *length);
+const guint *board_selection_controller_peek_path(BoardSelectionController *self, guint *length);
 
-gboolean board_selection_controller_contains(BoardSelectionController *self, uint8_t index);
+gboolean board_selection_controller_contains(BoardSelectionController *self, guint index);
 
-gboolean board_selection_controller_handle_click(BoardSelectionController *self, uint8_t index);
+gboolean board_selection_controller_handle_click(BoardSelectionController *self, guint index);
 
 G_END_DECLS
 

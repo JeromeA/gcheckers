@@ -7,13 +7,14 @@
 #include "sgf_controller.h"
 #include "widget_utils.h"
 
-#include "board.h"
-
 #include <stdbool.h>
+
+typedef struct _GCheckersModel GCheckersModel;
+GGameModel *gcheckers_model_peek_game_model(GCheckersModel *self);
 
 struct _BoardView {
   GObject parent_instance;
-  GCheckersModel *model;
+  GGameModel *model;
   GtkWidget *root;
   BoardGrid *board_grid;
   BoardMoveOverlay *board_overlay;
@@ -24,118 +25,163 @@ struct _BoardView {
   BoardViewSquareHandler square_handler;
   gpointer square_handler_data;
   gboolean input_enabled;
-  CheckersColor bottom_color;
+  guint bottom_side;
 };
 
 G_DEFINE_TYPE(BoardView, board_view, G_TYPE_OBJECT)
 
 static const int board_view_square_size = 31;
 
-static void board_view_update_board(BoardView *self, const GameState *state) {
-  g_return_if_fail(BOARD_IS_VIEW(self));
-  g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
-  g_return_if_fail(state != NULL);
-
-  MoveList moves = {0};
+static void board_view_update_board(BoardView *self, gconstpointer position) {
+  const GameBackend *backend = NULL;
+  GameBackendMoveList moves = {0};
   gboolean moves_loaded = FALSE;
   gboolean highlight_moves = FALSE;
-  bool playable_starts[CHECKERS_MAX_SQUARES] = {false};
-  bool possible_destinations[CHECKERS_MAX_SQUARES] = {false};
-  if (state->winner == CHECKERS_WINNER_NONE) {
-    moves = gcheckers_model_list_moves(self->model);
+  gboolean playable_starts[128] = {FALSE};
+  gboolean possible_destinations[128] = {FALSE};
+
+  g_return_if_fail(BOARD_IS_VIEW(self));
+  g_return_if_fail(GGAME_IS_MODEL(self->model));
+  g_return_if_fail(position != NULL);
+
+  backend = ggame_model_peek_backend(self->model);
+  g_return_if_fail(backend != NULL);
+  g_return_if_fail(backend->position_outcome != NULL);
+  g_return_if_fail(backend->square_grid_piece_view != NULL);
+
+  if (backend->position_outcome(position) == GAME_BACKEND_OUTCOME_ONGOING) {
+    moves = ggame_model_list_moves(self->model);
     moves_loaded = TRUE;
     highlight_moves = moves.count > 0;
     if (highlight_moves) {
-      game_moves_collect_starts(&moves, playable_starts);
-      uint8_t selection_length = 0;
-      const uint8_t *selection =
-          board_selection_controller_peek_path(self->selection_controller, &selection_length);
+      guint selection_length = 0;
+      const guint *selection = board_selection_controller_peek_path(self->selection_controller, &selection_length);
+
+      g_return_if_fail(backend->square_grid_moves_collect_starts != NULL);
+      g_return_if_fail(backend->square_grid_moves_collect_next_destinations != NULL);
+      backend->square_grid_moves_collect_starts(&moves, playable_starts, G_N_ELEMENTS(playable_starts));
       if (selection_length > 0) {
-        game_moves_collect_next_destinations(&moves, selection, selection_length, possible_destinations);
+        backend->square_grid_moves_collect_next_destinations(&moves,
+                                                             selection,
+                                                             selection_length,
+                                                             possible_destinations,
+                                                             G_N_ELEMENTS(possible_destinations));
       }
     }
   }
 
-  guint board_size = state->board.board_size;
-  int max_square = board_playable_squares(board_size);
-  for (int idx = 0; idx < max_square; ++idx) {
-    BoardSquare *square = board_grid_get_square(self->board_grid, (uint8_t)idx);
-    if (!square) {
-      continue;
+  guint rows = backend->square_grid_rows(position);
+  guint cols = backend->square_grid_cols(position);
+  for (guint row = 0; row < rows; ++row) {
+    for (guint col = 0; col < cols; ++col) {
+      guint index = 0;
+      GameBackendSquarePieceView piece = {0};
+
+      if (!backend->square_grid_square_playable(position, row, col) ||
+          !backend->square_grid_square_index(position, row, col, &index)) {
+        continue;
+      }
+
+      BoardSquare *square = board_grid_get_square(self->board_grid, index);
+      if (square == NULL) {
+        continue;
+      }
+
+      if (!backend->square_grid_piece_view(position, index, &piece)) {
+        g_debug("Failed to get square piece view");
+        continue;
+      }
+
+      board_square_set_piece(square, &piece, self->piece_palette);
+
+      gboolean is_selected = board_selection_controller_contains(self->selection_controller, index);
+      gboolean is_selectable = highlight_moves && index < G_N_ELEMENTS(playable_starts) && playable_starts[index];
+      gboolean is_destination =
+          highlight_moves && index < G_N_ELEMENTS(possible_destinations) && possible_destinations[index];
+      board_square_set_highlight(square, is_selected, is_selectable, is_destination);
     }
-
-    CheckersPiece piece = board_get(&state->board, (uint8_t)idx);
-    board_square_set_piece(square, piece, self->piece_palette);
-
-    gboolean is_selected = board_selection_controller_contains(self->selection_controller, (uint8_t)idx);
-    gboolean is_selectable = highlight_moves && playable_starts[idx];
-    gboolean is_destination = highlight_moves && possible_destinations[idx];
-    board_square_set_highlight(square, is_selected, is_selectable, is_destination);
   }
 
   if (moves_loaded) {
-    movelist_free(&moves);
+    backend->move_list_free(&moves);
   }
 }
 
-static void board_view_update_sensitivity(BoardView *self, const GameState *state) {
-  g_return_if_fail(BOARD_IS_VIEW(self));
-  g_return_if_fail(state != NULL);
+static void board_view_update_sensitivity(BoardView *self, gconstpointer position) {
+  const GameBackend *backend = NULL;
+  gboolean can_play = FALSE;
+  guint rows = 0;
+  guint cols = 0;
 
-  gboolean can_play = state->winner == CHECKERS_WINNER_NONE && self->input_enabled;
-  int max_square = board_playable_squares(state->board.board_size);
-  for (int i = 0; i < max_square; ++i) {
-    BoardSquare *square = board_grid_get_square(self->board_grid, (uint8_t)i);
-    if (square) {
-      gtk_widget_set_sensitive(board_square_get_widget(square), can_play);
+  g_return_if_fail(BOARD_IS_VIEW(self));
+  g_return_if_fail(position != NULL);
+
+  backend = ggame_model_peek_backend(self->model);
+  g_return_if_fail(backend != NULL);
+
+  can_play = backend->position_outcome(position) == GAME_BACKEND_OUTCOME_ONGOING && self->input_enabled;
+  rows = backend->square_grid_rows(position);
+  cols = backend->square_grid_cols(position);
+  for (guint row = 0; row < rows; ++row) {
+    for (guint col = 0; col < cols; ++col) {
+      guint index = 0;
+
+      if (!backend->square_grid_square_playable(position, row, col) ||
+          !backend->square_grid_square_index(position, row, col, &index)) {
+        continue;
+      }
+
+      BoardSquare *square = board_grid_get_square(self->board_grid, index);
+      if (square != NULL) {
+        gtk_widget_set_sensitive(board_square_get_widget(square), can_play);
+      }
     }
   }
 }
 
 static gboolean board_view_handle_square_action(BoardView *self, GtkWidget *square_widget, guint button) {
+  const GameBackend *backend = NULL;
+  gconstpointer position = NULL;
+
   g_return_val_if_fail(BOARD_IS_VIEW(self), FALSE);
-  g_return_val_if_fail(GCHECKERS_IS_MODEL(self->model), FALSE);
+  g_return_val_if_fail(GGAME_IS_MODEL(self->model), FALSE);
   g_return_val_if_fail(GTK_IS_WIDGET(square_widget), FALSE);
 
-  const GameState *state = gcheckers_model_peek_state(self->model);
-  if (!state) {
-    g_debug("Failed to fetch game state for square action\n");
+  backend = ggame_model_peek_backend(self->model);
+  position = ggame_model_peek_position(self->model);
+  if (backend == NULL || position == NULL) {
     return FALSE;
   }
 
   gpointer data = g_object_get_data(G_OBJECT(square_widget), "board-index");
-  if (!data) {
-    g_debug("Missing board index for square action\n");
-    return FALSE;
-  }
-  int index = GPOINTER_TO_INT(data) - 1;
-  if (index < 0) {
-    g_debug("Invalid board index for square action\n");
+  if (data == NULL) {
+    g_debug("Missing board index for square action");
     return FALSE;
   }
 
-  if (self->square_handler != NULL &&
-      self->square_handler((guint8)index, button, self->square_handler_data)) {
+  gint index = GPOINTER_TO_INT(data) - 1;
+  if (index < 0) {
+    g_debug("Invalid board index for square action");
+    return FALSE;
+  }
+
+  if (self->square_handler != NULL && self->square_handler((guint) index, button, self->square_handler_data)) {
     board_selection_controller_clear(self->selection_controller);
     board_view_update(self);
     return TRUE;
   }
 
-  if (button != GDK_BUTTON_PRIMARY) {
+  if (button != GDK_BUTTON_PRIMARY ||
+      backend->position_outcome(position) != GAME_BACKEND_OUTCOME_ONGOING ||
+      !self->input_enabled) {
     return FALSE;
   }
 
-  if (state->winner != CHECKERS_WINNER_NONE) {
-    return FALSE;
-  }
-  if (!self->input_enabled) {
-    return FALSE;
-  }
-
-  if (board_selection_controller_handle_click(self->selection_controller, (uint8_t)index)) {
+  if (board_selection_controller_handle_click(self->selection_controller, (guint) index)) {
     board_view_update(self);
     return TRUE;
   }
+
   return FALSE;
 }
 
@@ -169,24 +215,24 @@ static void board_view_on_square_secondary_pressed(GtkGestureClick *gesture,
 }
 
 static void board_view_build_board(BoardView *self) {
+  gconstpointer position = NULL;
+  const GameBackend *backend = NULL;
+
   g_return_if_fail(BOARD_IS_VIEW(self));
-  g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
+  g_return_if_fail(GGAME_IS_MODEL(self->model));
 
-  const GameState *state = gcheckers_model_peek_state(self->model);
-  if (!state) {
-    g_debug("Failed to fetch game state while building board\n");
+  backend = ggame_model_peek_backend(self->model);
+  position = ggame_model_peek_position(self->model);
+  if (backend == NULL || position == NULL) {
     return;
   }
 
-  guint board_size = state->board.board_size;
-  if (board_size == 0) {
-    g_debug("Board size was zero while building board\n");
-    return;
-  }
+  g_return_if_fail(backend->supports_square_grid_board);
 
   board_grid_build(self->board_grid,
-                   board_size,
-                   self->bottom_color,
+                   backend,
+                   position,
+                   self->bottom_side,
                    board_view_on_square_clicked,
                    board_view_on_square_secondary_pressed,
                    self);
@@ -198,15 +244,26 @@ GtkWidget *board_view_get_widget(BoardView *self) {
   return self->root;
 }
 
-void board_view_set_model(BoardView *self, GCheckersModel *model) {
-  g_return_if_fail(BOARD_IS_VIEW(self));
-  g_return_if_fail(GCHECKERS_IS_MODEL(model));
+void board_view_set_model(BoardView *self, gpointer model) {
+  const GameBackend *backend = NULL;
+  GGameModel *game_model = NULL;
 
-  if (self->model) {
-    g_clear_object(&self->model);
+  g_return_if_fail(BOARD_IS_VIEW(self));
+  g_return_if_fail(model != NULL);
+
+  if (GGAME_IS_MODEL(model)) {
+    game_model = GGAME_MODEL(model);
+  } else {
+    game_model = gcheckers_model_peek_game_model((GCheckersModel *) model);
   }
 
-  self->model = g_object_ref(model);
+  g_return_if_fail(GGAME_IS_MODEL(game_model));
+  g_set_object(&self->model, game_model);
+
+  backend = ggame_model_peek_backend(self->model);
+  g_return_if_fail(backend != NULL);
+  g_return_if_fail(backend->supports_square_grid_board);
+
   board_selection_controller_set_model(self->selection_controller, self->model);
   board_move_overlay_set_model(self->board_overlay, self->model);
   board_view_build_board(self);
@@ -220,48 +277,49 @@ void board_view_set_sgf_controller(BoardView *self, GCheckersSgfController *cont
   board_move_overlay_set_sgf_controller(self->board_overlay, controller);
 }
 
-void board_view_set_move_handler(BoardView *self, BoardViewMoveHandler handler, gpointer user_data) {
+void board_view_set_move_handler(BoardView *self, gpointer handler, gpointer user_data) {
   g_return_if_fail(BOARD_IS_VIEW(self));
 
-  self->move_handler = handler;
+  self->move_handler = (BoardViewMoveHandler) handler;
   self->move_handler_data = user_data;
   board_selection_controller_set_move_handler(self->selection_controller,
                                               self->move_handler,
                                               self->move_handler_data);
 }
 
-void board_view_set_square_handler(BoardView *self, BoardViewSquareHandler handler, gpointer user_data) {
+void board_view_set_square_handler(BoardView *self, gpointer handler, gpointer user_data) {
   g_return_if_fail(BOARD_IS_VIEW(self));
 
-  self->square_handler = handler;
+  self->square_handler = (BoardViewSquareHandler) handler;
   self->square_handler_data = user_data;
 }
 
 void board_view_update(BoardView *self) {
+  const GameBackend *backend = NULL;
+  gconstpointer position = NULL;
+
   g_return_if_fail(BOARD_IS_VIEW(self));
 
-  if (!self->model) {
-    g_debug("Missing model while updating board view\n");
+  if (self->model == NULL) {
+    g_debug("Missing model while updating board view");
     return;
   }
 
-  const GameState *state = gcheckers_model_peek_state(self->model);
-  if (!state) {
-    g_debug("Failed to fetch game state for board update\n");
+  backend = ggame_model_peek_backend(self->model);
+  position = ggame_model_peek_position(self->model);
+  if (backend == NULL || position == NULL) {
+    g_debug("Failed to fetch backend state for board update");
     return;
   }
 
-  if (board_grid_get_board_size(self->board_grid) != state->board.board_size) {
+  if (board_grid_get_board_size(self->board_grid) != backend->square_grid_rows(position)) {
     board_selection_controller_clear(self->selection_controller);
     board_view_build_board(self);
   }
 
-  board_view_update_board(self, state);
-  board_view_update_sensitivity(self, state);
-
-  if (self->board_overlay) {
-    board_move_overlay_queue_draw(self->board_overlay);
-  }
+  board_view_update_board(self, position);
+  board_view_update_sensitivity(self, position);
+  board_move_overlay_queue_draw(self->board_overlay);
 }
 
 void board_view_clear_selection(BoardView *self) {
@@ -275,28 +333,19 @@ void board_view_set_input_enabled(BoardView *self, gboolean enabled) {
   g_return_if_fail(BOARD_IS_VIEW(self));
 
   self->input_enabled = enabled;
-
-  if (!self->model) {
-    return;
+  if (self->model != NULL) {
+    board_view_update_sensitivity(self, ggame_model_peek_position(self->model));
   }
-
-  const GameState *state = gcheckers_model_peek_state(self->model);
-  if (!state) {
-    g_debug("Failed to fetch game state while updating input sensitivity\n");
-    return;
-  }
-
-  board_view_update_sensitivity(self, state);
 }
 
 static void board_view_dispose(GObject *object) {
   BoardView *self = BOARD_VIEW(object);
-
   gboolean root_removed = TRUE;
-  if (self->root) {
+
+  if (self->root != NULL) {
     root_removed = gcheckers_widget_remove_from_parent(self->root);
-    if (!root_removed && gtk_widget_get_parent(self->root)) {
-      g_debug("Failed to remove board view root from parent during dispose\n");
+    if (!root_removed && gtk_widget_get_parent(self->root) != NULL) {
+      g_debug("Failed to remove board view root from parent during dispose");
     }
   }
 
@@ -327,8 +376,7 @@ static void board_view_init(BoardView *self) {
   gtk_widget_set_vexpand(self->root, TRUE);
 
   self->board_grid = board_grid_new(board_view_square_size);
-  GtkWidget *grid_widget = board_grid_get_widget(self->board_grid);
-  gtk_overlay_set_child(GTK_OVERLAY(self->root), grid_widget);
+  gtk_overlay_set_child(GTK_OVERLAY(self->root), board_grid_get_widget(self->board_grid));
 
   self->board_overlay = board_move_overlay_new();
   gtk_overlay_add_overlay(GTK_OVERLAY(self->root), board_move_overlay_get_widget(self->board_overlay));
@@ -340,23 +388,22 @@ static void board_view_init(BoardView *self) {
   self->square_handler = NULL;
   self->square_handler_data = NULL;
   self->input_enabled = TRUE;
-  self->bottom_color = CHECKERS_COLOR_WHITE;
+  self->bottom_side = 0;
 }
 
 BoardView *board_view_new(void) {
   return g_object_new(BOARD_TYPE_VIEW, NULL);
 }
 
-void board_view_set_bottom_color(BoardView *self, CheckersColor bottom_color) {
+void board_view_set_bottom_side(BoardView *self, guint bottom_side) {
   g_return_if_fail(BOARD_IS_VIEW(self));
-  g_return_if_fail(bottom_color == CHECKERS_COLOR_WHITE || bottom_color == CHECKERS_COLOR_BLACK);
 
-  if (self->bottom_color == bottom_color) {
+  if (self->bottom_side == bottom_side) {
     return;
   }
 
-  self->bottom_color = bottom_color;
-  board_move_overlay_set_bottom_color(self->board_overlay, bottom_color);
+  self->bottom_side = bottom_side;
+  board_move_overlay_set_bottom_side(self->board_overlay, bottom_side);
 
   if (self->model != NULL) {
     board_view_build_board(self);
@@ -364,22 +411,20 @@ void board_view_set_bottom_color(BoardView *self, CheckersColor bottom_color) {
   }
 }
 
-CheckersColor board_view_get_bottom_color(BoardView *self) {
-  g_return_val_if_fail(BOARD_IS_VIEW(self), CHECKERS_COLOR_WHITE);
+guint board_view_get_bottom_side(BoardView *self) {
+  g_return_val_if_fail(BOARD_IS_VIEW(self), 0);
 
-  return self->bottom_color;
+  return self->bottom_side;
 }
 
 void board_view_set_banner_text(BoardView *self, const char *text) {
   g_return_if_fail(BOARD_IS_VIEW(self));
-  g_return_if_fail(self->board_overlay != NULL);
 
   board_move_overlay_set_banner(self->board_overlay, text, BOARD_MOVE_OVERLAY_BANNER_COLOR_DEFAULT);
 }
 
 void board_view_set_banner_text_red(BoardView *self, const char *text) {
   g_return_if_fail(BOARD_IS_VIEW(self));
-  g_return_if_fail(self->board_overlay != NULL);
 
   board_move_overlay_set_banner(self->board_overlay, text, BOARD_MOVE_OVERLAY_BANNER_COLOR_RED);
 }

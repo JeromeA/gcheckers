@@ -1,6 +1,5 @@
 #include "board_grid.h"
 
-#include "board.h"
 #include "widget_utils.h"
 
 #include <string.h>
@@ -8,17 +7,29 @@
 struct _BoardGrid {
   GObject parent_instance;
   GtkWidget *grid;
-  BoardSquare *squares[CHECKERS_MAX_SQUARES];
+  BoardSquare *squares[128];
   guint board_size;
   guint square_size;
 };
 
 G_DEFINE_TYPE(BoardGrid, board_grid, G_TYPE_OBJECT)
 
+static void board_grid_transform_for_bottom_side(guint *row, guint *col, guint rows, guint cols, guint bottom_side) {
+  g_return_if_fail(row != NULL);
+  g_return_if_fail(col != NULL);
+
+  if (bottom_side == 0) {
+    return;
+  }
+
+  *row = rows - 1 - *row;
+  *col = cols - 1 - *col;
+}
+
 static void board_grid_reset_squares(BoardGrid *self) {
   g_return_if_fail(BOARD_IS_GRID(self));
 
-  for (int i = 0; i < CHECKERS_MAX_SQUARES; ++i) {
+  for (guint i = 0; i < G_N_ELEMENTS(self->squares); ++i) {
     if (self->squares[i]) {
       g_clear_object(&self->squares[i]);
     }
@@ -89,23 +100,29 @@ void board_grid_clear(BoardGrid *self) {
 }
 
 void board_grid_build(BoardGrid *self,
-                      guint board_size,
-                      CheckersColor bottom_color,
+                      const GameBackend *backend,
+                      gconstpointer position,
+                      guint bottom_side,
                       BoardGridPrimaryClickHandler primary_clicked,
                       BoardGridSecondaryPressHandler secondary_pressed,
                       gpointer user_data) {
   g_return_if_fail(BOARD_IS_GRID(self));
-  g_return_if_fail(board_size > 0);
-  g_return_if_fail(bottom_color == CHECKERS_COLOR_WHITE || bottom_color == CHECKERS_COLOR_BLACK);
+  g_return_if_fail(backend != NULL);
+  g_return_if_fail(position != NULL);
+  g_return_if_fail(backend->supports_square_grid_board);
+  g_return_if_fail(backend->square_grid_rows != NULL);
+  g_return_if_fail(backend->square_grid_cols != NULL);
+  g_return_if_fail(backend->square_grid_square_playable != NULL);
+  g_return_if_fail(backend->square_grid_square_index != NULL);
 
-  if (board_size == 0) {
-    g_debug("Board size was zero while building board grid\n");
-    return;
-  }
+  guint rows = backend->square_grid_rows(position);
+  guint cols = backend->square_grid_cols(position);
+  g_return_if_fail(rows > 0);
+  g_return_if_fail(cols > 0);
 
   board_grid_clear(self);
   board_grid_reset_squares(self);
-  self->board_size = board_size;
+  self->board_size = rows;
   memset(self->squares, 0, sizeof(self->squares));
 
   gtk_grid_set_row_homogeneous(GTK_GRID(self->grid), TRUE);
@@ -113,10 +130,10 @@ void board_grid_build(BoardGrid *self,
   gtk_grid_set_row_spacing(GTK_GRID(self->grid), 1);
   gtk_grid_set_column_spacing(GTK_GRID(self->grid), 1);
 
-  for (int row = 0; row < (int)board_size; ++row) {
-    for (int col = 0; col < (int)board_size; ++col) {
+  for (guint row = 0; row < rows; ++row) {
+    for (guint col = 0; col < cols; ++col) {
       GtkWidget *square = NULL;
-      if ((row + col) % 2 == 0) {
+      if (!backend->square_grid_square_playable(position, row, col)) {
         GtkWidget *label = gtk_label_new(" ");
         gtk_widget_set_size_request(label, self->square_size, self->square_size);
         gtk_widget_set_hexpand(label, TRUE);
@@ -124,15 +141,15 @@ void board_grid_build(BoardGrid *self,
         gtk_widget_add_css_class(label, "board-light");
         square = label;
       } else {
-        int8_t index = board_index_from_coord(row, col, board_size);
+        guint index = 0;
         BoardSquare *board_square = board_square_new(self->square_size);
         GtkWidget *button = board_square_get_widget(board_square);
         gtk_widget_add_css_class(button, "board-dark");
         gtk_widget_add_css_class(button, "board-square");
-        if (index < 0) {
+        if (!backend->square_grid_square_index(position, row, col, &index)) {
           g_debug("Invalid board index while building board grid\n");
         } else {
-          board_square_set_index(board_square, (guint)index);
+          board_square_set_index(board_square, index);
         }
         if (primary_clicked != NULL) {
           g_signal_connect(button, "clicked", G_CALLBACK(primary_clicked), user_data);
@@ -144,22 +161,22 @@ void board_grid_build(BoardGrid *self,
           g_signal_connect(gesture, "pressed", G_CALLBACK(secondary_pressed), user_data);
         }
         square = button;
-        if (index >= 0 && index < CHECKERS_MAX_SQUARES) {
+        if (index < G_N_ELEMENTS(self->squares)) {
           self->squares[index] = board_square;
         }
       }
-      int display_row = row;
-      int display_col = col;
-      board_coord_transform_for_bottom_color(&display_row, &display_col, (uint8_t)board_size, bottom_color);
-      gtk_grid_attach(GTK_GRID(self->grid), square, display_col, display_row, 1, 1);
+      guint display_row = row;
+      guint display_col = col;
+      board_grid_transform_for_bottom_side(&display_row, &display_col, rows, cols, bottom_side);
+      gtk_grid_attach(GTK_GRID(self->grid), square, (int) display_col, (int) display_row, 1, 1);
     }
   }
 }
 
-BoardSquare *board_grid_get_square(BoardGrid *self, uint8_t index) {
+BoardSquare *board_grid_get_square(BoardGrid *self, guint index) {
   g_return_val_if_fail(BOARD_IS_GRID(self), NULL);
 
-  if (index >= CHECKERS_MAX_SQUARES) {
+  if (index >= G_N_ELEMENTS(self->squares)) {
     return NULL;
   }
 
@@ -167,7 +184,7 @@ BoardSquare *board_grid_get_square(BoardGrid *self, uint8_t index) {
 }
 
 guint board_grid_get_board_size(BoardGrid *self) {
-  g_return_val_if_fail(BOARD_IS_GRID(self), 0);
+g_return_val_if_fail(BOARD_IS_GRID(self), 0);
 
   return self->board_size;
 }

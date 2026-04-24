@@ -3,6 +3,7 @@
 
 #include "ai_alpha_beta.h"
 #include "game.h"
+#include "game_model.h"
 
 #include <glib-object.h>
 
@@ -25,6 +26,7 @@ gboolean gcheckers_model_analyze_moves(GCheckersModel *self,
 gboolean gcheckers_model_copy_game(GCheckersModel *self, Game *out_game);
 gboolean gcheckers_model_set_state(GCheckersModel *self, const GameState *state);
 char *gcheckers_model_format_status(GCheckersModel *self);
+GGameModel *gcheckers_model_peek_game_model(GCheckersModel *self);
 const GameState *gcheckers_model_peek_state(GCheckersModel *self);
 const CheckersRules *gcheckers_model_peek_rules(GCheckersModel *self);
 const CheckersMove *gcheckers_model_peek_last_move(GCheckersModel *self);

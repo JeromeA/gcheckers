@@ -1,6 +1,5 @@
 #include "board_move_overlay.h"
 
-#include "board.h"
 #include "widget_utils.h"
 
 #include <math.h>
@@ -8,9 +7,9 @@
 struct _BoardMoveOverlay {
   GObject parent_instance;
   GtkWidget *drawing_area;
-  GCheckersModel *model;
+  GGameModel *model;
   GCheckersSgfController *sgf_controller;
-  CheckersColor bottom_color;
+  guint bottom_side;
   char *banner_text;
   BoardMoveOverlayBannerColor banner_color;
 };
@@ -23,6 +22,22 @@ static const double board_move_overlay_arrow_scale = 0.28;
 static const double board_move_overlay_banner_padding_x = 24.0;
 static const double board_move_overlay_banner_padding_y = 14.0;
 static const double board_move_overlay_banner_radius = 18.0;
+
+static void board_move_overlay_transform_for_bottom_side(guint *row,
+                                                         guint *col,
+                                                         guint rows,
+                                                         guint cols,
+                                                         guint bottom_side) {
+  g_return_if_fail(row != NULL);
+  g_return_if_fail(col != NULL);
+
+  if (bottom_side == 0) {
+    return;
+  }
+
+  *row = rows - 1 - *row;
+  *col = cols - 1 - *col;
+}
 
 static void board_move_overlay_draw_rounded_rect(cairo_t *cr,
                                                  double x,
@@ -48,18 +63,11 @@ static void board_move_overlay_draw_rounded_rect(cairo_t *cr,
   cairo_close_path(cr);
 }
 
-const char *board_move_overlay_get_winner_banner_text(CheckersWinner winner) {
-  switch (winner) {
-    case CHECKERS_WINNER_WHITE:
-      return "White wins!";
-    case CHECKERS_WINNER_BLACK:
-      return "Black wins!";
-    case CHECKERS_WINNER_DRAW:
-      return "Draw!";
-    case CHECKERS_WINNER_NONE:
-    default:
-      return NULL;
-  }
+const char *board_move_overlay_get_winner_banner_text(const GameBackend *backend, GameBackendOutcome outcome) {
+  g_return_val_if_fail(backend != NULL, NULL);
+  g_return_val_if_fail(backend->outcome_banner_text != NULL, NULL);
+
+  return backend->outcome_banner_text(outcome);
 }
 
 static void board_move_overlay_draw_arrow(cairo_t *cr,
@@ -106,61 +114,81 @@ static void board_move_overlay_draw(GtkDrawingArea * /*area*/,
                                     int height,
                                     gpointer user_data) {
   BoardMoveOverlay *self = BOARD_MOVE_OVERLAY(user_data);
+  const GameBackend *backend = NULL;
+  gconstpointer position = NULL;
 
   g_return_if_fail(BOARD_IS_MOVE_OVERLAY(self));
-  g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
+  g_return_if_fail(GGAME_IS_MODEL(self->model));
   g_return_if_fail(cr != NULL);
 
   if (width <= 0 || height <= 0) {
     return;
   }
 
-  const GameState *state = gcheckers_model_peek_state(self->model);
-  if (!state) {
-    g_debug("Failed to fetch game state for last move overlay\n");
+  backend = ggame_model_peek_backend(self->model);
+  position = ggame_model_peek_position(self->model);
+  if (backend == NULL || position == NULL) {
     return;
   }
-  if (state->board.board_size == 0) {
-    g_debug("Board size was zero when drawing last move overlay\n");
+  g_return_if_fail(backend->position_outcome != NULL);
+  g_return_if_fail(backend->square_grid_rows != NULL);
+  g_return_if_fail(backend->square_grid_cols != NULL);
+  g_return_if_fail(backend->square_grid_index_coord != NULL);
+  g_return_if_fail(backend->square_grid_move_get_path != NULL);
+
+  guint rows = backend->square_grid_rows(position);
+  guint cols = backend->square_grid_cols(position);
+  if (rows == 0 || cols == 0) {
+    g_debug("Board grid dimensions were zero when drawing last move overlay");
     return;
   }
 
+  GameBackendOutcome outcome = backend->position_outcome(position);
   const char *winner_banner = self->banner_text != NULL ? self->banner_text
-                                                        : board_move_overlay_get_winner_banner_text(state->winner);
+                                                        : board_move_overlay_get_winner_banner_text(backend, outcome);
 
   CheckersMove move = {0};
   if (self->sgf_controller != NULL &&
       gcheckers_sgf_controller_get_current_node_move(self->sgf_controller, &move) &&
       move.length >= 2) {
-    double cell_width = (double)width / state->board.board_size;
-    double cell_height = (double)height / state->board.board_size;
-    double arrow_size = fmin(cell_width, cell_height) * board_move_overlay_arrow_scale;
+    guint path_length = 0;
+    guint path[128] = {0};
 
-    cairo_save(cr);
-    cairo_set_line_width(cr, board_move_overlay_stroke_width);
-    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
-    cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
-    cairo_set_source_rgba(cr, 0.2, 0.85, 0.2, board_move_overlay_alpha);
+    if (backend->square_grid_move_get_path(&move, &path_length, path, G_N_ELEMENTS(path)) && path_length >= 2) {
+      double cell_width = (double) width / cols;
+      double cell_height = (double) height / rows;
+      double arrow_size = fmin(cell_width, cell_height) * board_move_overlay_arrow_scale;
 
-    for (uint8_t i = 1; i < move.length; ++i) {
-      int start_row = 0;
-      int start_col = 0;
-      int end_row = 0;
-      int end_col = 0;
-      board_coord_from_index(move.path[i - 1], &start_row, &start_col, state->board.board_size);
-      board_coord_from_index(move.path[i], &end_row, &end_col, state->board.board_size);
-      board_coord_transform_for_bottom_color(&start_row, &start_col, state->board.board_size, self->bottom_color);
-      board_coord_transform_for_bottom_color(&end_row, &end_col, state->board.board_size, self->bottom_color);
+      cairo_save(cr);
+      cairo_set_line_width(cr, board_move_overlay_stroke_width);
+      cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+      cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+      cairo_set_source_rgba(cr, 0.2, 0.85, 0.2, board_move_overlay_alpha);
 
-      double start_x = ((double)start_col + 0.5) * cell_width;
-      double start_y = ((double)start_row + 0.5) * cell_height;
-      double end_x = ((double)end_col + 0.5) * cell_width;
-      double end_y = ((double)end_row + 0.5) * cell_height;
+      for (guint i = 1; i < path_length; ++i) {
+        guint start_row = 0;
+        guint start_col = 0;
+        guint end_row = 0;
+        guint end_col = 0;
 
-      board_move_overlay_draw_arrow(cr, start_x, start_y, end_x, end_y, arrow_size);
+        if (!backend->square_grid_index_coord(position, path[i - 1], &start_row, &start_col) ||
+            !backend->square_grid_index_coord(position, path[i], &end_row, &end_col)) {
+          continue;
+        }
+
+        board_move_overlay_transform_for_bottom_side(&start_row, &start_col, rows, cols, self->bottom_side);
+        board_move_overlay_transform_for_bottom_side(&end_row, &end_col, rows, cols, self->bottom_side);
+
+        double start_x = ((double) start_col + 0.5) * cell_width;
+        double start_y = ((double) start_row + 0.5) * cell_height;
+        double end_x = ((double) end_col + 0.5) * cell_width;
+        double end_y = ((double) end_row + 0.5) * cell_height;
+
+        board_move_overlay_draw_arrow(cr, start_x, start_y, end_x, end_y, arrow_size);
+      }
+
+      cairo_restore(cr);
     }
-
-    cairo_restore(cr);
   }
 
   if (winner_banner == NULL) {
@@ -176,8 +204,8 @@ static void board_move_overlay_draw(GtkDrawingArea * /*area*/,
 
   double banner_width = extents.width + board_move_overlay_banner_padding_x * 2.0;
   double banner_height = extents.height + board_move_overlay_banner_padding_y * 2.0;
-  double banner_x = ((double)width - banner_width) / 2.0;
-  double banner_y = ((double)height - banner_height) / 2.0;
+  double banner_x = ((double) width - banner_width) / 2.0;
+  double banner_y = ((double) height - banner_height) / 2.0;
 
   cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.68);
   board_move_overlay_draw_rounded_rect(cr,
@@ -202,12 +230,12 @@ static void board_move_overlay_draw(GtkDrawingArea * /*area*/,
 
 static void board_move_overlay_dispose(GObject *object) {
   BoardMoveOverlay *self = BOARD_MOVE_OVERLAY(object);
-
   gboolean drawing_area_removed = TRUE;
-  if (self->drawing_area) {
+
+  if (self->drawing_area != NULL) {
     drawing_area_removed = gcheckers_widget_remove_from_parent(self->drawing_area);
-    if (!drawing_area_removed && gtk_widget_get_parent(self->drawing_area)) {
-      g_debug("Failed to remove board overlay drawing area from parent during dispose\n");
+    if (!drawing_area_removed && gtk_widget_get_parent(self->drawing_area) != NULL) {
+      g_debug("Failed to remove board overlay drawing area from parent during dispose");
     }
   }
 
@@ -235,11 +263,8 @@ static void board_move_overlay_init(BoardMoveOverlay *self) {
   gtk_widget_set_hexpand(self->drawing_area, TRUE);
   gtk_widget_set_vexpand(self->drawing_area, TRUE);
   gtk_widget_set_can_target(self->drawing_area, FALSE);
-  gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(self->drawing_area),
-                                 board_move_overlay_draw,
-                                 self,
-                                 NULL);
-  self->bottom_color = CHECKERS_COLOR_WHITE;
+  gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(self->drawing_area), board_move_overlay_draw, self, NULL);
+  self->bottom_side = 0;
 }
 
 BoardMoveOverlay *board_move_overlay_new(void) {
@@ -252,15 +277,11 @@ GtkWidget *board_move_overlay_get_widget(BoardMoveOverlay *self) {
   return self->drawing_area;
 }
 
-void board_move_overlay_set_model(BoardMoveOverlay *self, GCheckersModel *model) {
+void board_move_overlay_set_model(BoardMoveOverlay *self, GGameModel *model) {
   g_return_if_fail(BOARD_IS_MOVE_OVERLAY(self));
-  g_return_if_fail(GCHECKERS_IS_MODEL(model));
+  g_return_if_fail(GGAME_IS_MODEL(model));
 
-  if (self->model) {
-    g_clear_object(&self->model);
-  }
-
-  self->model = g_object_ref(model);
+  g_set_object(&self->model, model);
 }
 
 void board_move_overlay_set_banner(BoardMoveOverlay *self,
@@ -282,29 +303,24 @@ void board_move_overlay_set_sgf_controller(BoardMoveOverlay *self, GCheckersSgfC
   g_return_if_fail(BOARD_IS_MOVE_OVERLAY(self));
   g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(controller));
 
-  if (self->sgf_controller != NULL) {
-    g_clear_object(&self->sgf_controller);
-  }
-
-  self->sgf_controller = g_object_ref(controller);
+  g_set_object(&self->sgf_controller, controller);
 }
 
-void board_move_overlay_set_bottom_color(BoardMoveOverlay *self, CheckersColor bottom_color) {
+void board_move_overlay_set_bottom_side(BoardMoveOverlay *self, guint bottom_side) {
   g_return_if_fail(BOARD_IS_MOVE_OVERLAY(self));
-  g_return_if_fail(bottom_color == CHECKERS_COLOR_WHITE || bottom_color == CHECKERS_COLOR_BLACK);
 
-  if (self->bottom_color == bottom_color) {
+  if (self->bottom_side == bottom_side) {
     return;
   }
 
-  self->bottom_color = bottom_color;
+  self->bottom_side = bottom_side;
   board_move_overlay_queue_draw(self);
 }
 
 void board_move_overlay_queue_draw(BoardMoveOverlay *self) {
   g_return_if_fail(BOARD_IS_MOVE_OVERLAY(self));
 
-  if (self->drawing_area) {
+  if (self->drawing_area != NULL) {
     gtk_widget_queue_draw(self->drawing_area);
   }
 }

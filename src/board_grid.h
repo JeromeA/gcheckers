@@ -3,6 +3,7 @@
 
 #include <gtk/gtk.h>
 
+#include "game_backend.h"
 #include "board_square.h"
 
 G_BEGIN_DECLS
@@ -21,12 +22,13 @@ typedef void (*BoardGridSecondaryPressHandler)(GtkGestureClick *gesture,
 BoardGrid *board_grid_new(guint square_size);
 GtkWidget *board_grid_get_widget(BoardGrid *self);
 void board_grid_build(BoardGrid *self,
-                      guint board_size,
-                      CheckersColor bottom_color,
+                      const GameBackend *backend,
+                      gconstpointer position,
+                      guint bottom_side,
                       BoardGridPrimaryClickHandler primary_clicked,
                       BoardGridSecondaryPressHandler secondary_pressed,
                       gpointer user_data);
-BoardSquare *board_grid_get_square(BoardGrid *self, uint8_t index);
+BoardSquare *board_grid_get_square(BoardGrid *self, guint index);
 void board_grid_clear(BoardGrid *self);
 
 guint board_grid_get_board_size(BoardGrid *self);

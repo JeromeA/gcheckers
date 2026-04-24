@@ -4,31 +4,13 @@
 
 struct _PiecePalette {
   GObject parent_instance;
-  GdkRGBA white_fill;
-  GdkRGBA white_stroke;
-  GdkRGBA black_fill;
-  GdkRGBA black_stroke;
+  GdkRGBA side0_fill;
+  GdkRGBA side0_stroke;
+  GdkRGBA side1_fill;
+  GdkRGBA side1_stroke;
 };
 
 G_DEFINE_TYPE(PiecePalette, piece_palette, G_TYPE_OBJECT)
-
-static const char *piece_palette_symbol(CheckersPiece piece) {
-  switch (piece) {
-    case CHECKERS_PIECE_WHITE_MAN:
-      return "⛀";
-    case CHECKERS_PIECE_WHITE_KING:
-      return "⛁";
-    case CHECKERS_PIECE_BLACK_MAN:
-      return "⛂";
-    case CHECKERS_PIECE_BLACK_KING:
-      return "⛃";
-    case CHECKERS_PIECE_EMPTY:
-      return "·";
-    default:
-      g_debug("piece_palette_symbol received unknown piece %d\n", piece);
-      return "?";
-  }
-}
 
 static gboolean piece_palette_parse_color(const char *color_name, GdkRGBA *color) {
   g_return_val_if_fail(color_name != NULL, FALSE);
@@ -43,36 +25,43 @@ static gboolean piece_palette_parse_color(const char *color_name, GdkRGBA *color
 }
 
 static gboolean piece_palette_get_style(PiecePalette *self,
-                                        CheckersPiece piece,
+                                        const GameBackendSquarePieceView *piece,
                                         const GdkRGBA **fill_color,
                                         const GdkRGBA **stroke_color,
                                         guint *layer_count) {
   g_return_val_if_fail(PIECE_IS_PALETTE(self), FALSE);
+  g_return_val_if_fail(piece != NULL, FALSE);
   g_return_val_if_fail(fill_color != NULL, FALSE);
   g_return_val_if_fail(stroke_color != NULL, FALSE);
   g_return_val_if_fail(layer_count != NULL, FALSE);
 
-  switch (piece) {
-    case CHECKERS_PIECE_WHITE_MAN:
-      *fill_color = &self->white_fill;
-      *stroke_color = &self->white_stroke;
+  if (piece->is_empty) {
+    return FALSE;
+  }
+
+  switch (piece->side) {
+    case 0:
+      *fill_color = &self->side0_fill;
+      *stroke_color = &self->side0_stroke;
+      break;
+    case 1:
+      *fill_color = &self->side1_fill;
+      *stroke_color = &self->side1_stroke;
+      break;
+    default:
+      g_debug("Unsupported side index %u for palette lookup", piece->side);
+      return FALSE;
+  }
+
+  switch (piece->kind) {
+    case GAME_BACKEND_SQUARE_PIECE_KIND_MAN:
       *layer_count = 1;
       return TRUE;
-    case CHECKERS_PIECE_BLACK_MAN:
-      *fill_color = &self->black_fill;
-      *stroke_color = &self->black_stroke;
-      *layer_count = 1;
-      return TRUE;
-    case CHECKERS_PIECE_WHITE_KING:
-      *fill_color = &self->white_fill;
-      *stroke_color = &self->white_stroke;
+    case GAME_BACKEND_SQUARE_PIECE_KIND_KING:
       *layer_count = 2;
       return TRUE;
-    case CHECKERS_PIECE_BLACK_KING:
-      *fill_color = &self->black_fill;
-      *stroke_color = &self->black_stroke;
-      *layer_count = 2;
-      return TRUE;
+    case GAME_BACKEND_SQUARE_PIECE_KIND_NONE:
+    case GAME_BACKEND_SQUARE_PIECE_KIND_SYMBOL_ONLY:
     default:
       return FALSE;
   }
@@ -82,23 +71,23 @@ static void piece_palette_class_init(PiecePaletteClass * /*klass*/) {
 }
 
 static void piece_palette_init(PiecePalette *self) {
-  if (!piece_palette_parse_color("#ffffff", &self->white_fill)) {
-    self->white_fill.red = 1.0;
-    self->white_fill.green = 1.0;
-    self->white_fill.blue = 1.0;
-    self->white_fill.alpha = 1.0;
+  if (!piece_palette_parse_color("#ffffff", &self->side0_fill)) {
+    self->side0_fill.red = 1.0;
+    self->side0_fill.green = 1.0;
+    self->side0_fill.blue = 1.0;
+    self->side0_fill.alpha = 1.0;
   }
-  if (!piece_palette_parse_color("#111111", &self->white_stroke)) {
-    self->white_stroke.red = 0.0667;
-    self->white_stroke.green = 0.0667;
-    self->white_stroke.blue = 0.0667;
-    self->white_stroke.alpha = 1.0;
+  if (!piece_palette_parse_color("#111111", &self->side0_stroke)) {
+    self->side0_stroke.red = 0.0667;
+    self->side0_stroke.green = 0.0667;
+    self->side0_stroke.blue = 0.0667;
+    self->side0_stroke.alpha = 1.0;
   }
-  if (!piece_palette_parse_color("#111111", &self->black_fill)) {
-    self->black_fill = self->white_stroke;
+  if (!piece_palette_parse_color("#111111", &self->side1_fill)) {
+    self->side1_fill = self->side0_stroke;
   }
-  if (!piece_palette_parse_color("#ffffff", &self->black_stroke)) {
-    self->black_stroke = self->white_fill;
+  if (!piece_palette_parse_color("#ffffff", &self->side1_stroke)) {
+    self->side1_stroke = self->side0_fill;
   }
 }
 
@@ -107,41 +96,20 @@ PiecePalette *piece_palette_new_default(void) {
 }
 
 gboolean piece_palette_lookup(PiecePalette *self,
-                              CheckersPiece piece,
+                              const GameBackendSquarePieceView *piece,
                               const char **symbol,
                               gboolean *is_empty) {
   g_return_val_if_fail(PIECE_IS_PALETTE(self), FALSE);
+  g_return_val_if_fail(piece != NULL, FALSE);
   g_return_val_if_fail(symbol != NULL, FALSE);
   g_return_val_if_fail(is_empty != NULL, FALSE);
 
-  *symbol = "";
-  *is_empty = FALSE;
-
-  switch (piece) {
-    case CHECKERS_PIECE_WHITE_MAN:
-      *symbol = piece_palette_symbol(piece);
-      return TRUE;
-    case CHECKERS_PIECE_BLACK_MAN:
-      *symbol = piece_palette_symbol(piece);
-      return TRUE;
-    case CHECKERS_PIECE_WHITE_KING:
-      *symbol = piece_palette_symbol(piece);
-      return TRUE;
-    case CHECKERS_PIECE_BLACK_KING:
-      *symbol = piece_palette_symbol(piece);
-      return TRUE;
-    case CHECKERS_PIECE_EMPTY:
-      *symbol = piece_palette_symbol(piece);
-      *is_empty = TRUE;
-      return TRUE;
-    default:
-      g_debug("piece_palette_lookup received unknown piece %d\n", piece);
-      *symbol = "?";
-      return TRUE;
-  }
+  *symbol = piece->symbol != NULL ? piece->symbol : "";
+  *is_empty = piece->is_empty;
+  return TRUE;
 }
 
-gboolean piece_palette_can_draw(PiecePalette *self, CheckersPiece piece) {
+gboolean piece_palette_can_draw(PiecePalette *self, const GameBackendSquarePieceView *piece) {
   const GdkRGBA *fill_color = NULL;
   const GdkRGBA *stroke_color = NULL;
   guint layer_count = 0;
@@ -150,11 +118,12 @@ gboolean piece_palette_can_draw(PiecePalette *self, CheckersPiece piece) {
 }
 
 gboolean piece_palette_draw(PiecePalette *self,
-                            CheckersPiece piece,
+                            const GameBackendSquarePieceView *piece,
                             cairo_t *cr,
                             double width,
                             double height) {
   g_return_val_if_fail(PIECE_IS_PALETTE(self), FALSE);
+  g_return_val_if_fail(piece != NULL, FALSE);
   g_return_val_if_fail(cr != NULL, FALSE);
   g_return_val_if_fail(width > 0.0, FALSE);
   g_return_val_if_fail(height > 0.0, FALSE);

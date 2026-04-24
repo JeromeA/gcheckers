@@ -1,4 +1,5 @@
 #include "application.h"
+#include "active_game_backend.h"
 #include "ai_alpha_beta.h"
 #include "window.h"
 
@@ -27,6 +28,7 @@ typedef enum {
 struct _GCheckersWindow {
   GtkApplicationWindow parent_instance;
   GCheckersModel *model;
+  GGameModel *game_model;
   GtkWidget *main_paned;
   GtkWidget *board_panel;
   GtkWidget *drawer_host;
@@ -198,6 +200,43 @@ enum {
 
 static void gcheckers_window_refresh_analysis_graph(GCheckersWindow *self);
 
+static GGameModel *gcheckers_window_get_game_model(GCheckersWindow *self) {
+  g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), NULL);
+
+  if (self->game_model == NULL) {
+    g_debug("Missing generic game model");
+    return NULL;
+  }
+
+  return self->game_model;
+}
+
+static const GameBackend *gcheckers_window_get_game_backend(GCheckersWindow *self) {
+  GGameModel *game_model = gcheckers_window_get_game_model(self);
+  g_return_val_if_fail(game_model != NULL, NULL);
+
+  const GameBackend *backend = ggame_model_peek_backend(game_model);
+  if (backend == NULL) {
+    g_debug("Missing active game backend");
+    return NULL;
+  }
+
+  return backend;
+}
+
+static gconstpointer gcheckers_window_get_game_position(GCheckersWindow *self) {
+  GGameModel *game_model = gcheckers_window_get_game_model(self);
+  g_return_val_if_fail(game_model != NULL, NULL);
+
+  gconstpointer position = ggame_model_peek_position(game_model);
+  if (position == NULL) {
+    g_debug("Missing active game position");
+    return NULL;
+  }
+
+  return position;
+}
+
 static gboolean gcheckers_window_moves_equal(const CheckersMove *left, const CheckersMove *right) {
   g_return_val_if_fail(left != NULL, FALSE);
   g_return_val_if_fail(right != NULL, FALSE);
@@ -213,7 +252,26 @@ static gboolean gcheckers_window_moves_equal(const CheckersMove *left, const Che
 }
 
 static const char *gcheckers_window_color_name(CheckersColor color) {
-  return color == CHECKERS_COLOR_BLACK ? "Black" : "White";
+  const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
+  g_return_val_if_fail(backend != NULL, NULL);
+  g_return_val_if_fail(backend->side_label != NULL, NULL);
+
+  return backend->side_label(color == CHECKERS_COLOR_BLACK ? 1u : 0u);
+}
+
+static void gcheckers_window_sync_side_labels(GCheckersWindow *self) {
+  const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
+  const char *side0_label = NULL;
+  const char *side1_label = NULL;
+
+  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(self->controls_panel != NULL);
+  g_return_if_fail(backend != NULL);
+  g_return_if_fail(backend->side_label != NULL);
+
+  side0_label = backend->side_label(0);
+  side1_label = backend->side_label(1);
+  player_controls_panel_set_side_labels(self->controls_panel, side0_label, side1_label);
 }
 
 static GCheckersApplication *gcheckers_window_get_application_instance(GCheckersWindow *self) {
@@ -439,8 +497,8 @@ static gboolean gcheckers_window_try_resolve_follow_player_bottom_color(GChecker
   g_return_val_if_fail(out_color != NULL, FALSE);
   g_return_val_if_fail(self->controls_panel != NULL, FALSE);
 
-  gboolean white_is_user = player_controls_panel_is_user_control(self->controls_panel, CHECKERS_COLOR_WHITE);
-  gboolean black_is_user = player_controls_panel_is_user_control(self->controls_panel, CHECKERS_COLOR_BLACK);
+  gboolean white_is_user = player_controls_panel_is_user_control(self->controls_panel, 0);
+  gboolean black_is_user = player_controls_panel_is_user_control(self->controls_panel, 1);
   if (white_is_user == black_is_user) {
     return FALSE;
   }
@@ -463,11 +521,12 @@ static CheckersColor gcheckers_window_resolve_board_bottom_color(GCheckersWindow
       return self->board_bottom_color;
     }
     case GCHECKERS_WINDOW_BOARD_ORIENTATION_FOLLOW_TURN: {
-      if (self->model != NULL) {
-        const GameState *state = gcheckers_model_peek_state(self->model);
-        if (state != NULL) {
-          return state->turn;
-        }
+      const GameBackend *backend = gcheckers_window_get_game_backend(self);
+      gconstpointer position = gcheckers_window_get_game_position(self);
+
+      if (backend != NULL && position != NULL && backend->position_turn != NULL) {
+        guint side = backend->position_turn(position);
+        return side == 0 ? CHECKERS_COLOR_WHITE : CHECKERS_COLOR_BLACK;
       }
       return self->board_bottom_color;
     }
@@ -483,7 +542,7 @@ static void gcheckers_window_sync_board_orientation(GCheckersWindow *self) {
 
   CheckersColor bottom_color = gcheckers_window_resolve_board_bottom_color(self);
   self->board_bottom_color = bottom_color;
-  board_view_set_bottom_color(self->board_view, bottom_color);
+  board_view_set_bottom_side(self->board_view, bottom_color);
 }
 
 static gboolean gcheckers_window_puzzle_name_matches(const char *name) {
@@ -1541,7 +1600,7 @@ static gboolean gcheckers_window_apply_player_move(const CheckersMove *move, gpo
   return TRUE;
 }
 
-static gboolean gcheckers_window_is_user_control(GCheckersWindow *self, CheckersColor color) {
+static gboolean gcheckers_window_is_user_control(GCheckersWindow *self, guint side) {
   g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), FALSE);
 
   if (!self->controls_panel) {
@@ -1549,13 +1608,13 @@ static gboolean gcheckers_window_is_user_control(GCheckersWindow *self, Checkers
     return TRUE;
   }
 
-  return player_controls_panel_is_user_control(self->controls_panel, color);
+  return player_controls_panel_is_user_control(self->controls_panel, side);
 }
 
-static gboolean gcheckers_window_is_computer_control(GCheckersWindow *self, CheckersColor color) {
+static gboolean gcheckers_window_is_computer_control(GCheckersWindow *self, guint side) {
   g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), FALSE);
 
-  return !gcheckers_window_is_user_control(self, color);
+  return !gcheckers_window_is_user_control(self, side);
 }
 
 guint gcheckers_window_get_analysis_depth(GCheckersWindow *self) {
@@ -1637,6 +1696,10 @@ static void gcheckers_window_set_analysis_status(GCheckersWindow *self, const ch
 
   if (self->analysis_status_label == NULL) {
     g_debug("Missing analysis status label");
+    return;
+  }
+  if (!GTK_IS_LABEL(self->analysis_status_label)) {
+    g_debug("Analysis status label is no longer a live GtkLabel");
     return;
   }
 
@@ -2453,20 +2516,21 @@ static void gcheckers_window_start_full_game_analysis(GCheckersWindow *self) {
 }
 
 static void gcheckers_window_update_control_state(GCheckersWindow *self) {
+  const GameBackend *backend = NULL;
+  gconstpointer position = NULL;
+  GameBackendOutcome outcome = GAME_BACKEND_OUTCOME_ONGOING;
+
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(self->board_view != NULL);
 
-  if (!self->model) {
-    g_debug("Missing model while updating control state\n");
-    return;
-  }
+  backend = gcheckers_window_get_game_backend(self);
+  position = gcheckers_window_get_game_position(self);
+  g_return_if_fail(backend != NULL);
+  g_return_if_fail(position != NULL);
+  g_return_if_fail(backend->position_outcome != NULL);
 
-  const GameState *state = gcheckers_model_peek_state(self->model);
-  if (!state) {
-    g_debug("Failed to fetch game state for control update\n");
-    return;
-  }
-
-  gboolean input_enabled = state->winner == CHECKERS_WINNER_NONE;
+  outcome = backend->position_outcome(position);
+  gboolean input_enabled = outcome == GAME_BACKEND_OUTCOME_ONGOING;
   board_view_set_input_enabled(self->board_view, input_enabled);
 }
 
@@ -2501,8 +2565,10 @@ static void gcheckers_window_schedule_auto_force_move(GCheckersWindow *self) {
 }
 
 static void gcheckers_window_maybe_trigger_auto_move(GCheckersWindow *self) {
+  const GameBackend *backend = NULL;
+  gconstpointer position = NULL;
+
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
-  g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
 
   if (gcheckers_window_is_edit_mode(self)) {
     return;
@@ -2519,15 +2585,20 @@ static void gcheckers_window_maybe_trigger_auto_move(GCheckersWindow *self) {
     return;
   }
 
-  const GameState *state = gcheckers_model_peek_state(self->model);
-  if (!state) {
-    g_debug("Failed to fetch game state for auto move\n");
+  backend = gcheckers_window_get_game_backend(self);
+  position = gcheckers_window_get_game_position(self);
+  if (backend == NULL || position == NULL) {
     return;
   }
-  if (state->winner != CHECKERS_WINNER_NONE) {
+  g_return_if_fail(backend->position_outcome != NULL);
+  g_return_if_fail(backend->position_turn != NULL);
+
+  if (backend->position_outcome(position) != GAME_BACKEND_OUTCOME_ONGOING) {
     return;
   }
-  if (!gcheckers_window_is_computer_control(self, state->turn)) {
+
+  guint side = backend->position_turn(position);
+  if (!gcheckers_window_is_computer_control(self, side)) {
     return;
   }
 
@@ -2809,8 +2880,10 @@ static GtkWidget *gcheckers_window_new_toolbar_action_button(const char *icon_na
 }
 
 void gcheckers_window_force_move(GCheckersWindow *self) {
+  const GameBackend *backend = NULL;
+  gconstpointer position = NULL;
+
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
-  g_return_if_fail(GCHECKERS_IS_MODEL(self->model));
 
   if (self->puzzle_mode) {
     g_debug("Ignoring forced move in puzzle mode");
@@ -2821,12 +2894,14 @@ void gcheckers_window_force_move(GCheckersWindow *self) {
     return;
   }
 
-  const GameState *state = gcheckers_model_peek_state(self->model);
-  if (!state) {
-    g_debug("Failed to fetch game state for forced move\n");
+  backend = gcheckers_window_get_game_backend(self);
+  position = gcheckers_window_get_game_position(self);
+  if (backend == NULL || position == NULL) {
     return;
   }
-  if (state->winner != CHECKERS_WINNER_NONE) {
+  g_return_if_fail(backend->position_outcome != NULL);
+
+  if (backend->position_outcome(position) != GAME_BACKEND_OUTCOME_ONGOING) {
     g_debug("Ignoring forced move after game end\n");
     return;
   }
@@ -2853,8 +2928,8 @@ void gcheckers_window_apply_new_game_settings(GCheckersWindow *self,
   g_return_if_fail(GCHECKERS_IS_WINDOW(self));
   g_return_if_fail(self->controls_panel != NULL);
 
-  player_controls_panel_set_mode(self->controls_panel, CHECKERS_COLOR_WHITE, white_mode);
-  player_controls_panel_set_mode(self->controls_panel, CHECKERS_COLOR_BLACK, black_mode);
+  player_controls_panel_set_mode(self->controls_panel, 0, white_mode);
+  player_controls_panel_set_mode(self->controls_panel, 1, black_mode);
   player_controls_panel_set_computer_depth(self->controls_panel, computer_depth);
 
   gcheckers_window_set_board_bottom_color(self, CHECKERS_COLOR_WHITE);
@@ -2910,8 +2985,12 @@ static void gcheckers_window_set_model(GCheckersWindow *self, GCheckersModel *mo
     }
     g_clear_object(&self->model);
   }
+  g_clear_object(&self->game_model);
 
   self->model = g_object_ref(model);
+  self->game_model = gcheckers_model_peek_game_model(self->model);
+  g_return_if_fail(self->game_model != NULL);
+  g_object_ref(self->game_model);
   self->state_handler_id = g_signal_connect(self->model,
                                             "state-changed",
                                             G_CALLBACK(gcheckers_window_on_state_changed),
@@ -2961,6 +3040,8 @@ static void gcheckers_window_dispose(GObject *object) {
   }
 
   gcheckers_window_unparent_controls_panel(self);
+  self->analysis_status_label = NULL;
+  self->analysis_buffer = NULL;
 
   gcheckers_window_stop_analysis(self);
   if (self->paned_tick_id != 0 && self->main_paned) {
@@ -2996,6 +3077,7 @@ static void gcheckers_window_dispose(GObject *object) {
     g_clear_object(&self->drawer_host);
   }
   g_clear_object(&self->board_view);
+  g_clear_object(&self->game_model);
   g_clear_object(&self->model);
   gcheckers_window_puzzle_attempt_reset(self);
   g_clear_pointer(&self->puzzle_path, g_free);
@@ -3220,6 +3302,7 @@ static void gcheckers_window_init(GCheckersWindow *self) {
   g_object_set_data(G_OBJECT(self), "board-panel", left_panel);
 
   self->controls_panel = g_object_ref_sink(player_controls_panel_new());
+  gcheckers_window_sync_side_labels(self);
   gtk_box_append(GTK_BOX(left_panel), GTK_WIDGET(self->controls_panel));
   g_signal_connect(self->controls_panel,
                    "control-changed",

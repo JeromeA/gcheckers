@@ -130,3 +130,17 @@ because no attempt had been started yet.
 The fix starts the unresolved attempt record as soon as a puzzle is opened. Terminal updates still replace that same
 record with `success`, `failure`, or `analyze`, and first-move failure detection now tracks whether the player has
 attempted any move separately from whether the record already exists.
+
+## Simple board moves could be selected but not played through the shared square-grid UI
+
+The shared selection controller should apply an exact move as soon as the user finishes a valid path, including a
+normal non-capturing move with exactly two squares.
+
+The generic board path asks the backend for move length first with `square_grid_move_get_path(move, &len, NULL, 0)`,
+then checks whether the clicked path exactly matches one legal move. The checkers backend rejected every non-empty move
+in that "length-only" mode because it compared the move length against `max_indices` even when no output buffer was
+requested. That made exact two-point moves look like extendable prefixes, so the destination square turned green
+instead of applying the move.
+
+The fix lets the checkers backend answer length-only path queries when `out_indices == NULL`, and a regression test now
+verifies that a simple opening move can be queried that way and still reports its full two-square path.

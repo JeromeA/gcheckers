@@ -10,7 +10,7 @@ struct _BoardSquare {
   GtkWidget *piece_label;
   GtkWidget *index_label;
   PiecePalette *piece_palette;
-  CheckersPiece piece;
+  GameBackendSquarePieceView piece;
   guint square_size;
 };
 
@@ -31,8 +31,8 @@ static void board_square_draw_piece(GtkDrawingArea * /*area*/,
     return;
   }
 
-  if (!piece_palette_draw(self->piece_palette, self->piece, cr, (double)width, (double)height)) {
-    g_debug("Failed to draw board piece %d\n", self->piece);
+  if (!piece_palette_draw(self->piece_palette, &self->piece, cr, (double)width, (double)height)) {
+    g_debug("Failed to draw board piece");
   }
 }
 
@@ -117,7 +117,9 @@ static void board_square_class_init(BoardSquareClass *klass) {
 }
 
 static void board_square_init(BoardSquare *self) {
-  self->piece = CHECKERS_PIECE_EMPTY;
+  memset(&self->piece, 0, sizeof(self->piece));
+  self->piece.is_empty = TRUE;
+  self->piece.kind = GAME_BACKEND_SQUARE_PIECE_KIND_NONE;
   self->square_size = 0;
 }
 
@@ -146,17 +148,18 @@ void board_square_set_index(BoardSquare *self, guint index) {
   g_object_set_data(G_OBJECT(self->button), "board-index", GINT_TO_POINTER(index + 1));
 }
 
-void board_square_set_piece(BoardSquare *self, CheckersPiece piece, PiecePalette *palette) {
+void board_square_set_piece(BoardSquare *self, const GameBackendSquarePieceView *piece, PiecePalette *palette) {
   g_return_if_fail(BOARD_IS_SQUARE(self));
+  g_return_if_fail(piece != NULL);
   g_return_if_fail(PIECE_IS_PALETTE(palette));
 
   const char *symbol = "";
   gboolean is_empty = FALSE;
   if (!piece_palette_lookup(palette, piece, &symbol, &is_empty)) {
-    g_debug("Failed to lookup palette data for piece %d\n", piece);
+    g_debug("Failed to lookup palette data for board piece");
   }
 
-  self->piece = piece;
+  self->piece = *piece;
   g_set_object(&self->piece_palette, palette);
 
   if (is_empty) {

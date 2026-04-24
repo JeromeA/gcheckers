@@ -1,4 +1,5 @@
 #include "ai_alpha_beta.h"
+#include "active_game_backend.h"
 #include "checkers_model.h"
 #include "rulesets.h"
 
@@ -11,6 +12,7 @@ struct _GCheckersModel {
   CheckersMove last_move;
   gboolean has_last_move;
   CheckersAiTranspositionTable *analysis_tt;
+  GGameModel *game_model;
 };
 
 G_DEFINE_TYPE(GCheckersModel, gcheckers_model, G_TYPE_OBJECT)
@@ -26,11 +28,21 @@ static void gcheckers_model_emit_state_changed(GCheckersModel *self) {
   g_signal_emit(self, model_signals[SIGNAL_STATE_CHANGED], 0);
 }
 
+static void gcheckers_model_sync_game_model(GCheckersModel *self) {
+  g_return_if_fail(GCHECKERS_IS_MODEL(self));
+  g_return_if_fail(GGAME_IS_MODEL(self->game_model));
+
+  if (!ggame_model_set_position(self->game_model, &self->game)) {
+    g_debug("Failed to sync generic game model from checkers model");
+  }
+}
+
 static void gcheckers_model_finalize(GObject *object) {
   GCheckersModel *self = GCHECKERS_MODEL(object);
 
   checkers_ai_tt_free(self->analysis_tt);
   game_destroy(&self->game);
+  g_clear_object(&self->game_model);
 
   G_OBJECT_CLASS(gcheckers_model_parent_class)->finalize(object);
 }
@@ -56,6 +68,8 @@ static void gcheckers_model_init(GCheckersModel *self) {
   g_return_if_fail(rules != NULL);
   game_init_with_rules(&self->game, rules);
   self->has_last_move = FALSE;
+  self->game_model = ggame_model_new(GGAME_ACTIVE_GAME_BACKEND);
+  gcheckers_model_sync_game_model(self);
   self->analysis_tt = checkers_ai_tt_new(GCHECKERS_MODEL_ANALYSIS_TT_SIZE_MB);
   if (self->analysis_tt == NULL) {
     g_debug("Failed to allocate model analysis TT, continuing without TT caching");
@@ -73,6 +87,7 @@ void gcheckers_model_reset(GCheckersModel *self) {
   game_destroy(&self->game);
   game_init_with_rules(&self->game, rules);
   self->has_last_move = FALSE;
+  gcheckers_model_sync_game_model(self);
   gcheckers_model_emit_state_changed(self);
 }
 
@@ -87,6 +102,7 @@ void gcheckers_model_set_rules(GCheckersModel *self, const CheckersRules *rules)
   game_destroy(&self->game);
   game_init_with_rules(&self->game, rules);
   self->has_last_move = FALSE;
+  gcheckers_model_sync_game_model(self);
   gcheckers_model_emit_state_changed(self);
 }
 
@@ -109,6 +125,7 @@ static gboolean gcheckers_model_apply_move_internal(GCheckersModel *self, const 
 
   self->last_move = *move;
   self->has_last_move = TRUE;
+  gcheckers_model_sync_game_model(self);
   gcheckers_model_emit_state_changed(self);
   return TRUE;
 }
@@ -209,6 +226,7 @@ gboolean gcheckers_model_set_state(GCheckersModel *self, const GameState *state)
 
   self->game.state = *state;
   self->has_last_move = FALSE;
+  gcheckers_model_sync_game_model(self);
   gcheckers_model_emit_state_changed(self);
   return TRUE;
 }
@@ -220,6 +238,12 @@ char *gcheckers_model_format_status(GCheckersModel *self) {
   const char *winner_label = game_winner_label(self->game.state.winner);
 
   return g_strdup_printf("Turn: %s\nWinner: %s", turn_label, winner_label);
+}
+
+GGameModel *gcheckers_model_peek_game_model(GCheckersModel *self) {
+  g_return_val_if_fail(GCHECKERS_IS_MODEL(self), NULL);
+
+  return self->game_model;
 }
 
 const GameState *gcheckers_model_peek_state(GCheckersModel *self) {

@@ -32,6 +32,31 @@ static const GameBackendVariant checkers_backend_variants[] = {
         },
 };
 
+static const char *checkers_backend_side_label(guint side) {
+  switch (side) {
+    case 0:
+      return "White";
+    case 1:
+      return "Black";
+    default:
+      return NULL;
+  }
+}
+
+static const char *checkers_backend_outcome_banner_text(GameBackendOutcome outcome) {
+  switch (outcome) {
+    case GAME_BACKEND_OUTCOME_SIDE_0_WIN:
+      return "White wins!";
+    case GAME_BACKEND_OUTCOME_SIDE_1_WIN:
+      return "Black wins!";
+    case GAME_BACKEND_OUTCOME_DRAW:
+      return "Draw!";
+    case GAME_BACKEND_OUTCOME_ONGOING:
+    default:
+      return NULL;
+  }
+}
+
 static const GameBackendVariant *checkers_backend_variant_at(guint index) {
   if (index >= G_N_ELEMENTS(checkers_backend_variants)) {
     return NULL;
@@ -249,6 +274,196 @@ static guint64 checkers_backend_hash_position(gconstpointer position) {
   return checkers_ai_zobrist_key(position);
 }
 
+static guint checkers_backend_square_grid_rows(gconstpointer position) {
+  g_return_val_if_fail(position != NULL, 0);
+
+  const Game *game = position;
+  return game->state.board.board_size;
+}
+
+static guint checkers_backend_square_grid_cols(gconstpointer position) {
+  return checkers_backend_square_grid_rows(position);
+}
+
+static gboolean checkers_backend_square_grid_square_playable(gconstpointer position, guint row, guint col) {
+  g_return_val_if_fail(position != NULL, FALSE);
+
+  const Game *game = position;
+  guint board_size = game->state.board.board_size;
+  if (row >= board_size || col >= board_size) {
+    return FALSE;
+  }
+
+  return ((row + col) % 2) != 0;
+}
+
+static gboolean checkers_backend_square_grid_square_index(gconstpointer position,
+                                                          guint row,
+                                                          guint col,
+                                                          guint *out_index) {
+  g_return_val_if_fail(position != NULL, FALSE);
+  g_return_val_if_fail(out_index != NULL, FALSE);
+
+  const Game *game = position;
+  int8_t index = board_index_from_coord((int) row, (int) col, game->state.board.board_size);
+  if (index < 0) {
+    return FALSE;
+  }
+
+  *out_index = (guint) index;
+  return TRUE;
+}
+
+static gboolean checkers_backend_square_grid_index_coord(gconstpointer position,
+                                                         guint index,
+                                                         guint *out_row,
+                                                         guint *out_col) {
+  g_return_val_if_fail(position != NULL, FALSE);
+  g_return_val_if_fail(out_row != NULL, FALSE);
+  g_return_val_if_fail(out_col != NULL, FALSE);
+
+  const Game *game = position;
+  guint max_index = board_playable_squares(game->state.board.board_size);
+  if (index >= max_index) {
+    return FALSE;
+  }
+
+  int row = 0;
+  int col = 0;
+  board_coord_from_index((guint8) index, &row, &col, game->state.board.board_size);
+  *out_row = (guint) row;
+  *out_col = (guint) col;
+  return TRUE;
+}
+
+static gboolean checkers_backend_square_grid_piece_view(gconstpointer position,
+                                                        guint index,
+                                                        GameBackendSquarePieceView *out_view) {
+  g_return_val_if_fail(position != NULL, FALSE);
+  g_return_val_if_fail(out_view != NULL, FALSE);
+
+  const Game *game = position;
+  guint max_index = board_playable_squares(game->state.board.board_size);
+  if (index >= max_index) {
+    return FALSE;
+  }
+
+  memset(out_view, 0, sizeof(*out_view));
+
+  CheckersPiece piece = board_get(&game->state.board, (guint8) index);
+  switch (piece) {
+    case CHECKERS_PIECE_WHITE_MAN:
+      out_view->side = 0;
+      out_view->kind = GAME_BACKEND_SQUARE_PIECE_KIND_MAN;
+      out_view->symbol = "⛀";
+      return TRUE;
+    case CHECKERS_PIECE_WHITE_KING:
+      out_view->side = 0;
+      out_view->kind = GAME_BACKEND_SQUARE_PIECE_KIND_KING;
+      out_view->symbol = "⛁";
+      return TRUE;
+    case CHECKERS_PIECE_BLACK_MAN:
+      out_view->side = 1;
+      out_view->kind = GAME_BACKEND_SQUARE_PIECE_KIND_MAN;
+      out_view->symbol = "⛂";
+      return TRUE;
+    case CHECKERS_PIECE_BLACK_KING:
+      out_view->side = 1;
+      out_view->kind = GAME_BACKEND_SQUARE_PIECE_KIND_KING;
+      out_view->symbol = "⛃";
+      return TRUE;
+    case CHECKERS_PIECE_EMPTY:
+    default:
+      out_view->is_empty = TRUE;
+      out_view->kind = GAME_BACKEND_SQUARE_PIECE_KIND_NONE;
+      out_view->symbol = "·";
+      return TRUE;
+  }
+}
+
+static gboolean checkers_backend_square_grid_move_get_path(gconstpointer move,
+                                                           guint *out_length,
+                                                           guint *out_indices,
+                                                           gsize max_indices) {
+  g_return_val_if_fail(move != NULL, FALSE);
+  g_return_val_if_fail(out_length != NULL, FALSE);
+
+  const CheckersMove *checkers_move = move;
+  if (out_indices != NULL && checkers_move->length > max_indices) {
+    return FALSE;
+  }
+
+  *out_length = checkers_move->length;
+  if (out_indices == NULL) {
+    return TRUE;
+  }
+
+  for (guint i = 0; i < checkers_move->length; ++i) {
+    out_indices[i] = checkers_move->path[i];
+  }
+  return TRUE;
+}
+
+static void checkers_backend_square_grid_moves_collect_starts(const GameBackendMoveList *moves,
+                                                              gboolean *out_starts,
+                                                              gsize out_count) {
+  g_return_if_fail(moves != NULL);
+  g_return_if_fail(out_starts != NULL);
+
+  memset(out_starts, 0, sizeof(*out_starts) * out_count);
+
+  const CheckersMove *all_moves = moves->moves;
+  for (gsize i = 0; i < moves->count; ++i) {
+    if (all_moves[i].length == 0 || all_moves[i].path[0] >= out_count) {
+      continue;
+    }
+    out_starts[all_moves[i].path[0]] = TRUE;
+  }
+}
+
+static gboolean checkers_backend_square_grid_move_has_prefix(gconstpointer move,
+                                                             const guint *path,
+                                                             guint path_length) {
+  g_return_val_if_fail(move != NULL, FALSE);
+  g_return_val_if_fail(path != NULL, FALSE);
+
+  const CheckersMove *checkers_move = move;
+  if (checkers_move->length < path_length) {
+    return FALSE;
+  }
+
+  for (guint i = 0; i < path_length; ++i) {
+    if (checkers_move->path[i] != path[i]) {
+      return FALSE;
+    }
+  }
+
+  return TRUE;
+}
+
+static void checkers_backend_square_grid_moves_collect_next_destinations(const GameBackendMoveList *moves,
+                                                                         const guint *path,
+                                                                         guint path_length,
+                                                                         gboolean *out_destinations,
+                                                                         gsize out_count) {
+  g_return_if_fail(moves != NULL);
+  g_return_if_fail(path != NULL || path_length == 0);
+  g_return_if_fail(out_destinations != NULL);
+
+  memset(out_destinations, 0, sizeof(*out_destinations) * out_count);
+
+  const CheckersMove *all_moves = moves->moves;
+  for (gsize i = 0; i < moves->count; ++i) {
+    if (!checkers_backend_square_grid_move_has_prefix(&all_moves[i], path, path_length)) {
+      continue;
+    }
+    if (all_moves[i].length <= path_length || all_moves[i].path[path_length] >= out_count) {
+      continue;
+    }
+    out_destinations[all_moves[i].path[path_length]] = TRUE;
+  }
+}
+
 static gboolean checkers_backend_format_move(gconstpointer move, char *buffer, gsize size) {
   g_return_val_if_fail(move != NULL, FALSE);
   g_return_val_if_fail(buffer != NULL, FALSE);
@@ -265,6 +480,8 @@ const GameBackend checkers_game_backend = {
     .move_size = sizeof(CheckersMove),
     .variant_at = checkers_backend_variant_at,
     .variant_by_short_name = checkers_backend_variant_by_short_name,
+    .side_label = checkers_backend_side_label,
+    .outcome_banner_text = checkers_backend_outcome_banner_text,
     .position_init = checkers_backend_position_init,
     .position_clear = checkers_backend_position_clear,
     .position_copy = checkers_backend_position_copy,
@@ -279,4 +496,16 @@ const GameBackend checkers_game_backend = {
     .terminal_score = checkers_backend_terminal_score,
     .hash_position = checkers_backend_hash_position,
     .format_move = checkers_backend_format_move,
+    .supports_square_grid_board = TRUE,
+    .square_grid_rows = checkers_backend_square_grid_rows,
+    .square_grid_cols = checkers_backend_square_grid_cols,
+    .square_grid_square_playable = checkers_backend_square_grid_square_playable,
+    .square_grid_square_index = checkers_backend_square_grid_square_index,
+    .square_grid_index_coord = checkers_backend_square_grid_index_coord,
+    .square_grid_piece_view = checkers_backend_square_grid_piece_view,
+    .square_grid_move_get_path = checkers_backend_square_grid_move_get_path,
+    .square_grid_moves_collect_starts = checkers_backend_square_grid_moves_collect_starts,
+    .square_grid_moves_collect_next_destinations =
+        checkers_backend_square_grid_moves_collect_next_destinations,
+    .square_grid_move_has_prefix = checkers_backend_square_grid_move_has_prefix,
 };

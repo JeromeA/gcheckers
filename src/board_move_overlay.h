@@ -3,7 +3,8 @@
 
 #include <gtk/gtk.h>
 
-#include "checkers_model.h"
+#include "game_backend.h"
+#include "game_model.h"
 #include "sgf_controller.h"
 
 G_BEGIN_DECLS
@@ -19,11 +20,11 @@ typedef enum {
 
 BoardMoveOverlay *board_move_overlay_new(void);
 GtkWidget *board_move_overlay_get_widget(BoardMoveOverlay *self);
-const char *board_move_overlay_get_winner_banner_text(CheckersWinner winner);
+const char *board_move_overlay_get_winner_banner_text(const GameBackend *backend, GameBackendOutcome outcome);
 void board_move_overlay_set_banner(BoardMoveOverlay *self, const char *text, BoardMoveOverlayBannerColor color);
-void board_move_overlay_set_model(BoardMoveOverlay *self, GCheckersModel *model);
+void board_move_overlay_set_model(BoardMoveOverlay *self, GGameModel *model);
 void board_move_overlay_set_sgf_controller(BoardMoveOverlay *self, GCheckersSgfController *controller);
-void board_move_overlay_set_bottom_color(BoardMoveOverlay *self, CheckersColor bottom_color);
+void board_move_overlay_set_bottom_side(BoardMoveOverlay *self, guint bottom_side);
 void board_move_overlay_queue_draw(BoardMoveOverlay *self);
 
 G_END_DECLS

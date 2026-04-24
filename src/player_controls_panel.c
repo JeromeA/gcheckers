@@ -9,9 +9,11 @@ static guint player_controls_panel_signals[PLAYER_CONTROLS_PANEL_SIGNAL_COUNT];
 
 struct _PlayerControlsPanel {
   GtkBox parent_instance;
-  GtkDropDown *white_control;
-  GtkDropDown *black_control;
+  GtkDropDown *side0_control;
+  GtkDropDown *side1_control;
   GtkScale *computer_depth_scale;
+  GtkLabel *side0_label;
+  GtkLabel *side1_label;
 };
 
 G_DEFINE_TYPE(PlayerControlsPanel, player_controls_panel, GTK_TYPE_BOX)
@@ -24,13 +26,13 @@ static gboolean player_controls_panel_computer_depth_valid(guint depth) {
   return depth <= PLAYER_COMPUTER_DEPTH_MAX;
 }
 
-static GtkDropDown *player_controls_panel_get_control(PlayerControlsPanel *self, CheckersColor color) {
+static GtkDropDown *player_controls_panel_get_control(PlayerControlsPanel *self, guint side) {
   g_return_val_if_fail(PLAYER_IS_CONTROLS_PANEL(self), NULL);
-  g_return_val_if_fail(color == CHECKERS_COLOR_WHITE || color == CHECKERS_COLOR_BLACK, NULL);
+  g_return_val_if_fail(side <= 1, NULL);
 
-  GtkDropDown *control = color == CHECKERS_COLOR_WHITE ? self->white_control : self->black_control;
-  if (!control) {
-    g_debug("Missing player control dropdown\n");
+  GtkDropDown *control = side == 0 ? self->side0_control : self->side1_control;
+  if (control == NULL) {
+    g_debug("Missing player control dropdown");
     return NULL;
   }
 
@@ -58,9 +60,11 @@ static void player_controls_panel_on_computer_depth_value_changed(GtkRange * /*r
 static void player_controls_panel_dispose(GObject *object) {
   PlayerControlsPanel *self = PLAYER_CONTROLS_PANEL(object);
 
-  self->white_control = NULL;
-  self->black_control = NULL;
+  self->side0_control = NULL;
+  self->side1_control = NULL;
   self->computer_depth_scale = NULL;
+  self->side0_label = NULL;
+  self->side1_label = NULL;
 
   G_OBJECT_CLASS(player_controls_panel_parent_class)->dispose(object);
 }
@@ -89,46 +93,46 @@ static void player_controls_panel_init(PlayerControlsPanel *self) {
   GtkWidget *controls_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
   gtk_box_append(GTK_BOX(self), controls_row);
 
-  GtkWidget *white_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
-  GtkWidget *black_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+  GtkWidget *side0_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+  GtkWidget *side1_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
   GtkWidget *computer_depth_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
-  gtk_box_append(GTK_BOX(controls_row), white_box);
-  gtk_box_append(GTK_BOX(controls_row), black_box);
+  gtk_box_append(GTK_BOX(controls_row), side0_box);
+  gtk_box_append(GTK_BOX(controls_row), side1_box);
   gtk_box_append(GTK_BOX(controls_row), computer_depth_box);
 
-  GtkWidget *white_label = gtk_label_new("White");
-  GtkWidget *black_label = gtk_label_new("Black");
+  self->side0_label = GTK_LABEL(gtk_label_new("Side 1"));
+  self->side1_label = GTK_LABEL(gtk_label_new("Side 2"));
   GtkWidget *computer_depth_label = gtk_label_new("Computer depth");
-  gtk_widget_set_halign(white_label, GTK_ALIGN_START);
-  gtk_widget_set_halign(black_label, GTK_ALIGN_START);
+  gtk_widget_set_halign(GTK_WIDGET(self->side0_label), GTK_ALIGN_START);
+  gtk_widget_set_halign(GTK_WIDGET(self->side1_label), GTK_ALIGN_START);
   gtk_widget_set_halign(computer_depth_label, GTK_ALIGN_START);
-  gtk_box_append(GTK_BOX(white_box), white_label);
-  gtk_box_append(GTK_BOX(black_box), black_label);
+  gtk_box_append(GTK_BOX(side0_box), GTK_WIDGET(self->side0_label));
+  gtk_box_append(GTK_BOX(side1_box), GTK_WIDGET(self->side1_label));
   gtk_box_append(GTK_BOX(computer_depth_box), computer_depth_label);
 
   static const char *control_options[] = {"User", "Computer", NULL};
-  self->white_control = GTK_DROP_DOWN(gtk_drop_down_new_from_strings(control_options));
-  self->black_control = GTK_DROP_DOWN(gtk_drop_down_new_from_strings(control_options));
+  self->side0_control = GTK_DROP_DOWN(gtk_drop_down_new_from_strings(control_options));
+  self->side1_control = GTK_DROP_DOWN(gtk_drop_down_new_from_strings(control_options));
   self->computer_depth_scale = GTK_SCALE(
       gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL, PLAYER_COMPUTER_DEPTH_MIN, PLAYER_COMPUTER_DEPTH_MAX, 1));
   gtk_scale_set_digits(self->computer_depth_scale, 0);
   gtk_scale_set_draw_value(self->computer_depth_scale, TRUE);
   gtk_widget_set_hexpand(GTK_WIDGET(self->computer_depth_scale), TRUE);
   gtk_widget_set_size_request(GTK_WIDGET(self->computer_depth_scale), 100, -1);
-  gtk_widget_set_size_request(GTK_WIDGET(self->white_control), 100, -1);
-  gtk_widget_set_size_request(GTK_WIDGET(self->black_control), 100, -1);
-  player_controls_panel_set_mode(self, CHECKERS_COLOR_WHITE, PLAYER_CONTROL_MODE_USER);
-  player_controls_panel_set_mode(self, CHECKERS_COLOR_BLACK, PLAYER_CONTROL_MODE_USER);
+  gtk_widget_set_size_request(GTK_WIDGET(self->side0_control), 100, -1);
+  gtk_widget_set_size_request(GTK_WIDGET(self->side1_control), 100, -1);
+  player_controls_panel_set_mode(self, 0, PLAYER_CONTROL_MODE_USER);
+  player_controls_panel_set_mode(self, 1, PLAYER_CONTROL_MODE_USER);
   player_controls_panel_set_computer_depth(self, PLAYER_COMPUTER_DEPTH_DEFAULT);
-  gtk_box_append(GTK_BOX(white_box), GTK_WIDGET(self->white_control));
-  gtk_box_append(GTK_BOX(black_box), GTK_WIDGET(self->black_control));
+  gtk_box_append(GTK_BOX(side0_box), GTK_WIDGET(self->side0_control));
+  gtk_box_append(GTK_BOX(side1_box), GTK_WIDGET(self->side1_control));
   gtk_box_append(GTK_BOX(computer_depth_box), GTK_WIDGET(self->computer_depth_scale));
 
-  g_signal_connect(self->white_control,
+  g_signal_connect(self->side0_control,
                    "notify::selected",
                    G_CALLBACK(player_controls_panel_on_selected_notify),
                    self);
-  g_signal_connect(self->black_control,
+  g_signal_connect(self->side1_control,
                    "notify::selected",
                    G_CALLBACK(player_controls_panel_on_selected_notify),
                    self);
@@ -142,48 +146,57 @@ PlayerControlsPanel *player_controls_panel_new(void) {
   return g_object_new(PLAYER_TYPE_CONTROLS_PANEL, NULL);
 }
 
-GtkDropDown *player_controls_panel_get_drop_down(PlayerControlsPanel *self, CheckersColor color) {
-  return player_controls_panel_get_control(self, color);
+GtkDropDown *player_controls_panel_get_drop_down(PlayerControlsPanel *self, guint side) {
+  return player_controls_panel_get_control(self, side);
 }
 
-void player_controls_panel_set_selected(PlayerControlsPanel *self, CheckersColor color, guint selected) {
+void player_controls_panel_set_selected(PlayerControlsPanel *self, guint side, guint selected) {
   g_return_if_fail(selected <= PLAYER_CONTROL_MODE_COMPUTER);
 
-  GtkDropDown *control = player_controls_panel_get_control(self, color);
+  GtkDropDown *control = player_controls_panel_get_control(self, side);
   g_return_if_fail(control != NULL);
 
   gtk_drop_down_set_selected(control, selected);
 }
 
-void player_controls_panel_set_mode(PlayerControlsPanel *self, CheckersColor color, PlayerControlMode mode) {
+void player_controls_panel_set_mode(PlayerControlsPanel *self, guint side, PlayerControlMode mode) {
   g_return_if_fail(player_controls_panel_mode_valid(mode));
 
-  player_controls_panel_set_selected(self, color, (guint)mode);
+  player_controls_panel_set_selected(self, side, (guint) mode);
 }
 
 void player_controls_panel_set_all_user(PlayerControlsPanel *self) {
   g_return_if_fail(PLAYER_IS_CONTROLS_PANEL(self));
 
-  player_controls_panel_set_mode(self, CHECKERS_COLOR_WHITE, PLAYER_CONTROL_MODE_USER);
-  player_controls_panel_set_mode(self, CHECKERS_COLOR_BLACK, PLAYER_CONTROL_MODE_USER);
+  player_controls_panel_set_mode(self, 0, PLAYER_CONTROL_MODE_USER);
+  player_controls_panel_set_mode(self, 1, PLAYER_CONTROL_MODE_USER);
 }
 
-guint player_controls_panel_get_selected(PlayerControlsPanel *self, CheckersColor color) {
-  GtkDropDown *control = player_controls_panel_get_control(self, color);
+guint player_controls_panel_get_selected(PlayerControlsPanel *self, guint side) {
+  GtkDropDown *control = player_controls_panel_get_control(self, side);
   g_return_val_if_fail(control != NULL, 0);
 
   return gtk_drop_down_get_selected(control);
 }
 
-PlayerControlMode player_controls_panel_get_mode(PlayerControlsPanel *self, CheckersColor color) {
-  guint selected = player_controls_panel_get_selected(self, color);
+PlayerControlMode player_controls_panel_get_mode(PlayerControlsPanel *self, guint side) {
+  guint selected = player_controls_panel_get_selected(self, side);
   g_return_val_if_fail(selected <= PLAYER_CONTROL_MODE_COMPUTER, PLAYER_CONTROL_MODE_USER);
 
-  return (PlayerControlMode)selected;
+  return (PlayerControlMode) selected;
 }
 
-gboolean player_controls_panel_is_user_control(PlayerControlsPanel *self, CheckersColor color) {
-  return player_controls_panel_get_mode(self, color) == PLAYER_CONTROL_MODE_USER;
+gboolean player_controls_panel_is_user_control(PlayerControlsPanel *self, guint side) {
+  return player_controls_panel_get_mode(self, side) == PLAYER_CONTROL_MODE_USER;
+}
+
+void player_controls_panel_set_side_labels(PlayerControlsPanel *self,
+                                           const char *side0_label,
+                                           const char *side1_label) {
+  g_return_if_fail(PLAYER_IS_CONTROLS_PANEL(self));
+
+  gtk_label_set_text(self->side0_label, side0_label != NULL ? side0_label : "Side 1");
+  gtk_label_set_text(self->side1_label, side1_label != NULL ? side1_label : "Side 2");
 }
 
 void player_controls_panel_set_computer_depth(PlayerControlsPanel *self, guint depth) {
@@ -191,7 +204,7 @@ void player_controls_panel_set_computer_depth(PlayerControlsPanel *self, guint d
   g_return_if_fail(player_controls_panel_computer_depth_valid(depth));
   g_return_if_fail(self->computer_depth_scale != NULL);
 
-  gtk_range_set_value(GTK_RANGE(self->computer_depth_scale), (gdouble)depth);
+  gtk_range_set_value(GTK_RANGE(self->computer_depth_scale), (gdouble) depth);
 }
 
 guint player_controls_panel_get_computer_depth(PlayerControlsPanel *self) {
@@ -199,8 +212,7 @@ guint player_controls_panel_get_computer_depth(PlayerControlsPanel *self) {
   g_return_val_if_fail(self->computer_depth_scale != NULL, PLAYER_COMPUTER_DEPTH_DEFAULT);
 
   gdouble value = gtk_range_get_value(GTK_RANGE(self->computer_depth_scale));
-  guint depth = (guint)value;
-
+  guint depth = (guint) value;
   if (!player_controls_panel_computer_depth_valid(depth)) {
     g_debug("Unexpected computer depth value");
     return PLAYER_COMPUTER_DEPTH_DEFAULT;
