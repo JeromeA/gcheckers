@@ -1,6 +1,7 @@
 #ifndef AI_TRANSPOSITION_TABLE_H
 #define AI_TRANSPOSITION_TABLE_H
 
+#include "ai_search.h"
 #include "game.h"
 
 #include <glib.h>
@@ -40,5 +41,6 @@ void checkers_ai_tt_store(CheckersAiTranspositionTable *tt,
                           gint score,
                           CheckersAiTtBound bound,
                           const CheckersMove *best_move);
+GameAiTranspositionTable *checkers_ai_tt_peek_generic(CheckersAiTranspositionTable *tt);
 
 #endif

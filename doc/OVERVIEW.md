@@ -260,31 +260,35 @@ last-move caching for board overlay rendering. Exposes structured move-analysis 
 to publish replayed SGF positions (for setup/property-driven nodes) into the GTK model.
 Collaborates with: `GCheckersWindow` and SGF controllers via signals and high-level move APIs.
 
-## AI alpha-beta search (`src/ai_alpha_beta.c`, `src/ai_alpha_beta.h`)
-Module: alpha-beta search.
-Role: choose a move and analyze all legal moves via depth-limited alpha-beta with a material heuristic and
-terminal-win scoring. Root move choice randomizes among all equal best-scoring moves, so repeated games can vary
-without lowering evaluation quality. Analysis APIs can report searched node counts and TT stats (probes/hits/cutoffs),
-and TT stats accumulate when callers reuse the same `CheckersAiSearchStats` across calls. Callers can use
-`checkers_ai_search_stats_clear()` for per-call snapshots or `checkers_ai_search_stats_add()` to aggregate
-independent runs.
+## Generic AI search (`src/ai_search.c`, `src/ai_search.h`)
+Module: backend-driven alpha-beta search.
+Role: choose a move and analyze all legal moves via depth-limited alpha-beta using only `GameBackend` callbacks for
+move generation, position copying, applying moves, static evaluation, terminal scoring, side-to-move inspection, and
+hashing. Root move choice randomizes among all equal best-scoring moves, so repeated games can vary without lowering
+evaluation quality. Analysis APIs can report searched node counts and TT stats (probes/hits/cutoffs), and TT stats
+accumulate when callers reuse the same `GameAiSearchStats` across calls.
 Depth accounting treats forced plies (`exactly one legal move`) as free extensions: depth is consumed only on
 decision nodes with multiple legal moves.
 Score convention: search scores are white-centric at all plies (`+` good for white, `-` good for black). Root move
 lists are ordered by side to move preference (white: high to low, black: low to high) so index 0 remains the best move
 for the player to act.
-Search integrates zobrist hashing + a depth/bound/age transposition table and uses stored best moves for local move
-ordering. Exposes both searched position scoring (`checkers_ai_alpha_beta_evaluate_position`) and pure static
-material scoring (`checkers_ai_evaluate_static_material`) for tooling that must not include forced-ply extensions.
-Collaborates with: `checkers_model.c` for model-facing AI move selection and structured analysis APIs.
+Search integrates backend hashing plus a depth/bound/age transposition table and uses stored best moves for local move
+ordering. Exposes both searched position scoring and pure static scoring through generic APIs.
+Collaborates with: `game_backend.h`, `tests/test_ai_search.c`, and the checkers compatibility wrapper.
+
+## AI alpha-beta compatibility wrapper (`src/ai_alpha_beta.c`, `src/ai_alpha_beta.h`)
+Module: checkers-facing search compatibility.
+Role: preserve the existing `CheckersMove`, `Game`, and `CheckersAiTranspositionTable` APIs while delegating the real
+search work to `ai_search.c` through the checkers backend adapter.
+Collaborates with: `checkers_model.c`, `create_puzzles.c`, and other existing checkers-only callers that have not
+yet migrated to generic AI interfaces.
 
 ## Transposition table (`src/ai_transposition_table.c`, `src/ai_transposition_table.h`)
-Module: transposition cache.
-Role: fixed-size direct-mapped TT keyed by zobrist hash entries, storing depth, score, bound type, age generation, and
-best move. Replacement prefers deeper entries and replaces old generations to keep iterative-deepening searches fresh.
-TT entries are ephemeral search-cache data only (pruning and move ordering), not authoritative user-visible analysis
-storage.
-Collaborates with: `ai_alpha_beta.c`.
+Module: checkers-facing TT compatibility wrapper.
+Role: preserve the existing checkers TT API while delegating storage to the generic backend-sized TT used by
+`ai_search.c`. TT entries remain ephemeral search-cache data only (pruning and move ordering), not authoritative
+user-visible analysis storage.
+Collaborates with: `ai_search.c` and `ai_alpha_beta.c`.
 
 ## Zobrist hashing (`src/ai_zobrist.c`, `src/ai_zobrist.h`)
 Module: position hashing.
