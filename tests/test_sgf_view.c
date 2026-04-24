@@ -665,6 +665,34 @@ static void test_sgf_view_scroller_missing_node_does_not_retry(void) {
   g_clear_object(&scroller);
 }
 
+static void test_sgf_view_unmapped_selection_does_not_scroll(void) {
+  SgfTree *tree = sgf_tree_new();
+  const SgfNode *move_1 = sgf_tree_append_move(tree, SGF_COLOR_BLACK, NULL);
+  const SgfNode *move_2 = sgf_tree_append_move(tree, SGF_COLOR_WHITE, NULL);
+
+  g_assert_nonnull(move_2);
+  g_assert_true(sgf_tree_set_current(tree, move_1));
+
+  SgfView *view = sgf_view_new();
+  sgf_view_set_tree(view, tree);
+
+  GtkWidget *root = sgf_view_get_widget(view);
+  GtkAdjustment *hadjustment = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(root));
+  GtkAdjustment *vadjustment = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(root));
+  g_assert_nonnull(hadjustment);
+  g_assert_nonnull(vadjustment);
+  g_assert_false(gtk_widget_get_mapped(root));
+
+  sgf_view_set_selected(view, move_2);
+  sgf_view_wait(120);
+
+  g_assert_cmpfloat(gtk_adjustment_get_value(hadjustment), ==, 0.0);
+  g_assert_cmpfloat(gtk_adjustment_get_value(vadjustment), ==, 0.0);
+
+  g_clear_object(&view);
+  g_clear_object(&tree);
+}
+
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   if (!gtk_init_check()) {
@@ -680,6 +708,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/sgf-view/layout-syncs-selection", test_sgf_view_connectors_skip);
     g_test_add_func("/sgf-view/force-layout-syncs-selection", test_sgf_view_connectors_skip);
     g_test_add_func("/sgf-view/scroller-missing-node-no-retry", test_sgf_view_connectors_skip);
+    g_test_add_func("/sgf-view/unmapped-selection-no-scroll", test_sgf_view_connectors_skip);
     return g_test_run();
   }
 
@@ -695,5 +724,6 @@ int main(int argc, char **argv) {
   g_test_add_func("/sgf-view/layout-syncs-selection", test_sgf_view_layout_syncs_selection);
   g_test_add_func("/sgf-view/force-layout-syncs-selection", test_sgf_view_force_layout_syncs_selection);
   g_test_add_func("/sgf-view/scroller-missing-node-no-retry", test_sgf_view_scroller_missing_node_does_not_retry);
+  g_test_add_func("/sgf-view/unmapped-selection-no-scroll", test_sgf_view_unmapped_selection_does_not_scroll);
   return g_test_run();
 }

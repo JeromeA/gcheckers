@@ -101,7 +101,9 @@ static void sgf_view_queue_scroll_to_selected(SgfView *self) {
     g_debug("SGF view scroll request ignored: reason=no-selection");
     return;
   }
-
+  if (!self->root || !gtk_widget_get_mapped(self->root)) {
+    return;
+  }
   sgf_view_scroller_scroll(self->scroller,
                            GTK_SCROLLED_WINDOW(self->root),
                            self->node_widgets,

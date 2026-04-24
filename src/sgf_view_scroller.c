@@ -13,6 +13,8 @@ struct _SgfViewScroller {
   GHashTable *node_widgets;
   const SgfNode *selected;
   gboolean retry_scheduled;
+  guint retry_generation;
+  guint retry_count;
 };
 
 G_DEFINE_TYPE(SgfViewScroller, sgf_view_scroller, G_TYPE_OBJECT)
@@ -23,6 +25,8 @@ static void sgf_view_scroller_clear_context(SgfViewScroller *self) {
   g_clear_object(&self->root);
   g_clear_pointer(&self->node_widgets, g_hash_table_unref);
   self->selected = NULL;
+  self->retry_generation = 0;
+  self->retry_count = 0;
 }
 
 static void sgf_view_scroller_retry_callback(gpointer user_data) {
@@ -36,6 +40,7 @@ static void sgf_view_scroller_retry_callback(gpointer user_data) {
     return;
   }
 
+  self->retry_count++;
   sgf_view_scroller_scroll(self, self->root, self->node_widgets, self->selected);
   g_object_unref(self);
 }
@@ -68,13 +73,19 @@ void sgf_view_scroller_scroll(SgfViewScroller *self,
   g_return_if_fail(node_widgets != NULL);
   g_return_if_fail(selected != NULL);
 
-  GtkScrolledWindow *root_ref = g_object_ref(root);
-  GHashTable *node_widgets_ref = g_hash_table_ref(node_widgets);
+  gboolean same_context =
+      self->root == root && self->node_widgets == node_widgets && self->selected == selected;
+  if (!same_context) {
+    GtkScrolledWindow *root_ref = g_object_ref(root);
+    GHashTable *node_widgets_ref = g_hash_table_ref(node_widgets);
 
-  sgf_view_scroller_clear_context(self);
-  self->root = root_ref;
-  self->node_widgets = node_widgets_ref;
-  self->selected = selected;
+    sgf_view_scroller_clear_context(self);
+    self->root = root_ref;
+    self->node_widgets = node_widgets_ref;
+    self->selected = selected;
+    self->retry_generation++;
+    self->retry_count = 0;
+  }
 
   GtkWidget *widget = g_hash_table_lookup(node_widgets, (gpointer)selected);
   if (!widget) {
@@ -100,7 +111,8 @@ void sgf_view_scroller_scroll(SgfViewScroller *self,
   }
 
   graphene_rect_t bounds;
-  if (!gtk_widget_compute_bounds(widget, content, &bounds)) {
+  gboolean has_bounds = gtk_widget_compute_bounds(widget, content, &bounds);
+  if (!has_bounds) {
     sgf_view_scroller_schedule_retry(self);
     return;
   }
@@ -132,6 +144,8 @@ static void sgf_view_scroller_init(SgfViewScroller *self) {
   self->node_widgets = NULL;
   self->selected = NULL;
   self->retry_scheduled = FALSE;
+  self->retry_generation = 0;
+  self->retry_count = 0;
 }
 
 SgfViewScroller *sgf_view_scroller_new(void) {
