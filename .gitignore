@@ -3,3 +3,4 @@ coverage/
 gcheckers.png
 data/schemas/gschemas.compiled
 /*.sgf
+tests/puzzle-progress-report-data/

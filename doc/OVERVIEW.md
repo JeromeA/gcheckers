@@ -403,6 +403,16 @@ types directly, but tests and future refactors can now bind to `GGAME_ACTIVE_GAM
 checkers engine headers directly.
 Collaborates with: `Makefile` backend selection, `tests/test_game_backend.c`, and future generic model/search work.
 
+## Generic game model (`src/game_model.c`, `src/game_model.h`)
+Class: `GGameModel` (`GObject`).
+Role: wrap one active `GameBackend` plus one opaque current position behind a GTK-friendly state container with a
+`state-changed` signal. The model owns backend-sized position storage, initializes it from the backend's first
+variant when one exists, exposes generic move listing and move application, and leaves the existing
+`GCheckersModel` untouched for current UI code.
+Scope: this is a Milestone 2 compatibility layer for backend-oriented tests and future refactors. It is not yet wired
+into `window.c` or the visible application shell.
+Collaborates with: `src/game_backend.h`, `src/games/checkers/checkers_backend.c`, and `tests/test_game_model.c`.
+
 ## GTK application entry (`src/gcheckers.c`, `src/application.c`, `src/application.h`)
 Class: `GCheckersApplication` (`GtkApplication`).
 Role: define the GTK application type and activation flow that creates the main window and model, installs app actions
