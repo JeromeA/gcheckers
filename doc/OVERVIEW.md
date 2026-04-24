@@ -392,6 +392,17 @@ Role: resolve installed or local read-only data subdirectories such as `puzzles`
 override first, then `g_get_user_data_dir()`, then `g_get_system_data_dirs()`, then the local checkout fallback.
 Collaborates with: `window.c` for packaging-safe puzzle discovery and `tests/test_app_paths.c`.
 
+## Game backend interface (`src/game_backend.h`, `src/active_game_backend.h`, `src/games/checkers/checkers_backend.c`)
+Module: generic game-selection boundary plus the default checkers adapter.
+Role: `game_backend.h` defines the first generic callback table used to describe one compiled game backend without
+moving existing engine files yet. `active_game_backend.h` maps the build-time define `GGAME_GAME_CHECKERS` to the
+active backend object, and `src/games/checkers/checkers_backend.c` adapts the current top-level checkers engine,
+ruleset catalog, move list, and move formatting APIs into that generic table.
+Scope: this is an initial Milestone 1 compatibility layer only. Shared application code still uses checkers-native
+types directly, but tests and future refactors can now bind to `GGAME_ACTIVE_GAME_BACKEND` instead of including
+checkers engine headers directly.
+Collaborates with: `Makefile` backend selection, `tests/test_game_backend.c`, and future generic model/search work.
+
 ## GTK application entry (`src/gcheckers.c`, `src/application.c`, `src/application.h`)
 Class: `GCheckersApplication` (`GtkApplication`).
 Role: define the GTK application type and activation flow that creates the main window and model, installs app actions

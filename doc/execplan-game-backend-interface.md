@@ -18,7 +18,8 @@ produces the current application behavior. The visible proof is that `make`, the
 existing GTK application still work when the Makefile defines the active game as checkers. The architectural proof is
 that shared files such as `src/window.c`, `src/puzzle_progress.c`, and `src/ai_alpha_beta.c` no longer include
 checkers-only headers like `game.h`, `board.h`, `rulesets.h`, or `checkers_model.h`; they include the generic backend
-API instead, and the application/binary prefix is renamed from `gcheckers` to `ggame`.
+API instead. The generic project/framework name becomes `ggame`, but shipped binaries and packages become
+game-specific, with the checkers build still producing `gcheckers`.
 
 ## Progress
 
@@ -33,7 +34,9 @@ API instead, and the application/binary prefix is renamed from `gcheckers` to `g
       works for both rectangular boards and non-rectangular games.
 - [ ] Update the Makefile so selecting another backend is a matter of changing one compile define and linked backend
       source list.
-- [ ] Rename the application, binary, schema, desktop metadata, and public prefixes from `gcheckers` to `ggame`.
+- [ ] Split generic `ggame` framework naming from per-game shipped app naming, so the checkers build still produces
+      `gcheckers` and future games produce their own binary/app IDs.
+- [ ] Replace the single root Flatpak manifest with one manifest per shipped game build.
 - [ ] Rename or wrap checkers-specific tests so they compile through the checkers backend and add backend-interface
       tests.
 - [ ] Update `doc/OVERVIEW.md` after each `src/` milestone so the source architecture remains accurate.
@@ -110,8 +113,15 @@ API instead, and the application/binary prefix is renamed from `gcheckers` to `g
   Date/Author: 2026-04-24 / Codex
 
 - Decision: rename the product-facing application and code prefixes from `gcheckers` to `ggame`.
-  Rationale: once the application is explicitly multi-game, the old product name becomes actively misleading in public
-  APIs, binary names, desktop files, settings IDs, and class prefixes.
+  Rationale: once the application is explicitly multi-game, the old product name becomes actively misleading in the
+  generic framework code. However, shipped binaries and packages should remain game-specific, so the checkers build
+  remains `gcheckers` while the shared framework is named `ggame`.
+  Date/Author: 2026-04-24 / Codex
+
+- Decision: package each shipped game as its own binary, desktop ID, and Flatpak manifest.
+  Rationale: users install games, not abstract frameworks. The build system should therefore be able to produce
+  multiple branded apps from the same `ggame` codebase, with `gcheckers` as the checkers-branded build and future
+  games following the same pattern.
   Date/Author: 2026-04-24 / Codex
 
 ## Outcomes & Retrospective
@@ -337,8 +347,9 @@ under `src/games/checkers/` or become a compatibility wrapper scheduled for dele
 
 Rename shared abstractions as they are generalized. `GCheckersModel` should become `GGameModel` or `GameModel` in
 `src/game_model.c` and `src/game_model.h`, with signal names and API terms that refer to "game", "position", "move",
-"side", and "variant" rather than "checkers". This plan also includes product renaming: the application, binary,
-desktop metadata, schema IDs, and class prefixes should move from `gcheckers` to `ggame`.
+"side", and "variant" rather than "checkers". This plan also includes framework renaming: shared code and generic
+prefixes should move from `gcheckers` to `ggame`, while shipped applications remain game-specific (`gcheckers` for
+the checkers build).
 
 ## Plan of Work
 
@@ -439,7 +450,7 @@ to side 0 and side 1 labels supplied by the backend, not hard-coded white and bl
 
 Acceptance for this milestone is that `build/tests/test_board_view`, `build/tests/test_window`, and
 `build/tests/test_player_controls_panel` compile without including checkers-only headers from shared UI files. Running
-`build/bin/ggame` with the default checkers backend should still show a normal checkers board and allow a move.
+`build/bin/gcheckers` with the default checkers backend should still show a normal checkers board and allow a move.
 
 ### Milestone 5: migrate SGF and puzzle hooks to generic ownership
 
@@ -542,25 +553,40 @@ It should fail immediately with a clear Makefile error naming the unknown game.
 Acceptance for this milestone is that changing `GAME=checkers` is sufficient to select the checkers backend and no
 source file outside the backend directory must be edited to select it.
 
-### Milestone 8: rename the product from `gcheckers` to `ggame`
+### Milestone 8: split generic `ggame` naming from shipped app naming
 
-Rename the product-facing application identity everywhere it matters:
+Rename the generic framework identity while preserving game-specific shipped names:
 
-    build/bin/gcheckers -> build/bin/ggame
     GCheckersApplication -> GGameApplication
     GCheckersWindow -> GGameWindow
-    io.github.jeromea.gcheckers -> io.github.jeromea.ggame
-    data/io.github.jeromea.gcheckers.desktop -> data/io.github.jeromea.ggame.desktop
-    data/io.github.jeromea.gcheckers.metainfo.xml -> data/io.github.jeromea.ggame.metainfo.xml
+    generic internal prefixes/modules/settings helpers -> ggame*
+    shipped checkers binary -> build/bin/gcheckers
+    shipped checkers app ID -> io.github.jeromea.gcheckers
 
-Update `Makefile`, Flatpak metadata, app settings schema, desktop file, icon name if appropriate, and test names that
-expose the old product name. Keep transitional compatibility aliases only when necessary for data migration, and
-document every one.
+The rule is: framework code, reusable modules, and generic documentation use `ggame`; shipped binaries, desktop IDs,
+icons, metainfo, and user-facing packaging remain specific to the selected game. For the checkers build, that means
+the final app is still named `gcheckers`.
 
-Acceptance for this milestone is that a user launches `ggame`, sees the new application ID in desktop metadata, and
-shared code no longer introduces new `gcheckers` prefixes.
+Acceptance for this milestone is that shared code no longer introduces new `gcheckers`-prefixed generic types, while
+the checkers build still produces and launches `gcheckers`.
 
-### Milestone 9: update documentation and remove obsolete checkers names from shared APIs
+### Milestone 9: produce one Flatpak manifest per shipped game
+
+Replace the single root Flatpak manifest model with one manifest per shipped game build. For the checkers build, the
+manifest should package the checkers-branded app, for example:
+
+    flatpak/io.github.jeromea.gcheckers.yaml
+
+Future games should add their own manifests in the same pattern rather than mutating one shared root manifest. The
+generic `ggame` framework itself is not a shipped end-user Flatpak.
+
+Update the build, tests, and documentation so manifest validation is parameterized by game/app ID rather than hardcoded
+to one root YAML file.
+
+Acceptance for this milestone is that the repository can package the checkers build through its dedicated Flatpak
+manifest, and the directory structure clearly allows adding another game-specific manifest alongside it.
+
+### Milestone 10: update documentation and remove obsolete checkers names from shared APIs
 
 Update `doc/OVERVIEW.md` after every source milestone, and do a final pass here. The final overview should explain:
 
@@ -573,8 +599,8 @@ Update `doc/OVERVIEW.md` after every source milestone, and do a final pass here.
 7. which tests are generic and which are checkers-specific.
 
 Remove obsolete names from shared APIs where practical. It is not acceptable for generic interfaces to expose
-`CheckersMove`, `CheckersRules`, `CheckersBoard`, or `CheckersWinner`, and by this milestone the public product name
-should already be `ggame` rather than `gcheckers`.
+`CheckersMove`, `CheckersRules`, `CheckersBoard`, or `CheckersWinner`. By this milestone, generic framework names
+should use `ggame`, while the shipped checkers app and package metadata still use `gcheckers`.
 
 Acceptance for this milestone is that a novice can read `doc/OVERVIEW.md`, find the active backend selection point,
 and understand where to add a new game backend without reading this ExecPlan.
@@ -596,7 +622,8 @@ committing. Prefer small commits with messages like:
     Add active game backend interface
     Add generic game model wrapper
     Move checkers engine under games/checkers
-    Rename gcheckers to ggame
+    Split ggame framework naming from gcheckers app naming
+    Add per-game Flatpak manifests
 
 When moving files, use `git mv` rather than delete-and-add. Keep compatibility wrappers only when they reduce risk,
 and record every wrapper in `Outcomes & Retrospective` with the reason it still exists.
@@ -614,8 +641,8 @@ The default build still works:
     cd /home/jerome/Data/gcheckers
     make
 
-Expected result: `build/bin/ggame`, `build/tools/create_puzzles`, `build/tools/find_position`, and the static library
-build without compiler warnings.
+Expected result: the selected game build binary (for checkers, `build/bin/gcheckers`), `build/tools/create_puzzles`,
+`build/tools/find_position`, and the static library build without compiler warnings.
 
 The explicit active-backend build still works:
 
@@ -669,11 +696,12 @@ completion.
 
 Manual application smoke test:
 
-    build/bin/ggame
+    build/bin/gcheckers
 
-Expected result: the `ggame` window appears, the checkers backend can start a new game, a legal move can be made,
+Expected result: the `gcheckers` window appears, the checkers backend can start a new game, a legal move can be made,
 analysis can run, and puzzle mode can open a checkers puzzle from `puzzles/checkers/<variant>/...`. The user should
-not see any functional difference from the pre-refactor checkers application beyond the renamed product identity.
+not see any functional difference from the pre-refactor checkers application other than the internal architectural
+split behind the scenes.
 
 ## Idempotence and Recovery
 
@@ -761,8 +789,12 @@ The Makefile must expose:
     GAME_BACKEND_SRCS
     SHARED_SRCS
     CHECKERS_BACKEND_SRCS
+    GAME_APP_BIN
+    GAME_APP_ID
+    GAME_FLATPAK_MANIFEST
 
-The active backend selection must be visible in compiler commands through `$(GAME_BACKEND_DEFINE)`.
+The active backend selection must be visible in compiler commands through `$(GAME_BACKEND_DEFINE)`, and packaging must
+be parameterized through per-game app/binary/manifest variables rather than one hard-coded root manifest.
 
 ## Revision Notes
 
@@ -771,5 +803,6 @@ requested direction into a compile-time selected `GameBackend` callback structur
 final `src/games/checkers/` ownership boundary.
 
 2026-04-24 / Codex: Reworked the plan so variants are optional, square-grid board rendering is an optional shared path
-rather than a mandatory assumption, puzzle storage/generation and move validation are generic, and the
-product/application rename from `gcheckers` to `ggame` is part of the migration rather than deferred.
+rather than a mandatory assumption, puzzle storage/generation and move validation are generic, the generic framework is
+named `ggame`, shipped apps remain game-specific (`gcheckers` for checkers), and Flatpak packaging is split into one
+manifest per shipped game build.
