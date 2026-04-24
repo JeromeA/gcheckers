@@ -8,17 +8,17 @@ This document must be maintained in accordance with `doc/PLANS.md`.
 ## Purpose / Big Picture
 
 After this change, the program will no longer be architecturally tied to checkers. A developer will be able to build
-the same GTK application, SGF-style timeline UI, board widget, and alpha-beta search against a selected game backend.
-The selected backend is chosen at compile time with a preprocessor define, and the active backend exposes one structure
-of callbacks and metadata that shared code uses instead of calling checkers-specific functions directly.
+the same GTK application shell, timeline UI, puzzle flow, and alpha-beta search against a selected game backend. The
+selected backend is chosen at compile time with a preprocessor define, and the active backend exposes one structure of
+callbacks and metadata that shared code uses instead of calling checkers-specific functions directly.
 
 The first implementation does not add a second playable game. It moves checkers into `src/games/checkers/`, introduces
 a generic game backend interface in shared `src/` code, and proves that compiling with the checkers backend still
 produces the current application behavior. The visible proof is that `make`, the existing checkers tests, and the
 existing GTK application still work when the Makefile defines the active game as checkers. The architectural proof is
-that shared files such as `src/window.c`, `src/board_view.c`, and `src/ai_alpha_beta.c` no longer include
+that shared files such as `src/window.c`, `src/puzzle_progress.c`, and `src/ai_alpha_beta.c` no longer include
 checkers-only headers like `game.h`, `board.h`, `rulesets.h`, or `checkers_model.h`; they include the generic backend
-API instead.
+API instead, and the application/binary prefix is renamed from `gcheckers` to `ggame`.
 
 ## Progress
 
@@ -27,9 +27,13 @@ API instead.
 - [ ] Add a generic backend API in shared `src/` code and a compile-time active-backend selection header.
 - [ ] Introduce a checkers backend adapter while leaving existing checkers engine files in place.
 - [ ] Move checkers-specific engine, ruleset, puzzle, notation, and model code under `src/games/checkers/`.
-- [ ] Convert shared UI, SGF, puzzle shell, settings, and AI code to use generic backend types and callbacks.
+- [ ] Convert shared application shell, timeline, puzzle shell, settings, and AI code to use generic backend types and
+      callbacks.
+- [ ] Move board presentation behind an optional square-grid API plus a backend-owned custom-widget path so shared UI
+      works for both rectangular boards and non-rectangular games.
 - [ ] Update the Makefile so selecting another backend is a matter of changing one compile define and linked backend
       source list.
+- [ ] Rename the application, binary, schema, desktop metadata, and public prefixes from `gcheckers` to `ggame`.
 - [ ] Rename or wrap checkers-specific tests so they compile through the checkers backend and add backend-interface
       tests.
 - [ ] Update `doc/OVERVIEW.md` after each `src/` milestone so the source architecture remains accurate.
@@ -54,6 +58,10 @@ API instead.
   Evidence: the overview has separate sections for `Board primitives`, `Board geometry`, `Constants`, `Game engine`,
   `Ruleset catalog`, `Move generation`, and `GTK model wrapper`, all describing checkers concepts.
 
+- Observation: the current board UI is tightly coupled to square-grid checkers assumptions.
+  Evidence: `src/board_view.c`, `src/board_grid.c`, `src/board_square.c`, and `src/board_selection_controller.c`
+  exist as separate square-board modules rather than as a generic scene or backend-owned widget.
+
 ## Decision Log
 
 - Decision: place game-specific source under `src/games/<game-id>/`, starting with `src/games/checkers/`.
@@ -69,7 +77,7 @@ API instead.
 
 - Decision: define one public `GameBackend` structure in shared code and one active-backend selection header.
   Rationale: shared UI and AI need a stable contract, but each game needs freedom to own its internal structs,
-  notation, variants, board geometry, and persistence details. A callback table makes the boundary explicit and keeps
+  notation, variants, board presentation, and persistence details. A callback table makes the boundary explicit and keeps
   future game additions local to `src/games/<game-id>/` plus one Makefile selection.
   Date/Author: 2026-04-23 / Codex
 
@@ -83,6 +91,28 @@ API instead.
   Rationale: a large directory move makes diffs noisy and can hide behavioral regressions. Adding a generic wrapper
   around the existing checkers engine first lets tests prove the interface, then the file move can be mostly mechanical.
   Date/Author: 2026-04-23 / Codex
+
+- Decision: make rectangular square-board rendering optional rather than mandatory.
+  Rationale: checkers and similar games can reuse a shared square-grid presentation API, but the next planned game
+  cannot. The backend contract should therefore allow either a shared square-grid path or a completely backend-owned
+  widget path.
+  Date/Author: 2026-04-24 / Codex
+
+- Decision: keep the notion of “variant” generic and optional across games.
+  Rationale: checkers rulesets are one example of a backend-specific variant, but some games may have no exposed
+  variants at all. The shared API should therefore talk about optional game variants, not mandatory ruleset lists.
+  Date/Author: 2026-04-24 / Codex
+
+- Decision: make puzzle storage, puzzle move validation, and puzzle generation generic in the shared layer.
+  Rationale: puzzle progress, storage layout, and the overall generate-validate-save flow are not inherently checkers
+  features. Backends should provide validation heuristics and candidate scoring, while the shell owns path layout,
+  persistence, and common progress behavior.
+  Date/Author: 2026-04-24 / Codex
+
+- Decision: rename the product-facing application and code prefixes from `gcheckers` to `ggame`.
+  Rationale: once the application is explicitly multi-game, the old product name becomes actively misleading in public
+  APIs, binary names, desktop files, settings IDs, and class prefixes.
+  Date/Author: 2026-04-24 / Codex
 
 ## Outcomes & Retrospective
 
@@ -115,9 +145,10 @@ ordering.
 The current board UI has reusable and checkers-specific parts mixed together. `src/board_view.c`,
 `src/board_grid.c`, `src/board_square.c`, `src/board_selection_controller.c`, `src/piece_palette.c`,
 `src/man_paintable.c`, and `src/board_move_overlay.c` render a square board, pieces, selection highlights, legal move
-hints, and winner overlays. A future generic board UI can still assume a rectangular grid of squares, but it must ask
-the backend whether a square is playable, what piece occupies it, how to draw that piece, how to interpret a click,
-and how to format move overlays.
+hints, and winner overlays. That code is reusable for games that really are played on rectangular boards of squares,
+but it is not generic enough to be mandatory for every backend. The shared application must therefore support two
+paths: an optional square-grid board API for games like checkers, and a fully backend-owned board widget path for
+games with different geometry.
 
 The current SGF layer lives in `src/sgf_tree.c`, `src/sgf_io.c`, `src/sgf_move_props.c`, and
 `src/sgf_controller.c`. In this plan, "SGF-style" means the shared tree/timeline structure remains useful, but the
@@ -128,16 +159,20 @@ timeline format as long as the backend provides import/export callbacks.
 The current puzzle system is checkers-specific in data and semantics. `src/puzzle_catalog.c` scans
 `puzzles/<ruleset>/puzzle-####.sgf`; `src/puzzle_dialog.c` shows checkers ruleset choices; `src/puzzle_progress.c`
 records puzzle IDs and outcomes; and `src/window.c` validates puzzle moves against checkers SGF main lines. The shared
-application can keep a generic puzzle shell and progress storage, but each game backend must define its puzzle
-variants, puzzle file parser, solution validation, and next-puzzle catalog rules.
+application should keep a generic puzzle shell and progress storage. Puzzle paths should become
+`puzzles/<game-id>/<variant-short-name>/...`, puzzle progress IDs should be prefixed with `<game-id>/`, move
+validation should be expressed through generic move-comparison and continuation callbacks, and puzzle generation should
+be one generic engine that asks the backend for game-specific heuristics and candidate-validation rules.
 
 The build is controlled by `Makefile`. It currently puts top-level checkers engine files into `SRCS` and links them
 into the main app, tools, and many tests. This is the main integration point for compile-time backend selection.
 
 When this plan says "backend", it means a game-specific module that implements a C structure of callbacks used by
 shared code. When this plan says "active backend", it means the one backend selected for this build by a compile
-define such as `GCHECKERS_GAME_CHECKERS`. When this plan says "opaque", it means shared code holds a pointer or byte
-buffer but does not inspect the fields inside; only backend callbacks understand that memory.
+define such as `GGAME_GAME_CHECKERS`. When this plan says "variant", it means an optional backend-defined named
+configuration the shared shell can offer at new-game or puzzle-start time. When this plan says "opaque", it means
+shared code holds a pointer or byte buffer but does not inspect the fields inside; only backend callbacks understand
+that memory.
 
 ## Target Architecture
 
@@ -179,16 +214,14 @@ shape must include these concepts:
       const char *id;
       const char *display_name;
       guint max_sides;
-      guint max_board_rows;
-      guint max_board_cols;
       gsize position_size;
       gsize move_size;
 
-      guint (*variant_count)(void);
+      guint variant_count;
       const GameBackendVariant *(*variant_at)(guint index);
       const GameBackendVariant *(*variant_by_short_name)(const char *short_name);
 
-      void (*position_init)(GamePosition *position, const GameBackendVariant *variant);
+      void (*position_init)(GamePosition *position, const GameBackendVariant *variant_or_null);
       void (*position_clear)(GamePosition *position);
       void (*position_copy)(GamePosition *dest, const GamePosition *src);
       GameOutcome (*position_outcome)(const GamePosition *position);
@@ -207,6 +240,36 @@ shape must include these concepts:
 
       gboolean (*format_move)(const GameMove *move, char *buffer, gsize size);
       gboolean (*parse_move)(const char *text, GameMove *out_move);
+
+      gboolean supports_square_grid_board;
+      guint (*board_rows)(const GamePosition *position);
+      guint (*board_cols)(const GamePosition *position);
+      gboolean (*board_square_playable)(const GamePosition *position, guint row, guint col);
+      gboolean (*board_square_piece)(const GamePosition *position, guint row, guint col, gpointer out_piece_view);
+      gboolean (*board_list_targets_for_selection)(const GamePosition *position,
+                                                   const GameMoveList *moves,
+                                                   guint row,
+                                                   guint col,
+                                                   gpointer out_targets);
+      GtkWidget *(*board_widget_new)(void);
+      void (*board_widget_bind_model)(GtkWidget *widget, gpointer model);
+      void (*board_widget_unbind_model)(GtkWidget *widget);
+
+      GPtrArray *(*puzzle_catalog_load)(const GameBackendVariant *variant, GError **error);
+      gboolean (*puzzle_load)(const char *path, gpointer *out_record_tree, GError **error);
+      gboolean (*puzzle_validate_next_move)(gpointer record_tree,
+                                            const GamePosition *position,
+                                            const GameMove *played_move,
+                                            gboolean *out_is_correct,
+                                            GameMove *out_forced_reply,
+                                            gboolean *out_has_forced_reply,
+                                            gboolean *out_is_complete,
+                                            GError **error);
+      char *(*puzzle_id_from_path)(const GameBackendVariant *variant, const char *path);
+      gboolean (*puzzle_candidate_is_valid)(const GamePosition *position,
+                                            const GameMove *candidate_move,
+                                            gpointer heuristic_context,
+                                            GError **error);
     };
 
 This interface is intentionally lower-level than the current `GCheckersModel`. Shared UI and AI can call it without
@@ -229,11 +292,11 @@ in spirit:
 
     #include "game_backend.h"
 
-    #if defined(GCHECKERS_GAME_CHECKERS)
+    #if defined(GGAME_GAME_CHECKERS)
     #include "games/checkers/checkers_backend.h"
-    #define GCHECKERS_ACTIVE_GAME_BACKEND (&checkers_game_backend)
+    #define GGAME_ACTIVE_GAME_BACKEND (&checkers_game_backend)
     #else
-    #error "No game backend selected. Define GCHECKERS_GAME_CHECKERS or another backend define."
+    #error "No game backend selected. Define GGAME_GAME_CHECKERS or another backend define."
     #endif
 
     #endif
@@ -274,8 +337,8 @@ under `src/games/checkers/` or become a compatibility wrapper scheduled for dele
 
 Rename shared abstractions as they are generalized. `GCheckersModel` should become `GGameModel` or `GameModel` in
 `src/game_model.c` and `src/game_model.h`, with signal names and API terms that refer to "game", "position", "move",
-"side", and "variant" rather than "checkers". The application and binary can keep the `gcheckers` name for now; this
-plan is about source architecture, not product branding.
+"side", and "variant" rather than "checkers". This plan also includes product renaming: the application, binary,
+desktop metadata, schema IDs, and class prefixes should move from `gcheckers` to `ggame`.
 
 ## Plan of Work
 
@@ -283,7 +346,7 @@ plan is about source architecture, not product branding.
 
 Create `src/game_backend.h` with the generic types and callback table. Keep it small enough to compile quickly, but
 complete enough to support the current checkers engine through an adapter. Add `src/active_game_backend.h` with a
-single supported branch for `GCHECKERS_GAME_CHECKERS`.
+single supported branch for `GGAME_GAME_CHECKERS`.
 
 Add `src/games/checkers/checkers_backend.h` and `src/games/checkers/checkers_backend.c` initially as adapters that
 include the existing top-level `src/game.h`, `src/board.h`, `src/rulesets.h`, and AI support headers. This first
@@ -291,14 +354,18 @@ adapter may call existing checkers functions directly. It must expose:
 
     extern const GameBackend checkers_game_backend;
 
-Update the Makefile so `CFLAGS` includes `-DGCHECKERS_GAME_CHECKERS` by default. Do not move existing engine files in
+Update the Makefile so `CFLAGS` includes `-DGGAME_GAME_CHECKERS` by default. Do not move existing engine files in
 this milestone. Add a small test, for example `tests/test_game_backend.c`, that includes `active_game_backend.h`,
-gets `GCHECKERS_ACTIVE_GAME_BACKEND`, verifies the backend ID is `checkers`, verifies the variant list contains
+gets `GGAME_ACTIVE_GAME_BACKEND`, verifies the backend ID is `checkers`, verifies the variant list contains
 `american`, `international`, and `russian`, creates an initial position for one variant, lists legal moves, applies
 one move, and formats that move. This proves the callback table is useful before any larger refactor.
 
+The backend-interface tests should also cover the optionality rules: if a backend reports `variant_count == 0`, then
+`position_init(..., NULL)` must still create a valid starting position. The checkers backend will exercise the
+non-empty variant path.
+
 Acceptance for this milestone is that `make test_game_backend`, `make`, and the existing `make test_game` pass, and
-the new test fails if `-DGCHECKERS_GAME_CHECKERS` is removed.
+the new test fails if `-DGGAME_GAME_CHECKERS` is removed.
 
 ### Milestone 2: create a generic model wrapper beside `GCheckersModel`
 
@@ -352,19 +419,19 @@ the wrapper.
 ### Milestone 4: migrate shared UI from `GCheckersModel` to `GameModel`
 
 Convert UI modules that should be shared across games to use `GameModel`, `GameBackend`, `GamePosition`, and
-`GameMove`. Start with the smallest closed path: `src/board_view.c`, `src/board_grid.c`, `src/board_square.c`,
-`src/board_selection_controller.c`, and `src/board_move_overlay.c`. These modules currently assume checkers playable
-square indexes and checkers pieces. Add backend callbacks needed by board rendering:
+`GameMove`. Preserve two rendering paths:
 
-    guint (*board_rows)(const GamePosition *position);
-    guint (*board_cols)(const GamePosition *position);
-    gboolean (*board_square_playable)(const GamePosition *position, guint row, guint col);
-    gboolean (*board_square_piece)(const GamePosition *position, guint row, guint col, GamePieceView *out_piece);
-    gboolean (*move_origin_destinations)(const GameMoveList *moves, ...);
+1. an optional shared square-grid board path for backends that set `supports_square_grid_board` to `TRUE`, and
+2. a backend-owned widget path for games that do not.
 
-Define `GamePieceView` in shared code as the minimum drawing information the UI needs, such as side index, piece kind
-index, and whether the piece is promoted or special. For checkers, this maps white man, black man, white king, and
-black king to the existing piece paintable. Keep the existing visual result for checkers.
+`src/board_view.c`, `src/board_grid.c`, `src/board_square.c`, `src/board_selection_controller.c`, and
+`src/board_move_overlay.c` should either become the shared square-grid implementation or move under
+`src/games/checkers/` if they cannot be cleaned up enough. The important contract is that shared window code does not
+assume squares are always available. It asks the backend which path to use.
+
+For checkers, the backend should opt into the square-grid API and continue using the existing visual style. For the
+next game, the backend can set `supports_square_grid_board` to `FALSE` and supply a dedicated board widget
+instead.
 
 Then migrate `src/window.c`, `src/player_controls_panel.c`, and `src/analysis_graph.c` to ask `GameModel` and
 `GameBackend` for status, legal moves, AI analysis, and side labels. Keep `PlayerControlsPanel` generic by referring
@@ -372,9 +439,9 @@ to side 0 and side 1 labels supplied by the backend, not hard-coded white and bl
 
 Acceptance for this milestone is that `build/tests/test_board_view`, `build/tests/test_window`, and
 `build/tests/test_player_controls_panel` compile without including checkers-only headers from shared UI files. Running
-`build/bin/gcheckers` with the default checkers backend should still show a normal checkers board and allow a move.
+`build/bin/ggame` with the default checkers backend should still show a normal checkers board and allow a move.
 
-### Milestone 5: migrate SGF and puzzle hooks to backend ownership
+### Milestone 5: migrate SGF and puzzle hooks to generic ownership
 
 Keep the shared tree/timeline code in `src/sgf_tree.c` and the shared view code in `src/sgf_view*.c`, but move
 checkers-specific SGF parsing and formatting into backend callbacks. The backend must own:
@@ -389,21 +456,29 @@ Rename shared APIs if necessary so they no longer promise real SGF compliance fo
 names as `.sgf` for existing checkers compatibility, but make shared code talk about "game record tree" where the
 semantics are backend-defined.
 
-Move checkers puzzle catalog and generation code into `src/games/checkers/`. Keep `src/puzzle_progress.c` shared
-because progress storage can be game-neutral if puzzle IDs are prefixed with the backend ID, such as
-`checkers/international/puzzle-0007.sgf`. The active backend should provide puzzle catalog callbacks:
+Keep `src/puzzle_progress.c` shared and make its storage layout explicitly game-generic. Paths and IDs should include
+the game ID first, for example `puzzles/checkers/international/puzzle-0007.sgf` and
+`checkers/international/puzzle-0007.sgf`. The active backend should provide generic puzzle callbacks:
 
     GPtrArray *(*puzzle_catalog_load)(const GameBackendVariant *variant, GError **error);
     gboolean (*puzzle_load)(const char *path, GameRecordTree **out_tree, GError **error);
-    gboolean (*puzzle_validate_attempt)(...);
+    gboolean (*puzzle_validate_next_move)(...);
+    char *(*puzzle_id_from_path)(const GameBackendVariant *variant, const char *path);
 
 The exact validation signature can be shaped by current puzzle mode, but it must keep shared `src/window.c` from
-knowing checkers main-line solution semantics.
+knowing checkers main-line solution semantics. Shared puzzle mode should be able to say "the player attempted move X,
+is it correct, is there an automatic reply, and is the puzzle now complete?" without knowing how the backend decides
+that.
+
+Puzzle generation should also become a generic shared driver. The driver owns iteration, deduplication plumbing,
+save-path layout, and persistence. Each backend supplies candidate-generation heuristics, puzzle-worthiness rules, and
+post-candidate validation callbacks. For checkers, the existing mistake-detection and tactical-continuation heuristics
+move under `src/games/checkers/` and plug into that generic driver.
 
 Acceptance for this milestone is that puzzle picker, next puzzle, analyze puzzle, progress recording, and puzzle
-clearing still pass their focused tests with the checkers backend. Existing checked-in puzzle files can remain under
-`puzzles/american`, `puzzles/international`, and `puzzles/russian`; this plan changes source ownership, not puzzle
-asset layout.
+clearing still pass their focused tests with the checkers backend. Existing checked-in puzzle files should move to the
+generic path shape `puzzles/checkers/<variant>/...` as part of this milestone so source ownership and storage layout
+match.
 
 ### Milestone 6: physically move checkers files and remove compatibility includes
 
@@ -440,7 +515,7 @@ Refactor `Makefile` source variables into shared and backend groups. The default
     GAME ?= checkers
 
     ifeq ($(GAME),checkers)
-    GAME_BACKEND_DEFINE := -DGCHECKERS_GAME_CHECKERS
+    GAME_BACKEND_DEFINE := -DGGAME_GAME_CHECKERS
     GAME_BACKEND_SRCS := $(CHECKERS_BACKEND_SRCS)
     else
     $(error Unknown GAME '$(GAME)')
@@ -467,7 +542,25 @@ It should fail immediately with a clear Makefile error naming the unknown game.
 Acceptance for this milestone is that changing `GAME=checkers` is sufficient to select the checkers backend and no
 source file outside the backend directory must be edited to select it.
 
-### Milestone 8: update documentation and remove obsolete checkers names from shared APIs
+### Milestone 8: rename the product from `gcheckers` to `ggame`
+
+Rename the product-facing application identity everywhere it matters:
+
+    build/bin/gcheckers -> build/bin/ggame
+    GCheckersApplication -> GGameApplication
+    GCheckersWindow -> GGameWindow
+    io.github.jeromea.gcheckers -> io.github.jeromea.ggame
+    data/io.github.jeromea.gcheckers.desktop -> data/io.github.jeromea.ggame.desktop
+    data/io.github.jeromea.gcheckers.metainfo.xml -> data/io.github.jeromea.ggame.metainfo.xml
+
+Update `Makefile`, Flatpak metadata, app settings schema, desktop file, icon name if appropriate, and test names that
+expose the old product name. Keep transitional compatibility aliases only when necessary for data migration, and
+document every one.
+
+Acceptance for this milestone is that a user launches `ggame`, sees the new application ID in desktop metadata, and
+shared code no longer introduces new `gcheckers` prefixes.
+
+### Milestone 9: update documentation and remove obsolete checkers names from shared APIs
 
 Update `doc/OVERVIEW.md` after every source milestone, and do a final pass here. The final overview should explain:
 
@@ -476,11 +569,12 @@ Update `doc/OVERVIEW.md` after every source milestone, and do a final pass here.
 3. shared AI search,
 4. active-backend compile-time selection,
 5. the checkers backend directory,
-6. which tests are generic and which are checkers-specific.
+6. generic puzzle storage and generation,
+7. which tests are generic and which are checkers-specific.
 
-Remove obsolete names from shared APIs where practical. It is acceptable for the binary, desktop file, schema ID, and
-class prefixes like `GCheckersWindow` to remain as product names during this plan. It is not acceptable for generic
-interfaces to expose `CheckersMove`, `CheckersRules`, `CheckersBoard`, or `CheckersWinner`.
+Remove obsolete names from shared APIs where practical. It is not acceptable for generic interfaces to expose
+`CheckersMove`, `CheckersRules`, `CheckersBoard`, or `CheckersWinner`, and by this milestone the public product name
+should already be `ggame` rather than `gcheckers`.
 
 Acceptance for this milestone is that a novice can read `doc/OVERVIEW.md`, find the active backend selection point,
 and understand where to add a new game backend without reading this ExecPlan.
@@ -502,6 +596,7 @@ committing. Prefer small commits with messages like:
     Add active game backend interface
     Add generic game model wrapper
     Move checkers engine under games/checkers
+    Rename gcheckers to ggame
 
 When moving files, use `git mv` rather than delete-and-add. Keep compatibility wrappers only when they reduce risk,
 and record every wrapper in `Outcomes & Retrospective` with the reason it still exists.
@@ -519,15 +614,15 @@ The default build still works:
     cd /home/jerome/Data/gcheckers
     make
 
-Expected result: `build/bin/gcheckers`, `build/tools/create_puzzles`, `build/tools/find_position`, and the static
-library build without compiler warnings.
+Expected result: `build/bin/ggame`, `build/tools/create_puzzles`, `build/tools/find_position`, and the static library
+build without compiler warnings.
 
 The explicit active-backend build still works:
 
     make clean
     make GAME=checkers
 
-Expected result: same binaries as the default build, with `GCHECKERS_GAME_CHECKERS` selected through the Makefile.
+Expected result: same binaries as the default build, with `GGAME_GAME_CHECKERS` selected through the Makefile.
 
 The focused generic backend tests pass:
 
@@ -536,7 +631,8 @@ The focused generic backend tests pass:
     build/tests/test_ai_search
 
 Expected result: each test exits 0 and demonstrates creating a checkers position through the generic backend,
-applying a generic move, formatting a generic move, and running generic search.
+applying a generic move, formatting a generic move, and running generic search. The generic backend tests should also
+include one tiny fake backend with no variants and no square-grid support to prove both optional paths work.
 
 The existing checkers behavior tests pass through the moved backend:
 
@@ -573,11 +669,11 @@ completion.
 
 Manual application smoke test:
 
-    build/bin/gcheckers
+    build/bin/ggame
 
-Expected result: the checkers board appears, a new game can be started, a legal move can be made, analysis can run,
-and puzzle mode can open a checkers puzzle. The user should not see any functional difference from the pre-refactor
-checkers application.
+Expected result: the `ggame` window appears, the checkers backend can start a new game, a legal move can be made,
+analysis can run, and puzzle mode can open a checkers puzzle from `puzzles/checkers/<variant>/...`. The user should
+not see any functional difference from the pre-refactor checkers application beyond the renamed product identity.
 
 ## Idempotence and Recovery
 
@@ -640,11 +736,11 @@ The final public interface must include:
     src/ai_search.h
     src/games/checkers/checkers_backend.h
 
-`src/game_backend.h` owns the `GameBackend` struct and generic move, position, outcome, variant, board-view, puzzle,
-and record callbacks. It must not include checkers headers.
+`src/game_backend.h` owns the `GameBackend` struct and generic move, position, outcome, optional-variant,
+optional-square-grid-board, puzzle, and record callbacks. It must not include checkers headers.
 
 `src/active_game_backend.h` maps compile defines to the active backend object. It may include
-`src/games/checkers/checkers_backend.h` inside the `GCHECKERS_GAME_CHECKERS` branch. It must produce a compile error
+`src/games/checkers/checkers_backend.h` inside the `GGAME_GAME_CHECKERS` branch. It must produce a compile error
 if no backend define is present.
 
 `src/game_model.h` is the GObject model wrapper that shared UI owns. It must not expose checkers types.
@@ -673,3 +769,7 @@ The active backend selection must be visible in compiler commands through `$(GAM
 2026-04-23 / Codex: Initial ExecPlan written after surveying the existing architecture. The plan resolves the user's
 requested direction into a compile-time selected `GameBackend` callback structure, staged compatibility work, and a
 final `src/games/checkers/` ownership boundary.
+
+2026-04-24 / Codex: Reworked the plan so variants are optional, square-grid board rendering is an optional shared path
+rather than a mandatory assumption, puzzle storage/generation and move validation are generic, and the
+product/application rename from `gcheckers` to `ggame` is part of the migration rather than deferred.
