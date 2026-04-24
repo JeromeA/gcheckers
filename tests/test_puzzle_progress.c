@@ -21,7 +21,7 @@ static CheckersPuzzleAttemptRecord test_puzzle_progress_make_record(const char *
                                                                     CheckersPuzzleAttemptResult result) {
   CheckersPuzzleAttemptRecord record = {0};
   record.attempt_id = g_strdup(attempt_id);
-  record.puzzle_id = g_strdup("international/puzzle-0007.sgf");
+  record.puzzle_id = g_strdup("checkers/international/puzzle-0007.sgf");
   record.puzzle_number = 7;
   record.puzzle_source_name = g_strdup("puzzle-0007.sgf");
   record.puzzle_ruleset = PLAYER_RULESET_INTERNATIONAL;
@@ -269,7 +269,7 @@ static void test_puzzle_progress_reduce_status_prefers_success(void) {
   g_ptr_array_add(history, checkers_puzzle_attempt_record_copy(&failure));
   g_ptr_array_add(history, checkers_puzzle_attempt_record_copy(&success));
 
-  g_assert_cmpint(checkers_puzzle_progress_reduce_status_for_attempts(history, "international/puzzle-0007.sgf"),
+  g_assert_cmpint(checkers_puzzle_progress_reduce_status_for_attempts(history, "checkers/international/puzzle-0007.sgf"),
                   ==,
                   CHECKERS_PUZZLE_STATUS_SOLVED);
 
@@ -289,7 +289,7 @@ static void test_puzzle_progress_status_map_tracks_terminal_results(void) {
 
   g_autoptr(GHashTable) status_map = checkers_puzzle_progress_store_load_status_map(store, &error);
   g_assert_no_error(error);
-  g_assert_null(test_puzzle_progress_lookup_status(status_map, "international/puzzle-0007.sgf"));
+  g_assert_null(test_puzzle_progress_lookup_status(status_map, "checkers/international/puzzle-0007.sgf"));
 
   CheckersPuzzleAttemptRecord analyze =
       test_puzzle_progress_make_record("attempt-status", CHECKERS_PUZZLE_ATTEMPT_RESULT_ANALYZE);
@@ -300,7 +300,7 @@ static void test_puzzle_progress_status_map_tracks_terminal_results(void) {
   status_map = checkers_puzzle_progress_store_load_status_map(store, &error);
   g_assert_no_error(error);
   CheckersPuzzleStatusEntry *entry =
-      test_puzzle_progress_lookup_status(status_map, "international/puzzle-0007.sgf");
+      test_puzzle_progress_lookup_status(status_map, "checkers/international/puzzle-0007.sgf");
   g_assert_nonnull(entry);
   g_assert_cmpint(entry->status, ==, CHECKERS_PUZZLE_STATUS_FAILED);
 
@@ -312,7 +312,7 @@ static void test_puzzle_progress_status_map_tracks_terminal_results(void) {
   g_clear_pointer(&status_map, g_hash_table_unref);
   status_map = checkers_puzzle_progress_store_load_status_map(store, &error);
   g_assert_no_error(error);
-  entry = test_puzzle_progress_lookup_status(status_map, "international/puzzle-0007.sgf");
+  entry = test_puzzle_progress_lookup_status(status_map, "checkers/international/puzzle-0007.sgf");
   g_assert_nonnull(entry);
   g_assert_cmpint(entry->status, ==, CHECKERS_PUZZLE_STATUS_SOLVED);
 
@@ -340,7 +340,7 @@ static void test_puzzle_progress_status_map_rebuilds_from_corrupt_cache(void) {
   g_autoptr(GHashTable) status_map = checkers_puzzle_progress_store_load_status_map(store, &error);
   g_assert_no_error(error);
   CheckersPuzzleStatusEntry *entry =
-      test_puzzle_progress_lookup_status(status_map, "international/puzzle-0007.sgf");
+      test_puzzle_progress_lookup_status(status_map, "checkers/international/puzzle-0007.sgf");
   g_assert_nonnull(entry);
   g_assert_cmpint(entry->status, ==, CHECKERS_PUZZLE_STATUS_SOLVED);
 
@@ -367,7 +367,7 @@ static void test_puzzle_progress_clear_progress_removes_history_and_status(void)
 
   g_autoptr(GHashTable) status_map = checkers_puzzle_progress_store_load_status_map(store, &error);
   g_assert_no_error(error);
-  g_assert_nonnull(test_puzzle_progress_lookup_status(status_map, "international/puzzle-0007.sgf"));
+  g_assert_nonnull(test_puzzle_progress_lookup_status(status_map, "checkers/international/puzzle-0007.sgf"));
 
   g_assert_true(checkers_puzzle_progress_store_clear_progress(store, &error));
   g_assert_no_error(error);

@@ -14,7 +14,7 @@ else
   exit 1
 fi
 
-manifest="$repo_root/io.github.jeromea.gcheckers.yaml"
+manifest="$repo_root/flatpak/io.github.jeromea.gcheckers.yaml"
 
 grep -q "^id: io.github.jeromea.gcheckers$" "$manifest"
 grep -q "^runtime: org.gnome.Platform$" "$manifest"

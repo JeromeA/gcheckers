@@ -26,15 +26,15 @@ American/International/Russian and then click a numbered puzzle square from a te
 cancel-or-selected results back to `GCheckersWindow`; the window owns opening the selected puzzle and starting progress
 tracking. The grid is built from the selected ruleset directory only and shows local status per puzzle: untried squares
 are white, solved squares are green, and tried-without-success squares are red. Runtime loading resolves the puzzle root
-(`GCHECKERS_PUZZLES_DIR` or the installed/local application data search path), appends the selected ruleset short name
-such as `american` or `russian`, and then loads the exact clicked `puzzle-*.sgf`. While active it hides both drawers,
-disables SGF/review actions, shows puzzle-only `Next puzzle` and `Analyze` buttons, and validates the player's moves
-against the SGF main-line solution while auto-playing defender replies. `Next puzzle` now advances through the sorted
-catalog for the active ruleset, wrapping to the first puzzle after the last one, and no longer selects a random
-puzzle. Puzzle `Analyze` exits puzzle mode, rewinds fully to move 0, and then starts the same full-game analysis path
-used by the Analysis menu. The current node report still follows normal SGF selection instead of being replaced by a
-generic completion message. Picker squares keep custom status colors and now define an explicit darker `:active` state
-so mouse presses remain visible even with the custom button styling.
+(`GCHECKERS_PUZZLES_DIR` or the installed/local application data search path), appends the active game ID plus the
+selected ruleset short name such as `checkers/american` or `checkers/russian`, and then loads the exact clicked
+`puzzle-*.sgf`. While active it hides both drawers, disables SGF/review actions, shows puzzle-only `Next puzzle` and
+`Analyze` buttons, and validates the player's moves against the SGF main-line solution while auto-playing defender
+replies. `Next puzzle` now advances through the sorted catalog for the active ruleset, wrapping to the first puzzle
+after the last one, and no longer selects a random puzzle. Puzzle `Analyze` exits puzzle mode, rewinds fully to move 0,
+and then starts the same full-game analysis path used by the Analysis menu. The current node report still follows
+normal SGF selection instead of being replaced by a generic completion message. Picker squares keep custom status colors
+and now define an explicit darker `:active` state so mouse presses remain visible even with the custom button styling.
 Puzzle mode now also records local progress for each opened puzzle entry. Opening the puzzle creates an append-only
 attempt record with `started_unix_ms`, terminal outcomes are `success`, `failure`, or `analyze`, and the first wrong
 move is stored only when the failure happened on the very first attempted move. A started-but-unfinished puzzle entry
@@ -153,6 +153,8 @@ Role: scan one variant directory under the puzzle root, keep only `puzzle-####.s
 numbers, sort them ascending, and return explicit catalog entries with basename, full path, and stable `puzzle_id`.
 Collaborates with: `puzzle_dialog.c` for the numbered chooser grid and `window.c` for random-next selection inside the
 active ruleset.
+Storage shape: checked-in puzzles now live under `puzzles/checkers/<ruleset-short-name>/`, and stable puzzle IDs are
+prefixed with the active game ID, for example `checkers/international/puzzle-0007.sgf`.
 
 ## `gcheckers_style_init()` (`src/style.c`)
 Module: `gcheckers_style_init()` (style helper, not a class).
@@ -200,8 +202,9 @@ History format: one JSON object per line with schema version, puzzle identity, t
 first-wrong-move metadata, and local report metadata (`first_reported_unix_ms`, `report_count`). The history is never
 deleted after successful upload; successful sends only mark previously unreported resolved attempts as reported. The
 settings dialog can explicitly clear local progress, which rewrites both the history and status cache as empty.
-Status-cache format: one JSON document keyed by stable `puzzle_id` values such as `russian/puzzle-0007.sgf`, storing
-reduced `untried`/`failed`/`solved` state plus minimal metadata. If the cache is missing or corrupt,
+Status-cache format: one JSON document keyed by stable `puzzle_id` values such as
+`checkers/russian/puzzle-0007.sgf`, storing reduced `untried`/`failed`/`solved` state plus minimal metadata. If the
+cache is missing or corrupt,
 `puzzle_progress.c` rebuilds it from `attempt-history.jsonl`.
 Reporting policy: the application sends the full local resolved history when there are at least 10 unsent attempts, or
 when there are at least 5 unsent attempts and the oldest unsent one is more than 24 hours old. Uploads are best-effort
@@ -345,7 +348,7 @@ Module: CLI front end.
 Role: repeatedly self-play games at depth 0, detect mistake positions with configurable best-move-depth analysis,
 validate each candidate immediately in one pass, require the attacker to have at least four legal moves and a best
 response at least 50 points above the runner-up, then save puzzles as SGF files under
-`puzzles/<ruleset-short-name>/puzzle-####.sgf` with root setup (`AE/AB/AW/ABK/AWK/PL`), explicit
+`puzzles/checkers/<ruleset-short-name>/puzzle-####.sgf` with root setup (`AE/AB/AW/ABK/AWK/PL`), explicit
 `RU[<ruleset-short-name>]`, and a tactical continuation line.
 Validation and emission are now split: one path computes a validated puzzle candidate from a post-mistake position,
 and separate generation/checking paths either save that candidate or compare an existing saved puzzle against it.
@@ -376,8 +379,8 @@ The CLI always prints self-play completion, loaded existing solution keys, each 
 indented `->` rejection or keep reasons, and a final aggregated rejection report so puzzle filtering can be followed
 from the terminal. In check-existing mode, it also reports how many puzzle files were checked and how many would be or
 were removed.
-By default it saves only `puzzles/<ruleset-short-name>/puzzle-####.sgf`;
-`puzzles/<ruleset-short-name>/game-####.sgf` companions are written only when `--save-games` is enabled.
+By default it saves only `puzzles/checkers/<ruleset-short-name>/puzzle-####.sgf`;
+`puzzles/checkers/<ruleset-short-name>/game-####.sgf` companions are written only when `--save-games` is enabled.
 Collaborates with: `ai_alpha_beta.c`, `rulesets.c`, `sgf_tree.c`, `sgf_move_props.c`, `sgf_io.c`,
 and `puzzle_generation.c`.
 

@@ -9,7 +9,7 @@ static void test_puzzle_catalog_loads_sorted_variant_entries(void) {
   g_assert_no_error(error);
   g_assert_nonnull(root);
 
-  g_autofree char *variant_dir = g_build_filename(root, "russian", NULL);
+  g_autofree char *variant_dir = g_build_filename(root, "checkers", "russian", NULL);
   g_assert_cmpint(g_mkdir_with_parents(variant_dir, 0755), ==, 0);
 
   g_autofree char *puzzle_seven = g_build_filename(variant_dir, "puzzle-0007.sgf", NULL);
@@ -32,10 +32,10 @@ static void test_puzzle_catalog_loads_sorted_variant_entries(void) {
   CheckersPuzzleCatalogEntry *second = g_ptr_array_index(entries, 1);
   g_assert_cmpuint(first->puzzle_number, ==, 2);
   g_assert_cmpstr(first->basename, ==, "puzzle-0002.sgf");
-  g_assert_cmpstr(first->puzzle_id, ==, "russian/puzzle-0002.sgf");
+  g_assert_cmpstr(first->puzzle_id, ==, "checkers/russian/puzzle-0002.sgf");
   g_assert_cmpuint(second->puzzle_number, ==, 7);
   g_assert_cmpstr(second->basename, ==, "puzzle-0007.sgf");
-  g_assert_cmpstr(second->puzzle_id, ==, "russian/puzzle-0007.sgf");
+  g_assert_cmpstr(second->puzzle_id, ==, "checkers/russian/puzzle-0007.sgf");
 
   g_unsetenv("GCHECKERS_PUZZLES_DIR");
 }

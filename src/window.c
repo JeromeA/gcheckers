@@ -328,7 +328,10 @@ static gboolean gcheckers_window_puzzle_attempt_store_update(GCheckersWindow *se
 }
 
 static gboolean gcheckers_window_puzzle_attempt_ensure_started(GCheckersWindow *self) {
+  const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), FALSE);
+  g_return_val_if_fail(backend != NULL, FALSE);
+  g_return_val_if_fail(backend->id != NULL, FALSE);
 
   if (self->puzzle_attempt_started) {
     return TRUE;
@@ -363,7 +366,7 @@ static gboolean gcheckers_window_puzzle_attempt_ensure_started(GCheckersWindow *
     gcheckers_window_puzzle_attempt_reset(self);
     return FALSE;
   }
-  self->puzzle_attempt.puzzle_id = g_strdup_printf("%s/%s", ruleset_short_name, basename);
+  self->puzzle_attempt.puzzle_id = g_strdup_printf("%s/%s/%s", backend->id, ruleset_short_name, basename);
 
   if (!gcheckers_window_puzzle_attempt_store_update(self, TRUE)) {
     gcheckers_window_puzzle_attempt_reset(self);
@@ -1121,7 +1124,10 @@ static gboolean gcheckers_window_node_set_prop_has_point(SgfNode *node,
 }
 
 static char *gcheckers_window_build_puzzle_ruleset_dir(GCheckersWindow *self, PlayerRuleset ruleset) {
+  const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), NULL);
+  g_return_val_if_fail(backend != NULL, NULL);
+  g_return_val_if_fail(backend->id != NULL, NULL);
 
   g_autofree char *puzzle_root = gcheckers_app_paths_find_data_subdir("GCHECKERS_PUZZLES_DIR", "puzzles");
   if (puzzle_root == NULL) {
@@ -1135,7 +1141,7 @@ static char *gcheckers_window_build_puzzle_ruleset_dir(GCheckersWindow *self, Pl
     return NULL;
   }
 
-  return g_build_filename(puzzle_root, short_name, NULL);
+  return g_build_filename(puzzle_root, backend->id, short_name, NULL);
 }
 
 static gboolean gcheckers_window_update_node_setup_piece(SgfNode *node, const char *point, CheckersPiece piece) {

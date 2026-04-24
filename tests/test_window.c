@@ -582,7 +582,7 @@ static void test_gcheckers_window_store_resolved_puzzle_result(const char *state
   const char *short_name = checkers_ruleset_short_name(ruleset);
   g_assert_nonnull(short_name);
   g_autofree char *attempt_id = g_strdup_printf("attempt-%s-%u", short_name, puzzle_number);
-  g_autofree char *puzzle_id = g_strdup_printf("%s/puzzle-%04u.sgf", short_name, puzzle_number);
+  g_autofree char *puzzle_id = g_strdup_printf("checkers/%s/puzzle-%04u.sgf", short_name, puzzle_number);
   g_autofree char *source_name = g_strdup_printf("puzzle-%04u.sgf", puzzle_number);
 
   CheckersPuzzleAttemptRecord record = {0};
@@ -624,7 +624,7 @@ static gboolean test_gcheckers_window_write_single_move_puzzle_for_ruleset(char 
 
   const char *short_name = checkers_ruleset_short_name(ruleset);
   g_assert_nonnull(short_name);
-  g_autofree char *ruleset_dir = g_build_filename(*dir_path_ptr, short_name, NULL);
+  g_autofree char *ruleset_dir = g_build_filename(*dir_path_ptr, "checkers", short_name, NULL);
   g_assert_cmpint(g_mkdir_with_parents(ruleset_dir, 0755), ==, 0);
 
   GCheckersModel *model = gcheckers_model_new();
@@ -712,7 +712,7 @@ static gboolean test_gcheckers_window_write_two_attack_moves_puzzle_for_ruleset(
 
   const char *short_name = checkers_ruleset_short_name(ruleset);
   g_assert_nonnull(short_name);
-  g_autofree char *ruleset_dir = g_build_filename(*dir_path_ptr, short_name, NULL);
+  g_autofree char *ruleset_dir = g_build_filename(*dir_path_ptr, "checkers", short_name, NULL);
   g_assert_cmpint(g_mkdir_with_parents(ruleset_dir, 0755), ==, 0);
 
   GCheckersModel *model = gcheckers_model_new();
@@ -1366,9 +1366,9 @@ static void test_gcheckers_window_puzzle_mode_solves_and_exits_to_analysis(void)
   g_assert_cmpuint(history->len, ==, 1);
   CheckersPuzzleAttemptRecord *record = g_ptr_array_index(history, 0);
   g_assert_cmpint(record->result, ==, CHECKERS_PUZZLE_ATTEMPT_RESULT_SUCCESS);
-  g_assert_cmpstr(record->puzzle_id, ==, "russian/puzzle-0000.sgf");
+  g_assert_cmpstr(record->puzzle_id, ==, "checkers/russian/puzzle-0000.sgf");
   g_autoptr(GHashTable) status_map = test_gcheckers_window_load_status_map(progress_dir);
-  CheckersPuzzleStatusEntry *status_entry = g_hash_table_lookup(status_map, "russian/puzzle-0000.sgf");
+  CheckersPuzzleStatusEntry *status_entry = g_hash_table_lookup(status_map, "checkers/russian/puzzle-0000.sgf");
   g_assert_nonnull(status_entry);
   g_assert_cmpint(status_entry->status, ==, CHECKERS_PUZZLE_STATUS_SOLVED);
 
@@ -1571,7 +1571,7 @@ static void test_gcheckers_window_puzzle_wrong_first_move_records_failure(void) 
   g_assert_cmpuint(record->failed_first_move.path[0], ==, wrong_move.path[0]);
   g_assert_cmpuint(record->failed_first_move.path[1], ==, wrong_move.path[1]);
   g_autoptr(GHashTable) status_map = test_gcheckers_window_load_status_map(progress_dir);
-  CheckersPuzzleStatusEntry *status_entry = g_hash_table_lookup(status_map, "american/puzzle-0000.sgf");
+  CheckersPuzzleStatusEntry *status_entry = g_hash_table_lookup(status_map, "checkers/american/puzzle-0000.sgf");
   g_assert_nonnull(status_entry);
   g_assert_cmpint(status_entry->status, ==, CHECKERS_PUZZLE_STATUS_FAILED);
 

@@ -68,7 +68,7 @@ DESKTOP_FILE := data/$(APP_ID).desktop
 METAINFO_FILE := data/$(APP_ID).metainfo.xml
 ICON_FILE := data/icons/hicolor/scalable/apps/$(APP_ID).svg
 PUZZLE_VARIANTS := american international russian
-FLATPAK_MANIFEST := $(APP_ID).yaml
+FLATPAK_MANIFEST := flatpak/$(APP_ID).yaml
 PREFIX ?= /usr/local
 DESTDIR ?=
 BINDIR := $(PREFIX)/bin
@@ -464,9 +464,9 @@ $(TEST_PUZZLE_GENERATION_BIN): tests/test_puzzle_generation.c src/puzzle_generat
 
 test_puzzle_catalog: $(TEST_PUZZLE_CATALOG_BIN)
 $(TEST_PUZZLE_CATALOG_BIN): tests/test_puzzle_catalog.c $(APP_PATHS_SRCS) $(PUZZLE_CATALOG_SRCS) \
-	src/puzzle_catalog.h src/app_paths.h src/rulesets.c src/rulesets.h
+	src/puzzle_catalog.h src/app_paths.h $(SRCS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ tests/test_puzzle_catalog.c $(APP_PATHS_SRCS) $(PUZZLE_CATALOG_SRCS) src/rulesets.c \
+	$(CC) $(CFLAGS) -o $@ tests/test_puzzle_catalog.c $(APP_PATHS_SRCS) $(PUZZLE_CATALOG_SRCS) $(SRCS) \
 		$(LDLIBS)
 
 test_piece_palette: $(TEST_PIECE_PALETTE_BIN)
@@ -517,12 +517,13 @@ install: all $(DESKTOP_FILE) $(METAINFO_FILE) $(ICON_FILE)
 	$(INSTALL) -d $(DESTDIR)$(ICONS_DIR)
 	$(INSTALL) -m 644 $(ICON_FILE) $(DESTDIR)$(ICONS_DIR)/$(APP_ID).svg
 	$(INSTALL) -d $(DESTDIR)$(PUZZLES_INSTALL_DIR)
+	$(INSTALL) -d $(DESTDIR)$(PUZZLES_INSTALL_DIR)/checkers
 	@for dir in $(PUZZLE_VARIANTS); do \
-		$(INSTALL) -d $(DESTDIR)$(PUZZLES_INSTALL_DIR)/$$dir; \
-		if test -d puzzles/$$dir; then \
-			for file in puzzles/$$dir/*.sgf; do \
+		$(INSTALL) -d $(DESTDIR)$(PUZZLES_INSTALL_DIR)/checkers/$$dir; \
+		if test -d puzzles/checkers/$$dir; then \
+			for file in puzzles/checkers/$$dir/*.sgf; do \
 				if test -f "$$file"; then \
-					$(INSTALL) -m 644 "$$file" "$(DESTDIR)$(PUZZLES_INSTALL_DIR)/$$dir/"; \
+					$(INSTALL) -m 644 "$$file" "$(DESTDIR)$(PUZZLES_INSTALL_DIR)/checkers/$$dir/"; \
 				fi; \
 			done; \
 		fi; \

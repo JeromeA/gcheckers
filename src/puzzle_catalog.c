@@ -1,3 +1,4 @@
+#include "active_game_backend.h"
 #include "puzzle_catalog.h"
 
 #include "app_paths.h"
@@ -67,7 +68,10 @@ void checkers_puzzle_catalog_entry_free(CheckersPuzzleCatalogEntry *entry) {
 }
 
 GPtrArray *checkers_puzzle_catalog_load_for_ruleset(PlayerRuleset ruleset, GError **error) {
+  const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   const char *short_name = checkers_ruleset_short_name(ruleset);
+  g_return_val_if_fail(backend != NULL, NULL);
+  g_return_val_if_fail(backend->id != NULL, NULL);
   g_return_val_if_fail(short_name != NULL, NULL);
 
   g_autofree char *puzzles_root = gcheckers_app_paths_find_data_subdir("GCHECKERS_PUZZLES_DIR", "puzzles");
@@ -76,7 +80,7 @@ GPtrArray *checkers_puzzle_catalog_load_for_ruleset(PlayerRuleset ruleset, GErro
     return NULL;
   }
 
-  g_autofree char *ruleset_dir = g_build_filename(puzzles_root, short_name, NULL);
+  g_autofree char *ruleset_dir = g_build_filename(puzzles_root, backend->id, short_name, NULL);
   GPtrArray *entries = g_ptr_array_new_with_free_func((GDestroyNotify)checkers_puzzle_catalog_entry_free);
   if (!g_file_test(ruleset_dir, G_FILE_TEST_IS_DIR)) {
     return entries;
@@ -98,7 +102,7 @@ GPtrArray *checkers_puzzle_catalog_load_for_ruleset(PlayerRuleset ruleset, GErro
     entry->puzzle_number = puzzle_number;
     entry->basename = g_strdup(name);
     entry->path = g_build_filename(ruleset_dir, name, NULL);
-    entry->puzzle_id = g_strdup_printf("%s/%s", short_name, name);
+    entry->puzzle_id = g_strdup_printf("%s/%s/%s", backend->id, short_name, name);
     g_ptr_array_add(entries, entry);
   }
 

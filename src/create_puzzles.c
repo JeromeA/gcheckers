@@ -1772,7 +1772,7 @@ static char *checkers_puzzle_build_ruleset_output_dir(PlayerRuleset ruleset) {
     return NULL;
   }
 
-  return g_build_filename("puzzles", short_name, NULL);
+  return g_build_filename("puzzles", "checkers", short_name, NULL);
 }
 
 int main(int argc, char **argv) {
