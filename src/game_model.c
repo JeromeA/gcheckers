@@ -56,6 +56,8 @@ static void ggame_model_finalize(GObject *object) {
 
 static void ggame_model_constructed(GObject *object) {
   GGameModel *self = GGAME_MODEL(object);
+  gboolean has_move_list_api = FALSE;
+  gboolean has_move_builder_api = FALSE;
 
   G_OBJECT_CLASS(ggame_model_parent_class)->constructed(object);
 
@@ -63,11 +65,30 @@ static void ggame_model_constructed(GObject *object) {
   g_return_if_fail(self->backend->position_size > 0);
   g_return_if_fail(self->backend->position_init != NULL);
   g_return_if_fail(self->backend->position_clear != NULL);
-  g_return_if_fail(self->backend->list_moves != NULL);
-  g_return_if_fail(self->backend->move_list_free != NULL);
-  g_return_if_fail(self->backend->move_list_get != NULL);
-  g_return_if_fail(self->backend->moves_equal != NULL);
   g_return_if_fail(self->backend->apply_move != NULL);
+
+  has_move_list_api = self->backend->supports_move_list &&
+                      self->backend->list_moves != NULL &&
+                      self->backend->move_list_free != NULL &&
+                      self->backend->move_list_get != NULL &&
+                      self->backend->moves_equal != NULL;
+  has_move_builder_api = self->backend->supports_move_builder &&
+                         self->backend->move_list_free != NULL &&
+                         self->backend->move_list_get != NULL &&
+                         self->backend->moves_equal != NULL &&
+                         self->backend->move_builder_init != NULL &&
+                         self->backend->move_builder_clear != NULL &&
+                         self->backend->move_builder_list_candidates != NULL &&
+                         self->backend->move_builder_step != NULL &&
+                         self->backend->move_builder_is_complete != NULL &&
+                         self->backend->move_builder_build_move != NULL;
+  g_return_if_fail(has_move_list_api || has_move_builder_api);
+  if (self->backend->supports_ai_search) {
+    g_return_if_fail(has_move_list_api);
+    g_return_if_fail(self->backend->evaluate_static != NULL);
+    g_return_if_fail(self->backend->terminal_score != NULL);
+    g_return_if_fail(self->backend->hash_position != NULL);
+  }
 
   self->position = g_malloc0(self->backend->position_size);
   g_return_if_fail(self->position != NULL);
@@ -169,6 +190,10 @@ GameBackendMoveList ggame_model_list_moves(GGameModel *self) {
   g_return_val_if_fail(GGAME_IS_MODEL(self), empty);
   g_return_val_if_fail(self->backend != NULL, empty);
   g_return_val_if_fail(self->position != NULL, empty);
+  if (!self->backend->supports_move_list || self->backend->list_moves == NULL) {
+    g_debug("Move listing is not available for this backend");
+    return empty;
+  }
 
   return self->backend->list_moves(self->position);
 }
@@ -181,6 +206,17 @@ gboolean ggame_model_apply_move(GGameModel *self, gconstpointer move) {
   g_return_val_if_fail(self->backend != NULL, FALSE);
   g_return_val_if_fail(self->position != NULL, FALSE);
   g_return_val_if_fail(move != NULL, FALSE);
+
+  if (!self->backend->supports_move_list) {
+    applied = self->backend->apply_move(self->position, move);
+    if (!applied) {
+      g_debug("Backend rejected move application without move-list validation");
+      return FALSE;
+    }
+
+    ggame_model_emit_state_changed(self);
+    return TRUE;
+  }
 
   moves = self->backend->list_moves(self->position);
   for (gsize i = 0; i < moves.count; ++i) {
@@ -235,12 +271,18 @@ char *ggame_model_format_status(GGameModel *self) {
     variant_name = self->variant->name;
   }
 
-  moves = ggame_model_list_moves(self);
-  status = g_strdup_printf("Game: %s\nVariant: %s\nMoves available: %" G_GSIZE_FORMAT,
-                           self->backend->display_name,
-                           variant_name,
-                           moves.count);
-  self->backend->move_list_free(&moves);
+  if (self->backend->supports_move_list) {
+    moves = ggame_model_list_moves(self);
+    status = g_strdup_printf("Game: %s\nVariant: %s\nMoves available: %" G_GSIZE_FORMAT,
+                             self->backend->display_name,
+                             variant_name,
+                             moves.count);
+    self->backend->move_list_free(&moves);
+  } else {
+    status = g_strdup_printf("Game: %s\nVariant: %s\nMoves available: unavailable",
+                             self->backend->display_name,
+                             variant_name);
+  }
 
   return status;
 }

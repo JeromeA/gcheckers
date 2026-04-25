@@ -49,7 +49,7 @@ static void board_view_update_board(BoardView *self, gconstpointer position) {
   g_return_if_fail(backend->position_outcome != NULL);
   g_return_if_fail(backend->square_grid_piece_view != NULL);
 
-  if (backend->position_outcome(position) == GAME_BACKEND_OUTCOME_ONGOING) {
+  if (backend->position_outcome(position) == GAME_BACKEND_OUTCOME_ONGOING && backend->supports_move_list) {
     moves = ggame_model_list_moves(self->model);
     moves_loaded = TRUE;
     highlight_moves = moves.count > 0;

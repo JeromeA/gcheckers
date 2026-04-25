@@ -183,6 +183,10 @@ gboolean board_selection_controller_handle_click(BoardSelectionController *self,
 
   backend = ggame_model_peek_backend(self->model);
   g_return_val_if_fail(backend != NULL, FALSE);
+  if (!backend->supports_move_list) {
+    g_debug("Board selection controller requires list-move backends");
+    return FALSE;
+  }
 
   moves = ggame_model_list_moves(self->model);
   if (moves.count == 0) {

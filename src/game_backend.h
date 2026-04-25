@@ -37,11 +37,19 @@ typedef struct {
 } GameBackendMoveList;
 
 typedef struct {
+  gpointer builder_state;
+  gsize builder_state_size;
+} GameBackendMoveBuilder;
+
+typedef struct {
   const char *id;
   const char *display_name;
   guint variant_count;
   gsize position_size;
   gsize move_size;
+  gboolean supports_move_list;
+  gboolean supports_move_builder;
+  gboolean supports_ai_search;
 
   const GameBackendVariant *(*variant_at)(guint index);
   const GameBackendVariant *(*variant_by_short_name)(const char *short_name);
@@ -58,6 +66,12 @@ typedef struct {
   void (*move_list_free)(GameBackendMoveList *moves);
   const void *(*move_list_get)(const GameBackendMoveList *moves, gsize index);
   gboolean (*moves_equal)(gconstpointer left, gconstpointer right);
+  gboolean (*move_builder_init)(gconstpointer position, GameBackendMoveBuilder *out_builder);
+  void (*move_builder_clear)(GameBackendMoveBuilder *builder);
+  GameBackendMoveList (*move_builder_list_candidates)(const GameBackendMoveBuilder *builder);
+  gboolean (*move_builder_step)(GameBackendMoveBuilder *builder, gconstpointer candidate);
+  gboolean (*move_builder_is_complete)(const GameBackendMoveBuilder *builder);
+  gboolean (*move_builder_build_move)(const GameBackendMoveBuilder *builder, gpointer out_move);
   gboolean (*apply_move)(gpointer position, gconstpointer move);
   gint (*evaluate_static)(gconstpointer position);
   gint (*terminal_score)(GameBackendOutcome outcome, guint ply_depth);

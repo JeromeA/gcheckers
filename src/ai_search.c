@@ -568,6 +568,10 @@ gboolean game_ai_search_analyze_moves_cancellable_with_tt(const GameBackend *bac
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(out_moves != NULL, FALSE);
   g_return_val_if_fail(out_stats != NULL, FALSE);
+  if (!backend->supports_ai_search || !backend->supports_move_list) {
+    g_debug("AI analysis requires a backend with AI and full move-list support");
+    return FALSE;
+  }
   g_return_val_if_fail(backend->position_copy != NULL, FALSE);
   g_return_val_if_fail(backend->position_clear != NULL, FALSE);
   g_return_val_if_fail(backend->position_outcome != NULL, FALSE);
@@ -681,6 +685,22 @@ gboolean game_ai_search_evaluate_position(const GameBackend *backend,
   g_return_val_if_fail(backend != NULL, FALSE);
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(out_score != NULL, FALSE);
+  if (!backend->supports_ai_search || !backend->supports_move_list) {
+    g_debug("Position evaluation requires a backend with AI and full move-list support");
+    return FALSE;
+  }
+  g_return_val_if_fail(backend->position_copy != NULL, FALSE);
+  g_return_val_if_fail(backend->position_clear != NULL, FALSE);
+  g_return_val_if_fail(backend->position_outcome != NULL, FALSE);
+  g_return_val_if_fail(backend->position_turn != NULL, FALSE);
+  g_return_val_if_fail(backend->list_moves != NULL, FALSE);
+  g_return_val_if_fail(backend->move_list_free != NULL, FALSE);
+  g_return_val_if_fail(backend->move_list_get != NULL, FALSE);
+  g_return_val_if_fail(backend->moves_equal != NULL, FALSE);
+  g_return_val_if_fail(backend->apply_move != NULL, FALSE);
+  g_return_val_if_fail(backend->evaluate_static != NULL, FALSE);
+  g_return_val_if_fail(backend->terminal_score != NULL, FALSE);
+  g_return_val_if_fail(backend->hash_position != NULL, FALSE);
 
   root = g_malloc0(backend->position_size);
   g_return_val_if_fail(root != NULL, FALSE);
@@ -732,6 +752,10 @@ gboolean game_ai_evaluate_static(const GameBackend *backend, gconstpointer posit
   g_return_val_if_fail(backend != NULL, FALSE);
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(out_score != NULL, FALSE);
+  if (!backend->supports_ai_search) {
+    g_debug("Static evaluation requires a backend with AI support");
+    return FALSE;
+  }
   g_return_val_if_fail(backend->evaluate_static != NULL, FALSE);
 
   *out_score = backend->evaluate_static(position);

@@ -10,6 +10,9 @@ static void test_backend_metadata(void) {
   assert(strcmp(backend->id, "checkers") == 0);
   assert(strcmp(backend->display_name, "Checkers") == 0);
   assert(backend->variant_count == 3);
+  assert(backend->supports_move_list);
+  assert(!backend->supports_move_builder);
+  assert(backend->supports_ai_search);
 
   const GameBackendVariant *american = backend->variant_at(0);
   assert(american != NULL);
@@ -23,6 +26,7 @@ static void test_backend_metadata(void) {
 static void test_backend_position_and_move_flow(void) {
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   assert(backend != NULL);
+  assert(backend->supports_move_list);
 
   gpointer position = g_malloc0(backend->position_size);
   assert(position != NULL);

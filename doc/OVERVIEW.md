@@ -292,6 +292,8 @@ move generation, position copying, applying moves, static evaluation, terminal s
 hashing. Root move choice randomizes among all equal best-scoring moves, so repeated games can vary without lowering
 evaluation quality. Analysis APIs can report searched node counts and TT stats (probes/hits/cutoffs), and TT stats
 accumulate when callers reuse the same `GameAiSearchStats` across calls.
+This is now an optional backend capability: only backends that opt into `supports_ai_search` and also provide the full
+move-list API can use the generic alpha-beta layer.
 Depth accounting treats forced plies (`exactly one legal move`) as free extensions: depth is consumed only on
 decision nodes with multiple legal moves.
 Score convention: search scores are white-centric at all plies (`+` good for white, `-` good for black). Root move
@@ -406,10 +408,11 @@ Collaborates with: `window.c` for packaging-safe puzzle discovery and `tests/tes
 Module: generic game-selection boundary plus the default checkers adapter.
 Role: `game_backend.h` defines the generic callback table used to describe one compiled game backend.
 `active_game_backend.h` maps the build-time define `GGAME_GAME_CHECKERS` to the active backend object, and
-`src/games/checkers/checkers_backend.c` adapts the moved checkers engine, ruleset catalog, move list, and move
+`src/games/checkers/checkers_backend.c` adapts the moved checkers engine, ruleset catalog, move list, AI, and move
 formatting APIs into that generic table.
 Scope: shared application code still has some checkers-native compatibility layers, but the physical checkers source
 ownership boundary is now explicit under `src/games/checkers/`.
+Backends now advertise whether they support full move-list enumeration, incremental move-building, and AI search.
 Collaborates with: `Makefile` backend selection, `tests/test_game_backend.c`, and future generic model/search work.
 
 ## Generic game model (`src/game_model.c`, `src/game_model.h`)
@@ -417,7 +420,9 @@ Class: `GGameModel` (`GObject`).
 Role: wrap one active `GameBackend` plus one opaque current position behind a GTK-friendly state container with a
 `state-changed` signal. The model owns backend-sized position storage, initializes it from the backend's first
 variant when one exists, exposes generic move listing, application, and whole-position replacement, and now backs the
-shared square-grid UI through `GCheckersModel`'s compatibility bridge.
+shared square-grid UI through `GCheckersModel`'s compatibility bridge. Construction accepts either a full move-list
+backend or a move-builder backend; if move lists are unavailable, move application falls back to direct backend
+validation and status text reports move counts as unavailable.
 Collaborates with: `src/game_backend.h`, `src/games/checkers/checkers_backend.c`,
 `src/games/checkers/checkers_model.c`, and `tests/test_game_model.c`.
 
@@ -472,7 +477,8 @@ selected-node move.
 ### Selection controller (`src/board_selection_controller.c`, `src/board_selection_controller.h`)
 Module: selection path logic.
 Role: manage click-path selection and move application orchestration using backend move-path prefix callbacks rather
-than direct checkers-move inspection.
+than direct checkers-move inspection. The current shared square-grid controller still requires backends that support
+full move lists.
 Collaborates with: `BoardView` and `GGameModel` for applying moves.
 
 ### Piece palette (`src/piece_palette.c`, `src/piece_palette.h`)

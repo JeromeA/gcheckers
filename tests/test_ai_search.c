@@ -144,10 +144,33 @@ static void test_ai_search_tt_roundtrip_and_reuse(void) {
   game_destroy(&game);
 }
 
+static void test_ai_search_rejects_backend_without_ai(void) {
+  static const GameBackend no_ai_backend = {
+    .id = "no-ai",
+    .display_name = "No AI",
+    .variant_count = 0,
+    .position_size = sizeof(gint),
+    .move_size = sizeof(gint),
+    .supports_move_list = FALSE,
+    .supports_move_builder = TRUE,
+    .supports_ai_search = FALSE,
+  };
+  gint position = 0;
+  gint score = 0;
+  gint move = 0;
+  GameAiScoredMoveList scored_moves = {0};
+
+  assert(!game_ai_search_analyze_moves(&no_ai_backend, &position, 1, &scored_moves));
+  assert(!game_ai_search_evaluate_position(&no_ai_backend, &position, 1, &score));
+  assert(!game_ai_search_choose_move(&no_ai_backend, &position, 1, &move));
+  assert(!game_ai_evaluate_static(&no_ai_backend, &position, &score));
+}
+
 int main(void) {
   test_ai_search_analyze_and_choose_move();
   test_ai_search_evaluate_terminal_position();
   test_ai_search_tt_roundtrip_and_reuse();
+  test_ai_search_rejects_backend_without_ai();
 
   return 0;
 }
