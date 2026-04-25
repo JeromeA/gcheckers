@@ -84,7 +84,8 @@ INSTALL ?= install
 
 LIBGAME_A := $(LIB_DIR)/libgame.a
 GCHECKERS_BIN := $(BIN_DIR)/gcheckers
-CREATE_PUZZLES_BIN := $(TOOLS_DIR)/create_puzzles
+CREATE_PUZZLES_TOOL_NAME := $(GAME)_create_puzzles
+CREATE_PUZZLES_BIN := $(TOOLS_DIR)/$(CREATE_PUZZLES_TOOL_NAME)
 TEST_GAME_BIN := $(TESTS_DIR)/test_game
 TEST_GAME_PRINT_BIN := $(TESTS_DIR)/test_game_print
 TEST_GAME_BACKEND_BIN := $(TESTS_DIR)/test_game_backend
@@ -534,7 +535,7 @@ validate-desktop-metadata: $(DESKTOP_FILE) $(METAINFO_FILE)
 
 clean:
 	rm -rf $(BUILD_DIR)
-	rm -f checkers create_puzzles gcheckers libgame.a
+	rm -f checkers gcheckers libgame.a
 	rm -f test_game test_game_print test_board test_move_gen test_checkers_model test_ai_transposition_table
 	rm -f test_bga_client test_file_dialog_history test_app_paths
 	rm -f test_desktop_metadata test_flatpak_manifest test_create_puzzles_cli test_create_puzzles_check

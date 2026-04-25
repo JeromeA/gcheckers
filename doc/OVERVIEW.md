@@ -352,6 +352,8 @@ line of move, move, jump. If the attacker starts 400 or more points behind, the 
 back to at worst 300 points behind; otherwise the candidate is rejected as an uninteresting partial comeback. After the
 solution line ends, the immediate next best reply must also avoid an instant recapture, or the candidate is rejected as
 unstable.
+The built tool name is derived from `GAME`, so the checkers build emits `build/tools/checkers_create_puzzles` while the
+`make create_puzzles` target remains stable.
 While replaying a generated self-play game, the CLI analyzes each pre-mistake position at the configured best-move
 depth and reuses one shared TT allocation across the whole run. When `--synthetic-candidates` is enabled, it also
 tries any synthetic mistake move that already trails the best move by at least 100 points, so puzzle generation is not

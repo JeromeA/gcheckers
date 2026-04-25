@@ -9,7 +9,7 @@
 #include <glib/gstdio.h>
 
 #ifndef GCHECKERS_CREATE_PUZZLES_PATH
-#define GCHECKERS_CREATE_PUZZLES_PATH "./create_puzzles"
+#define GCHECKERS_CREATE_PUZZLES_PATH "./checkers_create_puzzles"
 #endif
 
 typedef struct {
