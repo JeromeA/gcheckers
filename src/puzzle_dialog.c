@@ -1,7 +1,7 @@
 #include "puzzle_dialog.h"
 
-#include "puzzle_catalog.h"
-#include "rulesets.h"
+#include "games/checkers/puzzle_catalog.h"
+#include "games/checkers/rulesets.h"
 
 typedef struct {
   GtkWindow *dialog;

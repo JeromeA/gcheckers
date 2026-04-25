@@ -34,7 +34,8 @@ game-specific, with the checkers build still producing `gcheckers`.
       decisions onto `GameBackend` and `GGameModel`.
 - [~] (2026-04-24 12:05Z) Start Milestone 5 by moving checked-in puzzles and stable puzzle IDs to the generic
       `puzzles/<game-id>/<variant>/...` and `<game-id>/<variant>/...` shapes for the active backend.
-- [ ] Move checkers-specific engine, ruleset, puzzle, notation, and model code under `src/games/checkers/`.
+- [x] (2026-04-24 14:20Z) Complete Milestone 6 by moving the checkers engine, ruleset/model wrappers, puzzle helpers,
+      and notation helpers under `src/games/checkers/`, then repointing build rules and includes at the new paths.
 - [ ] Convert shared application shell, timeline, puzzle shell, settings, and AI code to use generic backend types and
       callbacks.
 - [ ] Move board presentation behind an optional square-grid API plus a backend-owned custom-widget path so shared UI
@@ -81,6 +82,12 @@ game-specific, with the checkers build still producing `gcheckers`.
 - Observation: the Flatpak packaging split is mostly a repository-layout change, not a code-architecture change.
   Evidence: moving the manifest to `flatpak/io.github.jeromea.gcheckers.yaml` only required updating the Makefile,
   the manifest test, and the README command example.
+
+- Observation: physically moving the checkers sources was easier after simplifying `SRCS` into "always-linked core"
+  versus tool-only helpers.
+  Evidence: `create_puzzles_cli.c`, `puzzle_generation.c`, `puzzle_catalog.c`, and `position_format.c` could not stay
+  in the always-linked `SRCS` set without duplicate-link or unrelated dependency problems once they moved under
+  `src/games/checkers/`.
 
 ## Decision Log
 
@@ -143,9 +150,10 @@ game-specific, with the checkers build still producing `gcheckers`.
 
 ## Outcomes & Retrospective
 
-Milestones 1 through 4 are complete: the backend interface exists, a generic model and search layer sit beside the
-legacy checkers wrappers, the shared square-grid board path is backend-driven, and the Makefile already selects the
-active game with `GAME ?= checkers`. Milestone 5 is in progress. The repository now stores checked-in puzzles under
+Milestones 1 through 4 and 6 are complete: the backend interface exists, a generic model and search layer sit beside
+the legacy checkers wrappers, the shared square-grid board path is backend-driven, the physical checkers ownership
+boundary now lives under `src/games/checkers/`, and the Makefile already selects the active game with
+`GAME ?= checkers`. Milestone 5 is still in progress. The repository now stores checked-in puzzles under
 `puzzles/checkers/<variant>/...`, shared progress IDs include the game prefix, and the checkers Flatpak manifest now
 lives at `flatpak/io.github.jeromea.gcheckers.yaml`, but the deeper SGF parsing and backend-owned puzzle validation
 hooks are still pending. The expected final outcome remains a repository where the checkers backend is selected by a
@@ -156,22 +164,23 @@ new backend source directory plus Makefile source selection rather than rewritin
 
 The current repository is a GTK checkers application. The main window lives in `src/window.c` and owns a
 `GCheckersModel`, a board view, player controls, SGF timeline controls, puzzle mode, and analysis UI. The GTK model
-wrapper lives in `src/checkers_model.c` and `src/checkers_model.h`; it wraps the engine and emits GObject signals so
-the UI can repaint when moves are applied.
+wrapper now lives in `src/games/checkers/checkers_model.c` and `src/games/checkers/checkers_model.h`; it wraps the
+engine and emits GObject signals so the UI can repaint when moves are applied.
 
-The current checkers engine is spread across top-level `src/` files. `src/board.c` and `src/board.h` define checkers
-board storage and piece values. `src/board_geometry.c` and `src/board_geometry.h` precompute diagonal rays for
-playable checkers squares. `src/game.c` and `src/game.h` define `Game`, `GameState`, `CheckersMove`, `CheckersRules`,
-and winner logic. `src/move_gen.c` generates legal checkers moves. `src/rulesets.c`, `src/rulesets.h`, and
-`src/ruleset.h` define American, International, and Russian checkers variants. `src/game_print.c` formats positions
-and moves for tests and tools.
+The current checkers engine now lives under `src/games/checkers/`. `src/games/checkers/board.c` and
+`src/games/checkers/board.h` define checkers board storage and piece values.
+`src/games/checkers/board_geometry.c` and `src/games/checkers/board_geometry.h` precompute diagonal rays for playable
+checkers squares. `src/games/checkers/game.c` and `src/games/checkers/game.h` define `Game`, `GameState`,
+`CheckersMove`, `CheckersRules`, and winner logic. `src/games/checkers/move_gen.c` generates legal checkers moves.
+`src/games/checkers/rulesets.c`, `src/games/checkers/rulesets.h`, and `src/games/checkers/ruleset.h` define American,
+International, and Russian checkers variants. `src/games/checkers/game_print.c` formats positions and moves for tests
+and tools.
 
-The current AI is also checkers-specific even though much of the search shape is reusable. `src/ai_alpha_beta.c`
-implements alpha-beta search, move scoring, cancellation, progress callbacks, and transposition-table use. However,
-it evaluates material by reading checkers piece enums and board squares directly, and `src/ai_zobrist.c` hashes
-checkers board positions. The future shared AI must keep the alpha-beta control flow but call backend callbacks for
-move generation, applying moves, undoing or copying positions, static evaluation, terminal scoring, hashing, and move
-ordering.
+The current AI is also checkers-specific even though much of the search shape is reusable.
+`src/games/checkers/ai_alpha_beta.c` implements the checkers-facing compatibility wrapper for alpha-beta search, and
+`src/games/checkers/ai_zobrist.c` hashes checkers board positions. The future shared AI must keep the alpha-beta
+control flow but call backend callbacks for move generation, applying moves, undoing or copying positions, static
+evaluation, terminal scoring, hashing, and move ordering.
 
 The current board UI has reusable and checkers-specific parts mixed together. `src/board_view.c`,
 `src/board_grid.c`, `src/board_square.c`, `src/board_selection_controller.c`, `src/piece_palette.c`,
@@ -187,7 +196,7 @@ backend owns game-specific properties, move parsing, move formatting, setup-posi
 variant identifiers. If a future game cannot use real SGF semantics, the shared tree can still serve as an internal
 timeline format as long as the backend provides import/export callbacks.
 
-The current puzzle system is checkers-specific in data and semantics. `src/puzzle_catalog.c` scans
+The current puzzle system is checkers-specific in data and semantics. `src/games/checkers/puzzle_catalog.c` scans
 `puzzles/<ruleset>/puzzle-####.sgf`; `src/puzzle_dialog.c` shows checkers ruleset choices; `src/puzzle_progress.c`
 records puzzle IDs and outcomes; and `src/window.c` validates puzzle moves against checkers SGF main lines. The shared
 application should keep a generic puzzle shell and progress storage. Puzzle paths should become
@@ -195,8 +204,9 @@ application should keep a generic puzzle shell and progress storage. Puzzle path
 validation should be expressed through generic move-comparison and continuation callbacks, and puzzle generation should
 be one generic engine that asks the backend for game-specific heuristics and candidate-validation rules.
 
-The build is controlled by `Makefile`. It currently puts top-level checkers engine files into `SRCS` and links them
-into the main app, tools, and many tests. This is the main integration point for compile-time backend selection.
+The build is controlled by `Makefile`. It now points `SRCS` at `src/games/checkers/` for the default checkers build
+and keeps tool-only checkers helpers in separate source lists where needed. This is the main integration point for
+compile-time backend selection.
 
 When this plan says "backend", it means a game-specific module that implements a C structure of callbacks used by
 shared code. When this plan says "active backend", it means the one backend selected for this build by a compile

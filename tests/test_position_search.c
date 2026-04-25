@@ -5,7 +5,7 @@
 #include <glib.h>
 
 #include "../src/position_search.h"
-#include "../src/rulesets.h"
+#include "../src/games/checkers/rulesets.h"
 
 typedef struct {
   guint matches;

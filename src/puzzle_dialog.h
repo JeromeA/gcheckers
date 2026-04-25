@@ -2,7 +2,7 @@
 #define GCHECKERS_PUZZLE_DIALOG_H
 
 #include "puzzle_progress.h"
-#include "ruleset.h"
+#include "games/checkers/ruleset.h"
 
 #include <gtk/gtk.h>
 

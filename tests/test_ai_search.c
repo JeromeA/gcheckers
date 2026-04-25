@@ -3,8 +3,8 @@
 
 #include "../src/active_game_backend.h"
 #include "../src/ai_search.h"
-#include "../src/game.h"
-#include "../src/rulesets.h"
+#include "../src/games/checkers/game.h"
+#include "../src/games/checkers/rulesets.h"
 
 static void test_init_game_with_ruleset(Game *game, PlayerRuleset ruleset) {
   const CheckersRules *rules = checkers_ruleset_get_rules(ruleset);

@@ -2,9 +2,9 @@
 
 #include "app_settings.h"
 #include "application.h"
-#include "puzzle_catalog.h"
+#include "games/checkers/puzzle_catalog.h"
 #include "puzzle_progress.h"
-#include "rulesets.h"
+#include "games/checkers/rulesets.h"
 
 typedef struct {
   GCheckersWindow *self;

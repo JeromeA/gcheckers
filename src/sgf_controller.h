@@ -2,7 +2,7 @@
 #define GCHECKERS_SGF_CONTROLLER_H
 
 #include "board_view.h"
-#include "checkers_model.h"
+#include "games/checkers/checkers_model.h"
 #include "sgf_tree.h"
 #include "sgf_view.h"
 

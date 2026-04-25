@@ -1,7 +1,7 @@
 #ifndef SGF_MOVE_PROPS_H
 #define SGF_MOVE_PROPS_H
 
-#include "game.h"
+#include "games/checkers/game.h"
 #include "sgf_tree.h"
 
 #include <glib.h>

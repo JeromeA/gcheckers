@@ -1,7 +1,7 @@
 #ifndef SGF_IO_H
 #define SGF_IO_H
 
-#include "ruleset.h"
+#include "games/checkers/ruleset.h"
 #include "sgf_tree.h"
 
 #include <glib.h>

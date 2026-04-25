@@ -1,7 +1,7 @@
-#include "position_format.h"
+#include "games/checkers/position_format.h"
 #include "position_predicate.h"
 #include "position_search.h"
-#include "rulesets.h"
+#include "games/checkers/rulesets.h"
 
 #include <glib.h>
 #include <stdio.h>

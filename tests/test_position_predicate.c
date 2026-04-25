@@ -1,10 +1,10 @@
 #include <assert.h>
 #include <string.h>
 
-#include "../src/ai_alpha_beta.h"
+#include "../src/games/checkers/ai_alpha_beta.h"
 #include "../src/position_predicate.h"
 #include "../src/position_search.h"
-#include "../src/rulesets.h"
+#include "../src/games/checkers/rulesets.h"
 
 static void test_init_game_with_ruleset(Game *game, PlayerRuleset ruleset) {
   assert(game != NULL);

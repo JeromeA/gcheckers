@@ -1,7 +1,7 @@
 #include "sgf_io.h"
 
-#include "game.h"
-#include "rulesets.h"
+#include "games/checkers/game.h"
+#include "games/checkers/rulesets.h"
 #include "sgf_move_props.h"
 
 #include <string.h>

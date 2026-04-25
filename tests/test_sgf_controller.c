@@ -1,8 +1,8 @@
 #include <gtk/gtk.h>
 
 #include "board_view.h"
-#include "checkers_model.h"
-#include "rulesets.h"
+#include "games/checkers/checkers_model.h"
+#include "games/checkers/rulesets.h"
 #include "sgf_controller.h"
 #include "sgf_io.h"
 #include "sgf_move_props.h"

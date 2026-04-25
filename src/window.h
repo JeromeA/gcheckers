@@ -1,8 +1,8 @@
 #ifndef GCHECKERS_WINDOW_H
 #define GCHECKERS_WINDOW_H
 
-#include "checkers_model.h"
-#include "ruleset.h"
+#include "games/checkers/checkers_model.h"
+#include "games/checkers/ruleset.h"
 #include "sgf_controller.h"
 #include "player_controls_panel.h"
 

@@ -1,7 +1,7 @@
 #include "puzzle_progress.h"
 
 #include "file_dialog_history.h"
-#include "rulesets.h"
+#include "games/checkers/rulesets.h"
 
 #include <errno.h>
 #include <glib/gstdio.h>

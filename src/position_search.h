@@ -1,7 +1,7 @@
 #ifndef POSITION_SEARCH_H
 #define POSITION_SEARCH_H
 
-#include "game.h"
+#include "games/checkers/game.h"
 
 #include <glib.h>
 

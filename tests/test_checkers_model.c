@@ -4,9 +4,9 @@
 
 #include <glib.h>
 
-#include "../src/ai_alpha_beta.h"
-#include "../src/checkers_model.h"
-#include "../src/rulesets.h"
+#include "../src/games/checkers/ai_alpha_beta.h"
+#include "../src/games/checkers/checkers_model.h"
+#include "../src/games/checkers/rulesets.h"
 
 static gboolean test_checkers_model_move_in_list(const MoveList *moves, const CheckersMove *move) {
   g_return_val_if_fail(moves != NULL, FALSE);

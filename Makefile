@@ -18,6 +18,7 @@ GAME ?= checkers
 
 ifeq ($(GAME),checkers)
 GAME_BACKEND_DEFINE := -DGGAME_GAME_CHECKERS
+CHECKERS_DIR := src/games/checkers
 CHECKERS_BACKEND_SRCS := src/games/checkers/checkers_backend.c
 else
 $(error Unknown GAME '$(GAME)')
@@ -36,12 +37,14 @@ CALLGRIND_DIR := $(BUILD_DIR)/callgrind
 
 APP_PATHS_SRCS := src/app_paths.c
 PUZZLE_PROGRESS_SRCS := src/puzzle_progress.c
-PUZZLE_CATALOG_SRCS := src/puzzle_catalog.c
-SRCS := src/board.c src/board_geometry.c src/game.c src/game_print.c src/move_gen.c src/ai_search.c src/ai_alpha_beta.c \
-	src/rulesets.c \
-	src/ai_transposition_table.c src/ai_zobrist.c src/checkers_model.c src/game_model.c $(CHECKERS_BACKEND_SRCS)
-POSITION_SRCS := src/position_search.c src/position_predicate.c src/position_format.c
-BOARD_SRCS := src/board.c
+PUZZLE_CATALOG_SRCS := $(CHECKERS_DIR)/puzzle_catalog.c
+CHECKERS_SRCS := $(CHECKERS_DIR)/board.c $(CHECKERS_DIR)/board_geometry.c $(CHECKERS_DIR)/game.c \
+	$(CHECKERS_DIR)/game_print.c $(CHECKERS_DIR)/move_gen.c $(CHECKERS_DIR)/rulesets.c \
+	$(CHECKERS_DIR)/ai_alpha_beta.c $(CHECKERS_DIR)/ai_transposition_table.c $(CHECKERS_DIR)/ai_zobrist.c \
+	$(CHECKERS_DIR)/checkers_model.c
+SRCS := $(CHECKERS_SRCS) src/ai_search.c src/game_model.c $(CHECKERS_BACKEND_SRCS)
+POSITION_SRCS := src/position_search.c src/position_predicate.c $(CHECKERS_DIR)/position_format.c
+BOARD_SRCS := $(CHECKERS_DIR)/board.c
 SGF_TREE_SRCS := src/sgf_tree.c
 SGF_MOVE_PROPS_SRCS := src/sgf_move_props.c
 SGF_VIEW_SRCS := \
@@ -142,7 +145,7 @@ $(LIBGAME_A): $(OBJS)
 	@mkdir -p $(dir $@)
 	ar rcs $@ $^
 
-$(OBJ_DIR)/%.o: %.c src/game.h src/board.h src/checkers_constants.h
+$(OBJ_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -186,55 +189,60 @@ test: $(TEST_GAME_BIN) $(TEST_GAME_PRINT_BIN) $(TEST_GAME_BACKEND_BIN) $(TEST_GA
 	$(TEST_PUZZLE_PROGRESS_BIN)
 
 test_game: $(TEST_GAME_BIN)
-$(TEST_GAME_BIN): tests/test_game.c $(SRCS) src/game.h
+$(TEST_GAME_BIN): tests/test_game.c $(SRCS) $(CHECKERS_DIR)/game.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_game.c $(SRCS) $(LDLIBS)
 
 test_game_print: $(TEST_GAME_PRINT_BIN)
-$(TEST_GAME_PRINT_BIN): tests/test_game_print.c $(SRCS) src/game.h
+$(TEST_GAME_PRINT_BIN): tests/test_game_print.c $(SRCS) $(CHECKERS_DIR)/game.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_game_print.c $(SRCS) $(LDLIBS)
 
 test_game_backend: $(TEST_GAME_BACKEND_BIN)
 $(TEST_GAME_BACKEND_BIN): tests/test_game_backend.c src/active_game_backend.h src/game_backend.h \
-	$(SRCS) src/rulesets.h src/ruleset.h src/game.h src/board.h src/checkers_constants.h
+	$(SRCS) $(CHECKERS_DIR)/rulesets.h $(CHECKERS_DIR)/ruleset.h $(CHECKERS_DIR)/game.h $(CHECKERS_DIR)/board.h \
+	$(CHECKERS_DIR)/checkers_constants.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_game_backend.c $(SRCS) $(LDLIBS)
 
 test_game_model: $(TEST_GAME_MODEL_BIN)
 $(TEST_GAME_MODEL_BIN): tests/test_game_model.c src/active_game_backend.h src/game_backend.h src/game_model.h \
-	$(SRCS) src/rulesets.h src/ruleset.h src/game.h src/board.h src/checkers_constants.h
+	$(SRCS) $(CHECKERS_DIR)/rulesets.h $(CHECKERS_DIR)/ruleset.h $(CHECKERS_DIR)/game.h $(CHECKERS_DIR)/board.h \
+	$(CHECKERS_DIR)/checkers_constants.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_game_model.c $(SRCS) $(LDLIBS)
 
 test_board: $(TEST_BOARD_BIN)
-$(TEST_BOARD_BIN): tests/test_board.c $(BOARD_SRCS) src/board.h src/checkers_constants.h
+$(TEST_BOARD_BIN): tests/test_board.c $(BOARD_SRCS) $(CHECKERS_DIR)/board.h $(CHECKERS_DIR)/checkers_constants.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_board.c $(BOARD_SRCS) $(LDLIBS)
 
 test_board_geometry: $(TEST_BOARD_GEOMETRY_BIN)
-$(TEST_BOARD_GEOMETRY_BIN): tests/test_board_geometry.c src/board_geometry.c src/board_geometry.h src/board.c \
-	src/board.h src/checkers_constants.h
+$(TEST_BOARD_GEOMETRY_BIN): tests/test_board_geometry.c $(CHECKERS_DIR)/board_geometry.c \
+	$(CHECKERS_DIR)/board_geometry.h $(CHECKERS_DIR)/board.c $(CHECKERS_DIR)/board.h \
+	$(CHECKERS_DIR)/checkers_constants.h
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ tests/test_board_geometry.c src/board_geometry.c src/board.c $(LDLIBS)
+	$(CC) $(CFLAGS) -o $@ tests/test_board_geometry.c $(CHECKERS_DIR)/board_geometry.c $(CHECKERS_DIR)/board.c \
+		$(LDLIBS)
 
 test_move_gen: $(TEST_MOVE_GEN_BIN)
-$(TEST_MOVE_GEN_BIN): tests/test_move_gen.c $(SRCS) src/game.h
+$(TEST_MOVE_GEN_BIN): tests/test_move_gen.c $(SRCS) $(CHECKERS_DIR)/game.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_move_gen.c $(SRCS) $(LDLIBS)
 
-$(CREATE_PUZZLES_BIN): src/create_puzzles.c src/create_puzzles_cli.c src/create_puzzles_cli.h \
-	src/puzzle_generation.c src/puzzle_generation.h src/sgf_io.c src/sgf_io.h src/sgf_tree.c src/sgf_tree.h \
+$(CREATE_PUZZLES_BIN): src/create_puzzles.c $(CHECKERS_DIR)/create_puzzles_cli.c $(CHECKERS_DIR)/create_puzzles_cli.h \
+	$(CHECKERS_DIR)/puzzle_generation.c $(CHECKERS_DIR)/puzzle_generation.h src/sgf_io.c src/sgf_io.h src/sgf_tree.c src/sgf_tree.h \
 	src/sgf_move_props.c src/sgf_move_props.h $(SRCS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ src/create_puzzles.c src/create_puzzles_cli.c src/puzzle_generation.c src/sgf_io.c \
-		src/sgf_tree.c src/sgf_move_props.c $(SRCS) $(LDLIBS)
+	$(CC) $(CFLAGS) -o $@ src/create_puzzles.c $(CHECKERS_DIR)/create_puzzles_cli.c \
+		$(CHECKERS_DIR)/puzzle_generation.c src/sgf_io.c src/sgf_tree.c src/sgf_move_props.c $(SRCS) $(LDLIBS)
 
 test_create_puzzles_cli: $(TEST_CREATE_PUZZLES_CLI_BIN)
-$(TEST_CREATE_PUZZLES_CLI_BIN): tests/test_create_puzzles_cli.c src/create_puzzles_cli.c src/create_puzzles_cli.h \
-	src/rulesets.c src/rulesets.h
+$(TEST_CREATE_PUZZLES_CLI_BIN): tests/test_create_puzzles_cli.c $(CHECKERS_DIR)/create_puzzles_cli.c \
+	$(CHECKERS_DIR)/create_puzzles_cli.h $(CHECKERS_DIR)/rulesets.c $(CHECKERS_DIR)/rulesets.h
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ tests/test_create_puzzles_cli.c src/create_puzzles_cli.c src/rulesets.c $(LDLIBS)
+	$(CC) $(CFLAGS) -o $@ tests/test_create_puzzles_cli.c $(CHECKERS_DIR)/create_puzzles_cli.c \
+		$(CHECKERS_DIR)/rulesets.c $(LDLIBS)
 
 test_create_puzzles_check: $(TEST_CREATE_PUZZLES_CHECK_BIN)
 $(TEST_CREATE_PUZZLES_CHECK_BIN): $(CREATE_PUZZLES_BIN) tests/test_create_puzzles_check.c src/sgf_io.c \
@@ -244,24 +252,25 @@ $(TEST_CREATE_PUZZLES_CHECK_BIN): $(CREATE_PUZZLES_BIN) tests/test_create_puzzle
 		tests/test_create_puzzles_check.c src/sgf_io.c src/sgf_tree.c src/sgf_move_props.c $(SRCS) $(LDLIBS)
 
 $(FIND_POSITION_BIN): src/find_position.c $(POSITION_SRCS) $(SRCS) src/position_search.h src/position_predicate.h \
-	src/position_format.h
+	$(CHECKERS_DIR)/position_format.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ src/find_position.c $(POSITION_SRCS) $(SRCS) $(LDLIBS)
 
 test_checkers_model: $(TEST_CHECKERS_MODEL_BIN)
-$(TEST_CHECKERS_MODEL_BIN): tests/test_checkers_model.c $(SRCS) src/checkers_model.h
+$(TEST_CHECKERS_MODEL_BIN): tests/test_checkers_model.c $(SRCS) $(CHECKERS_DIR)/checkers_model.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_checkers_model.c $(SRCS) $(LDLIBS)
 
 test_ai_search: $(TEST_AI_SEARCH_BIN)
 $(TEST_AI_SEARCH_BIN): tests/test_ai_search.c src/active_game_backend.h src/game_backend.h src/ai_search.h \
-	$(SRCS) src/rulesets.h src/ruleset.h src/game.h src/board.h src/checkers_constants.h
+	$(SRCS) $(CHECKERS_DIR)/rulesets.h $(CHECKERS_DIR)/ruleset.h $(CHECKERS_DIR)/game.h $(CHECKERS_DIR)/board.h \
+	$(CHECKERS_DIR)/checkers_constants.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_ai_search.c $(SRCS) $(LDLIBS)
 
 test_ai_transposition_table: $(TEST_AI_TRANSPOSITION_TABLE_BIN)
-$(TEST_AI_TRANSPOSITION_TABLE_BIN): tests/test_ai_transposition_table.c $(SRCS) src/ai_transposition_table.h \
-	src/ai_zobrist.h
+$(TEST_AI_TRANSPOSITION_TABLE_BIN): tests/test_ai_transposition_table.c $(SRCS) \
+	$(CHECKERS_DIR)/ai_transposition_table.h $(CHECKERS_DIR)/ai_zobrist.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_ai_transposition_table.c $(SRCS) $(LDLIBS)
 
@@ -299,10 +308,11 @@ $(TEST_APP_PATHS_BIN): tests/test_app_paths.c $(APP_PATHS_SRCS) src/app_paths.h
 test_puzzle_progress: $(TEST_PUZZLE_PROGRESS_BIN)
 $(TEST_PUZZLE_PROGRESS_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_puzzle_progress.c $(APP_PATHS_SRCS) \
 	src/puzzle_progress.c src/puzzle_progress.h src/file_dialog_history.c src/file_dialog_history.h \
-	src/rulesets.c src/rulesets.h src/game.h src/board.h src/checkers_constants.h
+	$(CHECKERS_DIR)/rulesets.c $(CHECKERS_DIR)/rulesets.h $(CHECKERS_DIR)/game.h $(CHECKERS_DIR)/board.h \
+	$(CHECKERS_DIR)/checkers_constants.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_puzzle_progress.c $(APP_PATHS_SRCS) src/puzzle_progress.c \
-		src/file_dialog_history.c src/rulesets.c $(LDLIBS)
+		src/file_dialog_history.c $(CHECKERS_DIR)/rulesets.c $(LDLIBS)
 
 test_puzzle_progress_report_server: $(TEST_PUZZLE_PROGRESS_REPORT_SERVER_BIN)
 	@set -eu; \
@@ -373,10 +383,11 @@ $(TEST_SGF_TREE_BIN): tests/test_sgf_tree.c $(SGF_TREE_SRCS) src/sgf_tree.h
 
 test_sgf_io: $(TEST_SGF_IO_BIN)
 $(TEST_SGF_IO_BIN): tests/test_sgf_io.c src/sgf_io.c src/sgf_io.h src/sgf_tree.c src/sgf_tree.h src/sgf_move_props.c \
-	src/sgf_move_props.h src/game.h src/game_print.c src/board.c src/rulesets.c src/rulesets.h
+	src/sgf_move_props.h $(CHECKERS_DIR)/game.h $(CHECKERS_DIR)/game_print.c $(CHECKERS_DIR)/board.c \
+	$(CHECKERS_DIR)/rulesets.c $(CHECKERS_DIR)/rulesets.h
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ tests/test_sgf_io.c src/sgf_io.c src/sgf_tree.c src/sgf_move_props.c src/game_print.c \
-		src/board.c src/rulesets.c $(LDLIBS)
+	$(CC) $(CFLAGS) -o $@ tests/test_sgf_io.c src/sgf_io.c src/sgf_tree.c src/sgf_move_props.c \
+		$(CHECKERS_DIR)/game_print.c $(CHECKERS_DIR)/board.c $(CHECKERS_DIR)/rulesets.c $(LDLIBS)
 
 test_sgf_view: $(TEST_SGF_VIEW_BIN)
 $(TEST_SGF_VIEW_BIN): tests/test_sgf_view.c $(SGF_VIEW_SRCS) $(SGF_TREE_SRCS) $(WIDGET_UTILS_SRCS) \
@@ -393,7 +404,7 @@ $(TEST_BOARD_VIEW_BIN): tests/test_board_view.c src/board_view.c src/board_view.
 	src/sgf_move_props.c src/sgf_move_props.h src/sgf_tree.c src/sgf_tree.h src/sgf_view.c src/sgf_view.h \
 	src/sgf_view_disc_factory.c src/sgf_view_disc_factory.h src/sgf_view_layout.c src/sgf_view_layout.h \
 	src/sgf_view_link_renderer.c src/sgf_view_link_renderer.h src/sgf_view_scroller.c src/sgf_view_scroller.h \
-	src/sgf_view_selection_controller.c src/sgf_view_selection_controller.h src/checkers_model.h $(SRCS) \
+	src/sgf_view_selection_controller.c src/sgf_view_selection_controller.h $(CHECKERS_DIR)/checkers_model.h $(SRCS) \
 	$(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_board_view.c src/board_view.c src/board_grid.c \
@@ -414,7 +425,7 @@ $(TEST_SGF_CONTROLLER_BIN): tests/test_sgf_controller.c src/sgf_controller.c src
 	src/board_view.h src/board_grid.c src/board_grid.h src/board_square.c src/board_square.h \
 	src/board_move_overlay.c src/board_move_overlay.h src/board_selection_controller.c \
 	src/board_selection_controller.h src/piece_palette.c src/piece_palette.h src/man_paintable.c \
-	src/man_paintable.h src/checkers_model.c src/checkers_model.h src/sgf_io.c src/sgf_io.h \
+	src/man_paintable.h $(CHECKERS_DIR)/checkers_model.c $(CHECKERS_DIR)/checkers_model.h src/sgf_io.c src/sgf_io.h \
 	src/sgf_move_props.c src/sgf_move_props.h src/sgf_tree.c src/sgf_tree.h src/sgf_view.c src/sgf_view.h \
 	src/sgf_view_disc_factory.c src/sgf_view_disc_factory.h src/sgf_view_layout.c src/sgf_view_layout.h \
 	src/sgf_view_link_renderer.c src/sgf_view_link_renderer.h src/sgf_view_scroller.c \
@@ -431,7 +442,7 @@ test_window: $(TEST_WINDOW_BIN)
 $(TEST_WINDOW_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_window.c src/window.c src/application.c \
 	src/application.h $(APP_PATHS_SRCS) $(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c \
 	src/app_settings.h \
-	src/new_game_dialog.c src/puzzle_dialog.c src/puzzle_dialog.h src/rulesets.c src/rulesets.h \
+	src/new_game_dialog.c src/puzzle_dialog.c src/puzzle_dialog.h $(CHECKERS_DIR)/rulesets.c $(CHECKERS_DIR)/rulesets.h \
 	src/import_dialog.c src/settings_dialog.c src/settings_dialog.h src/sgf_file_actions.c \
 	src/sgf_file_actions.h src/file_dialog_history.c src/file_dialog_history.h src/bga_client.c src/bga_client.h \
 	src/window.h src/style.c src/style.h src/player_controls_panel.c src/player_controls_panel.h \
@@ -439,7 +450,7 @@ $(TEST_WINDOW_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_window.c src/window.
 	src/board_view.h src/board_grid.c src/board_grid.h src/board_square.c src/board_square.h \
 	src/board_move_overlay.c src/board_move_overlay.h src/board_selection_controller.c \
 	src/board_selection_controller.h src/piece_palette.c src/piece_palette.h src/man_paintable.c \
-	src/man_paintable.h src/checkers_model.c src/checkers_model.h src/sgf_io.c src/sgf_io.h \
+	src/man_paintable.h $(CHECKERS_DIR)/checkers_model.c $(CHECKERS_DIR)/checkers_model.h src/sgf_io.c src/sgf_io.h \
 	src/sgf_move_props.c src/sgf_move_props.h src/sgf_tree.c src/sgf_tree.h src/sgf_view.c src/sgf_view.h \
 	src/sgf_view_disc_factory.c src/sgf_view_disc_factory.h src/sgf_view_layout.c src/sgf_view_layout.h \
 	src/sgf_view_link_renderer.c src/sgf_view_link_renderer.h src/sgf_view_scroller.c \
@@ -457,21 +468,21 @@ $(TEST_WINDOW_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_window.c src/window.
 		src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(SRCS) $(LDLIBS) $(GTK_LIBS)
 
 test_puzzle_generation: $(TEST_PUZZLE_GENERATION_BIN)
-$(TEST_PUZZLE_GENERATION_BIN): tests/test_puzzle_generation.c src/puzzle_generation.c src/puzzle_generation.h \
-	src/ai_alpha_beta.h src/board.h
+$(TEST_PUZZLE_GENERATION_BIN): tests/test_puzzle_generation.c $(CHECKERS_DIR)/puzzle_generation.c \
+	$(CHECKERS_DIR)/puzzle_generation.h $(CHECKERS_DIR)/ai_alpha_beta.h $(CHECKERS_DIR)/board.h
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ tests/test_puzzle_generation.c src/puzzle_generation.c $(LDLIBS)
+	$(CC) $(CFLAGS) -o $@ tests/test_puzzle_generation.c $(CHECKERS_DIR)/puzzle_generation.c $(LDLIBS)
 
 test_puzzle_catalog: $(TEST_PUZZLE_CATALOG_BIN)
 $(TEST_PUZZLE_CATALOG_BIN): tests/test_puzzle_catalog.c $(APP_PATHS_SRCS) $(PUZZLE_CATALOG_SRCS) \
-	src/puzzle_catalog.h src/app_paths.h $(SRCS)
+	$(CHECKERS_DIR)/puzzle_catalog.h src/app_paths.h $(SRCS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_puzzle_catalog.c $(APP_PATHS_SRCS) $(PUZZLE_CATALOG_SRCS) $(SRCS) \
 		$(LDLIBS)
 
 test_piece_palette: $(TEST_PIECE_PALETTE_BIN)
 $(TEST_PIECE_PALETTE_BIN): tests/test_piece_palette.c src/piece_palette.c src/piece_palette.h \
-	src/man_paintable.c src/man_paintable.h src/board.h src/checkers_constants.h
+	src/man_paintable.c src/man_paintable.h $(CHECKERS_DIR)/board.h $(CHECKERS_DIR)/checkers_constants.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_piece_palette.c src/piece_palette.c \
 		src/man_paintable.c $(LDLIBS) $(GTK_LIBS)
@@ -479,7 +490,7 @@ $(TEST_PIECE_PALETTE_BIN): tests/test_piece_palette.c src/piece_palette.c src/pi
 $(GCHECKERS_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c src/application.c src/window.c $(APP_PATHS_SRCS) \
 	$(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c src/app_settings.h src/settings_dialog.c \
 	src/settings_dialog.h \
-	src/new_game_dialog.c src/puzzle_dialog.c src/puzzle_dialog.h src/rulesets.c src/rulesets.h \
+	src/new_game_dialog.c src/puzzle_dialog.c src/puzzle_dialog.h $(CHECKERS_DIR)/rulesets.c $(CHECKERS_DIR)/rulesets.h \
 	src/import_dialog.c src/sgf_file_actions.c \
 	src/sgf_file_actions.h src/file_dialog_history.c src/file_dialog_history.h src/bga_client.c src/bga_client.h \
 	src/window.h src/style.c src/style.h src/player_controls_panel.c src/player_controls_panel.h \
@@ -487,7 +498,7 @@ $(GCHECKERS_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c src/application.c
 	src/board_view.h src/board_grid.c src/board_grid.h src/board_square.c src/board_square.h \
 	src/board_move_overlay.c src/board_move_overlay.h src/board_selection_controller.c \
 	src/board_selection_controller.h src/piece_palette.c src/piece_palette.h src/application.h src/man_paintable.c \
-	src/man_paintable.h src/checkers_model.c src/checkers_model.h src/sgf_io.c src/sgf_io.h \
+	src/man_paintable.h $(CHECKERS_DIR)/checkers_model.c $(CHECKERS_DIR)/checkers_model.h src/sgf_io.c src/sgf_io.h \
 	src/sgf_move_props.c src/sgf_move_props.h src/sgf_tree.c src/sgf_tree.h src/sgf_view.c src/sgf_view.h \
 	src/sgf_view_disc_factory.c src/sgf_view_disc_factory.h src/sgf_view_layout.c src/sgf_view_layout.h \
 	src/sgf_view_link_renderer.c src/sgf_view_link_renderer.h src/sgf_view_scroller.c \
@@ -556,7 +567,7 @@ clean:
 	rm -f $(GSETTINGS_SCHEMA_COMPILED)
 	rm -rf $(COV_DIR)
 
-$(COV_OBJ_DIR)/%.o: %.c src/game.h src/board.h src/checkers_constants.h
+$(COV_OBJ_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(COVERAGE_CFLAGS) -c $< -o $@
 

@@ -2,7 +2,7 @@
 
 #include "app_settings.h"
 #include "app_paths.h"
-#include "checkers_model.h"
+#include "games/checkers/checkers_model.h"
 #include "window.h"
 
 #include <curl/curl.h>

@@ -1,4 +1,4 @@
-#include "../src/puzzle_generation.h"
+#include "../src/games/checkers/puzzle_generation.h"
 
 #include <glib.h>
 #include <glib/gstdio.h>

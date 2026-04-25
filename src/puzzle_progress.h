@@ -1,8 +1,8 @@
 #ifndef GCHECKERS_PUZZLE_PROGRESS_H
 #define GCHECKERS_PUZZLE_PROGRESS_H
 
-#include "game.h"
-#include "ruleset.h"
+#include "games/checkers/game.h"
+#include "games/checkers/ruleset.h"
 
 #include <glib.h>
 

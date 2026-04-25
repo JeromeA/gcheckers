@@ -1,5 +1,5 @@
-#include "../src/create_puzzles_cli.h"
-#include "../src/rulesets.h"
+#include "../src/games/checkers/create_puzzles_cli.h"
+#include "../src/games/checkers/rulesets.h"
 
 #include <glib.h>
 

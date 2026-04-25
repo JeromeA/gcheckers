@@ -1,7 +1,7 @@
 #include "sgf_controller.h"
 #include "sgf_io.h"
 #include "sgf_move_props.h"
-#include "rulesets.h"
+#include "games/checkers/rulesets.h"
 
 #include <string.h>
 

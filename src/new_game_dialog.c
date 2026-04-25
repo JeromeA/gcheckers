@@ -1,6 +1,6 @@
 #include "active_game_backend.h"
 #include "window.h"
-#include "rulesets.h"
+#include "games/checkers/rulesets.h"
 
 typedef struct {
   GCheckersWindow *self;

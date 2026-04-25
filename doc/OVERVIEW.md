@@ -147,7 +147,7 @@ Signals: `control-changed` for window-level coordination.
 Collaborates with: `GCheckersWindow` (signal handlers and `player_controls_panel_set_all_user()`) and GTK widgets
 (`GtkDropDown`, `GtkScale`).
 
-## `Puzzle Catalog` (`src/puzzle_catalog.c`, `src/puzzle_catalog.h`)
+## `Puzzle Catalog` (`src/games/checkers/puzzle_catalog.c`, `src/games/checkers/puzzle_catalog.h`)
 Module: ruleset-aware puzzle discovery helpers.
 Role: scan one variant directory under the puzzle root, keep only `puzzle-####.sgf` files, parse their numeric puzzle
 numbers, sort them ascending, and return explicit catalog entries with basename, full path, and stable `puzzle_id`.
@@ -217,32 +217,33 @@ Role: safely detach widgets from common GTK containers (box, grid, overlay, pane
 reference to avoid GTK4 dispose-time criticals.
 Collaborates with: `GCheckersWindow`, `BoardView`, and SGF view helpers during disposal.
 
-## Board primitives (`src/board.c`, `src/board.h`)
+## Board primitives (`src/games/checkers/board.c`, `src/games/checkers/board.h`)
 Module: board storage and helpers.
 Role: define board data structures, coordinate conversion helpers, piece helpers, and reset/init logic.
 Collaborates with: `game.c` for rules and state transitions, and `board_geometry.c` for one-time directional-ray
 construction.
 
-## Board geometry (`src/board_geometry.c`, `src/board_geometry.h`)
+## Board geometry (`src/games/checkers/board_geometry.c`, `src/games/checkers/board_geometry.h`)
 Module: precomputed directional traversal data.
 Role: build and expose immutable per-board-size direction rays in playable-square index space. Direction order is API:
 up-left, up-right, down-left, down-right.
 Collaborates with: `move_gen.c` for hot-path move enumeration, and `board.c` for one-time index/coordinate conversion
 while initializing the static geometry tables.
 
-## Constants (`src/checkers_constants.h`)
+## Constants (`src/games/checkers/checkers_constants.h`)
 Module: shared constants.
 Role: centralize size limits for boards, moves, and byte storage used throughout the engine and UI.
 Collaborates with: all game and model modules via compile-time limits.
 
-## Game engine (`src/game.c`, `src/game.h`)
+## Game engine (`src/games/checkers/game.c`, `src/games/checkers/game.h`)
 Module: core game rules and state.
 Role: define game types, rule enforcement, promotion, winner updates, and the public game API.
 Collaborates with: `move_gen.c` for move enumeration and `checkers_model.c` for GTK integration.
 Game creation is explicit via `game_init_with_rules()`; callers fetch concrete presets from the shared ruleset catalog
 before initialization.
 
-## Ruleset catalog (`src/rulesets.c`, `src/rulesets.h`, `src/ruleset.h`)
+## Ruleset catalog (`src/games/checkers/rulesets.c`, `src/games/checkers/rulesets.h`,
+`src/games/checkers/ruleset.h`)
 Module: ruleset metadata and presets.
 Role: central single source of truth for ruleset IDs, display names, short names (`american`, `international`,
 `russian`), UI summaries, and `CheckersRules` values in one enum-indexed table. Also exposes reverse lookup from a
@@ -251,18 +252,18 @@ Collaborates with: `window.c`/`new_game_dialog.c`/`puzzle_dialog.c` for UI selec
 and `create_puzzles_cli.c` for ruleset-targeted puzzle generation, and all game creators for explicit
 `game_init_with_rules()` setup.
 
-## Game printing (`src/game_print.c`)
+## Game printing (`src/games/checkers/game_print.c`)
 Module: terminal formatting helpers.
 Role: render board state and move notation for tooling and tests.
 Collaborates with: game/SGF formatting callers.
 
-## Move generation (`src/move_gen.c`)
+## Move generation (`src/games/checkers/move_gen.c`)
 Module: move generation.
 Role: enumerate simple moves, jumps, and forced-capture rules.
 Collaborates with: `game.c` to validate and apply generated moves, and `board_geometry.c` for direct index-space
 direction traversal without per-step coordinate conversion.
 
-## GTK model wrapper (`src/checkers_model.c`, `src/checkers_model.h`)
+## GTK model wrapper (`src/games/checkers/checkers_model.c`, `src/games/checkers/checkers_model.h`)
 Class: `GCheckersModel` (`GObject`).
 Role: wrap the engine for GTK, including move validation, alpha-beta move selection, state-change signals, and
 last-move caching for board overlay rendering. Exposes structured move-analysis API
@@ -287,21 +288,23 @@ Search integrates backend hashing plus a depth/bound/age transposition table and
 ordering. Exposes both searched position scoring and pure static scoring through generic APIs.
 Collaborates with: `game_backend.h`, `tests/test_ai_search.c`, and the checkers compatibility wrapper.
 
-## AI alpha-beta compatibility wrapper (`src/ai_alpha_beta.c`, `src/ai_alpha_beta.h`)
+## AI alpha-beta compatibility wrapper (`src/games/checkers/ai_alpha_beta.c`,
+`src/games/checkers/ai_alpha_beta.h`)
 Module: checkers-facing search compatibility.
 Role: preserve the existing `CheckersMove`, `Game`, and `CheckersAiTranspositionTable` APIs while delegating the real
 search work to `ai_search.c` through the checkers backend adapter.
 Collaborates with: `checkers_model.c`, `create_puzzles.c`, and other existing checkers-only callers that have not
 yet migrated to generic AI interfaces.
 
-## Transposition table (`src/ai_transposition_table.c`, `src/ai_transposition_table.h`)
+## Transposition table (`src/games/checkers/ai_transposition_table.c`,
+`src/games/checkers/ai_transposition_table.h`)
 Module: checkers-facing TT compatibility wrapper.
 Role: preserve the existing checkers TT API while delegating storage to the generic backend-sized TT used by
 `ai_search.c`. TT entries remain ephemeral search-cache data only (pruning and move ordering), not authoritative
 user-visible analysis storage.
 Collaborates with: `ai_search.c` and `ai_alpha_beta.c`.
 
-## Zobrist hashing (`src/ai_zobrist.c`, `src/ai_zobrist.h`)
+## Zobrist hashing (`src/games/checkers/ai_zobrist.c`, `src/games/checkers/ai_zobrist.h`)
 Module: position hashing.
 Role: deterministic 64-bit keying of board occupancy, board size, side to move, and winner state.
 Collaborates with: TT probe/store in `ai_alpha_beta.c`.
@@ -318,7 +321,7 @@ Role: provide search predicates and helpers such as "alpha-beta score is non-zer
 for immediate match reporting.
 Collaborates with: `ai_alpha_beta.c` and `position_search.c`.
 
-## Position formatting (`src/position_format.c`, `src/position_format.h`)
+## Position formatting (`src/games/checkers/position_format.c`, `src/games/checkers/position_format.h`)
 Module: position output formatting.
 Role: format move sequences for CLI/tooling output.
 Collaborates with: `find_position` and search callbacks.
@@ -384,7 +387,8 @@ By default it saves only `puzzles/checkers/<ruleset-short-name>/puzzle-####.sgf`
 Collaborates with: `ai_alpha_beta.c`, `rulesets.c`, `sgf_tree.c`, `sgf_move_props.c`, `sgf_io.c`,
 and `puzzle_generation.c`.
 
-## Puzzle generation helpers (`src/puzzle_generation.c`, `src/puzzle_generation.h`)
+## Puzzle generation helpers (`src/games/checkers/puzzle_generation.c`,
+`src/games/checkers/puzzle_generation.h`)
 Module: puzzle-selection and output-index helpers.
 Role: expose pure functions for mistake delta checks, "enough choice" and "single correct move" tests from scored move
 lists, where "single correct move" means the best score is ahead of the second-best score by a configurable margin,
@@ -409,13 +413,12 @@ Collaborates with: `window.c` for packaging-safe puzzle discovery and `tests/tes
 
 ## Game backend interface (`src/game_backend.h`, `src/active_game_backend.h`, `src/games/checkers/checkers_backend.c`)
 Module: generic game-selection boundary plus the default checkers adapter.
-Role: `game_backend.h` defines the first generic callback table used to describe one compiled game backend without
-moving existing engine files yet. `active_game_backend.h` maps the build-time define `GGAME_GAME_CHECKERS` to the
-active backend object, and `src/games/checkers/checkers_backend.c` adapts the current top-level checkers engine,
-ruleset catalog, move list, and move formatting APIs into that generic table.
-Scope: this is an initial Milestone 1 compatibility layer only. Shared application code still uses checkers-native
-types directly, but tests and future refactors can now bind to `GGAME_ACTIVE_GAME_BACKEND` instead of including
-checkers engine headers directly.
+Role: `game_backend.h` defines the generic callback table used to describe one compiled game backend.
+`active_game_backend.h` maps the build-time define `GGAME_GAME_CHECKERS` to the active backend object, and
+`src/games/checkers/checkers_backend.c` adapts the moved checkers engine, ruleset catalog, move list, and move
+formatting APIs into that generic table.
+Scope: shared application code still has some checkers-native compatibility layers, but the physical checkers source
+ownership boundary is now explicit under `src/games/checkers/`.
 Collaborates with: `Makefile` backend selection, `tests/test_game_backend.c`, and future generic model/search work.
 
 ## Generic game model (`src/game_model.c`, `src/game_model.h`)
@@ -424,8 +427,8 @@ Role: wrap one active `GameBackend` plus one opaque current position behind a GT
 `state-changed` signal. The model owns backend-sized position storage, initializes it from the backend's first
 variant when one exists, exposes generic move listing, application, and whole-position replacement, and now backs the
 shared square-grid UI through `GCheckersModel`'s compatibility bridge.
-Collaborates with: `src/game_backend.h`, `src/games/checkers/checkers_backend.c`, `src/checkers_model.c`, and
-`tests/test_game_model.c`.
+Collaborates with: `src/game_backend.h`, `src/games/checkers/checkers_backend.c`,
+`src/games/checkers/checkers_model.c`, and `tests/test_game_model.c`.
 
 ## GTK application entry (`src/gcheckers.c`, `src/application.c`, `src/application.h`)
 Class: `GCheckersApplication` (`GtkApplication`).

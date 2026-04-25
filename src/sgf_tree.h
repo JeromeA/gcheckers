@@ -1,7 +1,7 @@
 #ifndef SGF_TREE_H
 #define SGF_TREE_H
 
-#include "game.h"
+#include "games/checkers/game.h"
 
 #include <glib-object.h>
 

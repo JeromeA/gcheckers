@@ -1,7 +1,7 @@
 #include <glib.h>
 
-#include "../src/game.h"
-#include "../src/rulesets.h"
+#include "../src/games/checkers/game.h"
+#include "../src/games/checkers/rulesets.h"
 #include "../src/sgf_io.h"
 #include "../src/sgf_move_props.h"
 

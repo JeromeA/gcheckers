@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "../src/board.h"
+#include "../src/games/checkers/board.h"
 
 static void test_board_init_and_reset(void) {
   CheckersBoard board;

@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include "../src/board_geometry.h"
+#include "../src/games/checkers/board_geometry.h"
 
 static void assert_ray_equals(const int8_t *ray, const int8_t *expected, size_t expected_length) {
   assert(ray != NULL);

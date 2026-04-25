@@ -4,8 +4,8 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include "../src/game.h"
-#include "../src/rulesets.h"
+#include "../src/games/checkers/game.h"
+#include "../src/games/checkers/rulesets.h"
 
 static void test_init_game_with_ruleset(Game *game, PlayerRuleset ruleset) {
   assert(game != NULL);

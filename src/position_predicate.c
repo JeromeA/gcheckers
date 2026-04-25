@@ -1,6 +1,6 @@
 #include "position_predicate.h"
 
-#include "ai_alpha_beta.h"
+#include "games/checkers/ai_alpha_beta.h"
 
 #include <string.h>
 

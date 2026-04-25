@@ -1,10 +1,10 @@
 #include "checkers_backend.h"
 
-#include "../../ai_zobrist.h"
-#include "../../board.h"
-#include "../../game.h"
-#include "../../ruleset.h"
-#include "../../rulesets.h"
+#include "ai_zobrist.h"
+#include "board.h"
+#include "game.h"
+#include "ruleset.h"
+#include "rulesets.h"
 
 #include <string.h>
 
