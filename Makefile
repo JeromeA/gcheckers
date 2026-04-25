@@ -37,7 +37,7 @@ CALLGRIND_DIR := $(BUILD_DIR)/callgrind
 
 APP_PATHS_SRCS := src/app_paths.c
 PUZZLE_PROGRESS_SRCS := src/puzzle_progress.c
-PUZZLE_CATALOG_SRCS := $(CHECKERS_DIR)/puzzle_catalog.c
+PUZZLE_CATALOG_SRCS := src/puzzle_catalog.c
 CHECKERS_SRCS := $(CHECKERS_DIR)/board.c $(CHECKERS_DIR)/board_geometry.c $(CHECKERS_DIR)/game.c \
 	$(CHECKERS_DIR)/game_print.c $(CHECKERS_DIR)/move_gen.c $(CHECKERS_DIR)/rulesets.c \
 	$(CHECKERS_DIR)/ai_alpha_beta.c $(CHECKERS_DIR)/ai_transposition_table.c $(CHECKERS_DIR)/ai_zobrist.c \
@@ -383,11 +383,10 @@ $(TEST_SGF_TREE_BIN): tests/test_sgf_tree.c $(SGF_TREE_SRCS) src/sgf_tree.h
 
 test_sgf_io: $(TEST_SGF_IO_BIN)
 $(TEST_SGF_IO_BIN): tests/test_sgf_io.c src/sgf_io.c src/sgf_io.h src/sgf_tree.c src/sgf_tree.h src/sgf_move_props.c \
-	src/sgf_move_props.h $(CHECKERS_DIR)/game.h $(CHECKERS_DIR)/game_print.c $(CHECKERS_DIR)/board.c \
-	$(CHECKERS_DIR)/rulesets.c $(CHECKERS_DIR)/rulesets.h
+	src/sgf_move_props.h $(SRCS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_sgf_io.c src/sgf_io.c src/sgf_tree.c src/sgf_move_props.c \
-		$(CHECKERS_DIR)/game_print.c $(CHECKERS_DIR)/board.c $(CHECKERS_DIR)/rulesets.c $(LDLIBS)
+		$(SRCS) $(LDLIBS)
 
 test_sgf_view: $(TEST_SGF_VIEW_BIN)
 $(TEST_SGF_VIEW_BIN): tests/test_sgf_view.c $(SGF_VIEW_SRCS) $(SGF_TREE_SRCS) $(WIDGET_UTILS_SRCS) \
@@ -475,7 +474,7 @@ $(TEST_PUZZLE_GENERATION_BIN): tests/test_puzzle_generation.c $(CHECKERS_DIR)/pu
 
 test_puzzle_catalog: $(TEST_PUZZLE_CATALOG_BIN)
 $(TEST_PUZZLE_CATALOG_BIN): tests/test_puzzle_catalog.c $(APP_PATHS_SRCS) $(PUZZLE_CATALOG_SRCS) \
-	$(CHECKERS_DIR)/puzzle_catalog.h src/app_paths.h $(SRCS)
+	src/puzzle_catalog.h src/app_paths.h $(SRCS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_puzzle_catalog.c $(APP_PATHS_SRCS) $(PUZZLE_CATALOG_SRCS) $(SRCS) \
 		$(LDLIBS)

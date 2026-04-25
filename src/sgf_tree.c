@@ -50,6 +50,7 @@ static SgfNode *sgf_node_new(SgfNode *parent, SgfColor color, guint move_number)
 
 static void sgf_node_scored_move_free(gpointer data) {
   SgfNodeScoredMove *scored = data;
+  g_clear_pointer(&scored->move_text, g_free);
   g_free(scored);
 }
 
@@ -73,16 +74,16 @@ void sgf_node_analysis_free(SgfNodeAnalysis *analysis) {
 }
 
 gboolean sgf_node_analysis_add_scored_move(SgfNodeAnalysis *analysis,
-                                           const CheckersMove *move,
+                                           const char *move_text,
                                            gint score,
                                            guint64 nodes) {
   g_return_val_if_fail(analysis != NULL, FALSE);
   g_return_val_if_fail(analysis->moves != NULL, FALSE);
-  g_return_val_if_fail(move != NULL, FALSE);
-  g_return_val_if_fail(move->length >= 2, FALSE);
+  g_return_val_if_fail(move_text != NULL, FALSE);
+  g_return_val_if_fail(move_text[0] != '\0', FALSE);
 
   SgfNodeScoredMove *entry = g_new0(SgfNodeScoredMove, 1);
-  entry->move = *move;
+  entry->move_text = g_strdup(move_text);
   entry->score = score;
   entry->nodes = nodes;
   g_ptr_array_add(analysis->moves, entry);
@@ -106,7 +107,7 @@ SgfNodeAnalysis *sgf_node_analysis_copy(const SgfNodeAnalysis *analysis) {
       sgf_node_analysis_free(copy);
       return NULL;
     }
-    if (!sgf_node_analysis_add_scored_move(copy, &entry->move, entry->score, entry->nodes)) {
+    if (!sgf_node_analysis_add_scored_move(copy, entry->move_text, entry->score, entry->nodes)) {
       sgf_node_analysis_free(copy);
       return NULL;
     }

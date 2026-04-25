@@ -510,22 +510,30 @@ Collaborates with: SGF view and controller modules.
 
 ### SGF move properties (`src/sgf_move_props.c`, `src/sgf_move_props.h`)
 Module: SGF move property helpers.
-Role: convert between SGF move properties (`B[...]`/`W[...]`) and typed `CheckersMove` values used by controller/model
-paths.
+Role: convert between SGF move properties (`B[...]`/`W[...]`) and typed move storage supplied by the active backend.
+The current implementation still parses and formats checkers notation internally, but the public helper API no longer
+exposes `CheckersMove` in its header.
 Collaborates with: `sgf_io` and `GCheckersSgfController`.
 
 ### SGF IO (`src/sgf_io.c`, `src/sgf_io.h`)
 Module: SGF load/save core.
 Role: serialize and deserialize SGF trees using SGF syntax (`(`, `)`, `;`, `PROP[...]`) with move properties
 `B[...]`/`W[...]` and standard SGF variation nesting for branches. gcheckers writes SGF metadata (`FF`, `CA`, `AP`,
-`GM`, `RU`) and does not persist current UI selection. `RU` stores the gcheckers ruleset short name and is exposed
-through small tree helpers so controllers and puzzle tooling can parse or stamp the active variant. Loaders that open
-playable SGFs now require `RU` to be present and valid instead of inferring a variant heuristically. Node analysis
-persists through custom properties:
+`GM`, `RU`) and does not persist current UI selection. `RU` stores the active backend variant short name and is
+exposed through small tree helpers so controllers and puzzle tooling can parse or stamp the active variant. Loaders
+that open playable SGFs now require `RU` to be present and valid instead of inferring a variant heuristically. Node
+analysis persists through custom properties:
 `GCAD[depth]`, `GCAS[nodes=...;tt_probes=...;tt_hits=...;tt_cutoffs=...]`, and repeated
 `GCAN[move:score:nodes]` for scored moves, while still accepting older `GCAN[move:score]` data when loading. This
 layer is GTK-free so it can be reused by both GUI actions and future CLI commands.
 Collaborates with: `GCheckersSgfController` load/save entry points and `tests/test_sgf_io.c`.
+
+## Puzzle Catalog (`src/puzzle_catalog.c`, `src/puzzle_catalog.h`)
+Module: shared puzzle catalog loader.
+Role: scan `puzzles/<game-id>/<variant>/` for `puzzle-####.sgf` files, sort them by puzzle number, and expose stable
+`<game-id>/<variant>/puzzle-####.sgf` IDs to shared settings, puzzle-picker, and window code. This keeps the path and
+ID layout generic while still letting checkers-specific generation tools emit the existing file names.
+Collaborates with: `window.c`, `puzzle_dialog.c`, `settings_dialog.c`, and `tests/test_puzzle_catalog.c`.
 
 ### SGF view (`src/sgf_view.c`, `src/sgf_view.h`)
 Class: `SgfView` (`GtkWidget`).

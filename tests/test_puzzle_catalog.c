@@ -1,4 +1,6 @@
+#include "../src/active_game_backend.h"
 #include "../src/puzzle_catalog.h"
+#include "../src/games/checkers/rulesets.h"
 
 #include <glib.h>
 #include <glib/gstdio.h>
@@ -23,13 +25,15 @@ static void test_puzzle_catalog_loads_sorted_variant_entries(void) {
   g_assert_no_error(error);
 
   g_setenv("GCHECKERS_PUZZLES_DIR", root, TRUE);
-  g_autoptr(GPtrArray) entries = checkers_puzzle_catalog_load_for_ruleset(PLAYER_RULESET_RUSSIAN, &error);
+  const GameBackendVariant *variant = GGAME_ACTIVE_GAME_BACKEND->variant_by_short_name("russian");
+  g_assert_nonnull(variant);
+  g_autoptr(GPtrArray) entries = game_puzzle_catalog_load_variant(GGAME_ACTIVE_GAME_BACKEND, variant, &error);
   g_assert_no_error(error);
   g_assert_nonnull(entries);
   g_assert_cmpuint(entries->len, ==, 2);
 
-  CheckersPuzzleCatalogEntry *first = g_ptr_array_index(entries, 0);
-  CheckersPuzzleCatalogEntry *second = g_ptr_array_index(entries, 1);
+  GamePuzzleCatalogEntry *first = g_ptr_array_index(entries, 0);
+  GamePuzzleCatalogEntry *second = g_ptr_array_index(entries, 1);
   g_assert_cmpuint(first->puzzle_number, ==, 2);
   g_assert_cmpstr(first->basename, ==, "puzzle-0002.sgf");
   g_assert_cmpstr(first->puzzle_id, ==, "checkers/russian/puzzle-0002.sgf");

@@ -1,10 +1,11 @@
 #include "settings_dialog.h"
 
+#include "active_game_backend.h"
 #include "app_settings.h"
 #include "application.h"
-#include "games/checkers/puzzle_catalog.h"
-#include "puzzle_progress.h"
+#include "puzzle_catalog.h"
 #include "games/checkers/rulesets.h"
+#include "puzzle_progress.h"
 
 typedef struct {
   GCheckersWindow *self;
@@ -50,8 +51,16 @@ static guint gcheckers_window_settings_dialog_count_known_puzzles(GHashTable *kn
   guint total = 0;
   guint ruleset_count = checkers_ruleset_count();
   for (guint i = 0; i < ruleset_count; i++) {
+    const char *short_name = checkers_ruleset_short_name((PlayerRuleset) i);
+    const GameBackendVariant *variant =
+        short_name != NULL ? GGAME_ACTIVE_GAME_BACKEND->variant_by_short_name(short_name) : NULL;
+    if (variant == NULL) {
+      g_debug("Failed to resolve puzzle variant for ruleset %u", i);
+      continue;
+    }
+
     g_autoptr(GError) error = NULL;
-    g_autoptr(GPtrArray) entries = checkers_puzzle_catalog_load_for_ruleset((PlayerRuleset)i, &error);
+    g_autoptr(GPtrArray) entries = game_puzzle_catalog_load_variant(GGAME_ACTIVE_GAME_BACKEND, variant, &error);
     if (entries == NULL) {
       g_debug("Failed to load puzzle catalog for settings summary: %s",
               error != NULL ? error->message : "unknown error");
@@ -60,7 +69,7 @@ static guint gcheckers_window_settings_dialog_count_known_puzzles(GHashTable *kn
 
     total += entries->len;
     for (guint j = 0; j < entries->len; j++) {
-      CheckersPuzzleCatalogEntry *entry = g_ptr_array_index(entries, j);
+      GamePuzzleCatalogEntry *entry = g_ptr_array_index(entries, j);
       if (entry != NULL && entry->puzzle_id != NULL) {
         g_hash_table_add(known_puzzle_ids, g_strdup(entry->puzzle_id));
       }

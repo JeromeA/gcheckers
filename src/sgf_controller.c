@@ -1,4 +1,5 @@
 #include "sgf_controller.h"
+#include "active_game_backend.h"
 #include "sgf_io.h"
 #include "sgf_move_props.h"
 #include "games/checkers/rulesets.h"
@@ -33,7 +34,15 @@ static gboolean gcheckers_sgf_controller_sync_tree_ruleset_from_model(GCheckersS
     return FALSE;
   }
 
-  return sgf_io_tree_set_ruleset(self->sgf_tree, ruleset);
+  const char *short_name = checkers_ruleset_short_name(ruleset);
+  const GameBackendVariant *variant =
+      short_name != NULL ? GGAME_ACTIVE_GAME_BACKEND->variant_by_short_name(short_name) : NULL;
+  if (variant == NULL) {
+    g_debug("Unable to map model ruleset to a backend variant");
+    return FALSE;
+  }
+
+  return sgf_io_tree_set_variant(self->sgf_tree, variant);
 }
 
 G_DEFINE_TYPE(GCheckersSgfController, gcheckers_sgf_controller, G_TYPE_OBJECT)
@@ -887,10 +896,19 @@ gboolean gcheckers_sgf_controller_load_file(GCheckersSgfController *self, const 
 
   const SgfNode *selected = sgf_tree_get_current(self->sgf_tree);
   if (self->model != NULL) {
-    PlayerRuleset loaded_ruleset = PLAYER_RULESET_INTERNATIONAL;
+    const GameBackendVariant *loaded_variant = NULL;
     g_autoptr(GError) ruleset_error = NULL;
-    if (!sgf_io_tree_get_ruleset(self->sgf_tree, &loaded_ruleset, &ruleset_error)) {
+    if (!sgf_io_tree_get_variant(self->sgf_tree, &loaded_variant, &ruleset_error) || loaded_variant == NULL) {
       g_propagate_error(error, g_steal_pointer(&ruleset_error));
+      return FALSE;
+    }
+
+    PlayerRuleset loaded_ruleset = PLAYER_RULESET_INTERNATIONAL;
+    if (!checkers_ruleset_find_by_short_name(loaded_variant->short_name, &loaded_ruleset)) {
+      g_set_error_literal(error,
+                          g_quark_from_static_string("gcheckers-sgf-controller-error"),
+                          3,
+                          "Loaded SGF references an unknown ruleset");
       return FALSE;
     }
 

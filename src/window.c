@@ -6,8 +6,8 @@
 #include "app_paths.h"
 #include "analysis_graph.h"
 #include "board_view.h"
-#include "games/checkers/puzzle_catalog.h"
 #include "puzzle_dialog.h"
+#include "puzzle_catalog.h"
 #include "games/checkers/rulesets.h"
 #include "sgf_file_actions.h"
 #include "sgf_controller.h"
@@ -1369,9 +1369,12 @@ static gboolean gcheckers_window_enter_puzzle_mode_with_path(GCheckersWindow *se
     g_debug("Puzzle file load did not produce an SGF tree");
     return FALSE;
   }
-  PlayerRuleset loaded_ruleset = PLAYER_RULESET_INTERNATIONAL;
-  if (sgf_io_tree_get_ruleset(tree, &loaded_ruleset, NULL)) {
-    gcheckers_window_set_loaded_ruleset(self, loaded_ruleset);
+  const GameBackendVariant *loaded_variant = NULL;
+  if (sgf_io_tree_get_variant(tree, &loaded_variant, NULL) && loaded_variant != NULL) {
+    PlayerRuleset loaded_ruleset = PLAYER_RULESET_INTERNATIONAL;
+    if (checkers_ruleset_find_by_short_name(loaded_variant->short_name, &loaded_ruleset)) {
+      gcheckers_window_set_loaded_ruleset(self, loaded_ruleset);
+    }
   }
 
   g_autoptr(GArray) steps = g_array_new(FALSE, FALSE, sizeof(GCheckersWindowPuzzleStep));
@@ -1473,8 +1476,13 @@ static gboolean gcheckers_window_start_next_puzzle_mode_for_ruleset(GCheckersWin
   g_return_val_if_fail(GCHECKERS_IS_WINDOW(self), FALSE);
   g_return_val_if_fail(self->puzzle_path != NULL, FALSE);
 
+  const char *short_name = checkers_ruleset_short_name(ruleset);
+  const GameBackendVariant *variant =
+      short_name != NULL ? GGAME_ACTIVE_GAME_BACKEND->variant_by_short_name(short_name) : NULL;
+  g_return_val_if_fail(variant != NULL, FALSE);
+
   g_autoptr(GError) error = NULL;
-  g_autoptr(GPtrArray) puzzle_entries = checkers_puzzle_catalog_load_for_ruleset(ruleset, &error);
+  g_autoptr(GPtrArray) puzzle_entries = game_puzzle_catalog_load_variant(GGAME_ACTIVE_GAME_BACKEND, variant, &error);
   if (puzzle_entries == NULL) {
     g_debug("Failed to load puzzle catalog: %s", error != NULL ? error->message : "unknown error");
     return FALSE;
@@ -1487,7 +1495,7 @@ static gboolean gcheckers_window_start_next_puzzle_mode_for_ruleset(GCheckersWin
 
   guint current_index = G_MAXUINT;
   for (guint i = 0; i < puzzle_entries->len; i++) {
-    CheckersPuzzleCatalogEntry *entry = g_ptr_array_index(puzzle_entries, i);
+    GamePuzzleCatalogEntry *entry = g_ptr_array_index(puzzle_entries, i);
     g_return_val_if_fail(entry != NULL, FALSE);
     if (g_strcmp0(entry->path, self->puzzle_path) == 0) {
       current_index = i;
@@ -1506,7 +1514,7 @@ static gboolean gcheckers_window_start_next_puzzle_mode_for_ruleset(GCheckersWin
     next_index = 0;
   }
 
-  CheckersPuzzleCatalogEntry *entry = g_ptr_array_index(puzzle_entries, next_index);
+  GamePuzzleCatalogEntry *entry = g_ptr_array_index(puzzle_entries, next_index);
   g_return_val_if_fail(entry != NULL, FALSE);
   g_return_val_if_fail(entry->path != NULL, FALSE);
   if (!gcheckers_window_start_puzzle_mode_for_path(self, ruleset, entry->path)) {
@@ -1767,8 +1775,13 @@ static SgfNodeAnalysis *gcheckers_window_analysis_from_scored_moves(const Checke
   analysis->tt_cutoffs = stats->tt_cutoffs;
 
   for (guint i = 0; i < moves->count; ++i) {
+    char notation[128] = {0};
+    if (!game_format_move_notation(&moves->moves[i].move, notation, sizeof(notation))) {
+      sgf_node_analysis_free(analysis);
+      return NULL;
+    }
     if (!sgf_node_analysis_add_scored_move(analysis,
-                                           &moves->moves[i].move,
+                                           notation,
                                            moves->moves[i].score,
                                            moves->moves[i].nodes)) {
       sgf_node_analysis_free(analysis);
@@ -2038,11 +2051,7 @@ static void gcheckers_window_analysis_append_scored_moves(GString *text, const S
     if (entry == NULL) {
       continue;
     }
-
-    char notation[128];
-    if (!game_format_move_notation(&entry->move, notation, sizeof(notation))) {
-      g_strlcpy(notation, "?", sizeof(notation));
-    }
+    const char *notation = entry->move_text != NULL ? entry->move_text : "?";
 
     g_autofree char *score_text = gcheckers_window_format_analysis_score(entry->score);
     if (score_text == NULL) {

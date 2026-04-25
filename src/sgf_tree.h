@@ -1,8 +1,6 @@
 #ifndef SGF_TREE_H
 #define SGF_TREE_H
 
-#include "games/checkers/game.h"
-
 #include <glib-object.h>
 
 G_BEGIN_DECLS
@@ -16,7 +14,7 @@ typedef enum {
 typedef struct _SgfNode SgfNode;
 
 typedef struct {
-  CheckersMove move;
+  char *move_text;
   gint score;
   guint64 nodes;
 } SgfNodeScoredMove;
@@ -60,7 +58,7 @@ SgfNodeAnalysis *sgf_node_analysis_new(void);
 SgfNodeAnalysis *sgf_node_analysis_copy(const SgfNodeAnalysis *analysis);
 void sgf_node_analysis_free(SgfNodeAnalysis *analysis);
 gboolean sgf_node_analysis_add_scored_move(SgfNodeAnalysis *analysis,
-                                           const CheckersMove *move,
+                                           const char *move_text,
                                            gint score,
                                            guint64 nodes);
 gboolean sgf_node_set_analysis(SgfNode *node, const SgfNodeAnalysis *analysis);

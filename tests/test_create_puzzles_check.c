@@ -1,3 +1,4 @@
+#include "../src/active_game_backend.h"
 #include "../src/games/checkers/game.h"
 #include "../src/games/checkers/rulesets.h"
 #include "../src/sgf_io.h"
@@ -127,7 +128,9 @@ static gboolean test_create_puzzles_check_write_invalid_single_move_puzzle(const
   g_autoptr(SgfTree) puzzle_tree = sgf_tree_new();
   SgfNode *root = (SgfNode *)sgf_tree_get_root(puzzle_tree);
   g_assert_nonnull(root);
-  g_assert_true(sgf_io_tree_set_ruleset(puzzle_tree, PLAYER_RULESET_INTERNATIONAL));
+  const GameBackendVariant *variant = GGAME_ACTIVE_GAME_BACKEND->variant_by_short_name("international");
+  g_assert_nonnull(variant);
+  g_assert_true(sgf_io_tree_set_variant(puzzle_tree, variant));
   g_assert_true(test_create_puzzles_check_add_setup_properties(root, &state));
   SgfNode *puzzle_move_node = (SgfNode *)sgf_tree_append_node(puzzle_tree);
   g_assert_nonnull(puzzle_move_node);
@@ -135,7 +138,7 @@ static gboolean test_create_puzzles_check_write_invalid_single_move_puzzle(const
   g_assert_true(sgf_io_save_file(puzzle_path, puzzle_tree, NULL));
 
   g_autoptr(SgfTree) game_tree = sgf_tree_new();
-  g_assert_true(sgf_io_tree_set_ruleset(game_tree, PLAYER_RULESET_INTERNATIONAL));
+  g_assert_true(sgf_io_tree_set_variant(game_tree, variant));
   SgfNode *game_move_node = (SgfNode *)sgf_tree_append_node(game_tree);
   g_assert_nonnull(game_move_node);
   g_assert_true(sgf_move_props_set_move(game_move_node, SGF_COLOR_WHITE, &chosen, NULL));

@@ -1,5 +1,6 @@
 #include <glib.h>
 
+#include "../src/active_game_backend.h"
 #include "../src/games/checkers/game.h"
 #include "../src/games/checkers/rulesets.h"
 #include "../src/sgf_io.h"
@@ -84,13 +85,7 @@ static gboolean test_sgf_io_nodes_equal(const SgfNode *left, const SgfNode *righ
         return FALSE;
       }
       if (left_move->score != right_move->score || left_move->nodes != right_move->nodes ||
-          left_move->move.length != right_move->move.length ||
-          left_move->move.captures != right_move->move.captures) {
-        return FALSE;
-      }
-      if (memcmp(left_move->move.path,
-                 right_move->move.path,
-                 left_move->move.length * sizeof(left_move->move.path[0])) != 0) {
+          g_strcmp0(left_move->move_text, right_move->move_text) != 0) {
         return FALSE;
       }
     }
@@ -315,7 +310,7 @@ static void test_sgf_io_roundtrip_node_analysis_properties(void) {
   analysis->tt_probes = 700;
   analysis->tt_hits = 250;
   analysis->tt_cutoffs = 90;
-  g_assert_true(sgf_node_analysis_add_scored_move(analysis, &move, 12, 345));
+  g_assert_true(sgf_node_analysis_add_scored_move(analysis, "13-17", 12, 345));
   g_assert_true(sgf_node_set_analysis(node, analysis));
 
   g_autoptr(GError) error = NULL;
@@ -342,11 +337,16 @@ static void test_sgf_io_roundtrip_node_analysis_properties(void) {
   g_assert_nonnull(loaded_analysis);
   g_assert_cmpuint(loaded_analysis->depth, ==, 7);
   g_assert_cmpuint(loaded_analysis->moves->len, ==, 1);
+  const SgfNodeScoredMove *loaded_move = g_ptr_array_index(loaded_analysis->moves, 0);
+  g_assert_nonnull(loaded_move);
+  g_assert_cmpstr(loaded_move->move_text, ==, "13-17");
 }
 
 static void test_sgf_io_roundtrip_ruleset_property(void) {
   g_autoptr(SgfTree) tree = sgf_tree_new();
-  g_assert_true(sgf_io_tree_set_ruleset(tree, PLAYER_RULESET_RUSSIAN));
+  const GameBackendVariant *variant = GGAME_ACTIVE_GAME_BACKEND->variant_by_short_name("russian");
+  g_assert_nonnull(variant);
+  g_assert_true(sgf_io_tree_set_variant(tree, variant));
 
   g_autoptr(GError) error = NULL;
   g_autofree char *serialized = sgf_io_save_data(tree, &error);
@@ -359,10 +359,11 @@ static void test_sgf_io_roundtrip_ruleset_property(void) {
   g_assert_no_error(error);
   g_assert_nonnull(loaded);
 
-  PlayerRuleset ruleset = PLAYER_RULESET_INTERNATIONAL;
-  g_assert_true(sgf_io_tree_get_ruleset(loaded, &ruleset, &error));
+  const GameBackendVariant *loaded_variant = NULL;
+  g_assert_true(sgf_io_tree_get_variant(loaded, &loaded_variant, &error));
   g_assert_no_error(error);
-  g_assert_cmpuint(ruleset, ==, PLAYER_RULESET_RUSSIAN);
+  g_assert_nonnull(loaded_variant);
+  g_assert_cmpstr(loaded_variant->short_name, ==, "russian");
 }
 
 static void test_sgf_io_rejects_unknown_ruleset_property(void) {
@@ -372,8 +373,8 @@ static void test_sgf_io_rejects_unknown_ruleset_property(void) {
   g_assert_no_error(error);
   g_assert_nonnull(tree);
 
-  PlayerRuleset ruleset = PLAYER_RULESET_INTERNATIONAL;
-  g_assert_false(sgf_io_tree_get_ruleset(tree, &ruleset, &error));
+  const GameBackendVariant *variant = NULL;
+  g_assert_false(sgf_io_tree_get_variant(tree, &variant, &error));
   g_assert_error(error, g_quark_from_static_string("sgf-io-error"), 22);
 }
 
@@ -384,8 +385,8 @@ static void test_sgf_io_rejects_missing_ruleset_property(void) {
   g_assert_no_error(error);
   g_assert_nonnull(tree);
 
-  PlayerRuleset ruleset = PLAYER_RULESET_INTERNATIONAL;
-  g_assert_false(sgf_io_tree_get_ruleset(tree, &ruleset, &error));
+  const GameBackendVariant *variant = NULL;
+  g_assert_false(sgf_io_tree_get_variant(tree, &variant, &error));
   g_assert_error(error, g_quark_from_static_string("sgf-io-error"), 23);
 }
 

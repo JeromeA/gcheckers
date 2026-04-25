@@ -1,6 +1,7 @@
 #include "puzzle_dialog.h"
 
-#include "games/checkers/puzzle_catalog.h"
+#include "active_game_backend.h"
+#include "puzzle_catalog.h"
 #include "games/checkers/rulesets.h"
 
 typedef struct {
@@ -135,7 +136,7 @@ static void gcheckers_window_puzzle_dialog_apply_status_css(GtkWidget *button, C
   }
 }
 
-static GtkWidget *gcheckers_window_puzzle_dialog_create_puzzle_button(const CheckersPuzzleCatalogEntry *entry,
+static GtkWidget *gcheckers_window_puzzle_dialog_create_puzzle_button(const GamePuzzleCatalogEntry *entry,
                                                                       PlayerRuleset ruleset,
                                                                       CheckersPuzzleStatus status,
                                                                       GCheckersWindowPuzzleDialogData *data) {
@@ -223,8 +224,20 @@ static void gcheckers_window_puzzle_dialog_rebuild_grid(GCheckersWindowPuzzleDia
   }
 
   PlayerRuleset ruleset = (PlayerRuleset)gtk_drop_down_get_selected(data->ruleset);
+  const char *short_name = checkers_ruleset_short_name(ruleset);
+  const GameBackendVariant *variant =
+      short_name != NULL ? GGAME_ACTIVE_GAME_BACKEND->variant_by_short_name(short_name) : NULL;
+  if (variant == NULL) {
+    g_debug("Failed to resolve puzzle variant for ruleset %u", ruleset);
+    GtkWidget *label = gtk_label_new("Failed to resolve this puzzle variant.");
+    gtk_widget_set_halign(label, GTK_ALIGN_START);
+    gtk_widget_set_margin_top(label, 8);
+    gtk_box_append(GTK_BOX(data->puzzle_area), label);
+    return;
+  }
+
   g_autoptr(GError) error = NULL;
-  g_autoptr(GPtrArray) entries = checkers_puzzle_catalog_load_for_ruleset(ruleset, &error);
+  g_autoptr(GPtrArray) entries = game_puzzle_catalog_load_variant(GGAME_ACTIVE_GAME_BACKEND, variant, &error);
   if (entries == NULL) {
     g_debug("Failed to build puzzle picker catalog: %s", error != NULL ? error->message : "unknown error");
     GtkWidget *label = gtk_label_new("Failed to load puzzles for this variant.");
@@ -259,7 +272,7 @@ static void gcheckers_window_puzzle_dialog_rebuild_grid(GCheckersWindowPuzzleDia
   guint first_untried_row = 0;
   gboolean have_first_untried = FALSE;
   for (guint i = 0; i < entries->len; i++) {
-    CheckersPuzzleCatalogEntry *entry = g_ptr_array_index(entries, i);
+    GamePuzzleCatalogEntry *entry = g_ptr_array_index(entries, i);
     g_return_if_fail(entry != NULL);
 
     CheckersPuzzleStatus status = CHECKERS_PUZZLE_STATUS_UNTRIED;

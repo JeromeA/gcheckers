@@ -52,11 +52,7 @@ static void test_analysis_report_includes_per_move_nodes(void) {
   analysis->depth = 7;
   analysis->nodes = 123456;
 
-  CheckersMove move = {0};
-  move.length = 2;
-  move.path[0] = 12;
-  move.path[1] = 16;
-  g_assert_true(sgf_node_analysis_add_scored_move(analysis, &move, 42, 10));
+  g_assert_true(sgf_node_analysis_add_scored_move(analysis, "13-17", 42, 10));
 
   g_autofree char *report = gcheckers_window_format_analysis_report(analysis);
   g_assert_nonnull(report);
@@ -1223,11 +1219,7 @@ static void test_gcheckers_window_node_selection_updates_report(void) {
   g_assert_nonnull(analysis);
   analysis->depth = 6;
   analysis->nodes = 321;
-  CheckersMove move = {0};
-  move.length = 2;
-  move.path[0] = 21;
-  move.path[1] = 17;
-  g_assert_true(sgf_node_analysis_add_scored_move(analysis, &move, 42, 11));
+  g_assert_true(sgf_node_analysis_add_scored_move(analysis, "22-18", 42, 11));
   g_assert_true(sgf_node_set_analysis((SgfNode *)first, analysis));
 
   g_assert_true(gcheckers_sgf_controller_select_node(controller, first));

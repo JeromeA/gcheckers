@@ -1,7 +1,7 @@
 #include "sgf_io.h"
 
+#include "active_game_backend.h"
 #include "games/checkers/game.h"
-#include "games/checkers/rulesets.h"
 #include "sgf_move_props.h"
 
 #include <string.h>
@@ -53,8 +53,10 @@ static GQuark sgf_io_error_quark(void) {
   return g_quark_from_static_string("sgf-io-error");
 }
 
-gboolean sgf_io_tree_get_ruleset(const SgfTree *tree, PlayerRuleset *out_ruleset, GError **error) {
+gboolean sgf_io_tree_get_variant(const SgfTree *tree, const GameBackendVariant **out_variant, GError **error) {
   g_return_val_if_fail(SGF_IS_TREE((SgfTree *)tree), FALSE);
+  g_return_val_if_fail(GGAME_ACTIVE_GAME_BACKEND != NULL, FALSE);
+  g_return_val_if_fail(GGAME_ACTIVE_GAME_BACKEND->variant_by_short_name != NULL, FALSE);
 
   const SgfNode *root = sgf_tree_get_root((SgfTree *)tree);
   if (root == NULL) {
@@ -72,24 +74,25 @@ gboolean sgf_io_tree_get_ruleset(const SgfTree *tree, PlayerRuleset *out_ruleset
     return FALSE;
   }
 
-  PlayerRuleset ruleset = PLAYER_RULESET_INTERNATIONAL;
-  if (!checkers_ruleset_find_by_short_name(ru, &ruleset)) {
+  const GameBackendVariant *variant = GGAME_ACTIVE_GAME_BACKEND->variant_by_short_name(ru);
+  if (variant == NULL) {
     g_set_error(error, sgf_io_error_quark(), 22, "Unknown SGF RU value: %s", ru);
     return FALSE;
   }
 
-  if (out_ruleset != NULL) {
-    *out_ruleset = ruleset;
+  if (out_variant != NULL) {
+    *out_variant = variant;
   }
   return TRUE;
 }
 
-gboolean sgf_io_tree_set_ruleset(SgfTree *tree, PlayerRuleset ruleset) {
+gboolean sgf_io_tree_set_variant(SgfTree *tree, const GameBackendVariant *variant) {
   g_return_val_if_fail(SGF_IS_TREE(tree), FALSE);
+  g_return_val_if_fail(variant != NULL, FALSE);
 
-  const char *short_name = checkers_ruleset_short_name(ruleset);
+  const char *short_name = variant->short_name;
   if (short_name == NULL) {
-    g_debug("Unable to map ruleset to SGF RU value");
+    g_debug("Unable to map variant to SGF RU value");
     return FALSE;
   }
 
@@ -402,14 +405,15 @@ static gboolean sgf_io_parse_analysis_stats(const char *stats_text, SgfNodeAnaly
 }
 
 static gboolean sgf_io_parse_analysis_move(const char *value,
-                                           CheckersMove *out_move,
+                                           char **out_move_text,
                                            gint *out_score,
                                            guint64 *out_nodes) {
   g_return_val_if_fail(value != NULL, FALSE);
-  g_return_val_if_fail(out_move != NULL, FALSE);
+  g_return_val_if_fail(out_move_text != NULL, FALSE);
   g_return_val_if_fail(out_score != NULL, FALSE);
   g_return_val_if_fail(out_nodes != NULL, FALSE);
 
+  *out_move_text = NULL;
   *out_nodes = 0;
 
   const char *last_sep = strrchr(value, ':');
@@ -431,9 +435,6 @@ static gboolean sgf_io_parse_analysis_move(const char *value,
   }
 
   g_autofree char *notation = g_strndup(value, (gsize)(score_sep - value));
-  if (!sgf_move_props_parse_notation(notation, out_move, NULL)) {
-    return FALSE;
-  }
   const char *score_end = nodes_sep != NULL ? nodes_sep : value + strlen(value);
   g_autofree char *score_text =
       g_strndup(score_sep + 1, (gsize)(score_end - score_sep - 1));
@@ -443,6 +444,7 @@ static gboolean sgf_io_parse_analysis_move(const char *value,
   if (nodes_sep != NULL && !sgf_io_parse_uint64(nodes_sep + 1, out_nodes)) {
     return FALSE;
   }
+  *out_move_text = g_steal_pointer(&notation);
   return TRUE;
 }
 
@@ -476,14 +478,14 @@ static gboolean sgf_io_attach_analysis_from_properties(SgfNode *node, GError **e
   if (move_values != NULL) {
     for (guint i = 0; i < move_values->len; ++i) {
       const char *entry = g_ptr_array_index((GPtrArray *)move_values, i);
-      CheckersMove move = {0};
+      g_autofree char *move_text = NULL;
       gint score = 0;
       guint64 nodes = 0;
-      if (!sgf_io_parse_analysis_move(entry, &move, &score, &nodes)) {
+      if (!sgf_io_parse_analysis_move(entry, &move_text, &score, &nodes)) {
         g_set_error(error, sgf_io_error_quark(), SGF_IO_ANALYSIS_PROP_MOVE, "Invalid GCAN move entry: %s", entry);
         return FALSE;
       }
-      if (!sgf_node_analysis_add_scored_move(analysis, &move, score, nodes)) {
+      if (!sgf_node_analysis_add_scored_move(analysis, move_text, score, nodes)) {
         g_set_error_literal(error, sgf_io_error_quark(), SGF_IO_ANALYSIS_PROP_MOVE, "Unable to append GCAN move");
         return FALSE;
       }
@@ -534,14 +536,10 @@ static gboolean sgf_io_sync_analysis_properties(SgfNode *node, GError **error) {
   for (guint i = 0; i < analysis->moves->len; ++i) {
     const SgfNodeScoredMove *entry = g_ptr_array_index(analysis->moves, i);
     g_return_val_if_fail(entry != NULL, FALSE);
-
-    char notation[128] = {0};
-    if (!sgf_move_props_format_notation(&entry->move, notation, sizeof(notation), error)) {
-      return FALSE;
-    }
+    g_return_val_if_fail(entry->move_text != NULL, FALSE);
 
     char encoded[192] = {0};
-    g_snprintf(encoded, sizeof(encoded), "%s:%d:%" G_GUINT64_FORMAT, notation, entry->score, entry->nodes);
+    g_snprintf(encoded, sizeof(encoded), "%s:%d:%" G_GUINT64_FORMAT, entry->move_text, entry->score, entry->nodes);
     if (!sgf_node_add_property(node, SGF_IO_PROP_ANALYSIS_MOVE, encoded)) {
       g_set_error_literal(error, sgf_io_error_quark(), SGF_IO_ANALYSIS_PROP_MOVE, "Unable to write GCAN");
       return FALSE;

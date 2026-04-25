@@ -146,15 +146,6 @@ static void test_sgf_tree_collect_nodes_preorder(void) {
   g_object_unref(tree);
 }
 
-static CheckersMove test_sgf_tree_make_move(guint8 from, guint8 to) {
-  CheckersMove move = {0};
-  move.length = 2;
-  move.captures = 0;
-  move.path[0] = from;
-  move.path[1] = to;
-  return move;
-}
-
 static void test_sgf_tree_node_analysis_set_get_clear(void) {
   SgfTree *tree = sgf_tree_new();
   SgfNode *root = (SgfNode *)sgf_tree_get_root(tree);
@@ -168,10 +159,8 @@ static void test_sgf_tree_node_analysis_set_get_clear(void) {
   analysis->tt_hits = 123;
   analysis->tt_cutoffs = 78;
 
-  CheckersMove move_a = test_sgf_tree_make_move(11, 15);
-  CheckersMove move_b = test_sgf_tree_make_move(10, 14);
-  assert(sgf_node_analysis_add_scored_move(analysis, &move_a, 42, 1234));
-  assert(sgf_node_analysis_add_scored_move(analysis, &move_b, 12, 56));
+  assert(sgf_node_analysis_add_scored_move(analysis, "12-16", 42, 1234));
+  assert(sgf_node_analysis_add_scored_move(analysis, "11-15", 12, 56));
 
   assert(sgf_node_set_analysis(root, analysis));
   sgf_node_analysis_free(analysis);
@@ -190,9 +179,7 @@ static void test_sgf_tree_node_analysis_set_get_clear(void) {
   assert(first != NULL);
   assert(first->score == 42);
   assert(first->nodes == 1234);
-  assert(first->move.length == 2);
-  assert(first->move.path[0] == 11);
-  assert(first->move.path[1] == 15);
+  assert(strcmp(first->move_text, "12-16") == 0);
 
   assert(sgf_node_clear_analysis(root));
   assert(sgf_node_get_analysis(root) == NULL);

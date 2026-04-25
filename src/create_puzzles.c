@@ -1,3 +1,4 @@
+#include "active_game_backend.h"
 #include "games/checkers/ai_alpha_beta.h"
 #include "games/checkers/create_puzzles_cli.h"
 #include "games/checkers/puzzle_generation.h"
@@ -84,6 +85,16 @@ typedef struct {
   guint existing_puzzles_would_remove;
   guint rejections[CHECKERS_PUZZLE_REJECTION_COUNT];
 } CheckersPuzzleRunStats;
+
+static const GameBackendVariant *checkers_puzzle_ruleset_variant(PlayerRuleset ruleset) {
+  const char *short_name = checkers_ruleset_short_name(ruleset);
+
+  if (short_name == NULL) {
+    return NULL;
+  }
+
+  return GGAME_ACTIVE_GAME_BACKEND->variant_by_short_name(short_name);
+}
 
 static gboolean checkers_puzzle_analyze_resulting_position(const Game *game,
                                                            guint best_move_depth,
@@ -857,7 +868,8 @@ static gboolean checkers_puzzle_save_sgf(const char *path,
     g_debug("Failed to encode puzzle root setup properties");
     return FALSE;
   }
-  if (!sgf_io_tree_set_ruleset(tree, ruleset)) {
+  const GameBackendVariant *variant = checkers_puzzle_ruleset_variant(ruleset);
+  if (variant == NULL || !sgf_io_tree_set_variant(tree, variant)) {
     g_debug("Failed to encode puzzle SGF RU property");
     return FALSE;
   }
@@ -906,7 +918,8 @@ static gboolean checkers_puzzle_save_game_sgf(const char *path, PlayerRuleset ru
   g_return_val_if_fail(game_line != NULL, FALSE);
 
   g_autoptr(SgfTree) tree = sgf_tree_new();
-  if (!sgf_io_tree_set_ruleset(tree, ruleset)) {
+  const GameBackendVariant *variant = checkers_puzzle_ruleset_variant(ruleset);
+  if (variant == NULL || !sgf_io_tree_set_variant(tree, variant)) {
     g_debug("Failed to encode game SGF RU property");
     return FALSE;
   }
@@ -1421,12 +1434,18 @@ static const CheckersRules *checkers_puzzle_find_matching_rules_for_setup(const 
     g_return_val_if_fail(sgf_node_add_property(ru_root, "RU", ru), NULL);
   }
 
-  PlayerRuleset ru_ruleset = PLAYER_RULESET_INTERNATIONAL;
+  const GameBackendVariant *ru_variant = NULL;
   g_autoptr(GError) ru_error = NULL;
-  if (!sgf_io_tree_get_ruleset(ru_tree, &ru_ruleset, &ru_error)) {
+  if (!sgf_io_tree_get_variant(ru_tree, &ru_variant, &ru_error) || ru_variant == NULL) {
     if (ru_error != NULL) {
       g_debug("Invalid puzzle SGF RU value: %s", ru_error->message);
     }
+    return NULL;
+  }
+
+  PlayerRuleset ru_ruleset = PLAYER_RULESET_INTERNATIONAL;
+  if (!checkers_ruleset_find_by_short_name(ru_variant->short_name, &ru_ruleset)) {
+    g_debug("Invalid puzzle SGF RU variant: %s", ru_variant->short_name);
     return NULL;
   }
 

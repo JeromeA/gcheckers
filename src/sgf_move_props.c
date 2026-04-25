@@ -1,12 +1,14 @@
 #include "sgf_move_props.h"
 
+#include "games/checkers/game.h"
+
 #include <string.h>
 
 static GQuark sgf_move_props_error_quark(void) {
   return g_quark_from_static_string("sgf-move-props-error");
 }
 
-gboolean sgf_move_props_parse_notation(const char *notation, CheckersMove *out_move, GError **error) {
+gboolean sgf_move_props_parse_notation(const char *notation, gpointer out_move, GError **error) {
   g_return_val_if_fail(notation != NULL, FALSE);
   g_return_val_if_fail(out_move != NULL, FALSE);
 
@@ -74,11 +76,11 @@ gboolean sgf_move_props_parse_notation(const char *notation, CheckersMove *out_m
   }
 
   move.captures = captures ? (uint8_t)(move.length - 1) : 0;
-  *out_move = move;
+  *(CheckersMove *) out_move = move;
   return TRUE;
 }
 
-gboolean sgf_move_props_format_notation(const CheckersMove *move, char *buffer, size_t size, GError **error) {
+gboolean sgf_move_props_format_notation(gconstpointer move, char *buffer, size_t size, GError **error) {
   g_return_val_if_fail(move != NULL, FALSE);
   g_return_val_if_fail(buffer != NULL, FALSE);
   g_return_val_if_fail(size > 0, FALSE);
@@ -91,7 +93,7 @@ gboolean sgf_move_props_format_notation(const CheckersMove *move, char *buffer, 
   return TRUE;
 }
 
-gboolean sgf_move_props_parse_node(const SgfNode *node, SgfColor *out_color, CheckersMove *out_move, GError **error) {
+gboolean sgf_move_props_parse_node(const SgfNode *node, SgfColor *out_color, gpointer out_move, GError **error) {
   gboolean has_move = FALSE;
   if (!sgf_move_props_try_parse_node(node, out_color, out_move, &has_move, error)) {
     return FALSE;
@@ -110,7 +112,7 @@ gboolean sgf_move_props_parse_node(const SgfNode *node, SgfColor *out_color, Che
 
 gboolean sgf_move_props_try_parse_node(const SgfNode *node,
                                        SgfColor *out_color,
-                                       CheckersMove *out_move,
+                                       gpointer out_move,
                                        gboolean *out_has_move,
                                        GError **error) {
   g_return_val_if_fail(node != NULL, FALSE);
@@ -131,7 +133,7 @@ gboolean sgf_move_props_try_parse_node(const SgfNode *node,
   if (black_move == NULL && white_move == NULL) {
     *out_has_move = FALSE;
     *out_color = SGF_COLOR_NONE;
-    *out_move = (CheckersMove){0};
+    *(CheckersMove *) out_move = (CheckersMove){0};
     return TRUE;
   }
 
@@ -143,12 +145,12 @@ gboolean sgf_move_props_try_parse_node(const SgfNode *node,
   }
 
   *out_color = color;
-  *out_move = move;
+  *(CheckersMove *) out_move = move;
   *out_has_move = TRUE;
   return TRUE;
 }
 
-gboolean sgf_move_props_set_move(SgfNode *node, SgfColor color, const CheckersMove *move, GError **error) {
+gboolean sgf_move_props_set_move(SgfNode *node, SgfColor color, gconstpointer move, GError **error) {
   g_return_val_if_fail(node != NULL, FALSE);
   g_return_val_if_fail(move != NULL, FALSE);
   g_return_val_if_fail(color == SGF_COLOR_BLACK || color == SGF_COLOR_WHITE, FALSE);

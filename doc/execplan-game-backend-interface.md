@@ -34,6 +34,9 @@ game-specific, with the checkers build still producing `gcheckers`.
       decisions onto `GameBackend` and `GGameModel`.
 - [~] (2026-04-24 12:05Z) Start Milestone 5 by moving checked-in puzzles and stable puzzle IDs to the generic
       `puzzles/<game-id>/<variant>/...` and `<game-id>/<variant>/...` shapes for the active backend.
+- [~] (2026-04-25 10:50Z) Continue Milestone 5 by adding a shared `puzzle_catalog` module, switching shared SGF `RU`
+      helpers from checkers rulesets to backend variants, and removing `CheckersMove` from the public
+      `sgf_move_props.h` API.
 - [x] (2026-04-24 14:20Z) Complete Milestone 6 by moving the checkers engine, ruleset/model wrappers, puzzle helpers,
       and notation helpers under `src/games/checkers/`, then repointing build rules and includes at the new paths.
 - [ ] Convert shared application shell, timeline, puzzle shell, settings, and AI code to use generic backend types and
@@ -88,6 +91,12 @@ game-specific, with the checkers build still producing `gcheckers`.
   Evidence: `create_puzzles_cli.c`, `puzzle_generation.c`, `puzzle_catalog.c`, and `position_format.c` could not stay
   in the always-linked `SRCS` set without duplicate-link or unrelated dependency problems once they moved under
   `src/games/checkers/`.
+
+- Observation: shared puzzle browsing could be generalized before puzzle-progress records and the SGF controller are
+  fully renamed or detached from checkers internals.
+  Evidence: adding `src/puzzle_catalog.c` and switching `window.c`, `puzzle_dialog.c`, and `settings_dialog.c` to it
+  removed the shared dependency on `src/games/checkers/puzzle_catalog.h` without changing the underlying checkers
+  puzzle files or picker behavior.
 
 ## Decision Log
 
@@ -155,10 +164,12 @@ the legacy checkers wrappers, the shared square-grid board path is backend-drive
 boundary now lives under `src/games/checkers/`, and the Makefile already selects the active game with
 `GAME ?= checkers`. Milestone 5 is still in progress. The repository now stores checked-in puzzles under
 `puzzles/checkers/<variant>/...`, shared progress IDs include the game prefix, and the checkers Flatpak manifest now
-lives at `flatpak/io.github.jeromea.gcheckers.yaml`, but the deeper SGF parsing and backend-owned puzzle validation
-hooks are still pending. The expected final outcome remains a repository where the checkers backend is selected by a
-compile define, shared code depends only on generic backend headers, and adding a second game requires implementing a
-new backend source directory plus Makefile source selection rather than rewriting the UI.
+lives at `flatpak/io.github.jeromea.gcheckers.yaml`. Shared puzzle browsing now goes through `src/puzzle_catalog.c`,
+`sgf_io.h` exposes backend-variant helpers instead of checkers-ruleset helpers, and `sgf_move_props.h` no longer
+exports `CheckersMove`. The deeper puzzle-progress record genericization, SGF controller renaming, and framework-wide
+`ggame` naming sweep are still pending. The expected final outcome remains a repository where the checkers backend is
+selected by a compile define, shared code depends only on generic backend headers, and adding a second game requires
+implementing a new backend source directory plus Makefile source selection rather than rewriting the UI.
 
 ## Context and Orientation
 
