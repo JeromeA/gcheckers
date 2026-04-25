@@ -311,23 +311,6 @@ Module: position hashing.
 Role: deterministic 64-bit keying of board occupancy, board size, side to move, and winner state.
 Collaborates with: TT probe/store in `ai_alpha_beta.c`.
 
-## Position search helpers (`src/position_search.c`, `src/position_search.h`)
-Module: position traversal.
-Role: enumerate game positions over a ply range, apply caller-provided predicates, report matches via callbacks, and
-optionally deduplicate transpositions by board state + side to move.
-Collaborates with: predicate and formatting modules plus `find_position`.
-
-## Position predicates (`src/position_predicate.c`, `src/position_predicate.h`)
-Module: reusable position predicates.
-Role: provide search predicates and helpers such as "alpha-beta score is non-zero at depth N", with a cached score
-for immediate match reporting.
-Collaborates with: `ai_alpha_beta.c` and `position_search.c`.
-
-## Position formatting (`src/games/checkers/position_format.c`, `src/games/checkers/position_format.h`)
-Module: position output formatting.
-Role: format move sequences for CLI/tooling output.
-Collaborates with: `find_position` and search callbacks.
-
 ## BoardGameArena client (`src/bga_client.c`, `src/bga_client.h`)
 Module: BoardGameArena login HTTP client.
 Role: perform libcurl requests to fetch `requestToken` from `https://en.boardgamearena.com/`, then submit
@@ -340,13 +323,6 @@ History parsing extracts each table's `table_id`, start timestamp (rendered as `
 names.
 Collaborates with: import dialog flow for "Fetch game history" and `tests/test_bga_client.c` (token/login/history
 parsing + live login smoke test with env-provided credentials).
-
-## Position finder CLI (`src/find_position.c`)
-Module: CLI front end.
-Role: hardcode ad hoc position-search queries by combining reusable search traversal, predicates, and line formatters.
-Current query scans unique positions after exactly four plies from the initial state and prints lines where at least
-one of those four plies is a deep mistake: not a mistake at depth 8, but a mistake at depth 10.
-Collaborates with: `position_search.c`, `position_predicate.c`, and `position_format.c`.
 
 ## Puzzle generator CLI (`src/create_puzzles.c`)
 Module: CLI front end.

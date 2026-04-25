@@ -1,6 +1,48 @@
 #include <gtk/gtk.h>
 
+#include "games/checkers/board.h"
 #include "piece_palette.h"
+
+static GameBackendSquarePieceView test_piece_palette_piece_view(CheckersPiece piece) {
+  switch (piece) {
+    case CHECKERS_PIECE_WHITE_MAN:
+      return (GameBackendSquarePieceView){
+        .is_empty = FALSE,
+        .side = 0,
+        .kind = GAME_BACKEND_SQUARE_PIECE_KIND_MAN,
+        .symbol = NULL,
+      };
+    case CHECKERS_PIECE_WHITE_KING:
+      return (GameBackendSquarePieceView){
+        .is_empty = FALSE,
+        .side = 0,
+        .kind = GAME_BACKEND_SQUARE_PIECE_KIND_KING,
+        .symbol = NULL,
+      };
+    case CHECKERS_PIECE_BLACK_MAN:
+      return (GameBackendSquarePieceView){
+        .is_empty = FALSE,
+        .side = 1,
+        .kind = GAME_BACKEND_SQUARE_PIECE_KIND_MAN,
+        .symbol = NULL,
+      };
+    case CHECKERS_PIECE_BLACK_KING:
+      return (GameBackendSquarePieceView){
+        .is_empty = FALSE,
+        .side = 1,
+        .kind = GAME_BACKEND_SQUARE_PIECE_KIND_KING,
+        .symbol = NULL,
+      };
+    case CHECKERS_PIECE_EMPTY:
+    default:
+      return (GameBackendSquarePieceView){
+        .is_empty = TRUE,
+        .side = 0,
+        .kind = GAME_BACKEND_SQUARE_PIECE_KIND_NONE,
+        .symbol = NULL,
+      };
+  }
+}
 
 static guint test_piece_palette_count_partial_alpha(cairo_surface_t *surface) {
   g_return_val_if_fail(surface != NULL, 0);
@@ -85,6 +127,7 @@ static void test_piece_palette_find_y_bounds(cairo_surface_t *surface, int *min_
 
 static cairo_surface_t *test_piece_palette_draw_piece(CheckersPiece piece, int size) {
   PiecePalette *palette = piece_palette_new_default();
+  GameBackendSquarePieceView piece_view = test_piece_palette_piece_view(piece);
   g_assert_nonnull(palette);
 
   cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, size, size);
@@ -96,7 +139,7 @@ static cairo_surface_t *test_piece_palette_draw_piece(CheckersPiece piece, int s
   cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.0);
   cairo_paint(cr);
 
-  g_assert_true(piece_palette_draw(palette, piece, cr, (double)size, (double)size));
+  g_assert_true(piece_palette_draw(palette, &piece_view, cr, (double)size, (double)size));
 
   cairo_destroy(cr);
   g_clear_object(&palette);
@@ -149,6 +192,7 @@ static void test_piece_palette_draw_centers_king_vertically(void) {
 
 static void test_piece_palette_draw_rejects_empty_piece(void) {
   PiecePalette *palette = piece_palette_new_default();
+  GameBackendSquarePieceView piece = test_piece_palette_piece_view(CHECKERS_PIECE_EMPTY);
   g_assert_nonnull(palette);
 
   cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 31, 31);
@@ -157,7 +201,7 @@ static void test_piece_palette_draw_rejects_empty_piece(void) {
   cairo_t *cr = cairo_create(surface);
   g_assert_nonnull(cr);
 
-  g_assert_false(piece_palette_draw(palette, CHECKERS_PIECE_EMPTY, cr, 31.0, 31.0));
+  g_assert_false(piece_palette_draw(palette, &piece, cr, 31.0, 31.0));
 
   cairo_destroy(cr);
   cairo_surface_destroy(surface);

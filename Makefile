@@ -43,7 +43,6 @@ CHECKERS_SRCS := $(CHECKERS_DIR)/board.c $(CHECKERS_DIR)/board_geometry.c $(CHEC
 	$(CHECKERS_DIR)/ai_alpha_beta.c $(CHECKERS_DIR)/ai_transposition_table.c $(CHECKERS_DIR)/ai_zobrist.c \
 	$(CHECKERS_DIR)/checkers_model.c
 SRCS := $(CHECKERS_SRCS) src/ai_search.c src/game_model.c $(CHECKERS_BACKEND_SRCS)
-POSITION_SRCS := src/position_search.c src/position_predicate.c $(CHECKERS_DIR)/position_format.c
 BOARD_SRCS := $(CHECKERS_DIR)/board.c
 SGF_TREE_SRCS := src/sgf_tree.c
 SGF_MOVE_PROPS_SRCS := src/sgf_move_props.c
@@ -86,7 +85,6 @@ INSTALL ?= install
 LIBGAME_A := $(LIB_DIR)/libgame.a
 GCHECKERS_BIN := $(BIN_DIR)/gcheckers
 CREATE_PUZZLES_BIN := $(TOOLS_DIR)/create_puzzles
-FIND_POSITION_BIN := $(TOOLS_DIR)/find_position
 TEST_GAME_BIN := $(TESTS_DIR)/test_game
 TEST_GAME_PRINT_BIN := $(TESTS_DIR)/test_game_print
 TEST_GAME_BACKEND_BIN := $(TESTS_DIR)/test_game_backend
@@ -99,8 +97,6 @@ TEST_CREATE_PUZZLES_CHECK_BIN := $(TESTS_DIR)/test_create_puzzles_check
 TEST_CHECKERS_MODEL_BIN := $(TESTS_DIR)/test_checkers_model
 TEST_AI_SEARCH_BIN := $(TESTS_DIR)/test_ai_search
 TEST_AI_TRANSPOSITION_TABLE_BIN := $(TESTS_DIR)/test_ai_transposition_table
-TEST_POSITION_SEARCH_BIN := $(TESTS_DIR)/test_position_search
-TEST_POSITION_PREDICATE_BIN := $(TESTS_DIR)/test_position_predicate
 TEST_BGA_CLIENT_BIN := $(TESTS_DIR)/test_bga_client
 TEST_FILE_DIALOG_HISTORY_BIN := $(TESTS_DIR)/test_file_dialog_history
 TEST_APP_SETTINGS_BIN := $(TESTS_DIR)/test_app_settings
@@ -126,19 +122,18 @@ PROFILE_ARGS ?= 1
 PROFILE_CMD = $(PROFILE_BIN) $(PROFILE_ARGS)
 
 .PHONY: all clean test coverage install validate-desktop-metadata \
-	gcheckers create_puzzles find_position libgame.a \
+	gcheckers create_puzzles libgame.a \
 	test_game test_game_print test_game_backend test_game_model test_board test_board_geometry test_move_gen test_create_puzzles_cli test_create_puzzles_check \
-	test_checkers_model test_ai_search test_ai_transposition_table test_position_search test_position_predicate test_bga_client \
+	test_checkers_model test_ai_search test_ai_transposition_table test_bga_client \
 	test_file_dialog_history test_app_settings test_app_paths test_desktop_metadata test_flatpak_manifest test_sgf_tree test_sgf_io \
 	test_sgf_view test_board_view test_player_controls_panel test_sgf_controller test_window test_puzzle_generation test_puzzle_catalog \
 	test_piece_palette test_puzzle_progress test_puzzle_progress_report_server callgrind-run \
 	callgrind-annotate
 
-all: $(GSETTINGS_SCHEMA_COMPILED) $(LIBGAME_A) $(CREATE_PUZZLES_BIN) $(FIND_POSITION_BIN) $(GCHECKERS_BIN)
+all: $(GSETTINGS_SCHEMA_COMPILED) $(LIBGAME_A) $(CREATE_PUZZLES_BIN) $(GCHECKERS_BIN)
 
 gcheckers: $(GCHECKERS_BIN)
 create_puzzles: $(CREATE_PUZZLES_BIN)
-find_position: $(FIND_POSITION_BIN)
 libgame.a: $(LIBGAME_A)
 
 $(LIBGAME_A): $(OBJS)
@@ -151,7 +146,7 @@ $(OBJ_DIR)/%.o: %.c
 
 test: $(TEST_GAME_BIN) $(TEST_GAME_PRINT_BIN) $(TEST_GAME_BACKEND_BIN) $(TEST_GAME_MODEL_BIN) $(TEST_BOARD_BIN) $(TEST_BOARD_GEOMETRY_BIN) $(TEST_MOVE_GEN_BIN) \
 	$(TEST_CHECKERS_MODEL_BIN) $(TEST_AI_SEARCH_BIN) \
-	$(TEST_AI_TRANSPOSITION_TABLE_BIN) $(TEST_POSITION_SEARCH_BIN) $(TEST_POSITION_PREDICATE_BIN) $(TEST_SGF_TREE_BIN) \
+	$(TEST_AI_TRANSPOSITION_TABLE_BIN) $(TEST_SGF_TREE_BIN) \
 	$(TEST_SGF_IO_BIN) $(TEST_SGF_VIEW_BIN) $(TEST_BGA_CLIENT_BIN) $(TEST_FILE_DIALOG_HISTORY_BIN) \
 	$(TEST_APP_SETTINGS_BIN) $(TEST_APP_PATHS_BIN) $(TEST_BOARD_VIEW_BIN) $(TEST_PLAYER_CONTROLS_PANEL_BIN) $(TEST_SGF_CONTROLLER_BIN) \
 	$(TEST_WINDOW_BIN) $(TEST_CREATE_PUZZLES_CLI_BIN) $(TEST_CREATE_PUZZLES_CHECK_BIN) $(TEST_DESKTOP_METADATA_BIN) \
@@ -166,8 +161,6 @@ test: $(TEST_GAME_BIN) $(TEST_GAME_PRINT_BIN) $(TEST_GAME_BACKEND_BIN) $(TEST_GA
 	$(TEST_CHECKERS_MODEL_BIN)
 	$(TEST_AI_SEARCH_BIN)
 	$(TEST_AI_TRANSPOSITION_TABLE_BIN)
-	$(TEST_POSITION_SEARCH_BIN)
-	$(TEST_POSITION_PREDICATE_BIN)
 	$(TEST_SGF_TREE_BIN)
 	$(TEST_SGF_IO_BIN)
 	$(TEST_SGF_VIEW_BIN)
@@ -251,11 +244,6 @@ $(TEST_CREATE_PUZZLES_CHECK_BIN): $(CREATE_PUZZLES_BIN) tests/test_create_puzzle
 	$(CC) $(CFLAGS) -DGCHECKERS_CREATE_PUZZLES_PATH=\"$(CREATE_PUZZLES_BIN)\" -o $@ \
 		tests/test_create_puzzles_check.c src/sgf_io.c src/sgf_tree.c src/sgf_move_props.c $(SRCS) $(LDLIBS)
 
-$(FIND_POSITION_BIN): src/find_position.c $(POSITION_SRCS) $(SRCS) src/position_search.h src/position_predicate.h \
-	$(CHECKERS_DIR)/position_format.h
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ src/find_position.c $(POSITION_SRCS) $(SRCS) $(LDLIBS)
-
 test_checkers_model: $(TEST_CHECKERS_MODEL_BIN)
 $(TEST_CHECKERS_MODEL_BIN): tests/test_checkers_model.c $(SRCS) $(CHECKERS_DIR)/checkers_model.h
 	@mkdir -p $(dir $@)
@@ -273,16 +261,6 @@ $(TEST_AI_TRANSPOSITION_TABLE_BIN): tests/test_ai_transposition_table.c $(SRCS) 
 	$(CHECKERS_DIR)/ai_transposition_table.h $(CHECKERS_DIR)/ai_zobrist.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_ai_transposition_table.c $(SRCS) $(LDLIBS)
-
-test_position_search: $(TEST_POSITION_SEARCH_BIN)
-$(TEST_POSITION_SEARCH_BIN): tests/test_position_search.c $(POSITION_SRCS) $(SRCS) src/position_search.h
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ tests/test_position_search.c $(POSITION_SRCS) $(SRCS) $(LDLIBS)
-
-test_position_predicate: $(TEST_POSITION_PREDICATE_BIN)
-$(TEST_POSITION_PREDICATE_BIN): tests/test_position_predicate.c $(POSITION_SRCS) $(SRCS) src/position_predicate.h
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ tests/test_position_predicate.c $(POSITION_SRCS) $(SRCS) $(LDLIBS)
 
 test_bga_client: $(TEST_BGA_CLIENT_BIN)
 $(TEST_BGA_CLIENT_BIN): tests/test_bga_client.c src/bga_client.c src/bga_client.h
@@ -556,9 +534,9 @@ validate-desktop-metadata: $(DESKTOP_FILE) $(METAINFO_FILE)
 
 clean:
 	rm -rf $(BUILD_DIR)
-	rm -f checkers create_puzzles find_position gcheckers libgame.a
+	rm -f checkers create_puzzles gcheckers libgame.a
 	rm -f test_game test_game_print test_board test_move_gen test_checkers_model test_ai_transposition_table
-	rm -f test_position_search test_position_predicate test_bga_client test_file_dialog_history test_app_paths
+	rm -f test_bga_client test_file_dialog_history test_app_paths
 	rm -f test_desktop_metadata test_flatpak_manifest test_create_puzzles_cli test_create_puzzles_check
 	rm -f test_puzzle_generation test_board_view test_player_controls_panel test_sgf_controller test_sgf_io
 	rm -f test_sgf_tree test_sgf_view test_window
