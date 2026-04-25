@@ -151,6 +151,12 @@ static GameBackendMoveList checkers_backend_list_moves(gconstpointer position) {
   };
 }
 
+static GameBackendMoveList checkers_backend_list_good_moves(gconstpointer position,
+                                                            guint /*max_count*/,
+                                                            guint /*depth_hint*/) {
+  return checkers_backend_list_moves(position);
+}
+
 static void checkers_backend_move_list_free(GameBackendMoveList *moves) {
   g_return_if_fail(moves != NULL);
 
@@ -491,6 +497,7 @@ const GameBackend checkers_game_backend = {
     .position_outcome = checkers_backend_position_outcome,
     .position_turn = checkers_backend_position_turn,
     .list_moves = checkers_backend_list_moves,
+    .list_good_moves = checkers_backend_list_good_moves,
     .move_list_free = checkers_backend_move_list_free,
     .move_list_get = checkers_backend_move_list_get,
     .moves_equal = checkers_backend_moves_equal,

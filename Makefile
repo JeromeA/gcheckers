@@ -1,5 +1,4 @@
 CC := cc
-APP_ID := io.github.jeromea.gcheckers
 CFLAGS := -std=c99 -Wall -Wextra -Werror -Isrc
 CFLAGS += -g3
 COVERAGE_CFLAGS := --coverage -O0 -g
@@ -15,11 +14,36 @@ CURL_CFLAGS := $(shell pkg-config --cflags libcurl)
 CURL_LIBS := $(shell pkg-config --libs libcurl)
 LDLIBS := $(GLIB_LIBS) $(GOBJECT_LIBS) $(GIO_LIBS) $(CURL_LIBS) -lm
 GAME ?= checkers
+CHECKERS_DIR := src/games/checkers
 
 ifeq ($(GAME),checkers)
+APP_ID := io.github.jeromea.gcheckers
+APP_BIN_NAME := gcheckers
+APP_MAIN_SRC := src/gcheckers.c
 GAME_BACKEND_DEFINE := -DGGAME_GAME_CHECKERS
-CHECKERS_DIR := src/games/checkers
 CHECKERS_BACKEND_SRCS := src/games/checkers/checkers_backend.c
+GAME_SRCS := $(CHECKERS_DIR)/board.c $(CHECKERS_DIR)/board_geometry.c $(CHECKERS_DIR)/game.c \
+	$(CHECKERS_DIR)/game_print.c $(CHECKERS_DIR)/move_gen.c $(CHECKERS_DIR)/rulesets.c \
+	$(CHECKERS_DIR)/ai_alpha_beta.c $(CHECKERS_DIR)/ai_transposition_table.c $(CHECKERS_DIR)/ai_zobrist.c \
+	$(CHECKERS_DIR)/checkers_model.c
+GAME_BACKEND_SRCS := $(CHECKERS_BACKEND_SRCS)
+APP_BIN = $(BIN_DIR)/$(APP_BIN_NAME)
+ALL_TOOLS = $(CREATE_PUZZLES_BIN)
+ALL_SCHEMA_TARGETS = $(GSETTINGS_SCHEMA_COMPILED)
+SUPPORTS_CREATE_PUZZLES := yes
+else ifeq ($(GAME),homeworlds)
+APP_ID := io.github.jeromea.ghomeworlds
+APP_BIN_NAME := ghomeworlds
+APP_MAIN_SRC := src/ghomeworlds.c
+GAME_BACKEND_DEFINE := -DGGAME_GAME_HOMEWORLDS
+HOMEWORLDS_DIR := src/games/homeworlds
+HOMEWORLDS_BACKEND_SRCS := $(HOMEWORLDS_DIR)/homeworlds_backend.c
+GAME_SRCS :=
+GAME_BACKEND_SRCS := $(HOMEWORLDS_BACKEND_SRCS)
+APP_BIN = $(BIN_DIR)/$(APP_BIN_NAME)
+ALL_TOOLS =
+ALL_SCHEMA_TARGETS =
+SUPPORTS_CREATE_PUZZLES := no
 else
 $(error Unknown GAME '$(GAME)')
 endif
@@ -42,7 +66,7 @@ CHECKERS_SRCS := $(CHECKERS_DIR)/board.c $(CHECKERS_DIR)/board_geometry.c $(CHEC
 	$(CHECKERS_DIR)/game_print.c $(CHECKERS_DIR)/move_gen.c $(CHECKERS_DIR)/rulesets.c \
 	$(CHECKERS_DIR)/ai_alpha_beta.c $(CHECKERS_DIR)/ai_transposition_table.c $(CHECKERS_DIR)/ai_zobrist.c \
 	$(CHECKERS_DIR)/checkers_model.c
-SRCS := $(CHECKERS_SRCS) src/ai_search.c src/game_model.c $(CHECKERS_BACKEND_SRCS)
+SRCS := $(GAME_SRCS) src/ai_search.c src/game_model.c $(GAME_BACKEND_SRCS)
 BOARD_SRCS := $(CHECKERS_DIR)/board.c
 SGF_TREE_SRCS := src/sgf_tree.c
 SGF_MOVE_PROPS_SRCS := src/sgf_move_props.c
@@ -83,7 +107,6 @@ SCHEMAS_INSTALL_DIR := $(DATADIR)/glib-2.0/schemas
 INSTALL ?= install
 
 LIBGAME_A := $(LIB_DIR)/libgame.a
-GCHECKERS_BIN := $(BIN_DIR)/gcheckers
 CREATE_PUZZLES_TOOL_NAME := $(GAME)_create_puzzles
 CREATE_PUZZLES_BIN := $(TOOLS_DIR)/$(CREATE_PUZZLES_TOOL_NAME)
 TEST_GAME_BIN := $(TESTS_DIR)/test_game
@@ -131,11 +154,17 @@ PROFILE_CMD = $(PROFILE_BIN) $(PROFILE_ARGS)
 	test_piece_palette test_puzzle_progress test_puzzle_progress_report_server callgrind-run \
 	callgrind-annotate
 
-all: $(GSETTINGS_SCHEMA_COMPILED) $(LIBGAME_A) $(CREATE_PUZZLES_BIN) $(GCHECKERS_BIN)
+all: $(ALL_SCHEMA_TARGETS) $(LIBGAME_A) $(ALL_TOOLS) $(APP_BIN)
 
-gcheckers: $(GCHECKERS_BIN)
-create_puzzles: $(CREATE_PUZZLES_BIN)
+gcheckers: $(APP_BIN)
 libgame.a: $(LIBGAME_A)
+
+ifeq ($(SUPPORTS_CREATE_PUZZLES),yes)
+create_puzzles: $(CREATE_PUZZLES_BIN)
+else
+create_puzzles:
+	@echo "create_puzzles is not available for GAME=$(GAME)"
+endif
 
 $(LIBGAME_A): $(OBJS)
 	@mkdir -p $(dir $@)
@@ -465,7 +494,8 @@ $(TEST_PIECE_PALETTE_BIN): tests/test_piece_palette.c src/piece_palette.c src/pi
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_piece_palette.c src/piece_palette.c \
 		src/man_paintable.c $(LDLIBS) $(GTK_LIBS)
 
-$(GCHECKERS_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c src/application.c src/window.c $(APP_PATHS_SRCS) \
+ifeq ($(GAME),checkers)
+$(APP_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c src/application.c src/window.c $(APP_PATHS_SRCS) \
 	$(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c src/app_settings.h src/settings_dialog.c \
 	src/settings_dialog.h \
 	src/new_game_dialog.c src/puzzle_dialog.c src/puzzle_dialog.h $(CHECKERS_DIR)/rulesets.c $(CHECKERS_DIR)/rulesets.h \
@@ -492,13 +522,18 @@ $(GCHECKERS_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c src/application.c
 		src/sgf_move_props.c src/sgf_tree.c src/sgf_view.c src/sgf_view_disc_factory.c src/sgf_view_layout.c \
 		src/sgf_view_link_renderer.c src/sgf_view_scroller.c \
 		src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(SRCS) $(LDLIBS) $(GTK_LIBS)
+else ifeq ($(GAME),homeworlds)
+$(APP_BIN): src/ghomeworlds.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/ghomeworlds.c $(LDLIBS) $(GTK_LIBS)
+endif
 
 $(GSETTINGS_SCHEMA_COMPILED): $(GSETTINGS_SCHEMA_XML)
 	glib-compile-schemas $(GSETTINGS_SCHEMA_DIR)
 
 install: all $(DESKTOP_FILE) $(METAINFO_FILE) $(ICON_FILE)
 	$(INSTALL) -d $(DESTDIR)$(BINDIR)
-	$(INSTALL) -m 755 $(GCHECKERS_BIN) $(DESTDIR)$(BINDIR)/gcheckers
+	$(INSTALL) -m 755 $(APP_BIN) $(DESTDIR)$(BINDIR)/$(APP_BIN_NAME)
 	$(INSTALL) -d $(DESTDIR)$(APPLICATIONS_DIR)
 	$(INSTALL) -m 644 $(DESKTOP_FILE) $(DESTDIR)$(APPLICATIONS_DIR)/$(APP_ID).desktop
 	$(INSTALL) -d $(DESTDIR)$(METAINFO_DIR)

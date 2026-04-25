@@ -63,6 +63,7 @@ typedef struct {
   guint (*position_turn)(gconstpointer position);
 
   GameBackendMoveList (*list_moves)(gconstpointer position);
+  GameBackendMoveList (*list_good_moves)(gconstpointer position, guint max_count, guint depth_hint);
   void (*move_list_free)(GameBackendMoveList *moves);
   const void *(*move_list_get)(const GameBackendMoveList *moves, gsize index);
   gboolean (*moves_equal)(gconstpointer left, gconstpointer right);

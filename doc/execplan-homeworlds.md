@@ -25,8 +25,8 @@ starts their turn with no ships at their Homeworld.
 
 - [x] (2026-04-25 16:05Z) Read `doc/PLANS.md`, `doc/OVERVIEW.md`, `doc/execplan-game-backend-interface.md`, and
       `src/games/homeworlds/RULES.md`, then write this initial ExecPlan.
-- [ ] Add build-time `GAME=homeworlds` selection, homeworlds-branded binary/package naming, and a stub backend that
-      compiles with Homeworlds capability flags and a placeholder `list_good_moves` path.
+- [x] (2026-04-25 17:15Z) Complete Milestone 1 by adding `GAME=homeworlds` selection, a branded `ghomeworlds`
+      skeleton binary, the stub Homeworlds backend, and backend-selection coverage for the second game.
 - [ ] Implement a Homeworlds engine and backend under `src/games/homeworlds/`.
 - [ ] Add the missing backend-owned board widget path to shared UI so non-square games can render and accept input.
 - [ ] Integrate Homeworlds into the window and new-game flows as a playable local game with limited AI and with
@@ -55,6 +55,10 @@ starts their turn with no ships at their Homeworld.
   Evidence: `src/window.c` owns `BoardView *board_view` and `GGameSgfController *sgf_controller`, and
   `src/sgf_controller.c` requires `BoardView` in its constructor.
 
+- Observation: the existing shared application shell cannot simply be recompiled against a second backend yet.
+  Evidence: Milestone 1 needed a separate `src/ghomeworlds.c` GTK skeleton because the current `src/application.c` and
+  `src/window.c` still pull in checkers-specific modules and flows.
+
 ## Decision Log
 
 - Decision: Homeworlds will ship with a deliberately limited AI based on a new backend callback named
@@ -79,12 +83,20 @@ starts their turn with no ships at their Homeworld.
   and postpone user-facing serialization details until later.
   Date/Author: 2026-04-25 / Codex
 
+- Decision: Milestone 1 uses a branded Homeworlds GTK skeleton binary instead of trying to reuse the full shared
+  `GGameApplication` and `GGameWindow` stack immediately.
+  Rationale: the current shared application shell is still too checkers-specific to compile cleanly under
+  `GAME=homeworlds`. A tiny `src/ghomeworlds.c` binary satisfies the milestone’s build/package-selection goal without
+  pretending the later UI milestones are already complete.
+  Date/Author: 2026-04-25 / Codex
+
 ## Outcomes & Retrospective
 
-No code has been changed yet. The main outcome of this planning pass is a clarified scope: Homeworlds is not “just add
-another backend.” It requires four enabling pieces that do not fully exist today: per-game branding in the build, a
-new AI-facing `list_good_moves` callback for heuristic candidate pruning, backend-owned board widgets for non-square
-games, and Homeworlds-specific integration with the existing SGF-centered replay architecture.
+Milestone 1 is complete. The repository now has a second compile-time backend selection path, a stub
+`src/games/homeworlds/homeworlds_backend.c`, and a branded `build/bin/ghomeworlds` skeleton binary that proves the
+build/package split works. The main gap is unchanged: the real shared application shell still cannot host Homeworlds,
+which is exactly why the next milestone remains the real engine/backend implementation rather than pretending the UI is
+already generic.
 
 ## Context and Orientation
 
@@ -169,10 +181,11 @@ For example, if player 0’s homeworld uses star sizes 1 and 3, and player 1’s
 the layer nearest player 0 contains the systems one hop from player 0, which therefore use only size-2 stars; the
 layer nearest player 1 contains the systems one hop from player 1, which therefore use only size-1 stars; and a
 central layer contains everything else. If the two players are more directly connected, collapse the middle into one
-central layer containing all remaining systems. Each system should still render as a clear cluster of stars and
-orbiting ships, and the user must be able to click systems, ships, and available action targets to drive the move
-builder. The widget must also make pending sacrifice counts and chosen action types visible, because those are
-essential parts of Homeworlds turns.
+central layer containing all remaining systems. On each system, ships (triangles of 3 different sizes) should be
+pointing away from their owner, and be aligned at the right of the star from the owner's perspective.
+The user must be able to click systems, ships, and available action targets to drive the move builder. The widget
+must also make pending sacrifice counts and chosen action types visible, because those are essential parts of
+Homeworlds turns.
 
 Once the custom widget path exists, integrate Homeworlds into the window and new-game flows. `src/new_game_dialog.c`
 must stop assuming that every backend’s AI is based on exhaustive move generation. For Homeworlds, the dialog should

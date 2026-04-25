@@ -404,12 +404,15 @@ Role: resolve installed or local read-only data subdirectories such as `puzzles`
 override first, then `g_get_user_data_dir()`, then `g_get_system_data_dirs()`, then the local checkout fallback.
 Collaborates with: `window.c` for packaging-safe puzzle discovery and `tests/test_app_paths.c`.
 
-## Game backend interface (`src/game_backend.h`, `src/active_game_backend.h`, `src/games/checkers/checkers_backend.c`)
-Module: generic game-selection boundary plus the default checkers adapter.
+## Game backend interface (`src/game_backend.h`, `src/active_game_backend.h`,
+`src/games/checkers/checkers_backend.c`, `src/games/homeworlds/homeworlds_backend.c`)
+Module: generic game-selection boundary plus the compiled game adapters.
 Role: `game_backend.h` defines the generic callback table used to describe one compiled game backend.
 `active_game_backend.h` maps the build-time define `GGAME_GAME_CHECKERS` to the active backend object, and
 `src/games/checkers/checkers_backend.c` adapts the moved checkers engine, ruleset catalog, move list, AI, and move
-formatting APIs into that generic table.
+formatting APIs into that generic table. `src/games/homeworlds/homeworlds_backend.c` is currently only a Milestone 1
+stub: it advertises a move-builder Homeworlds backend, a placeholder `list_good_moves` path, and enough callbacks for
+`GAME=homeworlds` to compile, but it does not implement gameplay yet.
 Scope: shared application code still has some checkers-native compatibility layers, but the physical checkers source
 ownership boundary is now explicit under `src/games/checkers/`.
 Backends now advertise whether they support full move-list enumeration, incremental move-building, and AI search.
@@ -426,15 +429,18 @@ validation and status text reports move counts as unavailable.
 Collaborates with: `src/game_backend.h`, `src/games/checkers/checkers_backend.c`,
 `src/games/checkers/checkers_model.c`, and `tests/test_game_model.c`.
 
-## GTK application entry (`src/gcheckers.c`, `src/application.c`, `src/application.h`)
-Class: `GGameApplication` (`GtkApplication`).
+## GTK application entry (`src/gcheckers.c`, `src/application.c`, `src/application.h`, `src/ghomeworlds.c`)
+Class: `GGameApplication` (`GtkApplication`) for the checkers build; plain `GtkApplication` stub for the Homeworlds
+Milestone 1 build.
 Role: define the GTK application type and activation flow that creates the main window and model, installs app actions
 (`app.new-game`, `app.import`, `app.quit`), installs window game/SGF/navigation/analysis/puzzle/view actions, and
 publishes a menubar model (`File` -> `New game...`, `Import...`, `Load...`, `Save as...`, `Save position...`, `Quit`;
 `Game` -> `Force move` + navigation section; `Analysis` -> current-position and whole-game analysis; `Puzzle` ->
-`Play puzzles`; `View` -> drawer toggles) with keyboard accelerators.
-The canonical application ID is `io.github.jeromea.gcheckers`, which is also used by the installed desktop file,
-metainfo, icon name, and GSettings schema.
+`Play puzzles`; `View` -> drawer toggles) with keyboard accelerators. `src/ghomeworlds.c` is currently a branded
+Milestone 1 skeleton that opens a simple GTK window explaining that the Homeworlds gameplay integration has not landed
+yet.
+The checkers build uses application ID `io.github.jeromea.gcheckers`; the current Homeworlds Milestone 1 skeleton uses
+`io.github.jeromea.ghomeworlds`.
 Collaborates with: `GGameWindow` for UI wiring and new-game dialog presentation.
 
 ## Board view subsystem

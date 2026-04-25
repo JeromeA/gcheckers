@@ -7,12 +7,15 @@
 static void test_backend_metadata(void) {
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   assert(backend != NULL);
+
+#if defined(GGAME_GAME_CHECKERS)
   assert(strcmp(backend->id, "checkers") == 0);
   assert(strcmp(backend->display_name, "Checkers") == 0);
   assert(backend->variant_count == 3);
   assert(backend->supports_move_list);
   assert(!backend->supports_move_builder);
   assert(backend->supports_ai_search);
+  assert(backend->list_good_moves != NULL);
 
   const GameBackendVariant *american = backend->variant_at(0);
   assert(american != NULL);
@@ -21,11 +24,26 @@ static void test_backend_metadata(void) {
   const GameBackendVariant *russian = backend->variant_by_short_name("russian");
   assert(russian != NULL);
   assert(strcmp(russian->name, "Russian (8x8)") == 0);
+#elif defined(GGAME_GAME_HOMEWORLDS)
+  assert(strcmp(backend->id, "homeworlds") == 0);
+  assert(strcmp(backend->display_name, "Homeworlds") == 0);
+  assert(backend->variant_count == 0);
+  assert(!backend->supports_move_list);
+  assert(backend->supports_move_builder);
+  assert(!backend->supports_ai_search);
+  assert(backend->list_good_moves != NULL);
+  assert(strcmp(backend->side_label(0), "Player 1") == 0);
+  assert(strcmp(backend->side_label(1), "Player 2") == 0);
+#else
+#error "Add metadata expectations for the selected backend."
+#endif
 }
 
 static void test_backend_position_and_move_flow(void) {
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   assert(backend != NULL);
+
+#if defined(GGAME_GAME_CHECKERS)
   assert(backend->supports_move_list);
 
   gpointer position = g_malloc0(backend->position_size);
@@ -55,9 +73,40 @@ static void test_backend_position_and_move_flow(void) {
   backend->position_clear(position);
   g_free(move_copy);
   g_free(position);
+#elif defined(GGAME_GAME_HOMEWORLDS)
+  assert(!backend->supports_move_list);
+  assert(backend->supports_move_builder);
+  assert(backend->move_builder_init != NULL);
+  assert(backend->move_builder_clear != NULL);
+  assert(backend->move_builder_list_candidates != NULL);
+  assert(backend->move_builder_step != NULL);
+  assert(backend->move_builder_is_complete != NULL);
+  assert(backend->move_builder_build_move != NULL);
+
+  gpointer position = g_malloc0(backend->position_size);
+  assert(position != NULL);
+  backend->position_init(position, NULL);
+  assert(backend->position_outcome(position) == GAME_BACKEND_OUTCOME_ONGOING);
+  assert(backend->position_turn(position) == 0);
+
+  GameBackendMoveBuilder builder = {0};
+  assert(backend->move_builder_init(position, &builder));
+  GameBackendMoveList candidates = backend->move_builder_list_candidates(&builder);
+  assert(candidates.count == 0);
+  backend->move_list_free(&candidates);
+  assert(!backend->move_builder_is_complete(&builder));
+  backend->move_builder_clear(&builder);
+  backend->position_clear(position);
+  g_free(position);
+#else
+#error "Add move-flow expectations for the selected backend."
+#endif
 }
 
 static void test_backend_move_path_length_only_query(void) {
+#if !defined(GGAME_GAME_CHECKERS)
+  return;
+#else
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   assert(backend != NULL);
   assert(backend->square_grid_move_get_path != NULL);
@@ -96,6 +145,7 @@ static void test_backend_move_path_length_only_query(void) {
   backend->move_list_free(&moves);
   backend->position_clear(position);
   g_free(position);
+#endif
 }
 
 int main(void) {
