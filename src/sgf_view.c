@@ -267,7 +267,7 @@ static void sgf_view_dispose(GObject *object) {
 
   gboolean root_removed = TRUE;
   if (self->root) {
-    root_removed = gcheckers_widget_remove_from_parent(self->root);
+    root_removed = ggame_widget_remove_from_parent(self->root);
     if (!root_removed && gtk_widget_get_parent(self->root)) {
       g_debug("Failed to remove SGF view root from parent during dispose\n");
     }

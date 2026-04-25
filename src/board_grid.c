@@ -43,7 +43,7 @@ static void board_grid_dispose(GObject *object) {
   board_grid_reset_squares(self);
   gboolean grid_removed = TRUE;
   if (self->grid) {
-    grid_removed = gcheckers_widget_remove_from_parent(self->grid);
+    grid_removed = ggame_widget_remove_from_parent(self->grid);
     if (!grid_removed && gtk_widget_get_parent(self->grid)) {
       g_debug("Failed to remove board grid widget from parent during dispose\n");
     }

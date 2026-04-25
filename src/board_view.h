@@ -7,7 +7,7 @@
 
 G_BEGIN_DECLS
 
-typedef struct _GCheckersSgfController GCheckersSgfController;
+typedef struct _GGameSgfController GGameSgfController;
 
 #define BOARD_TYPE_VIEW (board_view_get_type())
 
@@ -19,7 +19,7 @@ typedef gboolean (*BoardViewSquareHandler)(guint index, guint button, gpointer u
 BoardView *board_view_new(void);
 GtkWidget *board_view_get_widget(BoardView *self);
 void board_view_set_model(BoardView *self, gpointer model);
-void board_view_set_sgf_controller(BoardView *self, GCheckersSgfController *controller);
+void board_view_set_sgf_controller(BoardView *self, GGameSgfController *controller);
 void board_view_set_move_handler(BoardView *self, gpointer handler, gpointer user_data);
 void board_view_set_square_handler(BoardView *self, gpointer handler, gpointer user_data);
 void board_view_update(BoardView *self);

@@ -1,10 +1,10 @@
 # Project overview
 
-## `GCheckersWindow` (`src/window.c`)
-Class: `GCheckersWindow` (`GtkApplicationWindow`).
+## `GGameWindow` (`src/window.c`)
+Class: `GGameWindow` (`GtkApplicationWindow`).
 Role: composition root that binds model state to UI updates, keeps board input available, and coordinates auto-play.
-Owns: `GCheckersModel`, `BoardView`, `PlayerControlsPanel`, and `GCheckersSgfController`.
-Collaborates with: `gcheckers_style_init()` for CSS, model signals for refresh, and SGF analysis signals to reset
+Owns: `GCheckersModel`, `BoardView`, `PlayerControlsPanel`, and `GGameSgfController`.
+Collaborates with: `ggame_style_init()` for CSS, model signals for refresh, and SGF analysis signals to reset
 player dropdowns. Computer turns are routed by control mode with alpha-beta depth configured from the shared
 `Computer depth` slider (`0..16`). Uses a three-pane layout: board and player controls (left), SGF mode selector
 and SGF view (middle), and analysis (right). Analysis is launched from shared window actions exposed in the
@@ -21,16 +21,16 @@ orientation based on the new-game player modes, and SGF review/manual navigation
 navigation does not keep rotating the board.
 Those shared board-orientation and board-input-enable decisions now come from the cached `GGameModel` through backend
 `position_turn()` and `position_outcome()` callbacks rather than directly inspecting checkers state.
-Puzzle mode starts with a modal chooser (`src/puzzle_dialog.c`) that lets the user pick
-American/International/Russian and then click a numbered puzzle square from a ten-column grid. The dialog only reports
-cancel-or-selected results back to `GCheckersWindow`; the window owns opening the selected puzzle and starting progress
-tracking. The grid is built from the selected ruleset directory only and shows local status per puzzle: untried squares
+Puzzle mode starts with a modal chooser (`src/puzzle_dialog.c`) that lets the user pick one backend
+variant and then click a numbered puzzle square from a ten-column grid. The dialog only reports
+cancel-or-selected results back to `GGameWindow`; the window owns opening the selected puzzle and starting progress
+tracking. The grid is built from the selected variant directory only and shows local status per puzzle: untried squares
 are white, solved squares are green, and tried-without-success squares are red. Runtime loading resolves the puzzle root
 (`GCHECKERS_PUZZLES_DIR` or the installed/local application data search path), appends the active game ID plus the
-selected ruleset short name such as `checkers/american` or `checkers/russian`, and then loads the exact clicked
+selected variant short name such as `checkers/american` or `checkers/russian`, and then loads the exact clicked
 `puzzle-*.sgf`. While active it hides both drawers, disables SGF/review actions, shows puzzle-only `Next puzzle` and
 `Analyze` buttons, and validates the player's moves against the SGF main-line solution while auto-playing defender
-replies. `Next puzzle` now advances through the sorted catalog for the active ruleset, wrapping to the first puzzle
+replies. `Next puzzle` now advances through the sorted catalog for the active variant, wrapping to the first puzzle
 after the last one, and no longer selects a random puzzle. Puzzle `Analyze` exits puzzle mode, rewinds fully to move 0,
 and then starts the same full-game analysis path used by the Analysis menu. The current node report still follows
 normal SGF selection instead of being replaced by a generic completion message. Picker squares keep custom status colors
@@ -80,9 +80,10 @@ also exposed in a toolbar
 (`New game...`, `Force move`, `Save position...`, SGF timeline rewind/step/skip actions) via GTK actions.
 Owns modal flows for `New game` and `Import games` wizards.
 `New game` now builds its optional `Variant` dropdown and summary label from the active backend metadata rather than
-hard-coding checkers names in the dialog. The current checkers path still maps the selected variant index back to the
-existing ruleset API, but side labels (`White`/`Black` today) and variant display text now come from the backend.
-When a backend exposes no variants, the dialog omits that row and keeps the current game setup. The modal remains
+hard-coding checkers names in the dialog. `GGameWindow`'s public new-game and puzzle APIs now take backend variants,
+while `window.c` keeps the current checkers-only ruleset mapping private. Side labels (`White`/`Black` today) and
+variant display text come from the backend. When a backend exposes no variants, the dialog omits that row and keeps
+the current game setup. The modal remains
 non-resizable and renders the summary as a single-line ellipsized label so variant switches do not change dialog
 height or leave extra blank space below the action buttons.
 Import wizard persists BoardGameArena email/password and remember flag with `GSettings` when fetching history, and
@@ -93,13 +94,13 @@ Import fetch flow for BoardGameArena uses a dedicated libcurl client: GET home p
 POST `loginUserWithPassword.html` with username/password/remember/request token and logs the HTTP/body result.
 Default panel widths target about `500/300/300` pixels at the default window width (`1100x700`).
 Lifecycle: sinks and retains an owned `PlayerControlsPanel` reference, removes it from its current `GtkBox` parent
-during dispose via `gcheckers_widget_remove_from_parent()`, and then clears its references.
+during dispose via `ggame_widget_remove_from_parent()`, and then clears its references.
 during dispose, cancels any pending auto-move idle source, and then clears its references.
 At construction time it also pushes the active backend's side labels into `PlayerControlsPanel`, so the shared board
 UI keeps generic two-side semantics while the compiled backend decides how those sides are named.
 
-## `GCheckersSgfController` (`src/sgf_controller.c`)
-Class: `GCheckersSgfController` (`GObject`).
+## `GGameSgfController` (`src/sgf_controller.c`)
+Class: `GGameSgfController` (`GObject`).
 Role: SGF timeline authority and synchronization point between SGF current-node transitions and game state updates.
 Move application is SGF-first: validate model move, append under SGF current, set SGF current, then project that
 transition to the model (`single move` if parent->child, otherwise reset+replay from root).
@@ -109,8 +110,8 @@ are validated as subsets of `AB`/`AW` and then applied as kings. Root `RU[<rules
 to switch the model to the matching ruleset before replay, and SGF loads now fail if `RU` is missing or unknown
 instead of falling back to the current model rules. `RU` is stamped back onto fresh trees and saved SGFs so
 variant-specific files round-trip explicitly.
-`gcheckers_sgf_controller_set_model()` only binds/disconnects model references; timeline clearing is explicit via
-`gcheckers_sgf_controller_new_game()`. Exposes SGF navigation helpers used by window actions: rewind to root, step
+`ggame_sgf_controller_set_model()` only binds/disconnects model references; timeline clearing is explicit via
+`ggame_sgf_controller_new_game()`. Exposes SGF navigation helpers used by window actions: rewind to root, step
 backward, step forward on main line, step to next branch point, and step to main-line end.
 Selection-only navigation updates SGF view selection in place (`sgf_view_set_selected`) instead of rebuilding the
 entire SGF layout.
@@ -120,7 +121,7 @@ Owns: `SgfTree` and `SgfView`, plus replay guard (`is_replaying`).
 Signals: `manual-requested` when analysis panel content should refresh for the selected node, and `node-changed`
 whenever SGF current node changes so other UI (analysis graph) can synchronize cursor state.
 Collaborates with: `GCheckersModel` for move validation/application, `BoardView` to clear selection on replay/reset,
-and `GCheckersWindow` via the `manual-requested` signal for SGF navigation/edit flows. Starting a fresh game resets
+and `GGameWindow` via the `manual-requested` signal for SGF navigation/edit flows. Starting a fresh game resets
 the SGF tree and emits `node-changed`, but does not force player controls back to user mode. Also exposes the current
 node's move so board overlays can use the same path for step-by-step and replay-based navigation.
 
@@ -135,7 +136,7 @@ Y-axis range always includes at least `[-200, +200]` (and expands as needed), wi
 slight white tint above and slight black tint below to indicate white/black advantage regions.
 Score convention: positive means white is better, negative means black is better (independent of side to move).
 Signals: `node-activated` with the clicked branch node pointer so window code can call SGF controller selection APIs.
-Collaborates with: `GCheckersWindow` (data binding) and `GCheckersSgfController` (selection updates).
+Collaborates with: `GGameWindow` (data binding) and `GGameSgfController` (selection updates).
 
 ## `PlayerControlsPanel` (`src/player_controls_panel.c`)
 Class: `PlayerControlsPanel` (`GtkBox`).
@@ -144,32 +145,32 @@ Modes: side 0 / side 1 each select `User` or `Computer`, plus a shared `Computer
 Defaults: both side controls start as `User`, and labels are backend-supplied by the window (`White`/`Black` for the
 current checkers backend).
 Signals: `control-changed` for window-level coordination.
-Collaborates with: `GCheckersWindow` (signal handlers and `player_controls_panel_set_all_user()`) and GTK widgets
+Collaborates with: `GGameWindow` (signal handlers and `player_controls_panel_set_all_user()`) and GTK widgets
 (`GtkDropDown`, `GtkScale`).
 
-## `Puzzle Catalog` (`src/games/checkers/puzzle_catalog.c`, `src/games/checkers/puzzle_catalog.h`)
-Module: ruleset-aware puzzle discovery helpers.
+## `Puzzle Catalog` (`src/puzzle_catalog.c`, `src/puzzle_catalog.h`)
+Module: backend-variant puzzle discovery helpers.
 Role: scan one variant directory under the puzzle root, keep only `puzzle-####.sgf` files, parse their numeric puzzle
 numbers, sort them ascending, and return explicit catalog entries with basename, full path, and stable `puzzle_id`.
-Collaborates with: `puzzle_dialog.c` for the numbered chooser grid and `window.c` for random-next selection inside the
-active ruleset.
-Storage shape: checked-in puzzles now live under `puzzles/checkers/<ruleset-short-name>/`, and stable puzzle IDs are
+Collaborates with: `puzzle_dialog.c` for the numbered chooser grid and `window.c` for next-puzzle selection inside the
+active variant.
+Storage shape: checked-in puzzles now live under `puzzles/checkers/<variant-short-name>/`, and stable puzzle IDs are
 prefixed with the active game ID, for example `checkers/international/puzzle-0007.sgf`.
 
-## `gcheckers_style_init()` (`src/style.c`)
-Module: `gcheckers_style_init()` (style helper, not a class).
+## `ggame_style_init()` (`src/style.c`)
+Module: `ggame_style_init()` (style helper, not a class).
 Role: installs application CSS once per process using `g_once_init_enter/leave`, including SGF disc colors and the
 colored puzzle-picker square styles.
 Owns: CSS string and `GtkCssProvider` setup.
-Collaborates with: `GdkDisplay`/`GtkStyleContext` and is invoked by `GCheckersWindow`.
+Collaborates with: `GdkDisplay`/`GtkStyleContext` and is invoked by `GGameWindow`.
 
-## `GCheckersApplication` (`src/application.c`)
-Class: `GCheckersApplication` (`GtkApplication`).
+## `GGameApplication` (`src/application.c`)
+Class: `GGameApplication` (`GtkApplication`).
 Role: top-level application shell that installs menu actions, creates the main window, and now owns shared puzzle
 progress reporting state.
-Owns: the application menubar/actions plus one `CheckersPuzzleProgressStore` for the process, the configured report
+Owns: the application menubar/actions plus one `GGamePuzzleProgressStore` for the process, the configured report
 URL (`GCHECKERS_PUZZLE_REPORT_URL`), the privacy/settings action, and the single in-flight background upload task.
-Collaborates with: `GCheckersWindow`, which asks for the shared store indirectly by attaching to this application, and
+Collaborates with: `GGameWindow`, which asks for the shared store indirectly by attaching to this application, and
 `puzzle_progress.c`, which provides history storage, threshold decisions, and upload JSON formatting. Puzzle uploads are
 also gated by the `send-puzzle-usage-data` application setting before any network request is attempted. The shared
 progress store accessor refreshes the store if `GCHECKERS_PUZZLE_PROGRESS_DIR` resolves to a different state directory,
@@ -185,7 +186,7 @@ application-usage-data` also defaults to true and is stored for future telemetry
 UI: the settings dialog is a small modal window with two checkboxes and `Cancel`/`Save` actions, following the same
 simple GTK window pattern as the new-game and import dialogs. It also shows a `Puzzle Progress` section with the
 number of solved puzzles out of the currently available puzzle catalog and a `Clear Progress` button that clears local
-attempt history plus the chooser status cache. On first launch, `GCheckersApplication` presents this dialog
+attempt history plus the chooser status cache. On first launch, `GGameApplication` presents this dialog
 automatically after creating the main window so the user can review the privacy controls before continuing.
 
 ## Puzzle Progress Reporting (`src/puzzle_progress.c`, `data/schemas/io.github.jeromea.gcheckers.gschema.xml`)
@@ -215,7 +216,7 @@ later puzzle-difficulty calibration work.
 Module: parent-removal helpers.
 Role: safely detach widgets from common GTK containers (box, grid, overlay, paned, stack) before dropping the last
 reference to avoid GTK4 dispose-time criticals.
-Collaborates with: `GCheckersWindow`, `BoardView`, and SGF view helpers during disposal.
+Collaborates with: `GGameWindow`, `BoardView`, and SGF view helpers during disposal.
 
 ## Board primitives (`src/games/checkers/board.c`, `src/games/checkers/board.h`)
 Module: board storage and helpers.
@@ -245,11 +246,12 @@ before initialization.
 ## Ruleset catalog (`src/games/checkers/rulesets.c`, `src/games/checkers/rulesets.h`,
 `src/games/checkers/ruleset.h`)
 Module: ruleset metadata and presets.
-Role: central single source of truth for ruleset IDs, display names, short names (`american`, `international`,
-`russian`), UI summaries, and `CheckersRules` values in one enum-indexed table. Also exposes reverse lookup from a
-short name back to a `PlayerRuleset`.
-Collaborates with: `window.c`/`new_game_dialog.c`/`puzzle_dialog.c` for UI selection + summaries, `create_puzzles.c`
-and `create_puzzles_cli.c` for ruleset-targeted puzzle generation, and all game creators for explicit
+Role: central single source of truth for the checkers backend's ruleset IDs, display names, short names
+(`american`, `international`, `russian`), UI summaries, and `CheckersRules` values in one enum-indexed table. Shared
+code now consumes backend `GameBackendVariant` metadata instead, while `window.c` and other checkers-owned code use
+this catalog to translate variants to concrete checkers rulesets.
+Collaborates with: `window.c`, `create_puzzles.c`, and `create_puzzles_cli.c` for ruleset-targeted puzzle generation,
+and all game creators for explicit
 `game_init_with_rules()` setup.
 
 ## Game printing (`src/games/checkers/game_print.c`)
@@ -270,7 +272,7 @@ last-move caching for board overlay rendering. Exposes structured move-analysis 
 (`gcheckers_model_analyze_moves`) returning scored moves plus search stats. Also exposes `gcheckers_model_set_state()`
 to publish replayed SGF positions (for setup/property-driven nodes) into the GTK model. It now also owns a synced
 `GGameModel` mirror so shared square-grid UI can consume backend-driven state without pulling checkers headers.
-Collaborates with: `GCheckersWindow`, SGF controllers, and shared square-grid board widgets.
+Collaborates with: `GGameWindow`, SGF controllers, and shared square-grid board widgets.
 
 ## Generic AI search (`src/ai_search.c`, `src/ai_search.h`)
 Module: backend-driven alpha-beta search.
@@ -291,7 +293,7 @@ Collaborates with: `game_backend.h`, `tests/test_ai_search.c`, and the checkers 
 ## AI alpha-beta compatibility wrapper (`src/games/checkers/ai_alpha_beta.c`,
 `src/games/checkers/ai_alpha_beta.h`)
 Module: checkers-facing search compatibility.
-Role: preserve the existing `CheckersMove`, `Game`, and `CheckersAiTranspositionTable` APIs while delegating the real
+Role: preserve the existing checkers-facing `Game` and `CheckersAiTranspositionTable` APIs while delegating the real
 search work to `ai_search.c` through the checkers backend adapter.
 Collaborates with: `checkers_model.c`, `create_puzzles.c`, and other existing checkers-only callers that have not
 yet migrated to generic AI interfaces.
@@ -431,7 +433,7 @@ Collaborates with: `src/game_backend.h`, `src/games/checkers/checkers_backend.c`
 `src/games/checkers/checkers_model.c`, and `tests/test_game_model.c`.
 
 ## GTK application entry (`src/gcheckers.c`, `src/application.c`, `src/application.h`)
-Class: `GCheckersApplication` (`GtkApplication`).
+Class: `GGameApplication` (`GtkApplication`).
 Role: define the GTK application type and activation flow that creates the main window and model, installs app actions
 (`app.new-game`, `app.import`, `app.quit`), installs window game/SGF/navigation/analysis/puzzle/view actions, and
 publishes a menubar model (`File` -> `New game...`, `Import...`, `Load...`, `Save as...`, `Save position...`, `Quit`;
@@ -439,7 +441,7 @@ publishes a menubar model (`File` -> `New game...`, `Import...`, `Load...`, `Sav
 `Play puzzles`; `View` -> drawer toggles) with keyboard accelerators.
 The canonical application ID is `io.github.jeromea.gcheckers`, which is also used by the installed desktop file,
 metainfo, icon name, and GSettings schema.
-Collaborates with: `GCheckersWindow` for UI wiring and new-game dialog presentation.
+Collaborates with: `GGameWindow` for UI wiring and new-game dialog presentation.
 
 ## Board view subsystem
 
@@ -475,13 +477,13 @@ Collaborates with: `BoardGrid` and `PiecePalette`.
 Module: move overlay renderer.
 Role: draw the selected SGF node's move arrow via cairo on top of the shared square-grid board and, when the game is
 over, a centered backend-provided winner banner across the board.
-Collaborates with: `BoardView`, `GGameModel` for backend-driven board state, and `GCheckersSgfController` for the
+Collaborates with: `BoardView`, `GGameModel` for backend-driven board state, and `GGameSgfController` for the
 selected-node move.
 
 ### Selection controller (`src/board_selection_controller.c`, `src/board_selection_controller.h`)
 Module: selection path logic.
 Role: manage click-path selection and move application orchestration using backend move-path prefix callbacks rather
-than direct `CheckersMove` inspection.
+than direct checkers-move inspection.
 Collaborates with: `BoardView` and `GGameModel` for applying moves.
 
 ### Piece palette (`src/piece_palette.c`, `src/piece_palette.h`)
@@ -511,9 +513,9 @@ Collaborates with: SGF view and controller modules.
 ### SGF move properties (`src/sgf_move_props.c`, `src/sgf_move_props.h`)
 Module: SGF move property helpers.
 Role: convert between SGF move properties (`B[...]`/`W[...]`) and typed move storage supplied by the active backend.
-The current implementation still parses and formats checkers notation internally, but the public helper API no longer
-exposes `CheckersMove` in its header.
-Collaborates with: `sgf_io` and `GCheckersSgfController`.
+The current implementation still parses and formats checkers notation internally, but the public helper API now only
+accepts opaque move storage pointers.
+Collaborates with: `sgf_io` and `GGameSgfController`.
 
 ### SGF IO (`src/sgf_io.c`, `src/sgf_io.h`)
 Module: SGF load/save core.
@@ -526,7 +528,7 @@ analysis persists through custom properties:
 `GCAD[depth]`, `GCAS[nodes=...;tt_probes=...;tt_hits=...;tt_cutoffs=...]`, and repeated
 `GCAN[move:score:nodes]` for scored moves, while still accepting older `GCAN[move:score]` data when loading. This
 layer is GTK-free so it can be reused by both GUI actions and future CLI commands.
-Collaborates with: `GCheckersSgfController` load/save entry points and `tests/test_sgf_io.c`.
+Collaborates with: `GGameSgfController` load/save entry points and `tests/test_sgf_io.c`.
 
 ## Puzzle Catalog (`src/puzzle_catalog.c`, `src/puzzle_catalog.h`)
 Module: shared puzzle catalog loader.
@@ -580,4 +582,4 @@ Collaborates with: `SgfView`, the SGF tree, and the scroller.
 Module: GTK SGF file action integration.
 Role: register `win.sgf-load` and `win.sgf-save-as` actions, present `GtkFileDialog` file pickers, reopen them in the
 last remembered SGF folder, call SGF controller load/save APIs, and show errors as modal dialogs.
-Collaborates with: `GCheckersWindow` action map, `GCheckersSgfController`, and `file_dialog_history.c`.
+Collaborates with: `GGameWindow` action map, `GGameSgfController`, and `file_dialog_history.c`.

@@ -6,7 +6,7 @@
 
 #include <string.h>
 
-struct _GCheckersSgfController {
+struct _GGameSgfController {
   GObject parent_instance;
   BoardView *board_view;
   GCheckersModel *model;
@@ -15,8 +15,8 @@ struct _GCheckersSgfController {
   gboolean is_replaying;
 };
 
-static gboolean gcheckers_sgf_controller_sync_tree_ruleset_from_model(GCheckersSgfController *self) {
-  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+static gboolean ggame_sgf_controller_sync_tree_ruleset_from_model(GGameSgfController *self) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
 
   if (!GCHECKERS_IS_MODEL(self->model) || !SGF_IS_TREE(self->sgf_tree)) {
     return TRUE;
@@ -45,7 +45,7 @@ static gboolean gcheckers_sgf_controller_sync_tree_ruleset_from_model(GCheckersS
   return sgf_io_tree_set_variant(self->sgf_tree, variant);
 }
 
-G_DEFINE_TYPE(GCheckersSgfController, gcheckers_sgf_controller, G_TYPE_OBJECT)
+G_DEFINE_TYPE(GGameSgfController, ggame_sgf_controller, G_TYPE_OBJECT)
 
 enum {
   SIGNAL_NODE_CHANGED,
@@ -55,14 +55,14 @@ enum {
 
 static guint controller_signals[SIGNAL_LAST] = {0};
 
-static void gcheckers_sgf_controller_emit_node_changed(GCheckersSgfController *self, const SgfNode *node) {
-  g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self));
+static void ggame_sgf_controller_emit_node_changed(GGameSgfController *self, const SgfNode *node) {
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self));
   g_return_if_fail(node != NULL);
 
   g_signal_emit(self, controller_signals[SIGNAL_NODE_CHANGED], 0, node);
 }
 
-static gboolean gcheckers_sgf_controller_moves_equal(const CheckersMove *left, const CheckersMove *right) {
+static gboolean ggame_sgf_controller_moves_equal(const CheckersMove *left, const CheckersMove *right) {
   g_return_val_if_fail(left != NULL, FALSE);
   g_return_val_if_fail(right != NULL, FALSE);
 
@@ -77,7 +77,7 @@ static gboolean gcheckers_sgf_controller_moves_equal(const CheckersMove *left, c
   return memcmp(left->path, right->path, left->length * sizeof(left->path[0])) == 0;
 }
 
-static SgfColor gcheckers_sgf_controller_color_from_turn(CheckersColor color) {
+static SgfColor ggame_sgf_controller_color_from_turn(CheckersColor color) {
   switch (color) {
     case CHECKERS_COLOR_BLACK:
       return SGF_COLOR_BLACK;
@@ -88,13 +88,13 @@ static SgfColor gcheckers_sgf_controller_color_from_turn(CheckersColor color) {
   }
 }
 
-static void gcheckers_sgf_controller_disconnect_model(GCheckersSgfController *self) {
-  g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self));
+static void ggame_sgf_controller_disconnect_model(GGameSgfController *self) {
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self));
 
   g_clear_object(&self->model);
 }
 
-static gboolean gcheckers_sgf_controller_parse_setup_point(const char *value,
+static gboolean ggame_sgf_controller_parse_setup_point(const char *value,
                                                            guint8 board_size,
                                                            guint8 *out_square,
                                                            GError **error) {
@@ -140,7 +140,7 @@ static gboolean gcheckers_sgf_controller_parse_setup_point(const char *value,
 
 typedef gboolean (*GCheckersSgfSetupSquareFunc)(GameState *state, guint8 square, gpointer user_data, GError **error);
 
-static gboolean gcheckers_sgf_controller_for_each_setup_square(GameState *state,
+static gboolean ggame_sgf_controller_for_each_setup_square(GameState *state,
                                                                const char *value,
                                                                GCheckersSgfSetupSquareFunc func,
                                                                gpointer user_data,
@@ -152,7 +152,7 @@ static gboolean gcheckers_sgf_controller_for_each_setup_square(GameState *state,
   const char *range_sep = strchr(value, ':');
   if (range_sep == NULL) {
     guint8 square = 0;
-    if (!gcheckers_sgf_controller_parse_setup_point(value, state->board.board_size, &square, error)) {
+    if (!ggame_sgf_controller_parse_setup_point(value, state->board.board_size, &square, error)) {
       return FALSE;
     }
     return func(state, square, user_data, error);
@@ -162,8 +162,8 @@ static gboolean gcheckers_sgf_controller_for_each_setup_square(GameState *state,
   g_autofree char *end_text = g_strdup(range_sep + 1);
   guint8 start_square = 0;
   guint8 end_square = 0;
-  if (!gcheckers_sgf_controller_parse_setup_point(start_text, state->board.board_size, &start_square, error) ||
-      !gcheckers_sgf_controller_parse_setup_point(end_text, state->board.board_size, &end_square, error)) {
+  if (!ggame_sgf_controller_parse_setup_point(start_text, state->board.board_size, &start_square, error) ||
+      !ggame_sgf_controller_parse_setup_point(end_text, state->board.board_size, &end_square, error)) {
     return FALSE;
   }
 
@@ -192,7 +192,7 @@ static gboolean gcheckers_sgf_controller_for_each_setup_square(GameState *state,
   return TRUE;
 }
 
-static gboolean gcheckers_sgf_controller_set_square_piece(GameState *state,
+static gboolean ggame_sgf_controller_set_square_piece(GameState *state,
                                                           guint8 square,
                                                           gpointer user_data,
                                                           GError ** /*error*/) {
@@ -201,7 +201,7 @@ static gboolean gcheckers_sgf_controller_set_square_piece(GameState *state,
   return TRUE;
 }
 
-static gboolean gcheckers_sgf_controller_apply_setup_values(GameState *state,
+static gboolean ggame_sgf_controller_apply_setup_values(GameState *state,
                                                             const GPtrArray *values,
                                                             CheckersPiece piece,
                                                             GError **error) {
@@ -214,9 +214,9 @@ static gboolean gcheckers_sgf_controller_apply_setup_values(GameState *state,
   for (guint i = 0; i < values->len; ++i) {
     const char *value = g_ptr_array_index((GPtrArray *)values, i);
     g_return_val_if_fail(value != NULL, FALSE);
-    if (!gcheckers_sgf_controller_for_each_setup_square(state,
+    if (!ggame_sgf_controller_for_each_setup_square(state,
                                                         value,
-                                                        gcheckers_sgf_controller_set_square_piece,
+                                                        ggame_sgf_controller_set_square_piece,
                                                         GINT_TO_POINTER(piece),
                                                         error)) {
       return FALSE;
@@ -231,7 +231,7 @@ typedef struct {
   const char *ident;
 } GCheckersSgfKingSetupContext;
 
-static gboolean gcheckers_sgf_controller_set_square_king(GameState *state,
+static gboolean ggame_sgf_controller_set_square_king(GameState *state,
                                                          guint8 square,
                                                          gpointer user_data,
                                                          GError **error) {
@@ -253,7 +253,7 @@ static gboolean gcheckers_sgf_controller_set_square_king(GameState *state,
   return TRUE;
 }
 
-static gboolean gcheckers_sgf_controller_apply_king_setup_values(GameState *state,
+static gboolean ggame_sgf_controller_apply_king_setup_values(GameState *state,
                                                                  const GPtrArray *values,
                                                                  CheckersColor color,
                                                                  CheckersPiece king_piece,
@@ -274,9 +274,9 @@ static gboolean gcheckers_sgf_controller_apply_king_setup_values(GameState *stat
   for (guint i = 0; i < values->len; ++i) {
     const char *value = g_ptr_array_index((GPtrArray *)values, i);
     g_return_val_if_fail(value != NULL, FALSE);
-    if (!gcheckers_sgf_controller_for_each_setup_square(state,
+    if (!ggame_sgf_controller_for_each_setup_square(state,
                                                         value,
-                                                        gcheckers_sgf_controller_set_square_king,
+                                                        ggame_sgf_controller_set_square_king,
                                                         &context,
                                                         error)) {
       return FALSE;
@@ -285,7 +285,7 @@ static gboolean gcheckers_sgf_controller_apply_king_setup_values(GameState *stat
   return TRUE;
 }
 
-static gboolean gcheckers_sgf_controller_apply_setup_node(GameState *state, const SgfNode *node, GError **error) {
+static gboolean ggame_sgf_controller_apply_setup_node(GameState *state, const SgfNode *node, GError **error) {
   g_return_val_if_fail(state != NULL, FALSE);
   g_return_val_if_fail(node != NULL, FALSE);
 
@@ -296,16 +296,16 @@ static gboolean gcheckers_sgf_controller_apply_setup_node(GameState *state, cons
   const GPtrArray *awk_values = sgf_node_get_property_values(node, "AWK");
   const char *pl = sgf_node_get_property_first(node, "PL");
 
-  if (!gcheckers_sgf_controller_apply_setup_values(state, ae_values, CHECKERS_PIECE_EMPTY, error) ||
-      !gcheckers_sgf_controller_apply_setup_values(state, ab_values, CHECKERS_PIECE_BLACK_MAN, error) ||
-      !gcheckers_sgf_controller_apply_setup_values(state, aw_values, CHECKERS_PIECE_WHITE_MAN, error) ||
-      !gcheckers_sgf_controller_apply_king_setup_values(state,
+  if (!ggame_sgf_controller_apply_setup_values(state, ae_values, CHECKERS_PIECE_EMPTY, error) ||
+      !ggame_sgf_controller_apply_setup_values(state, ab_values, CHECKERS_PIECE_BLACK_MAN, error) ||
+      !ggame_sgf_controller_apply_setup_values(state, aw_values, CHECKERS_PIECE_WHITE_MAN, error) ||
+      !ggame_sgf_controller_apply_king_setup_values(state,
                                                         abk_values,
                                                         CHECKERS_COLOR_BLACK,
                                                         CHECKERS_PIECE_BLACK_KING,
                                                         "ABK",
                                                         error) ||
-      !gcheckers_sgf_controller_apply_king_setup_values(state,
+      !ggame_sgf_controller_apply_king_setup_values(state,
                                                         awk_values,
                                                         CHECKERS_COLOR_WHITE,
                                                         CHECKERS_PIECE_WHITE_KING,
@@ -334,7 +334,7 @@ static gboolean gcheckers_sgf_controller_apply_setup_node(GameState *state, cons
   return TRUE;
 }
 
-static gboolean gcheckers_sgf_controller_format_setup_point(uint8_t index,
+static gboolean ggame_sgf_controller_format_setup_point(uint8_t index,
                                                             uint8_t board_size,
                                                             char out_point[3]) {
   g_return_val_if_fail(out_point != NULL, FALSE);
@@ -353,7 +353,7 @@ static gboolean gcheckers_sgf_controller_format_setup_point(uint8_t index,
   return TRUE;
 }
 
-static char *gcheckers_sgf_controller_escape_prop_value(const char *value) {
+static char *ggame_sgf_controller_escape_prop_value(const char *value) {
   g_return_val_if_fail(value != NULL, NULL);
 
   GString *escaped = g_string_new(NULL);
@@ -366,7 +366,7 @@ static char *gcheckers_sgf_controller_escape_prop_value(const char *value) {
   return g_string_free(escaped, FALSE);
 }
 
-static gboolean gcheckers_sgf_controller_append_prop_values(GString *content,
+static gboolean ggame_sgf_controller_append_prop_values(GString *content,
                                                             const char *ident,
                                                             GPtrArray *values,
                                                             GError **error) {
@@ -382,7 +382,7 @@ static gboolean gcheckers_sgf_controller_append_prop_values(GString *content,
   for (guint i = 0; i < values->len; ++i) {
     const char *value = g_ptr_array_index(values, i);
     g_return_val_if_fail(value != NULL, FALSE);
-    g_autofree char *escaped = gcheckers_sgf_controller_escape_prop_value(value);
+    g_autofree char *escaped = ggame_sgf_controller_escape_prop_value(value);
     if (escaped == NULL) {
       g_set_error_literal(error,
                           g_quark_from_static_string("gcheckers-sgf-controller-error"),
@@ -396,7 +396,7 @@ static gboolean gcheckers_sgf_controller_append_prop_values(GString *content,
   return TRUE;
 }
 
-static gboolean gcheckers_sgf_controller_extract_node_move(const SgfNode *node,
+static gboolean ggame_sgf_controller_extract_node_move(const SgfNode *node,
                                                            CheckersMove *move,
                                                            gboolean *has_move) {
   g_return_val_if_fail(node != NULL, FALSE);
@@ -415,7 +415,7 @@ static gboolean gcheckers_sgf_controller_extract_node_move(const SgfNode *node,
   return TRUE;
 }
 
-static GPtrArray *gcheckers_sgf_controller_build_node_path(const SgfNode *node) {
+static GPtrArray *ggame_sgf_controller_build_node_path(const SgfNode *node) {
   g_return_val_if_fail(node != NULL, NULL);
 
   GPtrArray *path = g_ptr_array_new();
@@ -434,11 +434,11 @@ static GPtrArray *gcheckers_sgf_controller_build_node_path(const SgfNode *node) 
   return path;
 }
 
-gboolean gcheckers_sgf_controller_replay_node_into_game(const SgfNode *node, Game *game, GError **error) {
+gboolean ggame_sgf_controller_replay_node_into_game(const SgfNode *node, Game *game, GError **error) {
   g_return_val_if_fail(node != NULL, FALSE);
   g_return_val_if_fail(game != NULL, FALSE);
 
-  g_autoptr(GPtrArray) path = gcheckers_sgf_controller_build_node_path(node);
+  g_autoptr(GPtrArray) path = ggame_sgf_controller_build_node_path(node);
   if (path == NULL) {
     g_set_error_literal(error,
                         g_quark_from_static_string("gcheckers-sgf-controller-error"),
@@ -450,14 +450,14 @@ gboolean gcheckers_sgf_controller_replay_node_into_game(const SgfNode *node, Gam
   for (guint i = 0; i < path->len; ++i) {
     const SgfNode *step = g_ptr_array_index(path, i);
     g_autoptr(GError) setup_error = NULL;
-    if (!gcheckers_sgf_controller_apply_setup_node(&game->state, step, &setup_error)) {
+    if (!ggame_sgf_controller_apply_setup_node(&game->state, step, &setup_error)) {
       g_propagate_error(error, g_steal_pointer(&setup_error));
       return FALSE;
     }
 
     CheckersMove move = {0};
     gboolean has_move = FALSE;
-    if (!gcheckers_sgf_controller_extract_node_move(step, &move, &has_move)) {
+    if (!ggame_sgf_controller_extract_node_move(step, &move, &has_move)) {
       g_set_error(error,
                   g_quark_from_static_string("gcheckers-sgf-controller-error"),
                   13,
@@ -482,8 +482,8 @@ gboolean gcheckers_sgf_controller_replay_node_into_game(const SgfNode *node, Gam
   return TRUE;
 }
 
-static gboolean gcheckers_sgf_controller_replay_to_node(GCheckersSgfController *self, const SgfNode *node) {
-  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+static gboolean ggame_sgf_controller_replay_to_node(GGameSgfController *self, const SgfNode *node) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(GCHECKERS_IS_MODEL(self->model), FALSE);
   g_return_val_if_fail(node != NULL, FALSE);
 
@@ -500,7 +500,7 @@ static gboolean gcheckers_sgf_controller_replay_to_node(GCheckersSgfController *
   }
 
   g_autoptr(GError) replay_error = NULL;
-  if (!gcheckers_sgf_controller_replay_node_into_game(node, &game, &replay_error)) {
+  if (!ggame_sgf_controller_replay_node_into_game(node, &game, &replay_error)) {
     g_debug("Failed to replay SGF node %u: %s",
             sgf_node_get_move_number(node),
             replay_error != NULL ? replay_error->message : "unknown error");
@@ -517,10 +517,10 @@ static gboolean gcheckers_sgf_controller_replay_to_node(GCheckersSgfController *
   return success;
 }
 
-static gboolean gcheckers_sgf_controller_sync_model_for_transition(GCheckersSgfController *self,
+static gboolean ggame_sgf_controller_sync_model_for_transition(GGameSgfController *self,
                                                                    const SgfNode *previous,
                                                                    const SgfNode *target) {
-  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(GCHECKERS_IS_MODEL(self->model), FALSE);
   g_return_val_if_fail(target != NULL, FALSE);
 
@@ -531,11 +531,11 @@ static gboolean gcheckers_sgf_controller_sync_model_for_transition(GCheckersSgfC
   if (previous && sgf_node_get_parent(target) == previous) {
     CheckersMove move = {0};
     gboolean has_move = FALSE;
-    if (!gcheckers_sgf_controller_extract_node_move(target, &move, &has_move)) {
+    if (!ggame_sgf_controller_extract_node_move(target, &move, &has_move)) {
       return FALSE;
     }
     if (!has_move) {
-      return gcheckers_sgf_controller_replay_to_node(self, target);
+      return ggame_sgf_controller_replay_to_node(self, target);
     }
 
     if (!gcheckers_model_apply_move(self->model, &move)) {
@@ -546,11 +546,11 @@ static gboolean gcheckers_sgf_controller_sync_model_for_transition(GCheckersSgfC
     return TRUE;
   }
 
-  return gcheckers_sgf_controller_replay_to_node(self, target);
+  return ggame_sgf_controller_replay_to_node(self, target);
 }
 
-static gboolean gcheckers_sgf_controller_move_current(GCheckersSgfController *self, const SgfNode *node) {
-  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+static gboolean ggame_sgf_controller_move_current(GGameSgfController *self, const SgfNode *node) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(SGF_IS_TREE(self->sgf_tree), FALSE);
   g_return_val_if_fail(node != NULL, FALSE);
 
@@ -562,23 +562,23 @@ static gboolean gcheckers_sgf_controller_move_current(GCheckersSgfController *se
 
   if (!self->model) {
     if (previous != node) {
-      gcheckers_sgf_controller_emit_node_changed(self, node);
+      ggame_sgf_controller_emit_node_changed(self, node);
     }
     return TRUE;
   }
 
-  gboolean ok = gcheckers_sgf_controller_sync_model_for_transition(self, previous, node);
+  gboolean ok = ggame_sgf_controller_sync_model_for_transition(self, previous, node);
   if (ok && previous != node) {
-    gcheckers_sgf_controller_emit_node_changed(self, node);
+    ggame_sgf_controller_emit_node_changed(self, node);
   }
   return ok;
 }
 
-static gboolean gcheckers_sgf_controller_navigate_to(GCheckersSgfController *self, const SgfNode *node) {
-  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+static gboolean ggame_sgf_controller_navigate_to(GGameSgfController *self, const SgfNode *node) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(node != NULL, FALSE);
 
-  if (!gcheckers_sgf_controller_move_current(self, node)) {
+  if (!ggame_sgf_controller_move_current(self, node)) {
     return FALSE;
   }
 
@@ -587,15 +587,15 @@ static gboolean gcheckers_sgf_controller_navigate_to(GCheckersSgfController *sel
   return TRUE;
 }
 
-static void gcheckers_sgf_controller_on_node_selected(SgfView * /*view*/,
+static void ggame_sgf_controller_on_node_selected(SgfView * /*view*/,
                                                       const SgfNode *node,
                                                       gpointer user_data) {
-  GCheckersSgfController *self = GCHECKERS_SGF_CONTROLLER(user_data);
+  GGameSgfController *self = GGAME_SGF_CONTROLLER(user_data);
 
-  g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self));
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self));
   g_return_if_fail(node != NULL);
 
-  if (!gcheckers_sgf_controller_move_current(self, node)) {
+  if (!ggame_sgf_controller_move_current(self, node)) {
     return;
   }
 
@@ -603,21 +603,21 @@ static void gcheckers_sgf_controller_on_node_selected(SgfView * /*view*/,
   sgf_view_set_selected(self->sgf_view, node);
 }
 
-static void gcheckers_sgf_controller_dispose(GObject *object) {
-  GCheckersSgfController *self = GCHECKERS_SGF_CONTROLLER(object);
+static void ggame_sgf_controller_dispose(GObject *object) {
+  GGameSgfController *self = GGAME_SGF_CONTROLLER(object);
 
-  gcheckers_sgf_controller_disconnect_model(self);
+  ggame_sgf_controller_disconnect_model(self);
   g_clear_object(&self->board_view);
   g_clear_object(&self->sgf_view);
   g_clear_object(&self->sgf_tree);
 
-  G_OBJECT_CLASS(gcheckers_sgf_controller_parent_class)->dispose(object);
+  G_OBJECT_CLASS(ggame_sgf_controller_parent_class)->dispose(object);
 }
 
-static void gcheckers_sgf_controller_class_init(GCheckersSgfControllerClass *klass) {
+static void ggame_sgf_controller_class_init(GGameSgfControllerClass *klass) {
   GObjectClass *object_class = G_OBJECT_CLASS(klass);
 
-  object_class->dispose = gcheckers_sgf_controller_dispose;
+  object_class->dispose = ggame_sgf_controller_dispose;
 
   controller_signals[SIGNAL_NODE_CHANGED] = g_signal_new("node-changed",
                                                          G_TYPE_FROM_CLASS(klass),
@@ -642,43 +642,43 @@ static void gcheckers_sgf_controller_class_init(GCheckersSgfControllerClass *kla
                                                                G_TYPE_POINTER);
 }
 
-static void gcheckers_sgf_controller_init(GCheckersSgfController *self) {
+static void ggame_sgf_controller_init(GGameSgfController *self) {
   self->sgf_tree = sgf_tree_new();
   self->sgf_view = sgf_view_new();
   sgf_view_set_tree(self->sgf_view, self->sgf_tree);
   g_signal_connect(self->sgf_view,
                    "node-selected",
-                   G_CALLBACK(gcheckers_sgf_controller_on_node_selected),
+                   G_CALLBACK(ggame_sgf_controller_on_node_selected),
                    self);
 
   self->is_replaying = FALSE;
 }
 
-GCheckersSgfController *gcheckers_sgf_controller_new(BoardView *board_view) {
+GGameSgfController *ggame_sgf_controller_new(BoardView *board_view) {
   g_return_val_if_fail(BOARD_IS_VIEW(board_view), NULL);
 
-  GCheckersSgfController *self = g_object_new(GCHECKERS_TYPE_SGF_CONTROLLER, NULL);
+  GGameSgfController *self = g_object_new(GGAME_TYPE_SGF_CONTROLLER, NULL);
   self->board_view = g_object_ref(board_view);
   return self;
 }
 
-void gcheckers_sgf_controller_set_model(GCheckersSgfController *self, GCheckersModel *model) {
-  g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self));
+void ggame_sgf_controller_set_model(GGameSgfController *self, GCheckersModel *model) {
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self));
   g_return_if_fail(GCHECKERS_IS_MODEL(model));
 
   if (self->model == model) {
     return;
   }
 
-  gcheckers_sgf_controller_disconnect_model(self);
+  ggame_sgf_controller_disconnect_model(self);
   self->model = g_object_ref(model);
 }
 
-void gcheckers_sgf_controller_new_game(GCheckersSgfController *self) {
-  g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self));
+void ggame_sgf_controller_new_game(GGameSgfController *self) {
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self));
 
   sgf_tree_reset(self->sgf_tree);
-  if (!gcheckers_sgf_controller_sync_tree_ruleset_from_model(self)) {
+  if (!ggame_sgf_controller_sync_tree_ruleset_from_model(self)) {
     g_debug("Failed to stamp SGF RU on new game tree");
   }
   sgf_view_set_tree(self->sgf_view, self->sgf_tree);
@@ -687,19 +687,19 @@ void gcheckers_sgf_controller_new_game(GCheckersSgfController *self) {
 
   const SgfNode *root = sgf_tree_get_root(self->sgf_tree);
   if (root != NULL) {
-    gcheckers_sgf_controller_emit_node_changed(self, root);
+    ggame_sgf_controller_emit_node_changed(self, root);
   }
 }
 
-gboolean gcheckers_sgf_controller_apply_move(GCheckersSgfController *self, const CheckersMove *move) {
-  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+gboolean ggame_sgf_controller_apply_move(GGameSgfController *self, gconstpointer move) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(GCHECKERS_IS_MODEL(self->model), FALSE);
   g_return_val_if_fail(move != NULL, FALSE);
 
   MoveList moves = gcheckers_model_list_moves(self->model);
   gboolean found = FALSE;
   for (guint i = 0; i < moves.count; ++i) {
-    if (gcheckers_sgf_controller_moves_equal(&moves.moves[i], move)) {
+    if (ggame_sgf_controller_moves_equal(&moves.moves[i], move)) {
       found = TRUE;
       break;
     }
@@ -728,7 +728,7 @@ gboolean gcheckers_sgf_controller_apply_move(GCheckersSgfController *self, const
   }
 
   const SgfNode *node = sgf_tree_append_move(self->sgf_tree,
-                                             gcheckers_sgf_controller_color_from_turn(state->turn),
+                                             ggame_sgf_controller_color_from_turn(state->turn),
                                              notation);
   movelist_free(&moves);
 
@@ -742,17 +742,17 @@ gboolean gcheckers_sgf_controller_apply_move(GCheckersSgfController *self, const
     return FALSE;
   }
 
-  if (!gcheckers_sgf_controller_sync_model_for_transition(self, previous, node)) {
+  if (!ggame_sgf_controller_sync_model_for_transition(self, previous, node)) {
     return FALSE;
   }
 
-  gcheckers_sgf_controller_emit_node_changed(self, node);
+  ggame_sgf_controller_emit_node_changed(self, node);
   sgf_view_refresh(self->sgf_view);
   return TRUE;
 }
 
-gboolean gcheckers_sgf_controller_step_ai_move(GCheckersSgfController *self, guint depth, CheckersMove *out_move) {
-  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+gboolean ggame_sgf_controller_step_ai_move(GGameSgfController *self, guint depth, gpointer out_move) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(GCHECKERS_IS_MODEL(self->model), FALSE);
 
   CheckersMove move = {0};
@@ -761,16 +761,16 @@ gboolean gcheckers_sgf_controller_step_ai_move(GCheckersSgfController *self, gui
     return FALSE;
   }
 
-  gboolean applied = gcheckers_sgf_controller_apply_move(self, &move);
+  gboolean applied = ggame_sgf_controller_apply_move(self, &move);
   if (applied && out_move) {
-    *out_move = move;
+    *(CheckersMove *) out_move = move;
   }
 
   return applied;
 }
 
-gboolean gcheckers_sgf_controller_rewind_to_start(GCheckersSgfController *self) {
-  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+gboolean ggame_sgf_controller_rewind_to_start(GGameSgfController *self) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(SGF_IS_TREE(self->sgf_tree), FALSE);
 
   const SgfNode *root = sgf_tree_get_root(self->sgf_tree);
@@ -783,11 +783,11 @@ gboolean gcheckers_sgf_controller_rewind_to_start(GCheckersSgfController *self) 
     return FALSE;
   }
 
-  return gcheckers_sgf_controller_navigate_to(self, root);
+  return ggame_sgf_controller_navigate_to(self, root);
 }
 
-gboolean gcheckers_sgf_controller_step_backward(GCheckersSgfController *self) {
-  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+gboolean ggame_sgf_controller_step_backward(GGameSgfController *self) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(SGF_IS_TREE(self->sgf_tree), FALSE);
 
   const SgfNode *current = sgf_tree_get_current(self->sgf_tree);
@@ -801,11 +801,11 @@ gboolean gcheckers_sgf_controller_step_backward(GCheckersSgfController *self) {
     return FALSE;
   }
 
-  return gcheckers_sgf_controller_navigate_to(self, target);
+  return ggame_sgf_controller_navigate_to(self, target);
 }
 
-gboolean gcheckers_sgf_controller_step_forward(GCheckersSgfController *self) {
-  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+gboolean ggame_sgf_controller_step_forward(GGameSgfController *self) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(SGF_IS_TREE(self->sgf_tree), FALSE);
 
   const SgfNode *current = sgf_tree_get_current(self->sgf_tree);
@@ -821,11 +821,11 @@ gboolean gcheckers_sgf_controller_step_forward(GCheckersSgfController *self) {
 
   const SgfNode *target = g_ptr_array_index((GPtrArray *)children, 0);
   g_return_val_if_fail(target != NULL, FALSE);
-  return gcheckers_sgf_controller_navigate_to(self, target);
+  return ggame_sgf_controller_navigate_to(self, target);
 }
 
-gboolean gcheckers_sgf_controller_step_forward_to_branch(GCheckersSgfController *self) {
-  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+gboolean ggame_sgf_controller_step_forward_to_branch(GGameSgfController *self) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(SGF_IS_TREE(self->sgf_tree), FALSE);
 
   const SgfNode *cursor = sgf_tree_get_current(self->sgf_tree);
@@ -849,11 +849,11 @@ gboolean gcheckers_sgf_controller_step_forward_to_branch(GCheckersSgfController 
     return FALSE;
   }
 
-  return gcheckers_sgf_controller_navigate_to(self, cursor);
+  return ggame_sgf_controller_navigate_to(self, cursor);
 }
 
-gboolean gcheckers_sgf_controller_step_forward_to_end(GCheckersSgfController *self) {
-  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+gboolean ggame_sgf_controller_step_forward_to_end(GGameSgfController *self) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(SGF_IS_TREE(self->sgf_tree), FALSE);
 
   const SgfNode *cursor = sgf_tree_get_current(self->sgf_tree);
@@ -877,11 +877,11 @@ gboolean gcheckers_sgf_controller_step_forward_to_end(GCheckersSgfController *se
     return FALSE;
   }
 
-  return gcheckers_sgf_controller_navigate_to(self, cursor);
+  return ggame_sgf_controller_navigate_to(self, cursor);
 }
 
-gboolean gcheckers_sgf_controller_load_file(GCheckersSgfController *self, const char *path, GError **error) {
-  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+gboolean ggame_sgf_controller_load_file(GGameSgfController *self, const char *path, GError **error) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(path != NULL, FALSE);
 
   g_autoptr(SgfTree) loaded = NULL;
@@ -922,7 +922,7 @@ gboolean gcheckers_sgf_controller_load_file(GCheckersSgfController *self, const 
     }
     gcheckers_model_set_rules(self->model, rules);
 
-    if (selected == NULL || !gcheckers_sgf_controller_replay_to_node(self, selected)) {
+    if (selected == NULL || !ggame_sgf_controller_replay_to_node(self, selected)) {
       g_set_error_literal(error, g_quark_from_static_string("gcheckers-sgf-controller-error"), 1,
                           "Unable to replay loaded SGF tree");
       return FALSE;
@@ -930,21 +930,21 @@ gboolean gcheckers_sgf_controller_load_file(GCheckersSgfController *self, const 
   }
 
   if (selected != NULL) {
-    gcheckers_sgf_controller_emit_node_changed(self, selected);
+    ggame_sgf_controller_emit_node_changed(self, selected);
     g_signal_emit(self, controller_signals[SIGNAL_MANUAL_REQUESTED], 0, selected);
   }
   return TRUE;
 }
 
-gboolean gcheckers_sgf_controller_select_node(GCheckersSgfController *self, const SgfNode *node) {
-  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+gboolean ggame_sgf_controller_select_node(GGameSgfController *self, const SgfNode *node) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(node != NULL, FALSE);
 
-  return gcheckers_sgf_controller_navigate_to(self, node);
+  return ggame_sgf_controller_navigate_to(self, node);
 }
 
-gboolean gcheckers_sgf_controller_refresh_current_node(GCheckersSgfController *self) {
-  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+gboolean ggame_sgf_controller_refresh_current_node(GGameSgfController *self) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(SGF_IS_TREE(self->sgf_tree), FALSE);
   g_return_val_if_fail(GCHECKERS_IS_MODEL(self->model), FALSE);
 
@@ -954,7 +954,7 @@ gboolean gcheckers_sgf_controller_refresh_current_node(GCheckersSgfController *s
     return FALSE;
   }
 
-  if (!gcheckers_sgf_controller_replay_to_node(self, current)) {
+  if (!ggame_sgf_controller_replay_to_node(self, current)) {
     return FALSE;
   }
 
@@ -962,8 +962,8 @@ gboolean gcheckers_sgf_controller_refresh_current_node(GCheckersSgfController *s
   return TRUE;
 }
 
-gboolean gcheckers_sgf_controller_get_current_node_move(GCheckersSgfController *self, CheckersMove *out_move) {
-  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+gboolean ggame_sgf_controller_get_current_node_move(GGameSgfController *self, gpointer out_move) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(SGF_IS_TREE(self->sgf_tree), FALSE);
   g_return_val_if_fail(out_move != NULL, FALSE);
 
@@ -973,19 +973,19 @@ gboolean gcheckers_sgf_controller_get_current_node_move(GCheckersSgfController *
   }
 
   gboolean has_move = FALSE;
-  if (!gcheckers_sgf_controller_extract_node_move(current, out_move, &has_move)) {
+  if (!ggame_sgf_controller_extract_node_move(current, out_move, &has_move)) {
     return FALSE;
   }
 
   return has_move;
 }
 
-gboolean gcheckers_sgf_controller_save_file(GCheckersSgfController *self, const char *path, GError **error) {
-  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+gboolean ggame_sgf_controller_save_file(GGameSgfController *self, const char *path, GError **error) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(path != NULL, FALSE);
   g_return_val_if_fail(SGF_IS_TREE(self->sgf_tree), FALSE);
 
-  if (!gcheckers_sgf_controller_sync_tree_ruleset_from_model(self)) {
+  if (!ggame_sgf_controller_sync_tree_ruleset_from_model(self)) {
     g_set_error_literal(error,
                         g_quark_from_static_string("gcheckers-sgf-controller-error"),
                         5,
@@ -996,8 +996,8 @@ gboolean gcheckers_sgf_controller_save_file(GCheckersSgfController *self, const 
   return sgf_io_save_file(path, self->sgf_tree, error);
 }
 
-gboolean gcheckers_sgf_controller_save_position_file(GCheckersSgfController *self, const char *path, GError **error) {
-  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+gboolean ggame_sgf_controller_save_position_file(GGameSgfController *self, const char *path, GError **error) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(path != NULL, FALSE);
   g_return_val_if_fail(GCHECKERS_IS_MODEL(self->model), FALSE);
 
@@ -1046,7 +1046,7 @@ gboolean gcheckers_sgf_controller_save_position_file(GCheckersSgfController *sel
   for (guint8 i = 0; i < squares; ++i) {
     CheckersPiece piece = board_get(&state->board, i);
     char point[3] = {0};
-    if (!gcheckers_sgf_controller_format_setup_point(i, state->board.board_size, point)) {
+    if (!ggame_sgf_controller_format_setup_point(i, state->board.board_size, point)) {
       g_set_error_literal(error,
                           g_quark_from_static_string("gcheckers-sgf-controller-error"),
                           4,
@@ -1082,11 +1082,11 @@ gboolean gcheckers_sgf_controller_save_position_file(GCheckersSgfController *sel
 
   GString *content = g_string_new("(;");
   g_string_append_printf(content, "FF[4]CA[UTF-8]AP[gcheckers]GM[40]RU[%s]", ru_value);
-  if (!gcheckers_sgf_controller_append_prop_values(content, "AE", ae_values, error) ||
-      !gcheckers_sgf_controller_append_prop_values(content, "AB", ab_values, error) ||
-      !gcheckers_sgf_controller_append_prop_values(content, "AW", aw_values, error) ||
-      !gcheckers_sgf_controller_append_prop_values(content, "ABK", abk_values, error) ||
-      !gcheckers_sgf_controller_append_prop_values(content, "AWK", awk_values, error)) {
+  if (!ggame_sgf_controller_append_prop_values(content, "AE", ae_values, error) ||
+      !ggame_sgf_controller_append_prop_values(content, "AB", ab_values, error) ||
+      !ggame_sgf_controller_append_prop_values(content, "AW", aw_values, error) ||
+      !ggame_sgf_controller_append_prop_values(content, "ABK", abk_values, error) ||
+      !ggame_sgf_controller_append_prop_values(content, "AWK", awk_values, error)) {
     g_string_free(content, TRUE);
     return FALSE;
   }
@@ -1099,8 +1099,8 @@ gboolean gcheckers_sgf_controller_save_position_file(GCheckersSgfController *sel
   return written;
 }
 
-GtkWidget *gcheckers_sgf_controller_get_widget(GCheckersSgfController *self) {
-  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), NULL);
+GtkWidget *ggame_sgf_controller_get_widget(GGameSgfController *self) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), NULL);
 
   GtkWidget *widget = sgf_view_get_widget(self->sgf_view);
   if (!widget) {
@@ -1111,8 +1111,8 @@ GtkWidget *gcheckers_sgf_controller_get_widget(GCheckersSgfController *self) {
   return widget;
 }
 
-SgfTree *gcheckers_sgf_controller_get_tree(GCheckersSgfController *self) {
-  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), NULL);
+SgfTree *ggame_sgf_controller_get_tree(GGameSgfController *self) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), NULL);
 
   if (!self->sgf_tree) {
     g_debug("Missing SGF tree");
@@ -1122,8 +1122,8 @@ SgfTree *gcheckers_sgf_controller_get_tree(GCheckersSgfController *self) {
   return self->sgf_tree;
 }
 
-SgfView *gcheckers_sgf_controller_get_view(GCheckersSgfController *self) {
-  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), NULL);
+SgfView *ggame_sgf_controller_get_view(GGameSgfController *self) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), NULL);
 
   if (!self->sgf_view) {
     g_debug("Missing SGF view");
@@ -1133,14 +1133,14 @@ SgfView *gcheckers_sgf_controller_get_view(GCheckersSgfController *self) {
   return self->sgf_view;
 }
 
-gboolean gcheckers_sgf_controller_is_replaying(GCheckersSgfController *self) {
-  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self), FALSE);
+gboolean ggame_sgf_controller_is_replaying(GGameSgfController *self) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
 
   return self->is_replaying;
 }
 
-void gcheckers_sgf_controller_force_layout_resync(GCheckersSgfController *self) {
-  g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(self));
+void ggame_sgf_controller_force_layout_resync(GGameSgfController *self) {
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self));
 
   if (!self->sgf_view) {
     g_debug("Missing SGF view for layout resync");

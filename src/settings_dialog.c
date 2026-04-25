@@ -8,25 +8,25 @@
 #include "puzzle_progress.h"
 
 typedef struct {
-  GCheckersWindow *self;
+  GGameWindow *self;
   GtkWindow *dialog;
   GtkCheckButton *send_puzzle_usage_check;
   GtkCheckButton *send_application_usage_check;
   GtkLabel *puzzle_progress_label;
   GSettings *settings;
-  CheckersPuzzleProgressStore *puzzle_progress_store;
-} GCheckersWindowSettingsDialogData;
+  GGamePuzzleProgressStore *puzzle_progress_store;
+} GGameWindowSettingsDialogData;
 
-static void gcheckers_window_settings_dialog_data_free(GCheckersWindowSettingsDialogData *data) {
+static void ggame_window_settings_dialog_data_free(GGameWindowSettingsDialogData *data) {
   g_return_if_fail(data != NULL);
 
   g_clear_object(&data->settings);
-  g_clear_pointer(&data->puzzle_progress_store, checkers_puzzle_progress_store_unref);
+  g_clear_pointer(&data->puzzle_progress_store, ggame_puzzle_progress_store_unref);
   g_object_unref(data->self);
   g_free(data);
 }
 
-static gboolean gcheckers_window_settings_dialog_destroy_hidden_cb(gpointer user_data) {
+static gboolean ggame_window_settings_dialog_destroy_hidden_cb(gpointer user_data) {
   GtkWindow *dialog = user_data;
   g_return_val_if_fail(GTK_IS_WINDOW(dialog), G_SOURCE_REMOVE);
 
@@ -35,17 +35,17 @@ static gboolean gcheckers_window_settings_dialog_destroy_hidden_cb(gpointer user
   return G_SOURCE_REMOVE;
 }
 
-static void gcheckers_window_settings_dialog_close(GtkWindow *dialog) {
+static void ggame_window_settings_dialog_close(GtkWindow *dialog) {
   g_return_if_fail(GTK_IS_WINDOW(dialog));
 
   gtk_widget_set_visible(GTK_WIDGET(dialog), FALSE);
   g_idle_add_full(G_PRIORITY_LOW,
-                  gcheckers_window_settings_dialog_destroy_hidden_cb,
+                  ggame_window_settings_dialog_destroy_hidden_cb,
                   g_object_ref(dialog),
                   NULL);
 }
 
-static guint gcheckers_window_settings_dialog_count_known_puzzles(GHashTable *known_puzzle_ids) {
+static guint ggame_window_settings_dialog_count_known_puzzles(GHashTable *known_puzzle_ids) {
   g_return_val_if_fail(known_puzzle_ids != NULL, 0);
 
   guint total = 0;
@@ -79,18 +79,18 @@ static guint gcheckers_window_settings_dialog_count_known_puzzles(GHashTable *kn
   return total;
 }
 
-static void gcheckers_window_settings_dialog_update_puzzle_progress(GCheckersWindowSettingsDialogData *data) {
+static void ggame_window_settings_dialog_update_puzzle_progress(GGameWindowSettingsDialogData *data) {
   g_return_if_fail(data != NULL);
   g_return_if_fail(GTK_IS_LABEL(data->puzzle_progress_label));
 
   g_autoptr(GHashTable) known_puzzle_ids = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
-  guint total = gcheckers_window_settings_dialog_count_known_puzzles(known_puzzle_ids);
+  guint total = ggame_window_settings_dialog_count_known_puzzles(known_puzzle_ids);
   guint solved = 0;
 
   if (data->puzzle_progress_store != NULL) {
     g_autoptr(GError) error = NULL;
     g_autoptr(GHashTable) status_map =
-        checkers_puzzle_progress_store_load_status_map(data->puzzle_progress_store, &error);
+        ggame_puzzle_progress_store_load_status_map(data->puzzle_progress_store, &error);
     if (status_map == NULL) {
       g_debug("Failed to load puzzle progress for settings summary: %s",
               error != NULL ? error->message : "unknown error");
@@ -100,8 +100,8 @@ static void gcheckers_window_settings_dialog_update_puzzle_progress(GCheckersWin
       gpointer value = NULL;
       g_hash_table_iter_init(&iter, status_map);
       while (g_hash_table_iter_next(&iter, &key, &value)) {
-        CheckersPuzzleStatusEntry *entry = value;
-        if (entry != NULL && entry->status == CHECKERS_PUZZLE_STATUS_SOLVED &&
+        GGamePuzzleStatusEntry *entry = value;
+        if (entry != NULL && entry->status == GGAME_PUZZLE_STATUS_SOLVED &&
             g_hash_table_contains(known_puzzle_ids, key)) {
           solved++;
         }
@@ -113,23 +113,23 @@ static void gcheckers_window_settings_dialog_update_puzzle_progress(GCheckersWin
   gtk_label_set_text(data->puzzle_progress_label, summary);
 }
 
-static void gcheckers_window_on_settings_dialog_destroy(GtkWindow * /*dialog*/, gpointer user_data) {
-  GCheckersWindowSettingsDialogData *data = user_data;
+static void ggame_window_on_settings_dialog_destroy(GtkWindow * /*dialog*/, gpointer user_data) {
+  GGameWindowSettingsDialogData *data = user_data;
   g_return_if_fail(data != NULL);
 
-  gcheckers_window_settings_dialog_data_free(data);
+  ggame_window_settings_dialog_data_free(data);
 }
 
-static void gcheckers_window_on_settings_dialog_cancel_clicked(GtkButton * /*button*/, gpointer user_data) {
-  GCheckersWindowSettingsDialogData *data = user_data;
+static void ggame_window_on_settings_dialog_cancel_clicked(GtkButton * /*button*/, gpointer user_data) {
+  GGameWindowSettingsDialogData *data = user_data;
   g_return_if_fail(data != NULL);
   g_return_if_fail(GTK_IS_WINDOW(data->dialog));
 
-  gcheckers_window_settings_dialog_close(data->dialog);
+  ggame_window_settings_dialog_close(data->dialog);
 }
 
-static void gcheckers_window_on_settings_dialog_save_clicked(GtkButton * /*button*/, gpointer user_data) {
-  GCheckersWindowSettingsDialogData *data = user_data;
+static void ggame_window_on_settings_dialog_save_clicked(GtkButton * /*button*/, gpointer user_data) {
+  GGameWindowSettingsDialogData *data = user_data;
   g_return_if_fail(data != NULL);
   g_return_if_fail(GTK_IS_WINDOW(data->dialog));
   g_return_if_fail(GTK_IS_CHECK_BUTTON(data->send_puzzle_usage_check));
@@ -144,11 +144,11 @@ static void gcheckers_window_on_settings_dialog_save_clicked(GtkButton * /*butto
                            gtk_check_button_get_active(data->send_application_usage_check));
   }
 
-  gcheckers_window_settings_dialog_close(data->dialog);
+  ggame_window_settings_dialog_close(data->dialog);
 }
 
-static void gcheckers_window_on_settings_dialog_clear_progress_clicked(GtkButton * /*button*/, gpointer user_data) {
-  GCheckersWindowSettingsDialogData *data = user_data;
+static void ggame_window_on_settings_dialog_clear_progress_clicked(GtkButton * /*button*/, gpointer user_data) {
+  GGameWindowSettingsDialogData *data = user_data;
   g_return_if_fail(data != NULL);
 
   if (data->puzzle_progress_store == NULL) {
@@ -157,16 +157,16 @@ static void gcheckers_window_on_settings_dialog_clear_progress_clicked(GtkButton
   }
 
   g_autoptr(GError) error = NULL;
-  if (!checkers_puzzle_progress_store_clear_progress(data->puzzle_progress_store, &error)) {
+  if (!ggame_puzzle_progress_store_clear_progress(data->puzzle_progress_store, &error)) {
     g_debug("Failed to clear puzzle progress: %s", error != NULL ? error->message : "unknown error");
     return;
   }
 
-  gcheckers_window_settings_dialog_update_puzzle_progress(data);
+  ggame_window_settings_dialog_update_puzzle_progress(data);
 }
 
-void gcheckers_window_present_settings_dialog(GCheckersWindow *self) {
-  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+void ggame_window_present_settings_dialog(GGameWindow *self) {
+  g_return_if_fail(GGAME_IS_WINDOW(self));
 
   GtkWidget *dialog = gtk_window_new();
   gtk_window_set_title(GTK_WINDOW(dialog), "Settings");
@@ -231,24 +231,24 @@ void gcheckers_window_present_settings_dialog(GCheckersWindow *self) {
   gtk_box_append(GTK_BOX(actions), cancel_button);
   gtk_box_append(GTK_BOX(actions), save_button);
 
-  GCheckersWindowSettingsDialogData *data = g_new0(GCheckersWindowSettingsDialogData, 1);
+  GGameWindowSettingsDialogData *data = g_new0(GGameWindowSettingsDialogData, 1);
   data->self = g_object_ref(self);
   data->dialog = GTK_WINDOW(dialog);
   data->send_puzzle_usage_check = GTK_CHECK_BUTTON(send_puzzle_usage_check);
   data->send_application_usage_check = GTK_CHECK_BUTTON(send_application_usage_check);
   data->puzzle_progress_label = GTK_LABEL(progress_label);
-  data->settings = gcheckers_app_settings_create();
+  data->settings = ggame_app_settings_create();
 
   GtkApplication *app = gtk_window_get_application(GTK_WINDOW(self));
-  if (GCHECKERS_IS_APPLICATION(app)) {
-    CheckersPuzzleProgressStore *store = gcheckers_application_get_puzzle_progress_store(GCHECKERS_APPLICATION(app));
+  if (GGAME_IS_APPLICATION(app)) {
+    GGamePuzzleProgressStore *store = ggame_application_get_puzzle_progress_store(GGAME_APPLICATION(app));
     if (store != NULL) {
-      data->puzzle_progress_store = checkers_puzzle_progress_store_ref(store);
+      data->puzzle_progress_store = ggame_puzzle_progress_store_ref(store);
     }
   }
 
   if (G_IS_SETTINGS(data->settings)) {
-    (void)gcheckers_app_settings_mark_privacy_settings_shown(data->settings);
+    (void)ggame_app_settings_mark_privacy_settings_shown(data->settings);
     gtk_check_button_set_active(data->send_puzzle_usage_check,
                                 g_settings_get_boolean(data->settings,
                                                        GCHECKERS_APP_SETTINGS_KEY_SEND_PUZZLE_USAGE));
@@ -259,23 +259,23 @@ void gcheckers_window_present_settings_dialog(GCheckersWindow *self) {
     gtk_check_button_set_active(data->send_puzzle_usage_check, TRUE);
     gtk_check_button_set_active(data->send_application_usage_check, TRUE);
   }
-  gcheckers_window_settings_dialog_update_puzzle_progress(data);
+  ggame_window_settings_dialog_update_puzzle_progress(data);
 
   g_signal_connect(clear_progress_button,
                    "clicked",
-                   G_CALLBACK(gcheckers_window_on_settings_dialog_clear_progress_clicked),
+                   G_CALLBACK(ggame_window_on_settings_dialog_clear_progress_clicked),
                    data);
   g_signal_connect(cancel_button,
                    "clicked",
-                   G_CALLBACK(gcheckers_window_on_settings_dialog_cancel_clicked),
+                   G_CALLBACK(ggame_window_on_settings_dialog_cancel_clicked),
                    data);
   g_signal_connect(save_button,
                    "clicked",
-                   G_CALLBACK(gcheckers_window_on_settings_dialog_save_clicked),
+                   G_CALLBACK(ggame_window_on_settings_dialog_save_clicked),
                    data);
   g_signal_connect(dialog,
                    "destroy",
-                   G_CALLBACK(gcheckers_window_on_settings_dialog_destroy),
+                   G_CALLBACK(ggame_window_on_settings_dialog_destroy),
                    data);
   gtk_window_present(GTK_WINDOW(dialog));
 }

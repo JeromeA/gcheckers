@@ -10,14 +10,14 @@
 #include <glib/gstdio.h>
 #include <string.h>
 
-static void test_gcheckers_sgf_controller_skip(void) {
+static void test_ggame_sgf_controller_skip(void) {
   g_test_skip("GTK display not available.");
 }
 
-static gboolean apply_first_move(GCheckersSgfController *controller,
+static gboolean apply_first_move(GGameSgfController *controller,
                                  GCheckersModel *model,
                                  CheckersMove *out_move) {
-  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(controller), FALSE);
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(controller), FALSE);
   g_return_val_if_fail(GCHECKERS_IS_MODEL(model), FALSE);
   g_return_val_if_fail(out_move != NULL, FALSE);
 
@@ -29,7 +29,7 @@ static gboolean apply_first_move(GCheckersSgfController *controller,
   }
 
   *out_move = moves.moves[0];
-  gboolean applied = gcheckers_sgf_controller_apply_move(controller, out_move);
+  gboolean applied = ggame_sgf_controller_apply_move(controller, out_move);
   movelist_free(&moves);
   if (!applied) {
     g_debug("Failed to apply test move through SGF controller\n");
@@ -39,11 +39,11 @@ static gboolean apply_first_move(GCheckersSgfController *controller,
   return TRUE;
 }
 
-static gboolean apply_first_distinct_move(GCheckersSgfController *controller,
+static gboolean apply_first_distinct_move(GGameSgfController *controller,
                                           GCheckersModel *model,
                                           const CheckersMove *exclude,
                                           CheckersMove *out_move) {
-  g_return_val_if_fail(GCHECKERS_IS_SGF_CONTROLLER(controller), FALSE);
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(controller), FALSE);
   g_return_val_if_fail(GCHECKERS_IS_MODEL(model), FALSE);
   g_return_val_if_fail(out_move != NULL, FALSE);
 
@@ -71,7 +71,7 @@ static gboolean apply_first_distinct_move(GCheckersSgfController *controller,
     return FALSE;
   }
 
-  gboolean applied = gcheckers_sgf_controller_apply_move(controller, out_move);
+  gboolean applied = ggame_sgf_controller_apply_move(controller, out_move);
   movelist_free(&moves);
   if (!applied) {
     g_debug("Failed to apply distinct test move through SGF controller\n");
@@ -112,7 +112,7 @@ typedef struct {
   const SgfNode *last_node;
 } SgfControllerNodeChangedProbe;
 
-static void test_gcheckers_sgf_controller_on_node_changed(GCheckersSgfController * /*controller*/,
+static void test_ggame_sgf_controller_on_node_changed(GGameSgfController * /*controller*/,
                                                           const SgfNode *node,
                                                           gpointer user_data) {
   SgfControllerNodeChangedProbe *probe = user_data;
@@ -123,16 +123,16 @@ static void test_gcheckers_sgf_controller_on_node_changed(GCheckersSgfController
   probe->last_node = node;
 }
 
-static void test_gcheckers_sgf_controller_appends_move_property(void) {
+static void test_ggame_sgf_controller_appends_move_property(void) {
   BoardView *board_view = board_view_new();
   GCheckersModel *model = gcheckers_model_new();
-  GCheckersSgfController *controller = gcheckers_sgf_controller_new(board_view);
-  gcheckers_sgf_controller_set_model(controller, model);
+  GGameSgfController *controller = ggame_sgf_controller_new(board_view);
+  ggame_sgf_controller_set_model(controller, model);
 
   CheckersMove move;
   g_assert_true(apply_first_move(controller, model, &move));
 
-  SgfTree *tree = gcheckers_sgf_controller_get_tree(controller);
+  SgfTree *tree = ggame_sgf_controller_get_tree(controller);
   const SgfNode *node = sgf_tree_get_first_child(tree);
   g_assert_nonnull(node);
 
@@ -149,18 +149,18 @@ static void test_gcheckers_sgf_controller_appends_move_property(void) {
   g_clear_object(&board_view);
 }
 
-static void test_gcheckers_sgf_controller_replay_branching(void) {
+static void test_ggame_sgf_controller_replay_branching(void) {
   BoardView *board_view = board_view_new();
   GCheckersModel *model = gcheckers_model_new();
-  GCheckersSgfController *controller = gcheckers_sgf_controller_new(board_view);
-  gcheckers_sgf_controller_set_model(controller, model);
+  GGameSgfController *controller = ggame_sgf_controller_new(board_view);
+  ggame_sgf_controller_set_model(controller, model);
 
   CheckersMove move_1;
   CheckersMove move_2;
   g_assert_true(apply_first_move(controller, model, &move_1));
   g_assert_true(apply_first_move(controller, model, &move_2));
 
-  SgfTree *tree = gcheckers_sgf_controller_get_tree(controller);
+  SgfTree *tree = ggame_sgf_controller_get_tree(controller);
   const SgfNode *node_1 = sgf_tree_get_first_child(tree);
   g_assert_nonnull(node_1);
 
@@ -168,7 +168,7 @@ static void test_gcheckers_sgf_controller_replay_branching(void) {
   g_assert_nonnull(children);
   g_assert_cmpuint(children->len, ==, 1);
 
-  SgfView *view = gcheckers_sgf_controller_get_view(controller);
+  SgfView *view = ggame_sgf_controller_get_view(controller);
   g_signal_emit_by_name(view, "node-selected", node_1);
 
   const GameState *state = gcheckers_model_peek_state(model);
@@ -193,18 +193,18 @@ static void test_gcheckers_sgf_controller_replay_branching(void) {
   g_clear_object(&board_view);
 }
 
-static void test_gcheckers_sgf_controller_new_game_clears_tree(void) {
+static void test_ggame_sgf_controller_new_game_clears_tree(void) {
   BoardView *board_view = board_view_new();
   GCheckersModel *model = gcheckers_model_new();
-  GCheckersSgfController *controller = gcheckers_sgf_controller_new(board_view);
-  gcheckers_sgf_controller_set_model(controller, model);
+  GGameSgfController *controller = ggame_sgf_controller_new(board_view);
+  ggame_sgf_controller_set_model(controller, model);
 
   CheckersMove move;
   g_assert_true(apply_first_move(controller, model, &move));
 
-  gcheckers_sgf_controller_new_game(controller);
+  ggame_sgf_controller_new_game(controller);
 
-  SgfTree *tree = gcheckers_sgf_controller_get_tree(controller);
+  SgfTree *tree = ggame_sgf_controller_get_tree(controller);
   const SgfNode *root = sgf_tree_get_root(tree);
   g_assert_nonnull(root);
   const GPtrArray *children = sgf_node_get_children(root);
@@ -216,7 +216,7 @@ static void test_gcheckers_sgf_controller_new_game_clears_tree(void) {
   g_clear_object(&board_view);
 }
 
-static void on_manual_requested_count(GCheckersSgfController * /*controller*/,
+static void on_manual_requested_count(GGameSgfController * /*controller*/,
                                       const SgfNode * /*node*/,
                                       gpointer user_data) {
   guint *count = user_data;
@@ -226,11 +226,11 @@ static void on_manual_requested_count(GCheckersSgfController * /*controller*/,
   (*count)++;
 }
 
-static void test_gcheckers_sgf_controller_new_game_does_not_request_manual_mode(void) {
+static void test_ggame_sgf_controller_new_game_does_not_request_manual_mode(void) {
   BoardView *board_view = board_view_new();
   GCheckersModel *model = gcheckers_model_new();
-  GCheckersSgfController *controller = gcheckers_sgf_controller_new(board_view);
-  gcheckers_sgf_controller_set_model(controller, model);
+  GGameSgfController *controller = ggame_sgf_controller_new(board_view);
+  ggame_sgf_controller_set_model(controller, model);
 
   guint manual_requested_count = 0;
   g_signal_connect(controller, "manual-requested", G_CALLBACK(on_manual_requested_count), &manual_requested_count);
@@ -238,7 +238,7 @@ static void test_gcheckers_sgf_controller_new_game_does_not_request_manual_mode(
   CheckersMove move;
   g_assert_true(apply_first_move(controller, model, &move));
 
-  gcheckers_sgf_controller_new_game(controller);
+  ggame_sgf_controller_new_game(controller);
 
   g_assert_cmpuint(manual_requested_count, ==, 0);
 
@@ -247,18 +247,18 @@ static void test_gcheckers_sgf_controller_new_game_does_not_request_manual_mode(
   g_clear_object(&board_view);
 }
 
-static void test_gcheckers_sgf_controller_step_ai_move(void) {
+static void test_ggame_sgf_controller_step_ai_move(void) {
   BoardView *board_view = board_view_new();
   GCheckersModel *model = gcheckers_model_new();
-  GCheckersSgfController *controller = gcheckers_sgf_controller_new(board_view);
-  gcheckers_sgf_controller_set_model(controller, model);
+  GGameSgfController *controller = ggame_sgf_controller_new(board_view);
+  ggame_sgf_controller_set_model(controller, model);
 
   CheckersMove move = {0};
-  gboolean applied = gcheckers_sgf_controller_step_ai_move(controller, 4, &move);
+  gboolean applied = ggame_sgf_controller_step_ai_move(controller, 4, &move);
   g_assert_true(applied);
   g_assert_cmpuint(move.length, >=, 2);
 
-  SgfTree *tree = gcheckers_sgf_controller_get_tree(controller);
+  SgfTree *tree = ggame_sgf_controller_get_tree(controller);
   const SgfNode *node = sgf_tree_get_current(tree);
   g_assert_nonnull(node);
   g_assert_cmpuint(sgf_node_get_move_number(node), ==, 1);
@@ -268,26 +268,26 @@ static void test_gcheckers_sgf_controller_step_ai_move(void) {
   g_clear_object(&board_view);
 }
 
-static void test_gcheckers_sgf_controller_navigation_step_and_rewind(void) {
+static void test_ggame_sgf_controller_navigation_step_and_rewind(void) {
   BoardView *board_view = board_view_new();
   GCheckersModel *model = gcheckers_model_new();
-  GCheckersSgfController *controller = gcheckers_sgf_controller_new(board_view);
-  gcheckers_sgf_controller_set_model(controller, model);
+  GGameSgfController *controller = ggame_sgf_controller_new(board_view);
+  ggame_sgf_controller_set_model(controller, model);
 
   CheckersMove move = {0};
   g_assert_true(apply_first_move(controller, model, &move));
   g_assert_true(apply_first_move(controller, model, &move));
 
-  SgfTree *tree = gcheckers_sgf_controller_get_tree(controller);
+  SgfTree *tree = ggame_sgf_controller_get_tree(controller);
   g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 2);
 
-  g_assert_true(gcheckers_sgf_controller_step_backward(controller));
+  g_assert_true(ggame_sgf_controller_step_backward(controller));
   g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 1);
 
-  g_assert_true(gcheckers_sgf_controller_step_forward(controller));
+  g_assert_true(ggame_sgf_controller_step_forward(controller));
   g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 2);
 
-  g_assert_true(gcheckers_sgf_controller_rewind_to_start(controller));
+  g_assert_true(ggame_sgf_controller_rewind_to_start(controller));
   g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 0);
 
   const GameState *state = gcheckers_model_peek_state(model);
@@ -299,26 +299,26 @@ static void test_gcheckers_sgf_controller_navigation_step_and_rewind(void) {
   g_clear_object(&board_view);
 }
 
-static void test_gcheckers_sgf_controller_current_node_move_accessor(void) {
+static void test_ggame_sgf_controller_current_node_move_accessor(void) {
   BoardView *board_view = board_view_new();
   GCheckersModel *model = gcheckers_model_new();
-  GCheckersSgfController *controller = gcheckers_sgf_controller_new(board_view);
-  gcheckers_sgf_controller_set_model(controller, model);
+  GGameSgfController *controller = ggame_sgf_controller_new(board_view);
+  ggame_sgf_controller_set_model(controller, model);
   board_view_set_sgf_controller(board_view, controller);
 
   CheckersMove move = {0};
-  g_assert_false(gcheckers_sgf_controller_get_current_node_move(controller, &move));
+  g_assert_false(ggame_sgf_controller_get_current_node_move(controller, &move));
 
   CheckersMove first_move = {0};
   g_assert_true(apply_first_move(controller, model, &first_move));
-  g_assert_true(gcheckers_sgf_controller_get_current_node_move(controller, &move));
+  g_assert_true(ggame_sgf_controller_get_current_node_move(controller, &move));
   g_assert_true(memcmp(&move, &first_move, sizeof(move)) == 0);
 
-  g_assert_true(gcheckers_sgf_controller_rewind_to_start(controller));
-  g_assert_false(gcheckers_sgf_controller_get_current_node_move(controller, &move));
+  g_assert_true(ggame_sgf_controller_rewind_to_start(controller));
+  g_assert_false(ggame_sgf_controller_get_current_node_move(controller, &move));
 
-  g_assert_true(gcheckers_sgf_controller_step_forward(controller));
-  g_assert_true(gcheckers_sgf_controller_get_current_node_move(controller, &move));
+  g_assert_true(ggame_sgf_controller_step_forward(controller));
+  g_assert_true(ggame_sgf_controller_get_current_node_move(controller, &move));
   g_assert_true(memcmp(&move, &first_move, sizeof(move)) == 0);
 
   g_clear_object(&controller);
@@ -326,22 +326,22 @@ static void test_gcheckers_sgf_controller_current_node_move_accessor(void) {
   g_clear_object(&board_view);
 }
 
-static void test_gcheckers_sgf_controller_navigation_forward_to_branch_and_end(void) {
+static void test_ggame_sgf_controller_navigation_forward_to_branch_and_end(void) {
   BoardView *board_view = board_view_new();
   GCheckersModel *model = gcheckers_model_new();
-  GCheckersSgfController *controller = gcheckers_sgf_controller_new(board_view);
-  gcheckers_sgf_controller_set_model(controller, model);
+  GGameSgfController *controller = ggame_sgf_controller_new(board_view);
+  ggame_sgf_controller_set_model(controller, model);
 
   CheckersMove move_1 = {0};
   CheckersMove move_2 = {0};
   g_assert_true(apply_first_move(controller, model, &move_1));
   g_assert_true(apply_first_move(controller, model, &move_2));
 
-  SgfTree *tree = gcheckers_sgf_controller_get_tree(controller);
+  SgfTree *tree = ggame_sgf_controller_get_tree(controller);
   const SgfNode *node_1 = sgf_tree_get_first_child(tree);
   g_assert_nonnull(node_1);
 
-  SgfView *view = gcheckers_sgf_controller_get_view(controller);
+  SgfView *view = ggame_sgf_controller_get_view(controller);
   g_signal_emit_by_name(view, "node-selected", node_1);
 
   CheckersMove branch_move = {0};
@@ -358,11 +358,11 @@ static void test_gcheckers_sgf_controller_navigation_forward_to_branch_and_end(v
   g_signal_emit_by_name(view, "node-selected", main_child);
   g_assert_true(apply_first_move(controller, model, &move_2));
 
-  g_assert_true(gcheckers_sgf_controller_rewind_to_start(controller));
-  g_assert_true(gcheckers_sgf_controller_step_forward_to_branch(controller));
+  g_assert_true(ggame_sgf_controller_rewind_to_start(controller));
+  g_assert_true(ggame_sgf_controller_step_forward_to_branch(controller));
   g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 1);
 
-  g_assert_true(gcheckers_sgf_controller_step_forward_to_end(controller));
+  g_assert_true(ggame_sgf_controller_step_forward_to_end(controller));
   g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 3);
 
   g_clear_object(&controller);
@@ -370,17 +370,17 @@ static void test_gcheckers_sgf_controller_navigation_forward_to_branch_and_end(v
   g_clear_object(&board_view);
 }
 
-static void test_gcheckers_sgf_controller_select_node_emits_node_changed(void) {
+static void test_ggame_sgf_controller_select_node_emits_node_changed(void) {
   BoardView *board_view = board_view_new();
   GCheckersModel *model = gcheckers_model_new();
-  GCheckersSgfController *controller = gcheckers_sgf_controller_new(board_view);
-  gcheckers_sgf_controller_set_model(controller, model);
+  GGameSgfController *controller = ggame_sgf_controller_new(board_view);
+  ggame_sgf_controller_set_model(controller, model);
 
   CheckersMove move = {0};
   g_assert_true(apply_first_move(controller, model, &move));
   g_assert_true(apply_first_move(controller, model, &move));
 
-  SgfTree *tree = gcheckers_sgf_controller_get_tree(controller);
+  SgfTree *tree = ggame_sgf_controller_get_tree(controller);
   g_assert_nonnull(tree);
   const SgfNode *root = sgf_tree_get_root(tree);
   g_assert_nonnull(root);
@@ -388,10 +388,10 @@ static void test_gcheckers_sgf_controller_select_node_emits_node_changed(void) {
   SgfControllerNodeChangedProbe probe = {0};
   g_signal_connect(controller,
                    "node-changed",
-                   G_CALLBACK(test_gcheckers_sgf_controller_on_node_changed),
+                   G_CALLBACK(test_ggame_sgf_controller_on_node_changed),
                    &probe);
 
-  g_assert_true(gcheckers_sgf_controller_select_node(controller, root));
+  g_assert_true(ggame_sgf_controller_select_node(controller, root));
   g_assert_cmpuint(probe.count, ==, 1);
   g_assert_true(probe.last_node == root);
   g_assert_true(sgf_tree_get_current(tree) == root);
@@ -401,11 +401,11 @@ static void test_gcheckers_sgf_controller_select_node_emits_node_changed(void) {
   g_clear_object(&board_view);
 }
 
-static void test_gcheckers_sgf_controller_load_applies_setup_properties(void) {
+static void test_ggame_sgf_controller_load_applies_setup_properties(void) {
   BoardView *board_view = board_view_new();
   GCheckersModel *model = gcheckers_model_new();
-  GCheckersSgfController *controller = gcheckers_sgf_controller_new(board_view);
-  gcheckers_sgf_controller_set_model(controller, model);
+  GGameSgfController *controller = ggame_sgf_controller_new(board_view);
+  ggame_sgf_controller_set_model(controller, model);
 
   const char *content =
       "(;FF[4]CA[UTF-8]AP[gcheckers]GM[40]RU[international]AE[af]AB[af]ABK[af]PL[B];AE[af]AW[af]AWK[af]PL[W])";
@@ -414,7 +414,7 @@ static void test_gcheckers_sgf_controller_load_applies_setup_properties(void) {
   g_assert_true(g_file_set_contents(path, content, -1, NULL));
 
   g_autoptr(GError) error = NULL;
-  g_assert_true(gcheckers_sgf_controller_load_file(controller, path, &error));
+  g_assert_true(ggame_sgf_controller_load_file(controller, path, &error));
   g_assert_no_error(error);
 
   const GameState *state = gcheckers_model_peek_state(model);
@@ -424,7 +424,7 @@ static void test_gcheckers_sgf_controller_load_applies_setup_properties(void) {
   g_assert_cmpuint(state->turn, ==, CHECKERS_COLOR_BLACK);
   g_assert_cmpint(board_get(&state->board, (guint8)setup_index), ==, CHECKERS_PIECE_BLACK_KING);
 
-  g_assert_true(gcheckers_sgf_controller_step_forward(controller));
+  g_assert_true(ggame_sgf_controller_step_forward(controller));
   state = gcheckers_model_peek_state(model);
   g_assert_nonnull(state);
   g_assert_cmpuint(state->turn, ==, CHECKERS_COLOR_WHITE);
@@ -437,18 +437,18 @@ static void test_gcheckers_sgf_controller_load_applies_setup_properties(void) {
   g_clear_object(&board_view);
 }
 
-static void test_gcheckers_sgf_controller_load_file_requires_ru(void) {
+static void test_ggame_sgf_controller_load_file_requires_ru(void) {
   BoardView *board_view = board_view_new();
   GCheckersModel *model = gcheckers_model_new();
-  GCheckersSgfController *controller = gcheckers_sgf_controller_new(board_view);
-  gcheckers_sgf_controller_set_model(controller, model);
+  GGameSgfController *controller = ggame_sgf_controller_new(board_view);
+  ggame_sgf_controller_set_model(controller, model);
 
   gchar *path = g_strdup_printf("%s/test-gcheckers-load-missing-ru-%u.sgf", g_get_tmp_dir(), g_random_int());
   g_assert_nonnull(path);
   g_assert_true(g_file_set_contents(path, "(;FF[4]CA[UTF-8]AP[gcheckers]GM[40];B[12-16])", -1, NULL));
 
   g_autoptr(GError) error = NULL;
-  g_assert_false(gcheckers_sgf_controller_load_file(controller, path, &error));
+  g_assert_false(ggame_sgf_controller_load_file(controller, path, &error));
   g_assert_error(error, g_quark_from_static_string("sgf-io-error"), 23);
 
   g_remove(path);
@@ -458,11 +458,11 @@ static void test_gcheckers_sgf_controller_load_file_requires_ru(void) {
   g_clear_object(&board_view);
 }
 
-static void test_gcheckers_sgf_controller_save_position_file(void) {
+static void test_ggame_sgf_controller_save_position_file(void) {
   BoardView *board_view = board_view_new();
   GCheckersModel *model = gcheckers_model_new();
-  GCheckersSgfController *controller = gcheckers_sgf_controller_new(board_view);
-  gcheckers_sgf_controller_set_model(controller, model);
+  GGameSgfController *controller = ggame_sgf_controller_new(board_view);
+  ggame_sgf_controller_set_model(controller, model);
 
   Game game = {0};
   g_assert_true(gcheckers_model_copy_game(model, &game));
@@ -495,7 +495,7 @@ static void test_gcheckers_sgf_controller_save_position_file(void) {
   g_assert_nonnull(path);
 
   g_autoptr(GError) error = NULL;
-  g_assert_true(gcheckers_sgf_controller_save_position_file(controller, path, &error));
+  g_assert_true(ggame_sgf_controller_save_position_file(controller, path, &error));
   g_assert_no_error(error);
 
   g_autofree char *saved = NULL;
@@ -528,7 +528,7 @@ static void test_gcheckers_sgf_controller_save_position_file(void) {
   g_assert_nonnull(sgf_node_get_property_values(root, "AW"));
 
   gcheckers_model_reset(model);
-  g_assert_true(gcheckers_sgf_controller_load_file(controller, path, &error));
+  g_assert_true(ggame_sgf_controller_load_file(controller, path, &error));
   g_assert_no_error(error);
   const GameState *loaded_state = gcheckers_model_peek_state(model);
   g_assert_nonnull(loaded_state);
@@ -545,11 +545,11 @@ static void test_gcheckers_sgf_controller_save_position_file(void) {
   g_clear_object(&board_view);
 }
 
-static void test_gcheckers_sgf_controller_load_file_applies_ruleset_from_ru(void) {
+static void test_ggame_sgf_controller_load_file_applies_ruleset_from_ru(void) {
   BoardView *board_view = board_view_new();
   GCheckersModel *model = gcheckers_model_new();
-  GCheckersSgfController *controller = gcheckers_sgf_controller_new(board_view);
-  gcheckers_sgf_controller_set_model(controller, model);
+  GGameSgfController *controller = ggame_sgf_controller_new(board_view);
+  ggame_sgf_controller_set_model(controller, model);
 
   gchar *path = g_strdup_printf("%s/test-gcheckers-load-ruleset-%u.sgf", g_get_tmp_dir(), g_random_int());
   g_assert_nonnull(path);
@@ -559,7 +559,7 @@ static void test_gcheckers_sgf_controller_load_file_applies_ruleset_from_ru(void
   g_assert_true(g_file_set_contents(path, content, -1, &error));
   g_assert_no_error(error);
 
-  g_assert_true(gcheckers_sgf_controller_load_file(controller, path, &error));
+  g_assert_true(ggame_sgf_controller_load_file(controller, path, &error));
   g_assert_no_error(error);
 
   const CheckersRules *rules = gcheckers_model_peek_rules(model);
@@ -573,7 +573,7 @@ static void test_gcheckers_sgf_controller_load_file_applies_ruleset_from_ru(void
   g_clear_object(&board_view);
 }
 
-static void test_gcheckers_sgf_controller_replay_node_into_game_applies_setup_root(void) {
+static void test_ggame_sgf_controller_replay_node_into_game_applies_setup_root(void) {
   g_autoptr(SgfTree) tree = sgf_tree_new();
   g_assert_nonnull(tree);
 
@@ -599,7 +599,7 @@ static void test_gcheckers_sgf_controller_replay_node_into_game_applies_setup_ro
   Game game = {0};
   game_init_with_rules(&game, checkers_ruleset_get_rules(PLAYER_RULESET_INTERNATIONAL));
   g_autoptr(GError) replay_error = NULL;
-  g_assert_true(gcheckers_sgf_controller_replay_node_into_game((const SgfNode *)child, &game, &replay_error));
+  g_assert_true(ggame_sgf_controller_replay_node_into_game((const SgfNode *)child, &game, &replay_error));
   g_assert_no_error(replay_error);
 
   g_assert_cmpuint(game.state.turn, ==, CHECKERS_COLOR_WHITE);
@@ -613,43 +613,43 @@ static void test_gcheckers_sgf_controller_replay_node_into_game_applies_setup_ro
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   if (!gtk_init_check()) {
-    g_test_add_func("/sgf-controller/appends-move-property", test_gcheckers_sgf_controller_skip);
-    g_test_add_func("/sgf-controller/replay-branching", test_gcheckers_sgf_controller_skip);
-    g_test_add_func("/sgf-controller/new-game", test_gcheckers_sgf_controller_skip);
-    g_test_add_func("/sgf-controller/step-ai-move", test_gcheckers_sgf_controller_skip);
-    g_test_add_func("/sgf-controller/navigation-step-and-rewind", test_gcheckers_sgf_controller_skip);
-    g_test_add_func("/sgf-controller/current-node-move", test_gcheckers_sgf_controller_skip);
-    g_test_add_func("/sgf-controller/navigation-forward-to-branch-and-end", test_gcheckers_sgf_controller_skip);
-    g_test_add_func("/sgf-controller/select-node-emits-node-changed", test_gcheckers_sgf_controller_skip);
-    g_test_add_func("/sgf-controller/load-applies-setup-properties", test_gcheckers_sgf_controller_skip);
-    g_test_add_func("/sgf-controller/load-file-requires-ru", test_gcheckers_sgf_controller_skip);
-    g_test_add_func("/sgf-controller/replay-node-into-game-applies-setup-root", test_gcheckers_sgf_controller_skip);
-    g_test_add_func("/sgf-controller/save-position-file", test_gcheckers_sgf_controller_skip);
-    g_test_add_func("/sgf-controller/load-file-applies-ruleset-from-ru", test_gcheckers_sgf_controller_skip);
+    g_test_add_func("/sgf-controller/appends-move-property", test_ggame_sgf_controller_skip);
+    g_test_add_func("/sgf-controller/replay-branching", test_ggame_sgf_controller_skip);
+    g_test_add_func("/sgf-controller/new-game", test_ggame_sgf_controller_skip);
+    g_test_add_func("/sgf-controller/step-ai-move", test_ggame_sgf_controller_skip);
+    g_test_add_func("/sgf-controller/navigation-step-and-rewind", test_ggame_sgf_controller_skip);
+    g_test_add_func("/sgf-controller/current-node-move", test_ggame_sgf_controller_skip);
+    g_test_add_func("/sgf-controller/navigation-forward-to-branch-and-end", test_ggame_sgf_controller_skip);
+    g_test_add_func("/sgf-controller/select-node-emits-node-changed", test_ggame_sgf_controller_skip);
+    g_test_add_func("/sgf-controller/load-applies-setup-properties", test_ggame_sgf_controller_skip);
+    g_test_add_func("/sgf-controller/load-file-requires-ru", test_ggame_sgf_controller_skip);
+    g_test_add_func("/sgf-controller/replay-node-into-game-applies-setup-root", test_ggame_sgf_controller_skip);
+    g_test_add_func("/sgf-controller/save-position-file", test_ggame_sgf_controller_skip);
+    g_test_add_func("/sgf-controller/load-file-applies-ruleset-from-ru", test_ggame_sgf_controller_skip);
     return g_test_run();
   }
 
-  g_test_add_func("/sgf-controller/appends-move-property", test_gcheckers_sgf_controller_appends_move_property);
-  g_test_add_func("/sgf-controller/replay-branching", test_gcheckers_sgf_controller_replay_branching);
-  g_test_add_func("/sgf-controller/new-game", test_gcheckers_sgf_controller_new_game_clears_tree);
+  g_test_add_func("/sgf-controller/appends-move-property", test_ggame_sgf_controller_appends_move_property);
+  g_test_add_func("/sgf-controller/replay-branching", test_ggame_sgf_controller_replay_branching);
+  g_test_add_func("/sgf-controller/new-game", test_ggame_sgf_controller_new_game_clears_tree);
   g_test_add_func("/sgf-controller/new-game-no-manual-request",
-                  test_gcheckers_sgf_controller_new_game_does_not_request_manual_mode);
-  g_test_add_func("/sgf-controller/step-ai-move", test_gcheckers_sgf_controller_step_ai_move);
+                  test_ggame_sgf_controller_new_game_does_not_request_manual_mode);
+  g_test_add_func("/sgf-controller/step-ai-move", test_ggame_sgf_controller_step_ai_move);
   g_test_add_func("/sgf-controller/navigation-step-and-rewind",
-                  test_gcheckers_sgf_controller_navigation_step_and_rewind);
+                  test_ggame_sgf_controller_navigation_step_and_rewind);
   g_test_add_func("/sgf-controller/current-node-move",
-                  test_gcheckers_sgf_controller_current_node_move_accessor);
+                  test_ggame_sgf_controller_current_node_move_accessor);
   g_test_add_func("/sgf-controller/navigation-forward-to-branch-and-end",
-                  test_gcheckers_sgf_controller_navigation_forward_to_branch_and_end);
+                  test_ggame_sgf_controller_navigation_forward_to_branch_and_end);
   g_test_add_func("/sgf-controller/select-node-emits-node-changed",
-                  test_gcheckers_sgf_controller_select_node_emits_node_changed);
+                  test_ggame_sgf_controller_select_node_emits_node_changed);
   g_test_add_func("/sgf-controller/load-applies-setup-properties",
-                  test_gcheckers_sgf_controller_load_applies_setup_properties);
-  g_test_add_func("/sgf-controller/load-file-requires-ru", test_gcheckers_sgf_controller_load_file_requires_ru);
+                  test_ggame_sgf_controller_load_applies_setup_properties);
+  g_test_add_func("/sgf-controller/load-file-requires-ru", test_ggame_sgf_controller_load_file_requires_ru);
   g_test_add_func("/sgf-controller/replay-node-into-game-applies-setup-root",
-                  test_gcheckers_sgf_controller_replay_node_into_game_applies_setup_root);
-  g_test_add_func("/sgf-controller/save-position-file", test_gcheckers_sgf_controller_save_position_file);
+                  test_ggame_sgf_controller_replay_node_into_game_applies_setup_root);
+  g_test_add_func("/sgf-controller/save-position-file", test_ggame_sgf_controller_save_position_file);
   g_test_add_func("/sgf-controller/load-file-applies-ruleset-from-ru",
-                  test_gcheckers_sgf_controller_load_file_applies_ruleset_from_ru);
+                  test_ggame_sgf_controller_load_file_applies_ruleset_from_ru);
   return g_test_run();
 }

@@ -1,6 +1,6 @@
 #include "app_settings.h"
 
-GSettings *gcheckers_app_settings_create(void) {
+GSettings *ggame_app_settings_create(void) {
   GSettingsSchemaSource *default_source = g_settings_schema_source_get_default();
   GSettingsSchema *schema = NULL;
   if (default_source != NULL) {
@@ -30,13 +30,13 @@ GSettings *gcheckers_app_settings_create(void) {
   return settings;
 }
 
-gboolean gcheckers_app_settings_get_privacy_settings_shown(GSettings *settings) {
+gboolean ggame_app_settings_get_privacy_settings_shown(GSettings *settings) {
   g_return_val_if_fail(G_IS_SETTINGS(settings), FALSE);
 
   return g_settings_get_boolean(settings, GCHECKERS_APP_SETTINGS_KEY_PRIVACY_SETTINGS_SHOWN);
 }
 
-gboolean gcheckers_app_settings_mark_privacy_settings_shown(GSettings *settings) {
+gboolean ggame_app_settings_mark_privacy_settings_shown(GSettings *settings) {
   g_return_val_if_fail(G_IS_SETTINGS(settings), FALSE);
 
   return g_settings_set_boolean(settings, GCHECKERS_APP_SETTINGS_KEY_PRIVACY_SETTINGS_SHOWN, TRUE);

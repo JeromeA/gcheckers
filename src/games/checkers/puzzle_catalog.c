@@ -74,7 +74,7 @@ GPtrArray *checkers_puzzle_catalog_load_for_ruleset(PlayerRuleset ruleset, GErro
   g_return_val_if_fail(backend->id != NULL, NULL);
   g_return_val_if_fail(short_name != NULL, NULL);
 
-  g_autofree char *puzzles_root = gcheckers_app_paths_find_data_subdir("GCHECKERS_PUZZLES_DIR", "puzzles");
+  g_autofree char *puzzles_root = ggame_app_paths_find_data_subdir("GCHECKERS_PUZZLES_DIR", "puzzles");
   if (puzzles_root == NULL) {
     g_set_error(error, G_FILE_ERROR, G_FILE_ERROR_NOENT, "Failed to resolve puzzle root directory");
     return NULL;

@@ -2,7 +2,7 @@
 
 static const char *gcheckers_settings_schema_id = "io.github.jeromea.gcheckers";
 
-GSettings *gcheckers_file_dialog_history_create_settings(void) {
+GSettings *ggame_file_dialog_history_create_settings(void) {
   GSettingsSchemaSource *default_source = g_settings_schema_source_get_default();
   GSettingsSchema *schema = NULL;
   if (default_source != NULL) {
@@ -32,7 +32,7 @@ GSettings *gcheckers_file_dialog_history_create_settings(void) {
   return settings;
 }
 
-GFile *gcheckers_file_dialog_history_get_initial_folder(GSettings *settings, const char *key) {
+GFile *ggame_file_dialog_history_get_initial_folder(GSettings *settings, const char *key) {
   g_return_val_if_fail(G_IS_SETTINGS(settings), NULL);
   g_return_val_if_fail(key != NULL, NULL);
 
@@ -44,7 +44,7 @@ GFile *gcheckers_file_dialog_history_get_initial_folder(GSettings *settings, con
   return g_file_new_for_uri(folder_uri);
 }
 
-gboolean gcheckers_file_dialog_history_remember_parent(GSettings *settings, const char *key, GFile *file) {
+gboolean ggame_file_dialog_history_remember_parent(GSettings *settings, const char *key, GFile *file) {
   g_return_val_if_fail(G_IS_SETTINGS(settings), FALSE);
   g_return_val_if_fail(key != NULL, FALSE);
   g_return_val_if_fail(G_IS_FILE(file), FALSE);

@@ -75,7 +75,7 @@ GPtrArray *game_puzzle_catalog_load_variant(const GameBackend *backend,
   g_return_val_if_fail(variant != NULL, NULL);
   g_return_val_if_fail(variant->short_name != NULL, NULL);
 
-  g_autofree char *puzzles_root = gcheckers_app_paths_find_data_subdir("GCHECKERS_PUZZLES_DIR", "puzzles");
+  g_autofree char *puzzles_root = ggame_app_paths_find_data_subdir("GCHECKERS_PUZZLES_DIR", "puzzles");
   if (puzzles_root == NULL) {
     g_set_error(error, G_FILE_ERROR, G_FILE_ERROR_NOENT, "Failed to resolve puzzle root directory");
     return NULL;

@@ -11,23 +11,23 @@ static char *test_puzzle_progress_make_state_dir(void) {
 
   g_setenv("GCHECKERS_PUZZLE_PROGRESS_DIR", root, TRUE);
   char *state_dir =
-      gcheckers_app_paths_get_user_state_subdir("GCHECKERS_PUZZLE_PROGRESS_DIR", "puzzle-progress", &error);
+      ggame_app_paths_get_user_state_subdir("GCHECKERS_PUZZLE_PROGRESS_DIR", "puzzle-progress", &error);
   g_assert_no_error(error);
   g_assert_nonnull(state_dir);
   return state_dir;
 }
 
-static CheckersPuzzleAttemptRecord test_puzzle_progress_make_record(const char *attempt_id,
-                                                                    CheckersPuzzleAttemptResult result) {
-  CheckersPuzzleAttemptRecord record = {0};
+static GGamePuzzleAttemptRecord test_puzzle_progress_make_record(const char *attempt_id,
+                                                                    GGamePuzzleAttemptResult result) {
+  GGamePuzzleAttemptRecord record = {0};
   record.attempt_id = g_strdup(attempt_id);
   record.puzzle_id = g_strdup("checkers/international/puzzle-0007.sgf");
   record.puzzle_number = 7;
   record.puzzle_source_name = g_strdup("puzzle-0007.sgf");
-  record.puzzle_ruleset = PLAYER_RULESET_INTERNATIONAL;
-  record.attacker = CHECKERS_COLOR_WHITE;
+  record.puzzle_variant = g_strdup("international");
+  record.attacker_side = 0;
   record.started_unix_ms = 1713300000000;
-  record.finished_unix_ms = result == CHECKERS_PUZZLE_ATTEMPT_RESULT_UNRESOLVED ? 0 : 1713300005000;
+  record.finished_unix_ms = result == GGAME_PUZZLE_ATTEMPT_RESULT_UNRESOLVED ? 0 : 1713300005000;
   record.result = result;
   record.failure_on_first_move = FALSE;
   record.has_failed_first_move = FALSE;
@@ -36,7 +36,7 @@ static CheckersPuzzleAttemptRecord test_puzzle_progress_make_record(const char *
   return record;
 }
 
-static CheckersPuzzleStatusEntry *test_puzzle_progress_lookup_status(GHashTable *status_map, const char *puzzle_id) {
+static GGamePuzzleStatusEntry *test_puzzle_progress_lookup_status(GHashTable *status_map, const char *puzzle_id) {
   g_return_val_if_fail(status_map != NULL, NULL);
   g_return_val_if_fail(puzzle_id != NULL, NULL);
 
@@ -46,361 +46,355 @@ static CheckersPuzzleStatusEntry *test_puzzle_progress_lookup_status(GHashTable 
 static void test_puzzle_progress_user_id_persists(void) {
   g_setenv("GSETTINGS_BACKEND", "memory", TRUE);
   g_autofree char *state_dir = test_puzzle_progress_make_state_dir();
-  CheckersPuzzleProgressStore *store = checkers_puzzle_progress_store_new(state_dir);
+  GGamePuzzleProgressStore *store = ggame_puzzle_progress_store_new(state_dir);
   g_assert_nonnull(store);
 
   g_autoptr(GError) error = NULL;
-  g_autofree char *first_id = checkers_puzzle_progress_store_get_or_create_user_id(store, &error);
+  g_autofree char *first_id = ggame_puzzle_progress_store_get_or_create_user_id(store, &error);
   g_assert_no_error(error);
   g_assert_nonnull(first_id);
 
-  g_autofree char *second_id = checkers_puzzle_progress_store_get_or_create_user_id(store, &error);
+  g_autofree char *second_id = ggame_puzzle_progress_store_get_or_create_user_id(store, &error);
   g_assert_no_error(error);
   g_assert_cmpstr(first_id, ==, second_id);
 
-  checkers_puzzle_progress_store_unref(store);
+  ggame_puzzle_progress_store_unref(store);
   g_unsetenv("GCHECKERS_PUZZLE_PROGRESS_DIR");
 }
 
 static void test_puzzle_progress_append_and_replace_success(void) {
   g_autofree char *state_dir = test_puzzle_progress_make_state_dir();
-  CheckersPuzzleProgressStore *store = checkers_puzzle_progress_store_new(state_dir);
+  GGamePuzzleProgressStore *store = ggame_puzzle_progress_store_new(state_dir);
 
-  CheckersPuzzleAttemptRecord unresolved =
-      test_puzzle_progress_make_record("attempt-success", CHECKERS_PUZZLE_ATTEMPT_RESULT_UNRESOLVED);
+  GGamePuzzleAttemptRecord unresolved =
+      test_puzzle_progress_make_record("attempt-success", GGAME_PUZZLE_ATTEMPT_RESULT_UNRESOLVED);
   g_autoptr(GError) error = NULL;
-  g_assert_true(checkers_puzzle_progress_store_append_attempt(store, &unresolved, &error));
+  g_assert_true(ggame_puzzle_progress_store_append_attempt(store, &unresolved, &error));
   g_assert_no_error(error);
 
-  CheckersPuzzleAttemptRecord success =
-      test_puzzle_progress_make_record("attempt-success", CHECKERS_PUZZLE_ATTEMPT_RESULT_SUCCESS);
-  g_assert_true(checkers_puzzle_progress_store_replace_attempt(store, &success, &error));
+  GGamePuzzleAttemptRecord success =
+      test_puzzle_progress_make_record("attempt-success", GGAME_PUZZLE_ATTEMPT_RESULT_SUCCESS);
+  g_assert_true(ggame_puzzle_progress_store_replace_attempt(store, &success, &error));
   g_assert_no_error(error);
 
-  g_autoptr(GPtrArray) history = checkers_puzzle_progress_store_load_attempt_history(store, &error);
+  g_autoptr(GPtrArray) history = ggame_puzzle_progress_store_load_attempt_history(store, &error);
   g_assert_no_error(error);
   g_assert_cmpuint(history->len, ==, 1);
-  CheckersPuzzleAttemptRecord *stored = g_ptr_array_index(history, 0);
-  g_assert_cmpint(stored->result, ==, CHECKERS_PUZZLE_ATTEMPT_RESULT_SUCCESS);
+  GGamePuzzleAttemptRecord *stored = g_ptr_array_index(history, 0);
+  g_assert_cmpint(stored->result, ==, GGAME_PUZZLE_ATTEMPT_RESULT_SUCCESS);
   g_assert_false(stored->failure_on_first_move);
 
-  checkers_puzzle_attempt_record_clear(&unresolved);
-  checkers_puzzle_attempt_record_clear(&success);
-  checkers_puzzle_progress_store_unref(store);
+  ggame_puzzle_attempt_record_clear(&unresolved);
+  ggame_puzzle_attempt_record_clear(&success);
+  ggame_puzzle_progress_store_unref(store);
   g_unsetenv("GCHECKERS_PUZZLE_PROGRESS_DIR");
 }
 
 static void test_puzzle_progress_first_move_failure_persists(void) {
   g_autofree char *state_dir = test_puzzle_progress_make_state_dir();
-  CheckersPuzzleProgressStore *store = checkers_puzzle_progress_store_new(state_dir);
+  GGamePuzzleProgressStore *store = ggame_puzzle_progress_store_new(state_dir);
 
-  CheckersPuzzleAttemptRecord unresolved =
-      test_puzzle_progress_make_record("attempt-failure", CHECKERS_PUZZLE_ATTEMPT_RESULT_UNRESOLVED);
+  GGamePuzzleAttemptRecord unresolved =
+      test_puzzle_progress_make_record("attempt-failure", GGAME_PUZZLE_ATTEMPT_RESULT_UNRESOLVED);
   g_autoptr(GError) error = NULL;
-  g_assert_true(checkers_puzzle_progress_store_append_attempt(store, &unresolved, &error));
+  g_assert_true(ggame_puzzle_progress_store_append_attempt(store, &unresolved, &error));
   g_assert_no_error(error);
 
-  CheckersPuzzleAttemptRecord failure =
-      test_puzzle_progress_make_record("attempt-failure", CHECKERS_PUZZLE_ATTEMPT_RESULT_FAILURE);
+  GGamePuzzleAttemptRecord failure =
+      test_puzzle_progress_make_record("attempt-failure", GGAME_PUZZLE_ATTEMPT_RESULT_FAILURE);
   failure.failure_on_first_move = TRUE;
   failure.has_failed_first_move = TRUE;
-  failure.failed_first_move.length = 2;
-  failure.failed_first_move.path[0] = 12;
-  failure.failed_first_move.path[1] = 16;
-  g_assert_true(checkers_puzzle_progress_store_replace_attempt(store, &failure, &error));
+  failure.failed_first_move_text = g_strdup("13-17");
+  g_assert_true(ggame_puzzle_progress_store_replace_attempt(store, &failure, &error));
   g_assert_no_error(error);
 
-  g_autoptr(GPtrArray) history = checkers_puzzle_progress_store_load_attempt_history(store, &error);
+  g_autoptr(GPtrArray) history = ggame_puzzle_progress_store_load_attempt_history(store, &error);
   g_assert_no_error(error);
-  CheckersPuzzleAttemptRecord *stored = g_ptr_array_index(history, 0);
+  GGamePuzzleAttemptRecord *stored = g_ptr_array_index(history, 0);
   g_assert_true(stored->failure_on_first_move);
   g_assert_true(stored->has_failed_first_move);
-  g_assert_cmpuint(stored->failed_first_move.length, ==, 2);
-  g_assert_cmpuint(stored->failed_first_move.path[0], ==, 12);
-  g_assert_cmpuint(stored->failed_first_move.path[1], ==, 16);
+  g_assert_cmpstr(stored->failed_first_move_text, ==, "13-17");
 
-  checkers_puzzle_attempt_record_clear(&unresolved);
-  checkers_puzzle_attempt_record_clear(&failure);
-  checkers_puzzle_progress_store_unref(store);
+  ggame_puzzle_attempt_record_clear(&unresolved);
+  ggame_puzzle_attempt_record_clear(&failure);
+  ggame_puzzle_progress_store_unref(store);
   g_unsetenv("GCHECKERS_PUZZLE_PROGRESS_DIR");
 }
 
 static void test_puzzle_progress_analyze_persists(void) {
   g_autofree char *state_dir = test_puzzle_progress_make_state_dir();
-  CheckersPuzzleProgressStore *store = checkers_puzzle_progress_store_new(state_dir);
+  GGamePuzzleProgressStore *store = ggame_puzzle_progress_store_new(state_dir);
 
-  CheckersPuzzleAttemptRecord unresolved =
-      test_puzzle_progress_make_record("attempt-analyze", CHECKERS_PUZZLE_ATTEMPT_RESULT_UNRESOLVED);
+  GGamePuzzleAttemptRecord unresolved =
+      test_puzzle_progress_make_record("attempt-analyze", GGAME_PUZZLE_ATTEMPT_RESULT_UNRESOLVED);
   g_autoptr(GError) error = NULL;
-  g_assert_true(checkers_puzzle_progress_store_append_attempt(store, &unresolved, &error));
+  g_assert_true(ggame_puzzle_progress_store_append_attempt(store, &unresolved, &error));
   g_assert_no_error(error);
 
-  CheckersPuzzleAttemptRecord analyze =
-      test_puzzle_progress_make_record("attempt-analyze", CHECKERS_PUZZLE_ATTEMPT_RESULT_ANALYZE);
-  g_assert_true(checkers_puzzle_progress_store_replace_attempt(store, &analyze, &error));
+  GGamePuzzleAttemptRecord analyze =
+      test_puzzle_progress_make_record("attempt-analyze", GGAME_PUZZLE_ATTEMPT_RESULT_ANALYZE);
+  g_assert_true(ggame_puzzle_progress_store_replace_attempt(store, &analyze, &error));
   g_assert_no_error(error);
 
-  g_autoptr(GPtrArray) history = checkers_puzzle_progress_store_load_attempt_history(store, &error);
+  g_autoptr(GPtrArray) history = ggame_puzzle_progress_store_load_attempt_history(store, &error);
   g_assert_no_error(error);
-  CheckersPuzzleAttemptRecord *stored = g_ptr_array_index(history, 0);
-  g_assert_cmpint(stored->result, ==, CHECKERS_PUZZLE_ATTEMPT_RESULT_ANALYZE);
+  GGamePuzzleAttemptRecord *stored = g_ptr_array_index(history, 0);
+  g_assert_cmpint(stored->result, ==, GGAME_PUZZLE_ATTEMPT_RESULT_ANALYZE);
   g_assert_false(stored->has_failed_first_move);
 
-  checkers_puzzle_attempt_record_clear(&unresolved);
-  checkers_puzzle_attempt_record_clear(&analyze);
-  checkers_puzzle_progress_store_unref(store);
+  ggame_puzzle_attempt_record_clear(&unresolved);
+  ggame_puzzle_attempt_record_clear(&analyze);
+  ggame_puzzle_progress_store_unref(store);
   g_unsetenv("GCHECKERS_PUZZLE_PROGRESS_DIR");
 }
 
 static void test_puzzle_progress_collect_unsent_and_thresholds(void) {
   g_autoptr(GPtrArray) history =
-      g_ptr_array_new_with_free_func((GDestroyNotify)checkers_puzzle_attempt_record_free);
+      g_ptr_array_new_with_free_func((GDestroyNotify)ggame_puzzle_attempt_record_free);
 
   for (guint i = 0; i < 9; i++) {
     g_autofree char *attempt_id = g_strdup_printf("attempt-%u", i);
-    CheckersPuzzleAttemptRecord record =
-        test_puzzle_progress_make_record(attempt_id, CHECKERS_PUZZLE_ATTEMPT_RESULT_SUCCESS);
+    GGamePuzzleAttemptRecord record =
+        test_puzzle_progress_make_record(attempt_id, GGAME_PUZZLE_ATTEMPT_RESULT_SUCCESS);
     record.attempt_id = g_strdup_printf("attempt-%u", i);
     record.started_unix_ms += i;
     record.finished_unix_ms += i;
-    g_ptr_array_add(history, checkers_puzzle_attempt_record_copy(&record));
-    checkers_puzzle_attempt_record_clear(&record);
+    g_ptr_array_add(history, ggame_puzzle_attempt_record_copy(&record));
+    ggame_puzzle_attempt_record_clear(&record);
   }
 
-  g_assert_false(checkers_puzzle_progress_should_send_report(history, 1713300005000));
+  g_assert_false(ggame_puzzle_progress_should_send_report(history, 1713300005000));
 
-  CheckersPuzzleAttemptRecord tenth =
-      test_puzzle_progress_make_record("attempt-10", CHECKERS_PUZZLE_ATTEMPT_RESULT_SUCCESS);
-  g_ptr_array_add(history, checkers_puzzle_attempt_record_copy(&tenth));
-  g_assert_true(checkers_puzzle_progress_should_send_report(history, 1713300005000));
-  checkers_puzzle_attempt_record_clear(&tenth);
+  GGamePuzzleAttemptRecord tenth =
+      test_puzzle_progress_make_record("attempt-10", GGAME_PUZZLE_ATTEMPT_RESULT_SUCCESS);
+  g_ptr_array_add(history, ggame_puzzle_attempt_record_copy(&tenth));
+  g_assert_true(ggame_puzzle_progress_should_send_report(history, 1713300005000));
+  ggame_puzzle_attempt_record_clear(&tenth);
 
   g_ptr_array_set_size(history, 0);
   for (guint i = 0; i < 5; i++) {
-    CheckersPuzzleAttemptRecord record =
-        test_puzzle_progress_make_record("stale", CHECKERS_PUZZLE_ATTEMPT_RESULT_SUCCESS);
+    GGamePuzzleAttemptRecord record =
+        test_puzzle_progress_make_record("stale", GGAME_PUZZLE_ATTEMPT_RESULT_SUCCESS);
     record.attempt_id = g_strdup_printf("stale-%u", i);
     record.started_unix_ms = 1000 + i;
     record.finished_unix_ms = 2000 + i;
-    g_ptr_array_add(history, checkers_puzzle_attempt_record_copy(&record));
-    checkers_puzzle_attempt_record_clear(&record);
+    g_ptr_array_add(history, ggame_puzzle_attempt_record_copy(&record));
+    ggame_puzzle_attempt_record_clear(&record);
   }
-  g_assert_true(checkers_puzzle_progress_should_send_report(history,
+  g_assert_true(ggame_puzzle_progress_should_send_report(history,
                                                             2000 + 24 * 60 * 60 * G_GINT64_CONSTANT(1000)));
 }
 
 static void test_puzzle_progress_mark_reported_without_deleting_history(void) {
   g_autofree char *state_dir = test_puzzle_progress_make_state_dir();
-  CheckersPuzzleProgressStore *store = checkers_puzzle_progress_store_new(state_dir);
+  GGamePuzzleProgressStore *store = ggame_puzzle_progress_store_new(state_dir);
   g_autoptr(GError) error = NULL;
 
-  CheckersPuzzleAttemptRecord first =
-      test_puzzle_progress_make_record("attempt-one", CHECKERS_PUZZLE_ATTEMPT_RESULT_SUCCESS);
-  CheckersPuzzleAttemptRecord second =
-      test_puzzle_progress_make_record("attempt-two", CHECKERS_PUZZLE_ATTEMPT_RESULT_ANALYZE);
+  GGamePuzzleAttemptRecord first =
+      test_puzzle_progress_make_record("attempt-one", GGAME_PUZZLE_ATTEMPT_RESULT_SUCCESS);
+  GGamePuzzleAttemptRecord second =
+      test_puzzle_progress_make_record("attempt-two", GGAME_PUZZLE_ATTEMPT_RESULT_ANALYZE);
   second.report_count = 1;
   second.first_reported_unix_ms = 1713300008000;
 
-  g_assert_true(checkers_puzzle_progress_store_append_attempt(store, &first, &error));
+  g_assert_true(ggame_puzzle_progress_store_append_attempt(store, &first, &error));
   g_assert_no_error(error);
-  g_assert_true(checkers_puzzle_progress_store_append_attempt(store, &second, &error));
-  g_assert_no_error(error);
-
-  g_assert_true(checkers_puzzle_progress_store_mark_reported(store, 1713300009000, &error));
+  g_assert_true(ggame_puzzle_progress_store_append_attempt(store, &second, &error));
   g_assert_no_error(error);
 
-  g_autoptr(GPtrArray) history = checkers_puzzle_progress_store_load_attempt_history(store, &error);
+  g_assert_true(ggame_puzzle_progress_store_mark_reported(store, 1713300009000, &error));
+  g_assert_no_error(error);
+
+  g_autoptr(GPtrArray) history = ggame_puzzle_progress_store_load_attempt_history(store, &error);
   g_assert_no_error(error);
   g_assert_cmpuint(history->len, ==, 2);
-  CheckersPuzzleAttemptRecord *stored_first = g_ptr_array_index(history, 0);
-  CheckersPuzzleAttemptRecord *stored_second = g_ptr_array_index(history, 1);
+  GGamePuzzleAttemptRecord *stored_first = g_ptr_array_index(history, 0);
+  GGamePuzzleAttemptRecord *stored_second = g_ptr_array_index(history, 1);
   g_assert_cmpuint(stored_first->report_count, ==, 1);
   g_assert_cmpint(stored_first->first_reported_unix_ms, ==, 1713300009000);
   g_assert_cmpuint(stored_second->report_count, ==, 1);
   g_assert_cmpint(stored_second->first_reported_unix_ms, ==, 1713300008000);
 
-  checkers_puzzle_attempt_record_clear(&first);
-  checkers_puzzle_attempt_record_clear(&second);
-  checkers_puzzle_progress_store_unref(store);
+  ggame_puzzle_attempt_record_clear(&first);
+  ggame_puzzle_attempt_record_clear(&second);
+  ggame_puzzle_progress_store_unref(store);
   g_unsetenv("GCHECKERS_PUZZLE_PROGRESS_DIR");
 }
 
 static void test_puzzle_progress_build_upload_json_formats_expected_records(void) {
   g_autoptr(GPtrArray) history =
-      g_ptr_array_new_with_free_func((GDestroyNotify)checkers_puzzle_attempt_record_free);
+      g_ptr_array_new_with_free_func((GDestroyNotify)ggame_puzzle_attempt_record_free);
 
-  CheckersPuzzleAttemptRecord success =
-      test_puzzle_progress_make_record("attempt-success", CHECKERS_PUZZLE_ATTEMPT_RESULT_SUCCESS);
-  CheckersPuzzleAttemptRecord failure =
-      test_puzzle_progress_make_record("attempt-failure", CHECKERS_PUZZLE_ATTEMPT_RESULT_FAILURE);
+  GGamePuzzleAttemptRecord success =
+      test_puzzle_progress_make_record("attempt-success", GGAME_PUZZLE_ATTEMPT_RESULT_SUCCESS);
+  GGamePuzzleAttemptRecord failure =
+      test_puzzle_progress_make_record("attempt-failure", GGAME_PUZZLE_ATTEMPT_RESULT_FAILURE);
   failure.failure_on_first_move = TRUE;
   failure.has_failed_first_move = TRUE;
-  failure.failed_first_move.length = 2;
-  failure.failed_first_move.path[0] = 12;
-  failure.failed_first_move.path[1] = 16;
-  CheckersPuzzleAttemptRecord analyze =
-      test_puzzle_progress_make_record("attempt-analyze", CHECKERS_PUZZLE_ATTEMPT_RESULT_ANALYZE);
+  failure.failed_first_move_text = g_strdup("13-17");
+  GGamePuzzleAttemptRecord analyze =
+      test_puzzle_progress_make_record("attempt-analyze", GGAME_PUZZLE_ATTEMPT_RESULT_ANALYZE);
 
-  g_ptr_array_add(history, checkers_puzzle_attempt_record_copy(&success));
-  g_ptr_array_add(history, checkers_puzzle_attempt_record_copy(&failure));
-  g_ptr_array_add(history, checkers_puzzle_attempt_record_copy(&analyze));
+  g_ptr_array_add(history, ggame_puzzle_attempt_record_copy(&success));
+  g_ptr_array_add(history, ggame_puzzle_attempt_record_copy(&failure));
+  g_ptr_array_add(history, ggame_puzzle_attempt_record_copy(&analyze));
 
-  g_autofree char *json = checkers_puzzle_progress_build_upload_json("user-123", history);
+  g_autofree char *json = ggame_puzzle_progress_build_upload_json("user-123", history);
   g_assert_nonnull(json);
   g_assert_nonnull(strstr(json, "\"user_id\":\"user-123\""));
   g_assert_nonnull(strstr(json, "\"result\":\"success\""));
   g_assert_nonnull(strstr(json, "\"result\":\"failure\""));
   g_assert_nonnull(strstr(json, "\"result\":\"analyze\""));
-  g_assert_nonnull(strstr(json, "\"failed_first_move\":{\"length\":2,\"captures\":0,\"path\":[12,16]}"));
+  g_assert_nonnull(strstr(json, "\"failed_first_move\":\"13-17\""));
 
-  checkers_puzzle_attempt_record_clear(&success);
-  checkers_puzzle_attempt_record_clear(&failure);
-  checkers_puzzle_attempt_record_clear(&analyze);
+  ggame_puzzle_attempt_record_clear(&success);
+  ggame_puzzle_attempt_record_clear(&failure);
+  ggame_puzzle_attempt_record_clear(&analyze);
 }
 
 static void test_puzzle_progress_reduce_status_prefers_success(void) {
   g_autoptr(GPtrArray) history =
-      g_ptr_array_new_with_free_func((GDestroyNotify)checkers_puzzle_attempt_record_free);
+      g_ptr_array_new_with_free_func((GDestroyNotify)ggame_puzzle_attempt_record_free);
 
-  CheckersPuzzleAttemptRecord failure =
-      test_puzzle_progress_make_record("attempt-failure", CHECKERS_PUZZLE_ATTEMPT_RESULT_FAILURE);
-  CheckersPuzzleAttemptRecord success =
-      test_puzzle_progress_make_record("attempt-success", CHECKERS_PUZZLE_ATTEMPT_RESULT_SUCCESS);
-  g_ptr_array_add(history, checkers_puzzle_attempt_record_copy(&failure));
-  g_ptr_array_add(history, checkers_puzzle_attempt_record_copy(&success));
+  GGamePuzzleAttemptRecord failure =
+      test_puzzle_progress_make_record("attempt-failure", GGAME_PUZZLE_ATTEMPT_RESULT_FAILURE);
+  GGamePuzzleAttemptRecord success =
+      test_puzzle_progress_make_record("attempt-success", GGAME_PUZZLE_ATTEMPT_RESULT_SUCCESS);
+  g_ptr_array_add(history, ggame_puzzle_attempt_record_copy(&failure));
+  g_ptr_array_add(history, ggame_puzzle_attempt_record_copy(&success));
 
-  g_assert_cmpint(checkers_puzzle_progress_reduce_status_for_attempts(history, "checkers/international/puzzle-0007.sgf"),
+  g_assert_cmpint(ggame_puzzle_progress_reduce_status_for_attempts(history, "checkers/international/puzzle-0007.sgf"),
                   ==,
-                  CHECKERS_PUZZLE_STATUS_SOLVED);
+                  GGAME_PUZZLE_STATUS_SOLVED);
 
-  checkers_puzzle_attempt_record_clear(&failure);
-  checkers_puzzle_attempt_record_clear(&success);
+  ggame_puzzle_attempt_record_clear(&failure);
+  ggame_puzzle_attempt_record_clear(&success);
 }
 
 static void test_puzzle_progress_status_map_tracks_terminal_results(void) {
   g_autofree char *state_dir = test_puzzle_progress_make_state_dir();
-  CheckersPuzzleProgressStore *store = checkers_puzzle_progress_store_new(state_dir);
+  GGamePuzzleProgressStore *store = ggame_puzzle_progress_store_new(state_dir);
   g_autoptr(GError) error = NULL;
 
-  CheckersPuzzleAttemptRecord unresolved =
-      test_puzzle_progress_make_record("attempt-status", CHECKERS_PUZZLE_ATTEMPT_RESULT_UNRESOLVED);
-  g_assert_true(checkers_puzzle_progress_store_append_attempt(store, &unresolved, &error));
+  GGamePuzzleAttemptRecord unresolved =
+      test_puzzle_progress_make_record("attempt-status", GGAME_PUZZLE_ATTEMPT_RESULT_UNRESOLVED);
+  g_assert_true(ggame_puzzle_progress_store_append_attempt(store, &unresolved, &error));
   g_assert_no_error(error);
 
-  g_autoptr(GHashTable) status_map = checkers_puzzle_progress_store_load_status_map(store, &error);
+  g_autoptr(GHashTable) status_map = ggame_puzzle_progress_store_load_status_map(store, &error);
   g_assert_no_error(error);
   g_assert_null(test_puzzle_progress_lookup_status(status_map, "checkers/international/puzzle-0007.sgf"));
 
-  CheckersPuzzleAttemptRecord analyze =
-      test_puzzle_progress_make_record("attempt-status", CHECKERS_PUZZLE_ATTEMPT_RESULT_ANALYZE);
-  g_assert_true(checkers_puzzle_progress_store_replace_attempt(store, &analyze, &error));
+  GGamePuzzleAttemptRecord analyze =
+      test_puzzle_progress_make_record("attempt-status", GGAME_PUZZLE_ATTEMPT_RESULT_ANALYZE);
+  g_assert_true(ggame_puzzle_progress_store_replace_attempt(store, &analyze, &error));
   g_assert_no_error(error);
 
   g_clear_pointer(&status_map, g_hash_table_unref);
-  status_map = checkers_puzzle_progress_store_load_status_map(store, &error);
+  status_map = ggame_puzzle_progress_store_load_status_map(store, &error);
   g_assert_no_error(error);
-  CheckersPuzzleStatusEntry *entry =
+  GGamePuzzleStatusEntry *entry =
       test_puzzle_progress_lookup_status(status_map, "checkers/international/puzzle-0007.sgf");
   g_assert_nonnull(entry);
-  g_assert_cmpint(entry->status, ==, CHECKERS_PUZZLE_STATUS_FAILED);
+  g_assert_cmpint(entry->status, ==, GGAME_PUZZLE_STATUS_FAILED);
 
-  CheckersPuzzleAttemptRecord success =
-      test_puzzle_progress_make_record("attempt-status", CHECKERS_PUZZLE_ATTEMPT_RESULT_SUCCESS);
-  g_assert_true(checkers_puzzle_progress_store_replace_attempt(store, &success, &error));
+  GGamePuzzleAttemptRecord success =
+      test_puzzle_progress_make_record("attempt-status", GGAME_PUZZLE_ATTEMPT_RESULT_SUCCESS);
+  g_assert_true(ggame_puzzle_progress_store_replace_attempt(store, &success, &error));
   g_assert_no_error(error);
 
   g_clear_pointer(&status_map, g_hash_table_unref);
-  status_map = checkers_puzzle_progress_store_load_status_map(store, &error);
+  status_map = ggame_puzzle_progress_store_load_status_map(store, &error);
   g_assert_no_error(error);
   entry = test_puzzle_progress_lookup_status(status_map, "checkers/international/puzzle-0007.sgf");
   g_assert_nonnull(entry);
-  g_assert_cmpint(entry->status, ==, CHECKERS_PUZZLE_STATUS_SOLVED);
+  g_assert_cmpint(entry->status, ==, GGAME_PUZZLE_STATUS_SOLVED);
 
-  checkers_puzzle_attempt_record_clear(&unresolved);
-  checkers_puzzle_attempt_record_clear(&analyze);
-  checkers_puzzle_attempt_record_clear(&success);
-  checkers_puzzle_progress_store_unref(store);
+  ggame_puzzle_attempt_record_clear(&unresolved);
+  ggame_puzzle_attempt_record_clear(&analyze);
+  ggame_puzzle_attempt_record_clear(&success);
+  ggame_puzzle_progress_store_unref(store);
   g_unsetenv("GCHECKERS_PUZZLE_PROGRESS_DIR");
 }
 
 static void test_puzzle_progress_status_map_rebuilds_from_corrupt_cache(void) {
   g_autofree char *state_dir = test_puzzle_progress_make_state_dir();
-  CheckersPuzzleProgressStore *store = checkers_puzzle_progress_store_new(state_dir);
+  GGamePuzzleProgressStore *store = ggame_puzzle_progress_store_new(state_dir);
   g_autoptr(GError) error = NULL;
 
-  CheckersPuzzleAttemptRecord success =
-      test_puzzle_progress_make_record("attempt-corrupt", CHECKERS_PUZZLE_ATTEMPT_RESULT_SUCCESS);
-  g_assert_true(checkers_puzzle_progress_store_append_attempt(store, &success, &error));
+  GGamePuzzleAttemptRecord success =
+      test_puzzle_progress_make_record("attempt-corrupt", GGAME_PUZZLE_ATTEMPT_RESULT_SUCCESS);
+  g_assert_true(ggame_puzzle_progress_store_append_attempt(store, &success, &error));
   g_assert_no_error(error);
 
-  g_autofree char *status_path = checkers_puzzle_progress_store_get_status_path(store);
+  g_autofree char *status_path = ggame_puzzle_progress_store_get_status_path(store);
   g_assert_true(g_file_set_contents(status_path, "{not-json", -1, &error));
   g_assert_no_error(error);
 
-  g_autoptr(GHashTable) status_map = checkers_puzzle_progress_store_load_status_map(store, &error);
+  g_autoptr(GHashTable) status_map = ggame_puzzle_progress_store_load_status_map(store, &error);
   g_assert_no_error(error);
-  CheckersPuzzleStatusEntry *entry =
+  GGamePuzzleStatusEntry *entry =
       test_puzzle_progress_lookup_status(status_map, "checkers/international/puzzle-0007.sgf");
   g_assert_nonnull(entry);
-  g_assert_cmpint(entry->status, ==, CHECKERS_PUZZLE_STATUS_SOLVED);
+  g_assert_cmpint(entry->status, ==, GGAME_PUZZLE_STATUS_SOLVED);
 
   g_autofree char *rebuilt_text = NULL;
   g_assert_true(g_file_get_contents(status_path, &rebuilt_text, NULL, &error));
   g_assert_no_error(error);
   g_assert_nonnull(strstr(rebuilt_text, "\"status\":\"solved\""));
 
-  checkers_puzzle_attempt_record_clear(&success);
-  checkers_puzzle_progress_store_unref(store);
+  ggame_puzzle_attempt_record_clear(&success);
+  ggame_puzzle_progress_store_unref(store);
   g_unsetenv("GCHECKERS_PUZZLE_PROGRESS_DIR");
 }
 
 static void test_puzzle_progress_clear_progress_removes_history_and_status(void) {
   g_autofree char *state_dir = test_puzzle_progress_make_state_dir();
-  CheckersPuzzleProgressStore *store = checkers_puzzle_progress_store_new(state_dir);
+  GGamePuzzleProgressStore *store = ggame_puzzle_progress_store_new(state_dir);
   g_assert_nonnull(store);
 
-  CheckersPuzzleAttemptRecord success =
-      test_puzzle_progress_make_record("attempt-clear", CHECKERS_PUZZLE_ATTEMPT_RESULT_SUCCESS);
+  GGamePuzzleAttemptRecord success =
+      test_puzzle_progress_make_record("attempt-clear", GGAME_PUZZLE_ATTEMPT_RESULT_SUCCESS);
   g_autoptr(GError) error = NULL;
-  g_assert_true(checkers_puzzle_progress_store_append_attempt(store, &success, &error));
+  g_assert_true(ggame_puzzle_progress_store_append_attempt(store, &success, &error));
   g_assert_no_error(error);
 
-  g_autoptr(GHashTable) status_map = checkers_puzzle_progress_store_load_status_map(store, &error);
+  g_autoptr(GHashTable) status_map = ggame_puzzle_progress_store_load_status_map(store, &error);
   g_assert_no_error(error);
   g_assert_nonnull(test_puzzle_progress_lookup_status(status_map, "checkers/international/puzzle-0007.sgf"));
 
-  g_assert_true(checkers_puzzle_progress_store_clear_progress(store, &error));
+  g_assert_true(ggame_puzzle_progress_store_clear_progress(store, &error));
   g_assert_no_error(error);
 
-  g_autoptr(GPtrArray) history = checkers_puzzle_progress_store_load_attempt_history(store, &error);
+  g_autoptr(GPtrArray) history = ggame_puzzle_progress_store_load_attempt_history(store, &error);
   g_assert_no_error(error);
   g_assert_cmpuint(history->len, ==, 0);
 
   g_clear_pointer(&status_map, g_hash_table_unref);
-  status_map = checkers_puzzle_progress_store_load_status_map(store, &error);
+  status_map = ggame_puzzle_progress_store_load_status_map(store, &error);
   g_assert_no_error(error);
   g_assert_cmpuint(g_hash_table_size(status_map), ==, 0);
 
-  checkers_puzzle_attempt_record_clear(&success);
-  checkers_puzzle_progress_store_unref(store);
+  ggame_puzzle_attempt_record_clear(&success);
+  ggame_puzzle_progress_store_unref(store);
   g_unsetenv("GCHECKERS_PUZZLE_PROGRESS_DIR");
 }
 
 static void test_puzzle_progress_empty_history_is_safe(void) {
   g_autofree char *state_dir = test_puzzle_progress_make_state_dir();
-  CheckersPuzzleProgressStore *store = checkers_puzzle_progress_store_new(state_dir);
+  GGamePuzzleProgressStore *store = ggame_puzzle_progress_store_new(state_dir);
 
   g_autoptr(GError) error = NULL;
-  g_autoptr(GPtrArray) history = checkers_puzzle_progress_store_load_attempt_history(store, &error);
+  g_autoptr(GPtrArray) history = ggame_puzzle_progress_store_load_attempt_history(store, &error);
   g_assert_no_error(error);
   g_assert_cmpuint(history->len, ==, 0);
 
-  g_autoptr(GPtrArray) unsent = checkers_puzzle_progress_store_collect_unsent_attempts(store, &error);
+  g_autoptr(GPtrArray) unsent = ggame_puzzle_progress_store_collect_unsent_attempts(store, &error);
   g_assert_no_error(error);
   g_assert_cmpuint(unsent->len, ==, 0);
-  g_assert_false(checkers_puzzle_progress_should_send_report(history, g_get_real_time() / 1000));
+  g_assert_false(ggame_puzzle_progress_should_send_report(history, g_get_real_time() / 1000));
 
-  checkers_puzzle_progress_store_unref(store);
+  ggame_puzzle_progress_store_unref(store);
   g_unsetenv("GCHECKERS_PUZZLE_PROGRESS_DIR");
 }
 

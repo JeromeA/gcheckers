@@ -16,7 +16,7 @@ typedef enum {
 } GCheckersImportStep;
 
 typedef struct {
-  GCheckersWindow *self;
+  GGameWindow *self;
   GtkWindow *dialog;
   GtkStack *stack;
   GtkDropDown *site_drop_down;
@@ -28,7 +28,7 @@ typedef struct {
   GtkListBox *history_list;
   GSettings *settings;
   GCheckersImportStep step;
-} GCheckersWindowImportDialogData;
+} GGameWindowImportDialogData;
 
 static const char *gcheckers_import_schema_id = "io.github.jeromea.gcheckers";
 static const char *gcheckers_import_key_remember = "import-remember";
@@ -65,7 +65,7 @@ static GSettings *gcheckers_import_dialog_create_settings(void) {
   return settings;
 }
 
-static void gcheckers_import_dialog_load_credentials(GCheckersWindowImportDialogData *data) {
+static void gcheckers_import_dialog_load_credentials(GGameWindowImportDialogData *data) {
   g_return_if_fail(data != NULL);
   g_return_if_fail(GTK_IS_ENTRY(data->email_entry));
   g_return_if_fail(GTK_IS_ENTRY(data->password_entry));
@@ -92,7 +92,7 @@ static void gcheckers_import_dialog_load_credentials(GCheckersWindowImportDialog
   gtk_editable_set_text(GTK_EDITABLE(data->password_entry), password ? password : "");
 }
 
-static void gcheckers_import_dialog_save_credentials(GCheckersWindowImportDialogData *data) {
+static void gcheckers_import_dialog_save_credentials(GGameWindowImportDialogData *data) {
   g_return_if_fail(data != NULL);
   g_return_if_fail(GTK_IS_ENTRY(data->email_entry));
   g_return_if_fail(GTK_IS_ENTRY(data->password_entry));
@@ -128,7 +128,7 @@ static void gcheckers_import_dialog_on_error_ok_clicked(GtkButton *button, gpoin
   gtk_window_destroy(error_dialog);
 }
 
-static void gcheckers_import_dialog_show_error_and_close_wizard(GCheckersWindowImportDialogData *data,
+static void gcheckers_import_dialog_show_error_and_close_wizard(GGameWindowImportDialogData *data,
                                                                 const char *text) {
   g_return_if_fail(data != NULL);
   g_return_if_fail(text != NULL);
@@ -159,14 +159,14 @@ static void gcheckers_import_dialog_show_error_and_close_wizard(GCheckersWindowI
   gtk_window_present(GTK_WINDOW(dialog));
 }
 
-static gboolean gcheckers_import_dialog_is_board_game_arena_selected(GCheckersWindowImportDialogData *data) {
+static gboolean gcheckers_import_dialog_is_board_game_arena_selected(GGameWindowImportDialogData *data) {
   g_return_val_if_fail(data != NULL, FALSE);
   g_return_val_if_fail(GTK_IS_DROP_DOWN(data->site_drop_down), FALSE);
 
   return gtk_drop_down_get_selected(data->site_drop_down) == GCHECKERS_IMPORT_SITE_BOARDGAMEARENA;
 }
 
-static void gcheckers_window_import_dialog_data_free(GCheckersWindowImportDialogData *data) {
+static void ggame_window_import_dialog_data_free(GGameWindowImportDialogData *data) {
   g_return_if_fail(data != NULL);
 
   g_clear_object(&data->settings);
@@ -174,14 +174,14 @@ static void gcheckers_window_import_dialog_data_free(GCheckersWindowImportDialog
   g_free(data);
 }
 
-static void gcheckers_window_on_import_dialog_destroy(GtkWindow * /*dialog*/, gpointer user_data) {
-  GCheckersWindowImportDialogData *data = user_data;
+static void ggame_window_on_import_dialog_destroy(GtkWindow * /*dialog*/, gpointer user_data) {
+  GGameWindowImportDialogData *data = user_data;
   g_return_if_fail(data != NULL);
 
-  gcheckers_window_import_dialog_data_free(data);
+  ggame_window_import_dialog_data_free(data);
 }
 
-static void gcheckers_window_import_dialog_update_step(GCheckersWindowImportDialogData *data) {
+static void ggame_window_import_dialog_update_step(GGameWindowImportDialogData *data) {
   g_return_if_fail(data != NULL);
   g_return_if_fail(GTK_IS_STACK(data->stack));
   g_return_if_fail(GTK_IS_BUTTON(data->back_button));
@@ -211,29 +211,29 @@ static void gcheckers_window_import_dialog_update_step(GCheckersWindowImportDial
   gcheckers_import_dialog_load_credentials(data);
 }
 
-static void gcheckers_window_on_import_dialog_site_notify(GObject * /*object*/,
+static void ggame_window_on_import_dialog_site_notify(GObject * /*object*/,
                                                           GParamSpec * /*pspec*/,
                                                           gpointer user_data) {
-  GCheckersWindowImportDialogData *data = user_data;
+  GGameWindowImportDialogData *data = user_data;
   g_return_if_fail(data != NULL);
 
   if (data->step != GCHECKERS_IMPORT_STEP_SITE) {
     return;
   }
 
-  gcheckers_window_import_dialog_update_step(data);
+  ggame_window_import_dialog_update_step(data);
 }
 
-static void gcheckers_window_on_import_dialog_cancel_clicked(GtkButton * /*button*/, gpointer user_data) {
-  GCheckersWindowImportDialogData *data = user_data;
+static void ggame_window_on_import_dialog_cancel_clicked(GtkButton * /*button*/, gpointer user_data) {
+  GGameWindowImportDialogData *data = user_data;
   g_return_if_fail(data != NULL);
   g_return_if_fail(GTK_IS_WINDOW(data->dialog));
 
   gtk_window_destroy(data->dialog);
 }
 
-static void gcheckers_window_on_import_dialog_back_clicked(GtkButton * /*button*/, gpointer user_data) {
-  GCheckersWindowImportDialogData *data = user_data;
+static void ggame_window_on_import_dialog_back_clicked(GtkButton * /*button*/, gpointer user_data) {
+  GGameWindowImportDialogData *data = user_data;
   g_return_if_fail(data != NULL);
 
   if (data->step == GCHECKERS_IMPORT_STEP_SITE) {
@@ -241,11 +241,11 @@ static void gcheckers_window_on_import_dialog_back_clicked(GtkButton * /*button*
   }
 
   data->step = GCHECKERS_IMPORT_STEP_SITE;
-  gcheckers_window_import_dialog_update_step(data);
+  ggame_window_import_dialog_update_step(data);
 }
 
-static void gcheckers_window_on_import_dialog_next_clicked(GtkButton * /*button*/, gpointer user_data) {
-  GCheckersWindowImportDialogData *data = user_data;
+static void ggame_window_on_import_dialog_next_clicked(GtkButton * /*button*/, gpointer user_data) {
+  GGameWindowImportDialogData *data = user_data;
   g_return_if_fail(data != NULL);
   g_return_if_fail(GTK_IS_WINDOW(data->dialog));
   g_return_if_fail(GTK_IS_ENTRY(data->email_entry));
@@ -262,7 +262,7 @@ static void gcheckers_window_on_import_dialog_next_clicked(GtkButton * /*button*
 
     data->step = GCHECKERS_IMPORT_STEP_CREDENTIALS;
     g_debug("Import flow: moving to credentials step");
-    gcheckers_window_import_dialog_update_step(data);
+    ggame_window_import_dialog_update_step(data);
     return;
   }
 
@@ -411,12 +411,12 @@ static void gcheckers_window_on_import_dialog_next_clicked(GtkButton * /*button*
   }
 
   data->step = GCHECKERS_IMPORT_STEP_HISTORY;
-  gcheckers_window_import_dialog_update_step(data);
+  ggame_window_import_dialog_update_step(data);
   g_debug("Import flow: switched wizard to history step");
 }
 
-void gcheckers_window_present_import_dialog(GCheckersWindow *self) {
-  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+void ggame_window_present_import_dialog(GGameWindow *self) {
+  g_return_if_fail(GGAME_IS_WINDOW(self));
 
   GtkWidget *dialog = gtk_window_new();
   gtk_window_set_title(GTK_WINDOW(dialog), "Import games");
@@ -515,7 +515,7 @@ void gcheckers_window_present_import_dialog(GCheckersWindow *self) {
   gtk_box_append(GTK_BOX(actions), back_button);
   gtk_box_append(GTK_BOX(actions), next_button);
 
-  GCheckersWindowImportDialogData *data = g_new0(GCheckersWindowImportDialogData, 1);
+  GGameWindowImportDialogData *data = g_new0(GGameWindowImportDialogData, 1);
   data->self = g_object_ref(self);
   data->dialog = GTK_WINDOW(dialog);
   data->stack = GTK_STACK(stack);
@@ -531,25 +531,25 @@ void gcheckers_window_present_import_dialog(GCheckersWindow *self) {
 
   g_signal_connect(site_drop_down,
                    "notify::selected",
-                   G_CALLBACK(gcheckers_window_on_import_dialog_site_notify),
+                   G_CALLBACK(ggame_window_on_import_dialog_site_notify),
                    data);
   g_signal_connect(cancel_button,
                    "clicked",
-                   G_CALLBACK(gcheckers_window_on_import_dialog_cancel_clicked),
+                   G_CALLBACK(ggame_window_on_import_dialog_cancel_clicked),
                    data);
   g_signal_connect(back_button,
                    "clicked",
-                   G_CALLBACK(gcheckers_window_on_import_dialog_back_clicked),
+                   G_CALLBACK(ggame_window_on_import_dialog_back_clicked),
                    data);
   g_signal_connect(next_button,
                    "clicked",
-                   G_CALLBACK(gcheckers_window_on_import_dialog_next_clicked),
+                   G_CALLBACK(ggame_window_on_import_dialog_next_clicked),
                    data);
   g_signal_connect(dialog,
                    "destroy",
-                   G_CALLBACK(gcheckers_window_on_import_dialog_destroy),
+                   G_CALLBACK(ggame_window_on_import_dialog_destroy),
                    data);
 
-  gcheckers_window_import_dialog_update_step(data);
+  ggame_window_import_dialog_update_step(data);
   gtk_window_present(GTK_WINDOW(dialog));
 }

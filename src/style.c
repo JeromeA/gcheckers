@@ -2,7 +2,7 @@
 
 #include <gtk/gtk.h>
 
-static const char *gcheckers_style_css =
+static const char *ggame_style_css =
     ".board { background-color: #2a160b; border: 2px solid #000; }"
     ".board-light { background-color: #e6d1a8; border-radius: 0; }"
     "button.board-dark {"
@@ -121,7 +121,7 @@ static const char *gcheckers_style_css =
     "}"
     "scale { padding: 0; }";
 
-void gcheckers_style_init(void) {
+void ggame_style_init(void) {
   static gsize initialized = 0;
 
   if (!g_once_init_enter(&initialized)) {
@@ -129,7 +129,7 @@ void gcheckers_style_init(void) {
   }
 
   GtkCssProvider *provider = gtk_css_provider_new();
-  gtk_css_provider_load_from_string(provider, gcheckers_style_css);
+  gtk_css_provider_load_from_string(provider, ggame_style_css);
 
   GdkDisplay *display = gdk_display_get_default();
   if (!display) {

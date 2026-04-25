@@ -18,7 +18,7 @@ static void test_app_paths_env_override_wins(void) {
   g_setenv("GCHECKERS_TEST_OVERRIDE", override, TRUE);
 
   g_autofree char *resolved =
-      gcheckers_app_paths_find_data_subdir("GCHECKERS_TEST_OVERRIDE", "puzzles");
+      ggame_app_paths_find_data_subdir("GCHECKERS_TEST_OVERRIDE", "puzzles");
   g_assert_cmpstr(resolved, ==, override);
 
   g_autofree char *variant_dir = g_build_filename(resolved, "american", NULL);
@@ -41,7 +41,7 @@ static void test_app_paths_system_data_dir_is_used(void) {
   g_setenv("XDG_DATA_DIRS", system_data, TRUE);
 
   g_autofree char *resolved =
-      gcheckers_app_paths_find_data_subdir("GCHECKERS_TEST_OVERRIDE", "puzzles");
+      ggame_app_paths_find_data_subdir("GCHECKERS_TEST_OVERRIDE", "puzzles");
   g_assert_cmpstr(resolved, ==, puzzles_dir);
 
   g_autofree char *variant_dir = g_build_filename(resolved, "international", NULL);
@@ -58,7 +58,7 @@ static void test_app_paths_user_state_dir_is_created(void) {
   g_autofree char *override = g_build_filename(root, "puzzle-progress", NULL);
   g_setenv("GCHECKERS_PUZZLE_PROGRESS_DIR", override, TRUE);
 
-  g_autofree char *resolved = gcheckers_app_paths_get_user_state_subdir("GCHECKERS_PUZZLE_PROGRESS_DIR",
+  g_autofree char *resolved = ggame_app_paths_get_user_state_subdir("GCHECKERS_PUZZLE_PROGRESS_DIR",
                                                                         "ignored",
                                                                         &error);
   g_assert_no_error(error);

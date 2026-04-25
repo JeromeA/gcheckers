@@ -1,54 +1,53 @@
 #include "active_game_backend.h"
 #include "window.h"
-#include "games/checkers/rulesets.h"
 
 typedef struct {
-  GCheckersWindow *self;
+  GGameWindow *self;
   GtkWindow *dialog;
   GtkDropDown *variant;
   GtkLabel *variant_summary;
   GtkDropDown *side0_player;
   GtkDropDown *side1_player;
   GtkScale *computer_depth_scale;
-} GCheckersWindowNewGameDialogData;
+} GGameWindowNewGameDialogData;
 
-static void gcheckers_window_new_game_dialog_data_free(GCheckersWindowNewGameDialogData *data) {
+static void ggame_window_new_game_dialog_data_free(GGameWindowNewGameDialogData *data) {
   g_return_if_fail(data != NULL);
 
   g_object_unref(data->self);
   g_free(data);
 }
 
-static void gcheckers_window_on_new_game_dialog_destroy(GtkWindow * /*dialog*/, gpointer user_data) {
-  GCheckersWindowNewGameDialogData *data = user_data;
+static void ggame_window_on_new_game_dialog_destroy(GtkWindow * /*dialog*/, gpointer user_data) {
+  GGameWindowNewGameDialogData *data = user_data;
   g_return_if_fail(data != NULL);
 
-  gcheckers_window_new_game_dialog_data_free(data);
+  ggame_window_new_game_dialog_data_free(data);
 }
 
-static void gcheckers_window_on_new_game_dialog_cancel_clicked(GtkButton * /*button*/, gpointer user_data) {
-  GCheckersWindowNewGameDialogData *data = user_data;
+static void ggame_window_on_new_game_dialog_cancel_clicked(GtkButton * /*button*/, gpointer user_data) {
+  GGameWindowNewGameDialogData *data = user_data;
   g_return_if_fail(data != NULL);
   g_return_if_fail(GTK_IS_WINDOW(data->dialog));
 
   gtk_window_destroy(data->dialog);
 }
 
-static void gcheckers_window_on_new_game_dialog_confirm_clicked(GtkButton * /*button*/, gpointer user_data) {
+static void ggame_window_on_new_game_dialog_confirm_clicked(GtkButton * /*button*/, gpointer user_data) {
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
-  GCheckersWindowNewGameDialogData *data = user_data;
-  PlayerRuleset ruleset = gcheckers_window_get_ruleset(data->self);
+  GGameWindowNewGameDialogData *data = user_data;
+  const GameBackendVariant *variant = ggame_window_get_variant(data->self);
 
   g_return_if_fail(data != NULL);
-  g_return_if_fail(GCHECKERS_IS_WINDOW(data->self));
+  g_return_if_fail(GGAME_IS_WINDOW(data->self));
   g_return_if_fail(GTK_IS_WINDOW(data->dialog));
   g_return_if_fail(backend != NULL);
 
   if (data->variant != NULL && backend->variant_count > 0) {
-    ruleset = (PlayerRuleset) gtk_drop_down_get_selected(data->variant);
+    variant = backend->variant_at(gtk_drop_down_get_selected(data->variant));
   }
-  gcheckers_window_apply_new_game_settings(data->self,
-                                           ruleset,
+  ggame_window_apply_new_game_settings(data->self,
+                                       variant,
                                            (PlayerControlMode) gtk_drop_down_get_selected(data->side0_player),
                                            (PlayerControlMode) gtk_drop_down_get_selected(data->side1_player),
                                            (guint) gtk_range_get_value(GTK_RANGE(data->computer_depth_scale)));
@@ -56,7 +55,7 @@ static void gcheckers_window_on_new_game_dialog_confirm_clicked(GtkButton * /*bu
   gtk_window_destroy(data->dialog);
 }
 
-static void gcheckers_window_new_game_update_variant_summary(GCheckersWindowNewGameDialogData *data) {
+static void ggame_window_new_game_update_variant_summary(GGameWindowNewGameDialogData *data) {
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   g_return_if_fail(data != NULL);
   g_return_if_fail(backend != NULL);
@@ -79,21 +78,21 @@ static void gcheckers_window_new_game_update_variant_summary(GCheckersWindowNewG
   gtk_label_set_text(data->variant_summary, summary);
 }
 
-static void gcheckers_window_on_new_game_variant_selected(GObject * /*object*/,
+static void ggame_window_on_new_game_variant_selected(GObject * /*object*/,
                                                           GParamSpec * /*pspec*/,
                                                           gpointer user_data) {
-  GCheckersWindowNewGameDialogData *data = user_data;
+  GGameWindowNewGameDialogData *data = user_data;
   g_return_if_fail(data != NULL);
 
-  gcheckers_window_new_game_update_variant_summary(data);
+  ggame_window_new_game_update_variant_summary(data);
 }
 
-void gcheckers_window_present_new_game_dialog(GCheckersWindow *self) {
+void ggame_window_present_new_game_dialog(GGameWindow *self) {
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
-  g_return_if_fail(GCHECKERS_IS_WINDOW(self));
+  g_return_if_fail(GGAME_IS_WINDOW(self));
   g_return_if_fail(backend != NULL);
 
-  PlayerControlsPanel *controls_panel = gcheckers_window_get_controls_panel(self);
+  PlayerControlsPanel *controls_panel = ggame_window_get_controls_panel(self);
   g_return_if_fail(controls_panel != NULL);
 
   GtkWidget *dialog = gtk_window_new();
@@ -164,7 +163,16 @@ void gcheckers_window_present_new_game_dialog(GCheckersWindow *self) {
   gtk_widget_set_size_request(GTK_WIDGET(computer_depth_scale), 100, -1);
 
   if (variant != NULL) {
-    gtk_drop_down_set_selected(variant, gcheckers_window_get_ruleset(self));
+    const GameBackendVariant *initial_variant = ggame_window_get_variant(self);
+
+    for (guint i = 0; i < backend->variant_count; ++i) {
+      const GameBackendVariant *candidate = backend->variant_at(i);
+
+      if (candidate == initial_variant) {
+        gtk_drop_down_set_selected(variant, i);
+        break;
+      }
+    }
   }
   gtk_drop_down_set_selected(side0_player, player_controls_panel_get_mode(controls_panel, 0));
   gtk_drop_down_set_selected(side1_player, player_controls_panel_get_mode(controls_panel, 1));
@@ -197,7 +205,7 @@ void gcheckers_window_present_new_game_dialog(GCheckersWindow *self) {
   gtk_box_append(GTK_BOX(actions), cancel_button);
   gtk_box_append(GTK_BOX(actions), confirm_button);
 
-  GCheckersWindowNewGameDialogData *data = g_new0(GCheckersWindowNewGameDialogData, 1);
+  GGameWindowNewGameDialogData *data = g_new0(GGameWindowNewGameDialogData, 1);
   data->self = g_object_ref(self);
   data->dialog = GTK_WINDOW(dialog);
   data->variant = variant;
@@ -205,24 +213,24 @@ void gcheckers_window_present_new_game_dialog(GCheckersWindow *self) {
   data->side0_player = side0_player;
   data->side1_player = side1_player;
   data->computer_depth_scale = computer_depth_scale;
-  gcheckers_window_new_game_update_variant_summary(data);
+  ggame_window_new_game_update_variant_summary(data);
 
   g_signal_connect(cancel_button,
                    "clicked",
-                   G_CALLBACK(gcheckers_window_on_new_game_dialog_cancel_clicked),
+                   G_CALLBACK(ggame_window_on_new_game_dialog_cancel_clicked),
                    data);
   g_signal_connect(confirm_button,
                    "clicked",
-                   G_CALLBACK(gcheckers_window_on_new_game_dialog_confirm_clicked),
+                   G_CALLBACK(ggame_window_on_new_game_dialog_confirm_clicked),
                    data);
   g_signal_connect(dialog,
                    "destroy",
-                   G_CALLBACK(gcheckers_window_on_new_game_dialog_destroy),
+                   G_CALLBACK(ggame_window_on_new_game_dialog_destroy),
                    data);
   if (variant != NULL) {
     g_signal_connect(variant,
                      "notify::selected",
-                     G_CALLBACK(gcheckers_window_on_new_game_variant_selected),
+                     G_CALLBACK(ggame_window_on_new_game_variant_selected),
                      data);
   }
   gtk_window_present(GTK_WINDOW(dialog));

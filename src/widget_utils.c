@@ -1,6 +1,6 @@
 #include "widget_utils.h"
 
-static gboolean gcheckers_widget_remove_from_overlay(GtkWidget *parent, GtkWidget *widget) {
+static gboolean ggame_widget_remove_from_overlay(GtkWidget *parent, GtkWidget *widget) {
   g_return_val_if_fail(GTK_IS_OVERLAY(parent), FALSE);
   g_return_val_if_fail(GTK_IS_WIDGET(widget), FALSE);
 
@@ -15,7 +15,7 @@ static gboolean gcheckers_widget_remove_from_overlay(GtkWidget *parent, GtkWidge
   return TRUE;
 }
 
-gboolean gcheckers_widget_remove_from_parent(GtkWidget *widget) {
+gboolean ggame_widget_remove_from_parent(GtkWidget *widget) {
   g_return_val_if_fail(GTK_IS_WIDGET(widget), FALSE);
 
   GtkWidget *parent = gtk_widget_get_parent(widget);
@@ -34,7 +34,7 @@ gboolean gcheckers_widget_remove_from_parent(GtkWidget *widget) {
   }
 
   if (GTK_IS_OVERLAY(parent)) {
-    return gcheckers_widget_remove_from_overlay(parent, widget);
+    return ggame_widget_remove_from_overlay(parent, widget);
   }
 
   if (GTK_IS_PANED(parent)) {

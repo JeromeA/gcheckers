@@ -8,13 +8,13 @@
 #include <curl/curl.h>
 
 typedef struct {
-  CheckersPuzzleProgressStore *store;
+  GGamePuzzleProgressStore *store;
   char *report_url;
-} GCheckersApplicationUploadTaskData;
+} GGameApplicationUploadTaskData;
 
-struct _GCheckersApplication {
+struct _GGameApplication {
   GtkApplication parent_instance;
-  CheckersPuzzleProgressStore *puzzle_progress_store;
+  GGamePuzzleProgressStore *puzzle_progress_store;
   char *puzzle_report_url;
   guint puzzle_progress_startup_flush_source_id;
   gboolean puzzle_progress_upload_active;
@@ -22,9 +22,9 @@ struct _GCheckersApplication {
   gboolean curl_initialized;
 };
 
-G_DEFINE_TYPE(GCheckersApplication, gcheckers_application, GTK_TYPE_APPLICATION)
+G_DEFINE_TYPE(GGameApplication, ggame_application, GTK_TYPE_APPLICATION)
 
-static size_t gcheckers_application_discard_upload_response(char *ptr,
+static size_t ggame_application_discard_upload_response(char *ptr,
                                                             size_t size,
                                                             size_t nmemb,
                                                             void * /*user_data*/) {
@@ -32,40 +32,40 @@ static size_t gcheckers_application_discard_upload_response(char *ptr,
   return size * nmemb;
 }
 
-static void gcheckers_application_upload_task_data_free(GCheckersApplicationUploadTaskData *task_data) {
+static void ggame_application_upload_task_data_free(GGameApplicationUploadTaskData *task_data) {
   if (task_data == NULL) {
     return;
   }
 
   if (task_data->store != NULL) {
-    checkers_puzzle_progress_store_unref(task_data->store);
+    ggame_puzzle_progress_store_unref(task_data->store);
   }
   g_clear_pointer(&task_data->report_url, g_free);
   g_free(task_data);
 }
 
-static void gcheckers_application_run_puzzle_progress_upload(GTask *task,
+static void ggame_application_run_puzzle_progress_upload(GTask *task,
                                                              gpointer /*source_object*/,
                                                              gpointer task_data,
                                                              GCancellable * /*cancellable*/) {
-  GCheckersApplicationUploadTaskData *upload_data = task_data;
+  GGameApplicationUploadTaskData *upload_data = task_data;
   g_return_if_fail(upload_data != NULL);
   g_return_if_fail(upload_data->store != NULL);
 
   g_autoptr(GError) error = NULL;
   g_autoptr(GPtrArray) history =
-      checkers_puzzle_progress_store_load_attempt_history(upload_data->store, &error);
+      ggame_puzzle_progress_store_load_attempt_history(upload_data->store, &error);
   if (history == NULL) {
     g_task_return_error(task, g_steal_pointer(&error));
     return;
   }
 
-  if (!checkers_puzzle_progress_should_send_report(history, g_get_real_time() / 1000)) {
+  if (!ggame_puzzle_progress_should_send_report(history, g_get_real_time() / 1000)) {
     g_task_return_boolean(task, TRUE);
     return;
   }
 
-  g_autoptr(GSettings) settings = gcheckers_app_settings_create();
+  g_autoptr(GSettings) settings = ggame_app_settings_create();
   if (G_IS_SETTINGS(settings) &&
       !g_settings_get_boolean(settings, GCHECKERS_APP_SETTINGS_KEY_SEND_PUZZLE_USAGE)) {
     g_task_return_boolean(task, TRUE);
@@ -73,13 +73,13 @@ static void gcheckers_application_run_puzzle_progress_upload(GTask *task,
   }
 
   g_autofree char *user_id =
-      checkers_puzzle_progress_store_get_or_create_user_id(upload_data->store, &error);
+      ggame_puzzle_progress_store_get_or_create_user_id(upload_data->store, &error);
   if (user_id == NULL) {
     g_task_return_error(task, g_steal_pointer(&error));
     return;
   }
 
-  g_autofree char *payload = checkers_puzzle_progress_build_upload_json(user_id, history);
+  g_autofree char *payload = ggame_puzzle_progress_build_upload_json(user_id, history);
   if (payload == NULL) {
     g_task_return_new_error(task,
                             G_IO_ERROR,
@@ -101,7 +101,7 @@ static void gcheckers_application_run_puzzle_progress_upload(GTask *task,
   curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload);
   curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE_LARGE, (curl_off_t)strlen(payload));
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, gcheckers_application_discard_upload_response);
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, ggame_application_discard_upload_response);
   curl_easy_setopt(curl, CURLOPT_USERAGENT, "gcheckers/dev");
   curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
 
@@ -131,7 +131,7 @@ static void gcheckers_application_run_puzzle_progress_upload(GTask *task,
     return;
   }
 
-  if (!checkers_puzzle_progress_store_mark_reported(upload_data->store, g_get_real_time() / 1000, &error)) {
+  if (!ggame_puzzle_progress_store_mark_reported(upload_data->store, g_get_real_time() / 1000, &error)) {
     g_task_return_error(task, g_steal_pointer(&error));
     return;
   }
@@ -139,11 +139,11 @@ static void gcheckers_application_run_puzzle_progress_upload(GTask *task,
   g_task_return_boolean(task, TRUE);
 }
 
-static void gcheckers_application_puzzle_progress_upload_ready(GObject *source_object,
+static void ggame_application_puzzle_progress_upload_ready(GObject *source_object,
                                                                GAsyncResult *result,
                                                                gpointer /*user_data*/) {
-  GCheckersApplication *self = GCHECKERS_APPLICATION(source_object);
-  g_return_if_fail(GCHECKERS_IS_APPLICATION(self));
+  GGameApplication *self = GGAME_APPLICATION(source_object);
+  g_return_if_fail(GGAME_IS_APPLICATION(self));
 
   g_autoptr(GError) error = NULL;
   if (!g_task_propagate_boolean(G_TASK(result), &error)) {
@@ -156,11 +156,11 @@ static void gcheckers_application_puzzle_progress_upload_ready(GObject *source_o
     return;
   }
 
-  gcheckers_application_request_puzzle_progress_flush(self);
+  ggame_application_request_puzzle_progress_flush(self);
 }
 
-static void gcheckers_application_start_puzzle_progress_upload(GCheckersApplication *self) {
-  g_return_if_fail(GCHECKERS_IS_APPLICATION(self));
+static void ggame_application_start_puzzle_progress_upload(GGameApplication *self) {
+  g_return_if_fail(GGAME_IS_APPLICATION(self));
 
   if (self->puzzle_progress_store == NULL || self->puzzle_progress_upload_active ||
       self->puzzle_report_url == NULL || self->puzzle_report_url[0] == '\0') {
@@ -168,99 +168,99 @@ static void gcheckers_application_start_puzzle_progress_upload(GCheckersApplicat
     return;
   }
 
-  GCheckersApplicationUploadTaskData *task_data = g_new0(GCheckersApplicationUploadTaskData, 1);
-  task_data->store = checkers_puzzle_progress_store_ref(self->puzzle_progress_store);
+  GGameApplicationUploadTaskData *task_data = g_new0(GGameApplicationUploadTaskData, 1);
+  task_data->store = ggame_puzzle_progress_store_ref(self->puzzle_progress_store);
   task_data->report_url = g_strdup(self->puzzle_report_url);
 
   self->puzzle_progress_upload_active = TRUE;
   self->puzzle_progress_upload_pending = FALSE;
 
-  GTask *task = g_task_new(self, NULL, gcheckers_application_puzzle_progress_upload_ready, NULL);
-  g_task_set_task_data(task, task_data, (GDestroyNotify)gcheckers_application_upload_task_data_free);
-  g_task_run_in_thread(task, gcheckers_application_run_puzzle_progress_upload);
+  GTask *task = g_task_new(self, NULL, ggame_application_puzzle_progress_upload_ready, NULL);
+  g_task_set_task_data(task, task_data, (GDestroyNotify)ggame_application_upload_task_data_free);
+  g_task_run_in_thread(task, ggame_application_run_puzzle_progress_upload);
   g_object_unref(task);
 }
 
-static gboolean gcheckers_application_request_startup_flush_cb(gpointer user_data) {
-  GCheckersApplication *self = GCHECKERS_APPLICATION(user_data);
-  g_return_val_if_fail(GCHECKERS_IS_APPLICATION(self), G_SOURCE_REMOVE);
+static gboolean ggame_application_request_startup_flush_cb(gpointer user_data) {
+  GGameApplication *self = GGAME_APPLICATION(user_data);
+  g_return_val_if_fail(GGAME_IS_APPLICATION(self), G_SOURCE_REMOVE);
 
   self->puzzle_progress_startup_flush_source_id = 0;
-  gcheckers_application_request_puzzle_progress_flush(self);
+  ggame_application_request_puzzle_progress_flush(self);
   return G_SOURCE_REMOVE;
 }
 
-static void gcheckers_application_on_new_game(GSimpleAction * /*action*/,
+static void ggame_application_on_new_game(GSimpleAction * /*action*/,
                                               GVariant * /*parameter*/,
                                               gpointer user_data) {
-  GCheckersApplication *self = GCHECKERS_APPLICATION(user_data);
-  g_return_if_fail(GCHECKERS_IS_APPLICATION(self));
+  GGameApplication *self = GGAME_APPLICATION(user_data);
+  g_return_if_fail(GGAME_IS_APPLICATION(self));
 
   GtkWindow *window = gtk_application_get_active_window(GTK_APPLICATION(self));
   if (!window) {
     g_debug("No active window for new game action");
     return;
   }
-  if (!GCHECKERS_IS_WINDOW(window)) {
+  if (!GGAME_IS_WINDOW(window)) {
     g_debug("Active window is not a gcheckers window");
     return;
   }
 
-  gcheckers_window_present_new_game_dialog(GCHECKERS_WINDOW(window));
+  ggame_window_present_new_game_dialog(GGAME_WINDOW(window));
 }
 
-static void gcheckers_application_on_import(GSimpleAction * /*action*/,
+static void ggame_application_on_import(GSimpleAction * /*action*/,
                                             GVariant * /*parameter*/,
                                             gpointer user_data) {
-  GCheckersApplication *self = GCHECKERS_APPLICATION(user_data);
-  g_return_if_fail(GCHECKERS_IS_APPLICATION(self));
+  GGameApplication *self = GGAME_APPLICATION(user_data);
+  g_return_if_fail(GGAME_IS_APPLICATION(self));
 
   GtkWindow *window = gtk_application_get_active_window(GTK_APPLICATION(self));
   if (!window) {
     g_debug("No active window for import action");
     return;
   }
-  if (!GCHECKERS_IS_WINDOW(window)) {
+  if (!GGAME_IS_WINDOW(window)) {
     g_debug("Active window is not a gcheckers window");
     return;
   }
 
-  gcheckers_window_present_import_dialog(GCHECKERS_WINDOW(window));
+  ggame_window_present_import_dialog(GGAME_WINDOW(window));
 }
 
-static void gcheckers_application_on_settings(GSimpleAction * /*action*/,
+static void ggame_application_on_settings(GSimpleAction * /*action*/,
                                               GVariant * /*parameter*/,
                                               gpointer user_data) {
-  GCheckersApplication *self = GCHECKERS_APPLICATION(user_data);
-  g_return_if_fail(GCHECKERS_IS_APPLICATION(self));
+  GGameApplication *self = GGAME_APPLICATION(user_data);
+  g_return_if_fail(GGAME_IS_APPLICATION(self));
 
   GtkWindow *window = gtk_application_get_active_window(GTK_APPLICATION(self));
   if (!window) {
     g_debug("No active window for settings action");
     return;
   }
-  if (!GCHECKERS_IS_WINDOW(window)) {
+  if (!GGAME_IS_WINDOW(window)) {
     g_debug("Active window is not a gcheckers window");
     return;
   }
 
-  gcheckers_window_present_settings_dialog(GCHECKERS_WINDOW(window));
+  ggame_window_present_settings_dialog(GGAME_WINDOW(window));
 }
 
-static void gcheckers_application_on_quit(GSimpleAction * /*action*/,
+static void ggame_application_on_quit(GSimpleAction * /*action*/,
                                           GVariant * /*parameter*/,
                                           gpointer user_data) {
-  GCheckersApplication *self = GCHECKERS_APPLICATION(user_data);
-  g_return_if_fail(GCHECKERS_IS_APPLICATION(self));
+  GGameApplication *self = GGAME_APPLICATION(user_data);
+  g_return_if_fail(GGAME_IS_APPLICATION(self));
 
   g_application_quit(G_APPLICATION(self));
 }
 
-static void gcheckers_application_startup(GApplication *app) {
-  GCheckersApplication *self = GCHECKERS_APPLICATION(app);
-  g_return_if_fail(GCHECKERS_IS_APPLICATION(self));
+static void ggame_application_startup(GApplication *app) {
+  GGameApplication *self = GGAME_APPLICATION(app);
+  g_return_if_fail(GGAME_IS_APPLICATION(self));
 
-  G_APPLICATION_CLASS(gcheckers_application_parent_class)->startup(app);
+  G_APPLICATION_CLASS(ggame_application_parent_class)->startup(app);
 
   if (curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK) {
     self->curl_initialized = TRUE;
@@ -270,19 +270,19 @@ static void gcheckers_application_startup(GApplication *app) {
 
   g_autoptr(GError) error = NULL;
   g_autofree char *state_dir =
-      gcheckers_app_paths_get_user_state_subdir("GCHECKERS_PUZZLE_PROGRESS_DIR", "puzzle-progress", &error);
+      ggame_app_paths_get_user_state_subdir("GCHECKERS_PUZZLE_PROGRESS_DIR", "puzzle-progress", &error);
   if (state_dir == NULL) {
     g_debug("Failed to initialize puzzle progress storage: %s",
             error != NULL ? error->message : "unknown error");
   } else {
-    self->puzzle_progress_store = checkers_puzzle_progress_store_new(state_dir);
+    self->puzzle_progress_store = ggame_puzzle_progress_store_new(state_dir);
   }
   self->puzzle_report_url = g_strdup(g_getenv("GCHECKERS_PUZZLE_REPORT_URL"));
 
   static const GActionEntry app_actions[] = {
       {
           .name = "new-game",
-          .activate = gcheckers_application_on_new_game,
+          .activate = ggame_application_on_new_game,
           .parameter_type = NULL,
           .state = NULL,
           .change_state = NULL,
@@ -290,7 +290,7 @@ static void gcheckers_application_startup(GApplication *app) {
       },
       {
           .name = "import",
-          .activate = gcheckers_application_on_import,
+          .activate = ggame_application_on_import,
           .parameter_type = NULL,
           .state = NULL,
           .change_state = NULL,
@@ -298,7 +298,7 @@ static void gcheckers_application_startup(GApplication *app) {
       },
       {
           .name = "settings",
-          .activate = gcheckers_application_on_settings,
+          .activate = ggame_application_on_settings,
           .parameter_type = NULL,
           .state = NULL,
           .change_state = NULL,
@@ -306,7 +306,7 @@ static void gcheckers_application_startup(GApplication *app) {
       },
       {
           .name = "quit",
-          .activate = gcheckers_application_on_quit,
+          .activate = ggame_application_on_quit,
           .parameter_type = NULL,
           .state = NULL,
           .change_state = NULL,
@@ -385,12 +385,12 @@ static void gcheckers_application_startup(GApplication *app) {
                                         (const char *[]){"End", NULL});
 
   self->puzzle_progress_startup_flush_source_id =
-      g_timeout_add(250, gcheckers_application_request_startup_flush_cb, self);
+      g_timeout_add(250, ggame_application_request_startup_flush_cb, self);
 }
 
-static void gcheckers_application_activate(GApplication *app) {
-  GCheckersApplication *self = GCHECKERS_APPLICATION(app);
-  g_return_if_fail(GCHECKERS_IS_APPLICATION(self));
+static void ggame_application_activate(GApplication *app) {
+  GGameApplication *self = GGAME_APPLICATION(app);
+  g_return_if_fail(GGAME_IS_APPLICATION(self));
 
   GtkWindow *existing = gtk_application_get_active_window(GTK_APPLICATION(app));
   if (existing) {
@@ -399,45 +399,45 @@ static void gcheckers_application_activate(GApplication *app) {
   }
 
   GCheckersModel *model = gcheckers_model_new();
-  GtkWindow *window = GTK_WINDOW(gcheckers_window_new(GTK_APPLICATION(app), model));
+  GtkWindow *window = GTK_WINDOW(ggame_window_new(GTK_APPLICATION(app), model));
   g_object_unref(model);
 
   gtk_window_present(window);
 
-  g_autoptr(GSettings) settings = gcheckers_app_settings_create();
+  g_autoptr(GSettings) settings = ggame_app_settings_create();
   if (G_IS_SETTINGS(settings) &&
-      !gcheckers_app_settings_get_privacy_settings_shown(settings)) {
-    gcheckers_window_present_settings_dialog(GCHECKERS_WINDOW(window));
+      !ggame_app_settings_get_privacy_settings_shown(settings)) {
+    ggame_window_present_settings_dialog(GGAME_WINDOW(window));
   }
 }
 
-static void gcheckers_application_shutdown(GApplication *app) {
-  GCheckersApplication *self = GCHECKERS_APPLICATION(app);
-  g_return_if_fail(GCHECKERS_IS_APPLICATION(self));
+static void ggame_application_shutdown(GApplication *app) {
+  GGameApplication *self = GGAME_APPLICATION(app);
+  g_return_if_fail(GGAME_IS_APPLICATION(self));
 
   if (self->puzzle_progress_startup_flush_source_id != 0) {
     g_clear_handle_id(&self->puzzle_progress_startup_flush_source_id, g_source_remove);
   }
-  gcheckers_application_request_puzzle_progress_flush(self);
+  ggame_application_request_puzzle_progress_flush(self);
 
-  G_APPLICATION_CLASS(gcheckers_application_parent_class)->shutdown(app);
+  G_APPLICATION_CLASS(ggame_application_parent_class)->shutdown(app);
 }
 
-static void gcheckers_application_dispose(GObject *object) {
-  GCheckersApplication *self = GCHECKERS_APPLICATION(object);
+static void ggame_application_dispose(GObject *object) {
+  GGameApplication *self = GGAME_APPLICATION(object);
 
   if (self->puzzle_progress_startup_flush_source_id != 0) {
     g_clear_handle_id(&self->puzzle_progress_startup_flush_source_id, g_source_remove);
   }
 
-  G_OBJECT_CLASS(gcheckers_application_parent_class)->dispose(object);
+  G_OBJECT_CLASS(ggame_application_parent_class)->dispose(object);
 }
 
-static void gcheckers_application_finalize(GObject *object) {
-  GCheckersApplication *self = GCHECKERS_APPLICATION(object);
+static void ggame_application_finalize(GObject *object) {
+  GGameApplication *self = GGAME_APPLICATION(object);
 
   if (self->puzzle_progress_store != NULL) {
-    checkers_puzzle_progress_store_unref(self->puzzle_progress_store);
+    ggame_puzzle_progress_store_unref(self->puzzle_progress_store);
     self->puzzle_progress_store = NULL;
   }
   g_clear_pointer(&self->puzzle_report_url, g_free);
@@ -446,29 +446,29 @@ static void gcheckers_application_finalize(GObject *object) {
     self->curl_initialized = FALSE;
   }
 
-  G_OBJECT_CLASS(gcheckers_application_parent_class)->finalize(object);
+  G_OBJECT_CLASS(ggame_application_parent_class)->finalize(object);
 }
 
-static void gcheckers_application_class_init(GCheckersApplicationClass *klass) {
+static void ggame_application_class_init(GGameApplicationClass *klass) {
   GObjectClass *object_class = G_OBJECT_CLASS(klass);
   GApplicationClass *app_class = G_APPLICATION_CLASS(klass);
 
-  object_class->dispose = gcheckers_application_dispose;
-  object_class->finalize = gcheckers_application_finalize;
-  app_class->startup = gcheckers_application_startup;
-  app_class->activate = gcheckers_application_activate;
-  app_class->shutdown = gcheckers_application_shutdown;
+  object_class->dispose = ggame_application_dispose;
+  object_class->finalize = ggame_application_finalize;
+  app_class->startup = ggame_application_startup;
+  app_class->activate = ggame_application_activate;
+  app_class->shutdown = ggame_application_shutdown;
 }
 
-static void gcheckers_application_init(GCheckersApplication *self) {
+static void ggame_application_init(GGameApplication *self) {
   self->puzzle_progress_startup_flush_source_id = 0;
   self->puzzle_progress_upload_active = FALSE;
   self->puzzle_progress_upload_pending = FALSE;
   self->curl_initialized = FALSE;
 }
 
-GCheckersApplication *gcheckers_application_new(void) {
-  return g_object_new(GCHECKERS_TYPE_APPLICATION,
+GGameApplication *ggame_application_new(void) {
+  return g_object_new(GGAME_TYPE_APPLICATION,
                       "application-id",
                       "io.github.jeromea.gcheckers",
                       "flags",
@@ -476,12 +476,12 @@ GCheckersApplication *gcheckers_application_new(void) {
                       NULL);
 }
 
-CheckersPuzzleProgressStore *gcheckers_application_get_puzzle_progress_store(GCheckersApplication *self) {
-  g_return_val_if_fail(GCHECKERS_IS_APPLICATION(self), NULL);
+GGamePuzzleProgressStore *ggame_application_get_puzzle_progress_store(GGameApplication *self) {
+  g_return_val_if_fail(GGAME_IS_APPLICATION(self), NULL);
 
   g_autoptr(GError) error = NULL;
   g_autofree char *state_dir =
-      gcheckers_app_paths_get_user_state_subdir("GCHECKERS_PUZZLE_PROGRESS_DIR", "puzzle-progress", &error);
+      ggame_app_paths_get_user_state_subdir("GCHECKERS_PUZZLE_PROGRESS_DIR", "puzzle-progress", &error);
   if (state_dir == NULL) {
     g_debug("Failed to resolve puzzle progress storage: %s", error != NULL ? error->message : "unknown error");
     return self->puzzle_progress_store;
@@ -489,25 +489,25 @@ CheckersPuzzleProgressStore *gcheckers_application_get_puzzle_progress_store(GCh
 
   g_autofree char *current_state_dir =
       self->puzzle_progress_store != NULL
-          ? checkers_puzzle_progress_store_dup_state_dir(self->puzzle_progress_store)
+          ? ggame_puzzle_progress_store_dup_state_dir(self->puzzle_progress_store)
           : NULL;
   if (g_strcmp0(current_state_dir, state_dir) != 0) {
     if (self->puzzle_progress_store != NULL) {
-      checkers_puzzle_progress_store_unref(self->puzzle_progress_store);
+      ggame_puzzle_progress_store_unref(self->puzzle_progress_store);
     }
-    self->puzzle_progress_store = checkers_puzzle_progress_store_new(state_dir);
+    self->puzzle_progress_store = ggame_puzzle_progress_store_new(state_dir);
   }
 
   return self->puzzle_progress_store;
 }
 
-void gcheckers_application_request_puzzle_progress_flush(GCheckersApplication *self) {
-  g_return_if_fail(GCHECKERS_IS_APPLICATION(self));
+void ggame_application_request_puzzle_progress_flush(GGameApplication *self) {
+  g_return_if_fail(GGAME_IS_APPLICATION(self));
 
   self->puzzle_progress_upload_pending = TRUE;
   if (self->puzzle_progress_upload_active) {
     return;
   }
 
-  gcheckers_application_start_puzzle_progress_upload(self);
+  ggame_application_start_puzzle_progress_upload(self);
 }

@@ -32,27 +32,29 @@ game-specific, with the checkers build still producing `gcheckers`.
       transposition-table layer.
 - [x] (2026-04-25 00:30Z) Complete Milestone 4 by moving the shared square-grid UI and core window-side status/orient
       decisions onto `GameBackend` and `GGameModel`.
-- [~] (2026-04-24 12:05Z) Start Milestone 5 by moving checked-in puzzles and stable puzzle IDs to the generic
-      `puzzles/<game-id>/<variant>/...` and `<game-id>/<variant>/...` shapes for the active backend.
-- [~] (2026-04-25 10:50Z) Continue Milestone 5 by adding a shared `puzzle_catalog` module, switching shared SGF `RU`
-      helpers from checkers rulesets to backend variants, and removing `CheckersMove` from the public
-      `sgf_move_props.h` API.
+- [x] (2026-04-25 14:30Z) Complete Milestone 5 by moving checked-in puzzles and stable puzzle IDs to the generic
+      `puzzles/<game-id>/<variant>/...` and `<game-id>/<variant>/...` shapes, switching shared SGF `RU` helpers from
+      checkers rulesets to backend variants, generalizing puzzle-progress records, and moving shared puzzle browsing to
+      `src/puzzle_catalog.c`.
 - [x] (2026-04-24 14:20Z) Complete Milestone 6 by moving the checkers engine, ruleset/model wrappers, puzzle helpers,
       and notation helpers under `src/games/checkers/`, then repointing build rules and includes at the new paths.
-- [ ] Convert shared application shell, timeline, puzzle shell, settings, and AI code to use generic backend types and
-      callbacks.
-- [ ] Move board presentation behind an optional square-grid API plus a backend-owned custom-widget path so shared UI
-      works for both rectangular boards and non-rectangular games.
+- [x] (2026-04-25 00:30Z) Convert the shared application shell, timeline, puzzle shell, settings, and AI code to use
+      generic backend types/callbacks while keeping the checkers compatibility bridge where the engine/model is still
+      checkers-owned.
+- [x] (2026-04-25 00:30Z) Move board presentation behind an optional square-grid API plus a backend-owned
+      custom-widget path so shared UI works for both rectangular boards and non-rectangular games.
 - [x] (2026-04-24 11:15Z) Make backend selection explicit in the Makefile with `GAME ?= checkers`,
       `GGAME_GAME_CHECKERS`, and an unknown-game failure path.
-- [ ] Split generic `ggame` framework naming from per-game shipped app naming, so the checkers build still produces
-      `gcheckers` and future games produce their own binary/app IDs.
+- [x] (2026-04-25 14:30Z) Split generic `ggame` framework naming from per-game shipped app naming, so the checkers
+      build still produces `gcheckers` while shared types/modules use `ggame`.
 - [x] (2026-04-24 12:45Z) Replace the single root Flatpak manifest path with a per-game manifest under
       `flatpak/io.github.jeromea.gcheckers.yaml`.
-- [ ] Rename or wrap checkers-specific tests so they compile through the checkers backend and add backend-interface
-      tests.
-- [ ] Update `doc/OVERVIEW.md` after each `src/` milestone so the source architecture remains accurate.
-- [ ] Run the full build and focused test suite; document any unrelated pre-existing test failures.
+- [x] (2026-04-25 14:30Z) Rename or wrap checkers-specific tests so they compile through the checkers backend and add
+      backend-interface tests.
+- [x] (2026-04-25 14:30Z) Update `doc/OVERVIEW.md` after each `src/` milestone so the source architecture remains
+      accurate.
+- [x] (2026-04-25 14:30Z) Run the full build and focused test suite; no new unrelated failures were introduced in the
+      exercised targets.
 
 ## Surprises & Discoveries
 
@@ -159,17 +161,16 @@ game-specific, with the checkers build still producing `gcheckers`.
 
 ## Outcomes & Retrospective
 
-Milestones 1 through 4 and 6 are complete: the backend interface exists, a generic model and search layer sit beside
-the legacy checkers wrappers, the shared square-grid board path is backend-driven, the physical checkers ownership
-boundary now lives under `src/games/checkers/`, and the Makefile already selects the active game with
-`GAME ?= checkers`. Milestone 5 is still in progress. The repository now stores checked-in puzzles under
-`puzzles/checkers/<variant>/...`, shared progress IDs include the game prefix, and the checkers Flatpak manifest now
-lives at `flatpak/io.github.jeromea.gcheckers.yaml`. Shared puzzle browsing now goes through `src/puzzle_catalog.c`,
-`sgf_io.h` exposes backend-variant helpers instead of checkers-ruleset helpers, and `sgf_move_props.h` no longer
-exports `CheckersMove`. The deeper puzzle-progress record genericization, SGF controller renaming, and framework-wide
-`ggame` naming sweep are still pending. The expected final outcome remains a repository where the checkers backend is
-selected by a compile define, shared code depends only on generic backend headers, and adding a second game requires
-implementing a new backend source directory plus Makefile source selection rather than rewriting the UI.
+The planned milestones are now complete. The backend interface exists, a generic model and search layer sit beside the
+legacy checkers wrappers, the shared square-grid board path is backend-driven, the physical checkers ownership boundary
+now lives under `src/games/checkers/`, and the Makefile selects the active game with `GAME ?= checkers`. The
+repository stores checked-in puzzles under `puzzles/checkers/<variant>/...`, shared progress IDs include the game
+prefix, the checkers Flatpak manifest lives at `flatpak/io.github.jeromea.gcheckers.yaml`, shared puzzle browsing goes
+through `src/puzzle_catalog.c`, `sgf_io.h` exposes backend-variant helpers instead of checkers-ruleset helpers,
+`sgf_move_props.h` and `sgf_controller.h` no longer expose `CheckersMove`, puzzle/new-game flows use backend variants
+in their public APIs, and the shared framework naming is now `ggame` while the shipped checkers build remains
+`gcheckers`. Adding a second game now means implementing a new backend source directory plus Makefile source selection
+rather than rewriting the shared UI shell.
 
 ## Context and Orientation
 
@@ -599,8 +600,8 @@ source file outside the backend directory must be edited to select it.
 
 Rename the generic framework identity while preserving game-specific shipped names:
 
-    GCheckersApplication -> GGameApplication
-    GCheckersWindow -> GGameWindow
+    GGameApplication -> GGameApplication
+    GGameWindow -> GGameWindow
     generic internal prefixes/modules/settings helpers -> ggame*
     shipped checkers binary -> build/bin/gcheckers
     shipped checkers app ID -> io.github.jeromea.gcheckers

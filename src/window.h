@@ -1,8 +1,8 @@
-#ifndef GCHECKERS_WINDOW_H
-#define GCHECKERS_WINDOW_H
+#ifndef GGAME_WINDOW_H
+#define GGAME_WINDOW_H
 
 #include "games/checkers/checkers_model.h"
-#include "games/checkers/ruleset.h"
+#include "game_backend.h"
 #include "sgf_controller.h"
 #include "player_controls_panel.h"
 
@@ -10,43 +10,43 @@
 
 G_BEGIN_DECLS
 
-#define GCHECKERS_TYPE_WINDOW (gcheckers_window_get_type())
+#define GGAME_TYPE_WINDOW (ggame_window_get_type())
 
-G_DECLARE_FINAL_TYPE(GCheckersWindow, gcheckers_window, GCHECKERS, WINDOW, GtkApplicationWindow)
+G_DECLARE_FINAL_TYPE(GGameWindow, ggame_window, GGAME, WINDOW, GtkApplicationWindow)
 
 typedef enum {
-  GCHECKERS_WINDOW_BOARD_ORIENTATION_FIXED = 0,
-  GCHECKERS_WINDOW_BOARD_ORIENTATION_FOLLOW_PLAYER,
-  GCHECKERS_WINDOW_BOARD_ORIENTATION_FOLLOW_TURN
-} GCheckersWindowBoardOrientationMode;
+  GGAME_WINDOW_BOARD_ORIENTATION_FIXED = 0,
+  GGAME_WINDOW_BOARD_ORIENTATION_FOLLOW_PLAYER,
+  GGAME_WINDOW_BOARD_ORIENTATION_FOLLOW_TURN
+} GGameWindowBoardOrientationMode;
 
-GCheckersWindow *gcheckers_window_new(GtkApplication *app, GCheckersModel *model);
-void gcheckers_window_present_new_game_dialog(GCheckersWindow *self);
-void gcheckers_window_present_puzzle_dialog(GCheckersWindow *self);
-void gcheckers_window_present_import_dialog(GCheckersWindow *self);
-void gcheckers_window_present_settings_dialog(GCheckersWindow *self);
-void gcheckers_window_set_loaded_source_path(GCheckersWindow *self, const char *path);
-void gcheckers_window_set_loaded_ruleset(GCheckersWindow *self, PlayerRuleset ruleset);
-void gcheckers_window_force_move(GCheckersWindow *self);
-char *gcheckers_window_format_analysis_score(gint score);
-char *gcheckers_window_format_analysis_report(const SgfNodeAnalysis *analysis);
-PlayerRuleset gcheckers_window_get_ruleset(GCheckersWindow *self);
-gboolean gcheckers_window_start_puzzle_mode_for_path(GCheckersWindow *self,
-                                                     PlayerRuleset ruleset,
+GGameWindow *ggame_window_new(GtkApplication *app, GCheckersModel *model);
+void ggame_window_present_new_game_dialog(GGameWindow *self);
+void ggame_window_present_puzzle_dialog(GGameWindow *self);
+void ggame_window_present_import_dialog(GGameWindow *self);
+void ggame_window_present_settings_dialog(GGameWindow *self);
+void ggame_window_set_loaded_source_path(GGameWindow *self, const char *path);
+void ggame_window_set_loaded_variant(GGameWindow *self, const GameBackendVariant *variant);
+void ggame_window_force_move(GGameWindow *self);
+char *ggame_window_format_analysis_score(gint score);
+char *ggame_window_format_analysis_report(const SgfNodeAnalysis *analysis);
+const GameBackendVariant *ggame_window_get_variant(GGameWindow *self);
+gboolean ggame_window_start_puzzle_mode_for_path(GGameWindow *self,
+                                                 const GameBackendVariant *variant,
                                                      const char *path);
-void gcheckers_window_apply_new_game_settings(GCheckersWindow *self,
-                                              PlayerRuleset ruleset,
+void ggame_window_apply_new_game_settings(GGameWindow *self,
+                                          const GameBackendVariant *variant,
                                               PlayerControlMode white_mode,
                                               PlayerControlMode black_mode,
                                               guint computer_depth);
-void gcheckers_window_set_board_orientation_mode(GCheckersWindow *self,
-                                                 GCheckersWindowBoardOrientationMode mode);
-void gcheckers_window_set_board_bottom_color(GCheckersWindow *self, CheckersColor bottom_color);
-CheckersColor gcheckers_window_get_board_bottom_color(GCheckersWindow *self);
-void gcheckers_window_set_analysis_depth(GCheckersWindow *self, guint depth);
-guint gcheckers_window_get_analysis_depth(GCheckersWindow *self);
-PlayerControlsPanel *gcheckers_window_get_controls_panel(GCheckersWindow *self);
-GCheckersSgfController *gcheckers_window_get_sgf_controller(GCheckersWindow *self);
+void ggame_window_set_board_orientation_mode(GGameWindow *self,
+                                                 GGameWindowBoardOrientationMode mode);
+void ggame_window_set_board_bottom_color(GGameWindow *self, CheckersColor bottom_color);
+CheckersColor ggame_window_get_board_bottom_color(GGameWindow *self);
+void ggame_window_set_analysis_depth(GGameWindow *self, guint depth);
+guint ggame_window_get_analysis_depth(GGameWindow *self);
+PlayerControlsPanel *ggame_window_get_controls_panel(GGameWindow *self);
+GGameSgfController *ggame_window_get_sgf_controller(GGameWindow *self);
 
 G_END_DECLS
 

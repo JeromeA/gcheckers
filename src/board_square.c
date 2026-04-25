@@ -90,7 +90,7 @@ static void board_square_dispose(GObject *object) {
 
   gboolean button_removed = TRUE;
   if (self->button) {
-    button_removed = gcheckers_widget_remove_from_parent(self->button);
+    button_removed = ggame_widget_remove_from_parent(self->button);
     if (!button_removed && gtk_widget_get_parent(self->button)) {
       g_debug("Failed to remove board square button from parent during dispose\n");
     }

@@ -1,8 +1,8 @@
-#ifndef GCHECKERS_SETTINGS_DIALOG_H
-#define GCHECKERS_SETTINGS_DIALOG_H
+#ifndef GGAME_SETTINGS_DIALOG_H
+#define GGAME_SETTINGS_DIALOG_H
 
 #include "window.h"
 
-void gcheckers_window_present_settings_dialog(GCheckersWindow *self);
+void ggame_window_present_settings_dialog(GGameWindow *self);
 
 #endif

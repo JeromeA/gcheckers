@@ -1,5 +1,5 @@
-#ifndef GCHECKERS_APPLICATION_H
-#define GCHECKERS_APPLICATION_H
+#ifndef GGAME_APPLICATION_H
+#define GGAME_APPLICATION_H
 
 #include "puzzle_progress.h"
 
@@ -7,13 +7,13 @@
 
 G_BEGIN_DECLS
 
-#define GCHECKERS_TYPE_APPLICATION (gcheckers_application_get_type())
+#define GGAME_TYPE_APPLICATION (ggame_application_get_type())
 
-G_DECLARE_FINAL_TYPE(GCheckersApplication, gcheckers_application, GCHECKERS, APPLICATION, GtkApplication)
+G_DECLARE_FINAL_TYPE(GGameApplication, ggame_application, GGAME, APPLICATION, GtkApplication)
 
-GCheckersApplication *gcheckers_application_new(void);
-CheckersPuzzleProgressStore *gcheckers_application_get_puzzle_progress_store(GCheckersApplication *self);
-void gcheckers_application_request_puzzle_progress_flush(GCheckersApplication *self);
+GGameApplication *ggame_application_new(void);
+GGamePuzzleProgressStore *ggame_application_get_puzzle_progress_store(GGameApplication *self);
+void ggame_application_request_puzzle_progress_flush(GGameApplication *self);
 
 G_END_DECLS
 

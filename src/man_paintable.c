@@ -29,44 +29,44 @@ typedef struct _GCheckersManPaintableClass {
   GObjectClass parent_class;
 } GCheckersManPaintableClass;
 
-#define GCHECKERS_TYPE_MAN_PAINTABLE (gcheckers_man_paintable_get_type())
-#define GCHECKERS_MAN_PAINTABLE(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj), GCHECKERS_TYPE_MAN_PAINTABLE, GCheckersManPaintable))
+#define GGAME_TYPE_MAN_PAINTABLE (ggame_man_paintable_get_type())
+#define GGAME_MAN_PAINTABLE(obj) \
+  (G_TYPE_CHECK_INSTANCE_CAST((obj), GGAME_TYPE_MAN_PAINTABLE, GCheckersManPaintable))
 
-static void gcheckers_man_paintable_snapshot(GdkPaintable *paintable,
+static void ggame_man_paintable_snapshot(GdkPaintable *paintable,
                                              GdkSnapshot *snapshot,
                                              double width,
                                              double height);
-static int gcheckers_man_paintable_get_intrinsic_width(GdkPaintable *paintable);
-static int gcheckers_man_paintable_get_intrinsic_height(GdkPaintable *paintable);
-static double gcheckers_man_paintable_get_intrinsic_aspect_ratio(GdkPaintable *paintable);
+static int ggame_man_paintable_get_intrinsic_width(GdkPaintable *paintable);
+static int ggame_man_paintable_get_intrinsic_height(GdkPaintable *paintable);
+static double ggame_man_paintable_get_intrinsic_aspect_ratio(GdkPaintable *paintable);
 
-static void gcheckers_man_paintable_paintable_init(GdkPaintableInterface *iface) {
-  iface->snapshot = gcheckers_man_paintable_snapshot;
-  iface->get_intrinsic_width = gcheckers_man_paintable_get_intrinsic_width;
-  iface->get_intrinsic_height = gcheckers_man_paintable_get_intrinsic_height;
-  iface->get_intrinsic_aspect_ratio = gcheckers_man_paintable_get_intrinsic_aspect_ratio;
+static void ggame_man_paintable_paintable_init(GdkPaintableInterface *iface) {
+  iface->snapshot = ggame_man_paintable_snapshot;
+  iface->get_intrinsic_width = ggame_man_paintable_get_intrinsic_width;
+  iface->get_intrinsic_height = ggame_man_paintable_get_intrinsic_height;
+  iface->get_intrinsic_aspect_ratio = ggame_man_paintable_get_intrinsic_aspect_ratio;
 }
 
 G_DEFINE_TYPE_WITH_CODE(GCheckersManPaintable,
-                        gcheckers_man_paintable,
+                        ggame_man_paintable,
                         G_TYPE_OBJECT,
-                        G_IMPLEMENT_INTERFACE(GDK_TYPE_PAINTABLE, gcheckers_man_paintable_paintable_init))
+                        G_IMPLEMENT_INTERFACE(GDK_TYPE_PAINTABLE, ggame_man_paintable_paintable_init))
 
-static void gcheckers_man_paintable_class_init(GCheckersManPaintableClass * /*klass*/) {
+static void ggame_man_paintable_class_init(GCheckersManPaintableClass * /*klass*/) {
 }
 
-static void gcheckers_man_paintable_init(GCheckersManPaintable * /*self*/) {
+static void ggame_man_paintable_init(GCheckersManPaintable * /*self*/) {
 }
 
-static double gcheckers_man_paintable_center_y_for_layers(guint layer_count) {
+static double ggame_man_paintable_center_y_for_layers(guint layer_count) {
   g_return_val_if_fail(layer_count > 0, gcheckers_man_center);
 
   return gcheckers_man_center - gcheckers_man_base_height / 2.0 +
          (double)(layer_count - 1) * gcheckers_king_stack_offset / 2.0;
 }
 
-static void gcheckers_man_paintable_draw_base(const GCheckersManPaintState *state, cairo_t *cr, double y_offset) {
+static void ggame_man_paintable_draw_base(const GCheckersManPaintState *state, cairo_t *cr, double y_offset) {
   g_return_if_fail(state != NULL);
   g_return_if_fail(cr != NULL);
 
@@ -92,7 +92,7 @@ static void gcheckers_man_paintable_draw_base(const GCheckersManPaintState *stat
   cairo_stroke(cr);
 }
 
-static void gcheckers_man_paintable_draw_top(const GCheckersManPaintState *state, cairo_t *cr, double y_offset) {
+static void ggame_man_paintable_draw_top(const GCheckersManPaintState *state, cairo_t *cr, double y_offset) {
   g_return_if_fail(state != NULL);
   g_return_if_fail(cr != NULL);
 
@@ -115,7 +115,7 @@ static void gcheckers_man_paintable_draw_top(const GCheckersManPaintState *state
   cairo_stroke(cr);
 }
 
-void gcheckers_man_paintable_draw(cairo_t *cr,
+void ggame_man_paintable_draw(cairo_t *cr,
                                   double width,
                                   double height,
                                   const GdkRGBA *fill_color,
@@ -130,7 +130,7 @@ void gcheckers_man_paintable_draw(cairo_t *cr,
   state.fill_color = *fill_color;
   state.stroke_color = *stroke_color;
   state.layer_count = layer_count;
-  state.center_y = gcheckers_man_paintable_center_y_for_layers(layer_count);
+  state.center_y = ggame_man_paintable_center_y_for_layers(layer_count);
 
   cairo_save(cr);
   cairo_set_line_width(cr, 2.0);
@@ -141,14 +141,14 @@ void gcheckers_man_paintable_draw(cairo_t *cr,
 
   for (guint layer = 0; layer < state.layer_count; ++layer) {
     double y_offset = -(double)layer * gcheckers_king_stack_offset;
-    gcheckers_man_paintable_draw_base(&state, cr, y_offset);
-    gcheckers_man_paintable_draw_top(&state, cr, y_offset);
+    ggame_man_paintable_draw_base(&state, cr, y_offset);
+    ggame_man_paintable_draw_top(&state, cr, y_offset);
   }
 
   cairo_restore(cr);
 }
 
-static void gcheckers_man_paintable_snapshot(GdkPaintable *paintable,
+static void ggame_man_paintable_snapshot(GdkPaintable *paintable,
                                              GdkSnapshot *snapshot,
                                              double width,
                                              double height) {
@@ -159,37 +159,37 @@ static void gcheckers_man_paintable_snapshot(GdkPaintable *paintable,
     return;
   }
 
-  GCheckersManPaintable *self = GCHECKERS_MAN_PAINTABLE(paintable);
+  GCheckersManPaintable *self = GGAME_MAN_PAINTABLE(paintable);
   graphene_rect_t bounds = GRAPHENE_RECT_INIT(0.0f, 0.0f, (float)width, (float)height);
   cairo_t *cr = gtk_snapshot_append_cairo(snapshot, &bounds);
 
-  gcheckers_man_paintable_draw(cr, width, height, &self->fill_color, &self->stroke_color, self->layer_count);
+  ggame_man_paintable_draw(cr, width, height, &self->fill_color, &self->stroke_color, self->layer_count);
   cairo_destroy(cr);
 }
 
-static int gcheckers_man_paintable_get_intrinsic_width(GdkPaintable *paintable) {
+static int ggame_man_paintable_get_intrinsic_width(GdkPaintable *paintable) {
   g_return_val_if_fail(GDK_IS_PAINTABLE(paintable), 0);
   return (int)gcheckers_man_viewbox_size;
 }
 
-static int gcheckers_man_paintable_get_intrinsic_height(GdkPaintable *paintable) {
+static int ggame_man_paintable_get_intrinsic_height(GdkPaintable *paintable) {
   g_return_val_if_fail(GDK_IS_PAINTABLE(paintable), 0);
   return (int)gcheckers_man_viewbox_size;
 }
 
-static double gcheckers_man_paintable_get_intrinsic_aspect_ratio(GdkPaintable *paintable) {
+static double ggame_man_paintable_get_intrinsic_aspect_ratio(GdkPaintable *paintable) {
   g_return_val_if_fail(GDK_IS_PAINTABLE(paintable), 0.0);
   return 1.0;
 }
 
-GdkPaintable *gcheckers_man_paintable_new(const GdkRGBA *fill_color,
+GdkPaintable *ggame_man_paintable_new(const GdkRGBA *fill_color,
                                           const GdkRGBA *stroke_color,
                                           guint layer_count) {
   g_return_val_if_fail(fill_color != NULL, NULL);
   g_return_val_if_fail(stroke_color != NULL, NULL);
   g_return_val_if_fail(layer_count > 0, NULL);
 
-  GCheckersManPaintable *paintable = g_object_new(gcheckers_man_paintable_get_type(), NULL);
+  GCheckersManPaintable *paintable = g_object_new(ggame_man_paintable_get_type(), NULL);
   paintable->fill_color = *fill_color;
   paintable->stroke_color = *stroke_color;
   paintable->layer_count = layer_count;

@@ -8,7 +8,7 @@ struct _BoardMoveOverlay {
   GObject parent_instance;
   GtkWidget *drawing_area;
   GGameModel *model;
-  GCheckersSgfController *sgf_controller;
+  GGameSgfController *sgf_controller;
   guint bottom_side;
   char *banner_text;
   BoardMoveOverlayBannerColor banner_color;
@@ -149,7 +149,7 @@ static void board_move_overlay_draw(GtkDrawingArea * /*area*/,
 
   CheckersMove move = {0};
   if (self->sgf_controller != NULL &&
-      gcheckers_sgf_controller_get_current_node_move(self->sgf_controller, &move) &&
+      ggame_sgf_controller_get_current_node_move(self->sgf_controller, &move) &&
       move.length >= 2) {
     guint path_length = 0;
     guint path[128] = {0};
@@ -233,7 +233,7 @@ static void board_move_overlay_dispose(GObject *object) {
   gboolean drawing_area_removed = TRUE;
 
   if (self->drawing_area != NULL) {
-    drawing_area_removed = gcheckers_widget_remove_from_parent(self->drawing_area);
+    drawing_area_removed = ggame_widget_remove_from_parent(self->drawing_area);
     if (!drawing_area_removed && gtk_widget_get_parent(self->drawing_area) != NULL) {
       g_debug("Failed to remove board overlay drawing area from parent during dispose");
     }
@@ -299,9 +299,9 @@ void board_move_overlay_set_banner(BoardMoveOverlay *self,
   board_move_overlay_queue_draw(self);
 }
 
-void board_move_overlay_set_sgf_controller(BoardMoveOverlay *self, GCheckersSgfController *controller) {
+void board_move_overlay_set_sgf_controller(BoardMoveOverlay *self, GGameSgfController *controller) {
   g_return_if_fail(BOARD_IS_MOVE_OVERLAY(self));
-  g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(controller));
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(controller));
 
   g_set_object(&self->sgf_controller, controller);
 }

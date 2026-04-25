@@ -2,31 +2,30 @@
 
 #include "active_game_backend.h"
 #include "puzzle_catalog.h"
-#include "games/checkers/rulesets.h"
 
 typedef struct {
   GtkWindow *dialog;
-  GtkDropDown *ruleset;
-  GtkLabel *ruleset_summary;
+  GtkDropDown *variant;
+  GtkLabel *variant_summary;
   GtkWidget *puzzle_area;
   GHashTable *status_map;
-  GCheckersPuzzleDialogDoneFunc done_func;
+  GGamePuzzleDialogDoneFunc done_func;
   gpointer user_data;
   GDestroyNotify user_data_destroy;
-} GCheckersWindowPuzzleDialogData;
+} GGameWindowPuzzleDialogData;
 
 typedef struct {
-  GCheckersWindowPuzzleDialogData *dialog_data;
-  PlayerRuleset ruleset;
+  GGameWindowPuzzleDialogData *dialog_data;
+  const GameBackendVariant *variant;
   char *path;
-} GCheckersWindowPuzzleButtonData;
+} GGameWindowPuzzleButtonData;
 
 typedef struct {
   GtkScrolledWindow *scroller;
   guint row;
-} GCheckersWindowPuzzleScrollData;
+} GGameWindowPuzzleScrollData;
 
-static gboolean gcheckers_window_puzzle_dialog_destroy_hidden_cb(gpointer user_data) {
+static gboolean ggame_window_puzzle_dialog_destroy_hidden_cb(gpointer user_data) {
   GtkWindow *dialog = user_data;
   g_return_val_if_fail(GTK_IS_WINDOW(dialog), G_SOURCE_REMOVE);
 
@@ -35,7 +34,7 @@ static gboolean gcheckers_window_puzzle_dialog_destroy_hidden_cb(gpointer user_d
   return G_SOURCE_REMOVE;
 }
 
-static void gcheckers_window_puzzle_button_data_free(GCheckersWindowPuzzleButtonData *data) {
+static void ggame_window_puzzle_button_data_free(GGameWindowPuzzleButtonData *data) {
   if (data == NULL) {
     return;
   }
@@ -44,7 +43,7 @@ static void gcheckers_window_puzzle_button_data_free(GCheckersWindowPuzzleButton
   g_free(data);
 }
 
-static void gcheckers_window_puzzle_scroll_data_free(GCheckersWindowPuzzleScrollData *data) {
+static void ggame_window_puzzle_scroll_data_free(GGameWindowPuzzleScrollData *data) {
   if (data == NULL) {
     return;
   }
@@ -53,8 +52,8 @@ static void gcheckers_window_puzzle_scroll_data_free(GCheckersWindowPuzzleScroll
   g_free(data);
 }
 
-static gboolean gcheckers_window_puzzle_dialog_scroll_to_row_cb(gpointer user_data) {
-  GCheckersWindowPuzzleScrollData *data = user_data;
+static gboolean ggame_window_puzzle_dialog_scroll_to_row_cb(gpointer user_data) {
+  GGameWindowPuzzleScrollData *data = user_data;
   g_return_val_if_fail(data != NULL, G_SOURCE_REMOVE);
   g_return_val_if_fail(GTK_IS_SCROLLED_WINDOW(data->scroller), G_SOURCE_REMOVE);
 
@@ -70,7 +69,7 @@ static gboolean gcheckers_window_puzzle_dialog_scroll_to_row_cb(gpointer user_da
   return G_SOURCE_REMOVE;
 }
 
-static void gcheckers_window_puzzle_dialog_data_free(GCheckersWindowPuzzleDialogData *data) {
+static void ggame_window_puzzle_dialog_data_free(GGameWindowPuzzleDialogData *data) {
   if (data == NULL) {
     return;
   }
@@ -82,44 +81,47 @@ static void gcheckers_window_puzzle_dialog_data_free(GCheckersWindowPuzzleDialog
   g_free(data);
 }
 
-static void gcheckers_window_on_puzzle_dialog_destroy(GtkWindow * /*dialog*/, gpointer user_data) {
-  GCheckersWindowPuzzleDialogData *data = user_data;
+static void ggame_window_on_puzzle_dialog_destroy(GtkWindow * /*dialog*/, gpointer user_data) {
+  GGameWindowPuzzleDialogData *data = user_data;
   g_return_if_fail(data != NULL);
 
   if (data->done_func != NULL) {
-    data->done_func(FALSE, PLAYER_RULESET_INTERNATIONAL, NULL, data->user_data);
+    data->done_func(FALSE, NULL, NULL, data->user_data);
   }
-  gcheckers_window_puzzle_dialog_data_free(data);
+  ggame_window_puzzle_dialog_data_free(data);
 }
 
-static void gcheckers_window_puzzle_dialog_update_ruleset_summary(GCheckersWindowPuzzleDialogData *data) {
+static void ggame_window_puzzle_dialog_update_variant_summary(GGameWindowPuzzleDialogData *data) {
+  const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   g_return_if_fail(data != NULL);
-  g_return_if_fail(GTK_IS_DROP_DOWN(data->ruleset));
-  g_return_if_fail(GTK_IS_LABEL(data->ruleset_summary));
+  g_return_if_fail(backend != NULL);
+  g_return_if_fail(GTK_IS_DROP_DOWN(data->variant));
+  g_return_if_fail(GTK_IS_LABEL(data->variant_summary));
+  g_return_if_fail(backend->variant_at != NULL);
 
-  PlayerRuleset ruleset = (PlayerRuleset)gtk_drop_down_get_selected(data->ruleset);
-  const char *summary = checkers_ruleset_summary(ruleset);
+  const GameBackendVariant *variant = backend->variant_at(gtk_drop_down_get_selected(data->variant));
+  const char *summary = variant != NULL ? variant->summary : NULL;
   if (summary == NULL) {
-    g_debug("Missing puzzle ruleset summary");
+    g_debug("Missing puzzle variant summary");
     return;
   }
 
-  gtk_label_set_text(data->ruleset_summary, summary);
+  gtk_label_set_text(data->variant_summary, summary);
 }
 
-static const char *gcheckers_window_puzzle_status_icon_name(CheckersPuzzleStatus status) {
+static const char *ggame_window_puzzle_status_icon_name(GGamePuzzleStatus status) {
   switch (status) {
-    case CHECKERS_PUZZLE_STATUS_SOLVED:
+    case GGAME_PUZZLE_STATUS_SOLVED:
       return "object-select-symbolic";
-    case CHECKERS_PUZZLE_STATUS_FAILED:
+    case GGAME_PUZZLE_STATUS_FAILED:
       return "window-close-symbolic";
-    case CHECKERS_PUZZLE_STATUS_UNTRIED:
+    case GGAME_PUZZLE_STATUS_UNTRIED:
     default:
       return NULL;
   }
 }
 
-static void gcheckers_window_puzzle_dialog_apply_status_css(GtkWidget *button, CheckersPuzzleStatus status) {
+static void ggame_window_puzzle_dialog_apply_status_css(GtkWidget *button, GGamePuzzleStatus status) {
   g_return_if_fail(GTK_IS_WIDGET(button));
 
   gtk_widget_add_css_class(button, "puzzle-picker-button");
@@ -127,25 +129,26 @@ static void gcheckers_window_puzzle_dialog_apply_status_css(GtkWidget *button, C
   gtk_widget_remove_css_class(button, "puzzle-picker-solved");
   gtk_widget_remove_css_class(button, "puzzle-picker-failed");
 
-  if (status == CHECKERS_PUZZLE_STATUS_SOLVED) {
+  if (status == GGAME_PUZZLE_STATUS_SOLVED) {
     gtk_widget_add_css_class(button, "puzzle-picker-solved");
-  } else if (status == CHECKERS_PUZZLE_STATUS_FAILED) {
+  } else if (status == GGAME_PUZZLE_STATUS_FAILED) {
     gtk_widget_add_css_class(button, "puzzle-picker-failed");
   } else {
     gtk_widget_add_css_class(button, "puzzle-picker-untried");
   }
 }
 
-static GtkWidget *gcheckers_window_puzzle_dialog_create_puzzle_button(const GamePuzzleCatalogEntry *entry,
-                                                                      PlayerRuleset ruleset,
-                                                                      CheckersPuzzleStatus status,
-                                                                      GCheckersWindowPuzzleDialogData *data) {
+static GtkWidget *ggame_window_puzzle_dialog_create_puzzle_button(const GamePuzzleCatalogEntry *entry,
+                                                                  const GameBackendVariant *variant,
+                                                                  GGamePuzzleStatus status,
+                                                                  GGameWindowPuzzleDialogData *data) {
   g_return_val_if_fail(entry != NULL, NULL);
+  g_return_val_if_fail(variant != NULL, NULL);
   g_return_val_if_fail(data != NULL, NULL);
 
   GtkWidget *button = gtk_button_new();
   gtk_widget_set_size_request(button, 52, 52);
-  gcheckers_window_puzzle_dialog_apply_status_css(button, status);
+  ggame_window_puzzle_dialog_apply_status_css(button, status);
 
   GtkWidget *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
   gtk_widget_set_halign(content, GTK_ALIGN_CENTER);
@@ -157,44 +160,44 @@ static GtkWidget *gcheckers_window_puzzle_dialog_create_puzzle_button(const Game
   gtk_widget_add_css_class(number_label, "puzzle-picker-number");
   gtk_box_append(GTK_BOX(content), number_label);
 
-  const char *icon_name = gcheckers_window_puzzle_status_icon_name(status);
+  const char *icon_name = ggame_window_puzzle_status_icon_name(status);
   if (icon_name != NULL) {
     GtkWidget *image = gtk_image_new_from_icon_name(icon_name);
     gtk_widget_add_css_class(image, "puzzle-picker-icon");
     gtk_box_append(GTK_BOX(content), image);
   }
 
-  GCheckersWindowPuzzleButtonData *button_data = g_new0(GCheckersWindowPuzzleButtonData, 1);
+  GGameWindowPuzzleButtonData *button_data = g_new0(GGameWindowPuzzleButtonData, 1);
   button_data->dialog_data = data;
-  button_data->ruleset = ruleset;
+  button_data->variant = variant;
   button_data->path = g_strdup(entry->path);
   g_object_set_data_full(G_OBJECT(button),
                          "gcheckers-puzzle-button-data",
                          button_data,
-                         (GDestroyNotify)gcheckers_window_puzzle_button_data_free);
+                         (GDestroyNotify)ggame_window_puzzle_button_data_free);
   g_object_set_data(G_OBJECT(button), "puzzle-number", GUINT_TO_POINTER(entry->puzzle_number + 1));
 
-  const char *ruleset_name = checkers_ruleset_name(ruleset);
-  g_autofree char *tooltip = g_strdup_printf("%s puzzle %u", ruleset_name != NULL ? ruleset_name : "Puzzle",
+  g_autofree char *tooltip = g_strdup_printf("%s puzzle %u",
+                                             variant->name != NULL ? variant->name : "Puzzle",
                                              entry->puzzle_number);
   gtk_widget_set_tooltip_text(button, tooltip);
   return button;
 }
 
-static void gcheckers_window_on_puzzle_button_clicked(GtkButton *button, gpointer /*user_data*/) {
+static void ggame_window_on_puzzle_button_clicked(GtkButton *button, gpointer /*user_data*/) {
   g_return_if_fail(GTK_IS_BUTTON(button));
 
-  GCheckersWindowPuzzleButtonData *button_data =
+  GGameWindowPuzzleButtonData *button_data =
       g_object_get_data(G_OBJECT(button), "gcheckers-puzzle-button-data");
   g_return_if_fail(button_data != NULL);
   g_return_if_fail(button_data->dialog_data != NULL);
   g_return_if_fail(GTK_IS_WINDOW(button_data->dialog_data->dialog));
 
-  GCheckersWindowPuzzleDialogData *data = button_data->dialog_data;
-  GCheckersPuzzleDialogDoneFunc done_func = data->done_func;
+  GGameWindowPuzzleDialogData *data = button_data->dialog_data;
+  GGamePuzzleDialogDoneFunc done_func = data->done_func;
   gpointer callback_user_data = data->user_data;
   GDestroyNotify callback_user_data_destroy = data->user_data_destroy;
-  PlayerRuleset ruleset = button_data->ruleset;
+  const GameBackendVariant *variant = button_data->variant;
   g_autofree char *path = g_strdup(button_data->path);
 
   data->done_func = NULL;
@@ -203,19 +206,22 @@ static void gcheckers_window_on_puzzle_button_clicked(GtkButton *button, gpointe
 
   gtk_widget_set_visible(GTK_WIDGET(data->dialog), FALSE);
   if (done_func != NULL) {
-    done_func(TRUE, ruleset, path, callback_user_data);
+    done_func(TRUE, variant, path, callback_user_data);
   }
   if (callback_user_data_destroy != NULL) {
     callback_user_data_destroy(callback_user_data);
   }
   g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,
-                  gcheckers_window_puzzle_dialog_destroy_hidden_cb,
+                  ggame_window_puzzle_dialog_destroy_hidden_cb,
                   g_object_ref(data->dialog),
                   NULL);
 }
 
-static void gcheckers_window_puzzle_dialog_rebuild_grid(GCheckersWindowPuzzleDialogData *data) {
+static void ggame_window_puzzle_dialog_rebuild_grid(GGameWindowPuzzleDialogData *data) {
+  const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   g_return_if_fail(data != NULL);
+  g_return_if_fail(backend != NULL);
+  g_return_if_fail(backend->variant_at != NULL);
   g_return_if_fail(GTK_IS_WIDGET(data->puzzle_area));
 
   GtkWidget *old_child = gtk_widget_get_first_child(data->puzzle_area);
@@ -223,12 +229,9 @@ static void gcheckers_window_puzzle_dialog_rebuild_grid(GCheckersWindowPuzzleDia
     gtk_box_remove(GTK_BOX(data->puzzle_area), old_child);
   }
 
-  PlayerRuleset ruleset = (PlayerRuleset)gtk_drop_down_get_selected(data->ruleset);
-  const char *short_name = checkers_ruleset_short_name(ruleset);
-  const GameBackendVariant *variant =
-      short_name != NULL ? GGAME_ACTIVE_GAME_BACKEND->variant_by_short_name(short_name) : NULL;
+  const GameBackendVariant *variant = backend->variant_at(gtk_drop_down_get_selected(data->variant));
   if (variant == NULL) {
-    g_debug("Failed to resolve puzzle variant for ruleset %u", ruleset);
+    g_debug("Failed to resolve puzzle variant");
     GtkWidget *label = gtk_label_new("Failed to resolve this puzzle variant.");
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_margin_top(label, 8);
@@ -237,7 +240,7 @@ static void gcheckers_window_puzzle_dialog_rebuild_grid(GCheckersWindowPuzzleDia
   }
 
   g_autoptr(GError) error = NULL;
-  g_autoptr(GPtrArray) entries = game_puzzle_catalog_load_variant(GGAME_ACTIVE_GAME_BACKEND, variant, &error);
+  g_autoptr(GPtrArray) entries = game_puzzle_catalog_load_variant(backend, variant, &error);
   if (entries == NULL) {
     g_debug("Failed to build puzzle picker catalog: %s", error != NULL ? error->message : "unknown error");
     GtkWidget *label = gtk_label_new("Failed to load puzzles for this variant.");
@@ -275,69 +278,68 @@ static void gcheckers_window_puzzle_dialog_rebuild_grid(GCheckersWindowPuzzleDia
     GamePuzzleCatalogEntry *entry = g_ptr_array_index(entries, i);
     g_return_if_fail(entry != NULL);
 
-    CheckersPuzzleStatus status = CHECKERS_PUZZLE_STATUS_UNTRIED;
+    GGamePuzzleStatus status = GGAME_PUZZLE_STATUS_UNTRIED;
     if (data->status_map != NULL) {
-      CheckersPuzzleStatusEntry *status_entry = g_hash_table_lookup(data->status_map, entry->puzzle_id);
+      GGamePuzzleStatusEntry *status_entry = g_hash_table_lookup(data->status_map, entry->puzzle_id);
       if (status_entry != NULL) {
         status = status_entry->status;
       }
     }
-    if (!have_first_untried && status == CHECKERS_PUZZLE_STATUS_UNTRIED) {
+    if (!have_first_untried && status == GGAME_PUZZLE_STATUS_UNTRIED) {
       first_untried_row = i / 10;
       have_first_untried = TRUE;
     }
 
-    GtkWidget *button =
-        gcheckers_window_puzzle_dialog_create_puzzle_button(entry, ruleset, status, data);
-    g_signal_connect(button, "clicked", G_CALLBACK(gcheckers_window_on_puzzle_button_clicked), NULL);
+    GtkWidget *button = ggame_window_puzzle_dialog_create_puzzle_button(entry, variant, status, data);
+    g_signal_connect(button, "clicked", G_CALLBACK(ggame_window_on_puzzle_button_clicked), NULL);
     gtk_grid_attach(GTK_GRID(grid), button, (gint)(i % 10), (gint)(i / 10), 1, 1);
   }
 
   if (have_first_untried && first_untried_row > 0) {
-    GCheckersWindowPuzzleScrollData *scroll_data = g_new0(GCheckersWindowPuzzleScrollData, 1);
+    GGameWindowPuzzleScrollData *scroll_data = g_new0(GGameWindowPuzzleScrollData, 1);
     scroll_data->scroller = g_object_ref(GTK_SCROLLED_WINDOW(scroller));
     scroll_data->row = first_untried_row;
     g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,
-                    gcheckers_window_puzzle_dialog_scroll_to_row_cb,
+                    ggame_window_puzzle_dialog_scroll_to_row_cb,
                     scroll_data,
-                    (GDestroyNotify)gcheckers_window_puzzle_scroll_data_free);
+                    (GDestroyNotify)ggame_window_puzzle_scroll_data_free);
   }
 }
 
-static void gcheckers_window_on_puzzle_dialog_ruleset_selected(GObject * /*object*/,
-                                                               GParamSpec * /*pspec*/,
-                                                               gpointer user_data) {
-  GCheckersWindowPuzzleDialogData *data = user_data;
+static void ggame_window_on_puzzle_dialog_variant_selected(GObject * /*object*/,
+                                                           GParamSpec * /*pspec*/,
+                                                           gpointer user_data) {
+  GGameWindowPuzzleDialogData *data = user_data;
   g_return_if_fail(data != NULL);
 
-  gcheckers_window_puzzle_dialog_update_ruleset_summary(data);
-  gcheckers_window_puzzle_dialog_rebuild_grid(data);
+  ggame_window_puzzle_dialog_update_variant_summary(data);
+  ggame_window_puzzle_dialog_rebuild_grid(data);
 }
 
-static void gcheckers_window_on_puzzle_dialog_cancel_clicked(GtkButton *button, gpointer user_data) {
-  GCheckersWindowPuzzleDialogData *data = user_data;
+static void ggame_window_on_puzzle_dialog_cancel_clicked(GtkButton *button, gpointer user_data) {
+  GGameWindowPuzzleDialogData *data = user_data;
   g_return_if_fail(data != NULL);
   g_return_if_fail(GTK_IS_BUTTON(button));
   g_return_if_fail(GTK_IS_WINDOW(data->dialog));
 
   gtk_widget_set_visible(GTK_WIDGET(data->dialog), FALSE);
   g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,
-                  gcheckers_window_puzzle_dialog_destroy_hidden_cb,
+                  ggame_window_puzzle_dialog_destroy_hidden_cb,
                   g_object_ref(data->dialog),
                   NULL);
 }
 
-void gcheckers_puzzle_dialog_present(GtkWindow *parent,
-                                     PlayerRuleset initial_ruleset,
-                                     CheckersPuzzleProgressStore *store,
-                                     GCheckersPuzzleDialogDoneFunc done_func,
+void ggame_puzzle_dialog_present(GtkWindow *parent,
+                                     const GameBackendVariant *initial_variant,
+                                     GGamePuzzleProgressStore *store,
+                                     GGamePuzzleDialogDoneFunc done_func,
                                      gpointer user_data,
                                      GDestroyNotify user_data_destroy) {
+  const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   g_return_if_fail(GTK_IS_WINDOW(parent));
-
-  guint ruleset_count = checkers_ruleset_count();
-  g_return_if_fail(ruleset_count > 0);
-  g_return_if_fail(ruleset_count <= G_MAXUINT8);
+  g_return_if_fail(backend != NULL);
+  g_return_if_fail(backend->variant_count > 0);
+  g_return_if_fail(backend->variant_at != NULL);
 
   GtkWidget *dialog = gtk_window_new();
   gtk_window_set_title(GTK_WINDOW(dialog), "Play puzzles");
@@ -359,33 +361,39 @@ void gcheckers_puzzle_dialog_present(GtkWindow *parent,
   gtk_grid_set_column_spacing(GTK_GRID(grid), 12);
   gtk_box_append(GTK_BOX(content), grid);
 
-  g_auto(GStrv) ruleset_options = g_new0(char *, ruleset_count + 1);
-  for (guint i = 0; i < ruleset_count; ++i) {
-    const char *name = checkers_ruleset_name((PlayerRuleset)i);
-    if (name == NULL) {
-      g_debug("Missing puzzle ruleset name");
+  g_auto(GStrv) variant_options = g_new0(char *, backend->variant_count + 1);
+  for (guint i = 0; i < backend->variant_count; ++i) {
+    const GameBackendVariant *variant = backend->variant_at(i);
+    if (variant == NULL || variant->name == NULL) {
+      g_debug("Missing puzzle variant name");
       gtk_window_destroy(GTK_WINDOW(dialog));
       return;
     }
-    ruleset_options[i] = g_strdup(name);
+    variant_options[i] = g_strdup(variant->name);
   }
 
-  GtkWidget *ruleset_label = gtk_label_new("Variant");
-  gtk_widget_set_halign(ruleset_label, GTK_ALIGN_START);
-  GtkWidget *ruleset_summary = gtk_label_new(NULL);
-  gtk_widget_set_halign(ruleset_summary, GTK_ALIGN_START);
-  gtk_label_set_xalign(GTK_LABEL(ruleset_summary), 0.0f);
-  gtk_label_set_wrap(GTK_LABEL(ruleset_summary), FALSE);
-  gtk_label_set_ellipsize(GTK_LABEL(ruleset_summary), PANGO_ELLIPSIZE_END);
-  gtk_widget_set_hexpand(ruleset_summary, TRUE);
+  GtkWidget *variant_label = gtk_label_new("Variant");
+  gtk_widget_set_halign(variant_label, GTK_ALIGN_START);
+  GtkWidget *variant_summary = gtk_label_new(NULL);
+  gtk_widget_set_halign(variant_summary, GTK_ALIGN_START);
+  gtk_label_set_xalign(GTK_LABEL(variant_summary), 0.0f);
+  gtk_label_set_wrap(GTK_LABEL(variant_summary), FALSE);
+  gtk_label_set_ellipsize(GTK_LABEL(variant_summary), PANGO_ELLIPSIZE_END);
+  gtk_widget_set_hexpand(variant_summary, TRUE);
 
-  GtkDropDown *ruleset = GTK_DROP_DOWN(
-      gtk_drop_down_new_from_strings((const char *const *)ruleset_options));
-  gtk_drop_down_set_selected(ruleset, initial_ruleset);
+  GtkDropDown *variant = GTK_DROP_DOWN(gtk_drop_down_new_from_strings((const char *const *) variant_options));
+  if (initial_variant != NULL) {
+    for (guint i = 0; i < backend->variant_count; ++i) {
+      if (backend->variant_at(i) == initial_variant) {
+        gtk_drop_down_set_selected(variant, i);
+        break;
+      }
+    }
+  }
 
-  gtk_grid_attach(GTK_GRID(grid), ruleset_label, 0, 0, 1, 1);
-  gtk_grid_attach(GTK_GRID(grid), GTK_WIDGET(ruleset), 1, 0, 1, 1);
-  gtk_grid_attach(GTK_GRID(grid), ruleset_summary, 1, 1, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), variant_label, 0, 0, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), GTK_WIDGET(variant), 1, 0, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), variant_summary, 1, 1, 1, 1);
 
   GtkWidget *puzzle_area = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_widget_set_vexpand(puzzle_area, TRUE);
@@ -398,10 +406,10 @@ void gcheckers_puzzle_dialog_present(GtkWindow *parent,
   GtkWidget *cancel_button = gtk_button_new_with_label("Cancel");
   gtk_box_append(GTK_BOX(actions), cancel_button);
 
-  GCheckersWindowPuzzleDialogData *data = g_new0(GCheckersWindowPuzzleDialogData, 1);
+  GGameWindowPuzzleDialogData *data = g_new0(GGameWindowPuzzleDialogData, 1);
   data->dialog = GTK_WINDOW(dialog);
-  data->ruleset = ruleset;
-  data->ruleset_summary = GTK_LABEL(ruleset_summary);
+  data->variant = variant;
+  data->variant_summary = GTK_LABEL(variant_summary);
   data->puzzle_area = puzzle_area;
   data->done_func = done_func;
   data->user_data = user_data;
@@ -409,26 +417,26 @@ void gcheckers_puzzle_dialog_present(GtkWindow *parent,
 
   if (store != NULL) {
     g_autoptr(GError) error = NULL;
-    data->status_map = checkers_puzzle_progress_store_load_status_map(store, &error);
+    data->status_map = ggame_puzzle_progress_store_load_status_map(store, &error);
     if (data->status_map == NULL) {
       g_debug("Failed to load puzzle status map: %s", error != NULL ? error->message : "unknown error");
     }
   }
 
-  gcheckers_window_puzzle_dialog_update_ruleset_summary(data);
-  gcheckers_window_puzzle_dialog_rebuild_grid(data);
+  ggame_window_puzzle_dialog_update_variant_summary(data);
+  ggame_window_puzzle_dialog_rebuild_grid(data);
 
   g_signal_connect(cancel_button,
                    "clicked",
-                   G_CALLBACK(gcheckers_window_on_puzzle_dialog_cancel_clicked),
+                   G_CALLBACK(ggame_window_on_puzzle_dialog_cancel_clicked),
                    data);
   g_signal_connect(dialog,
                    "destroy",
-                   G_CALLBACK(gcheckers_window_on_puzzle_dialog_destroy),
+                   G_CALLBACK(ggame_window_on_puzzle_dialog_destroy),
                    data);
-  g_signal_connect(ruleset,
+  g_signal_connect(variant,
                    "notify::selected",
-                   G_CALLBACK(gcheckers_window_on_puzzle_dialog_ruleset_selected),
+                   G_CALLBACK(ggame_window_on_puzzle_dialog_variant_selected),
                    data);
   gtk_window_present(GTK_WINDOW(dialog));
 }

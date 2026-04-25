@@ -270,9 +270,9 @@ void board_view_set_model(BoardView *self, gpointer model) {
   board_view_update(self);
 }
 
-void board_view_set_sgf_controller(BoardView *self, GCheckersSgfController *controller) {
+void board_view_set_sgf_controller(BoardView *self, GGameSgfController *controller) {
   g_return_if_fail(BOARD_IS_VIEW(self));
-  g_return_if_fail(GCHECKERS_IS_SGF_CONTROLLER(controller));
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(controller));
 
   board_move_overlay_set_sgf_controller(self->board_overlay, controller);
 }
@@ -343,7 +343,7 @@ static void board_view_dispose(GObject *object) {
   gboolean root_removed = TRUE;
 
   if (self->root != NULL) {
-    root_removed = gcheckers_widget_remove_from_parent(self->root);
+    root_removed = ggame_widget_remove_from_parent(self->root);
     if (!root_removed && gtk_widget_get_parent(self->root) != NULL) {
       g_debug("Failed to remove board view root from parent during dispose");
     }

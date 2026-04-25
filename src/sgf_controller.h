@@ -1,5 +1,5 @@
-#ifndef GCHECKERS_SGF_CONTROLLER_H
-#define GCHECKERS_SGF_CONTROLLER_H
+#ifndef GGAME_SGF_CONTROLLER_H
+#define GGAME_SGF_CONTROLLER_H
 
 #include "board_view.h"
 #include "games/checkers/checkers_model.h"
@@ -10,36 +10,36 @@
 
 G_BEGIN_DECLS
 
-#define GCHECKERS_TYPE_SGF_CONTROLLER (gcheckers_sgf_controller_get_type())
+#define GGAME_TYPE_SGF_CONTROLLER (ggame_sgf_controller_get_type())
 
-G_DECLARE_FINAL_TYPE(GCheckersSgfController,
-                     gcheckers_sgf_controller,
-                     GCHECKERS,
+G_DECLARE_FINAL_TYPE(GGameSgfController,
+                     ggame_sgf_controller,
+                     GGAME,
                      SGF_CONTROLLER,
                      GObject)
 
-GCheckersSgfController *gcheckers_sgf_controller_new(BoardView *board_view);
-void gcheckers_sgf_controller_set_model(GCheckersSgfController *self, GCheckersModel *model);
-void gcheckers_sgf_controller_new_game(GCheckersSgfController *self);
-gboolean gcheckers_sgf_controller_replay_node_into_game(const SgfNode *node, Game *game, GError **error);
-gboolean gcheckers_sgf_controller_apply_move(GCheckersSgfController *self, const CheckersMove *move);
-gboolean gcheckers_sgf_controller_step_ai_move(GCheckersSgfController *self, guint depth, CheckersMove *out_move);
-gboolean gcheckers_sgf_controller_rewind_to_start(GCheckersSgfController *self);
-gboolean gcheckers_sgf_controller_step_backward(GCheckersSgfController *self);
-gboolean gcheckers_sgf_controller_step_forward(GCheckersSgfController *self);
-gboolean gcheckers_sgf_controller_step_forward_to_branch(GCheckersSgfController *self);
-gboolean gcheckers_sgf_controller_step_forward_to_end(GCheckersSgfController *self);
-gboolean gcheckers_sgf_controller_select_node(GCheckersSgfController *self, const SgfNode *node);
-gboolean gcheckers_sgf_controller_refresh_current_node(GCheckersSgfController *self);
-gboolean gcheckers_sgf_controller_get_current_node_move(GCheckersSgfController *self, CheckersMove *out_move);
-gboolean gcheckers_sgf_controller_load_file(GCheckersSgfController *self, const char *path, GError **error);
-gboolean gcheckers_sgf_controller_save_file(GCheckersSgfController *self, const char *path, GError **error);
-gboolean gcheckers_sgf_controller_save_position_file(GCheckersSgfController *self, const char *path, GError **error);
-GtkWidget *gcheckers_sgf_controller_get_widget(GCheckersSgfController *self);
-SgfTree *gcheckers_sgf_controller_get_tree(GCheckersSgfController *self);
-SgfView *gcheckers_sgf_controller_get_view(GCheckersSgfController *self);
-gboolean gcheckers_sgf_controller_is_replaying(GCheckersSgfController *self);
-void gcheckers_sgf_controller_force_layout_resync(GCheckersSgfController *self);
+GGameSgfController *ggame_sgf_controller_new(BoardView *board_view);
+void ggame_sgf_controller_set_model(GGameSgfController *self, GCheckersModel *model);
+void ggame_sgf_controller_new_game(GGameSgfController *self);
+gboolean ggame_sgf_controller_replay_node_into_game(const SgfNode *node, Game *game, GError **error);
+gboolean ggame_sgf_controller_apply_move(GGameSgfController *self, gconstpointer move);
+gboolean ggame_sgf_controller_step_ai_move(GGameSgfController *self, guint depth, gpointer out_move);
+gboolean ggame_sgf_controller_rewind_to_start(GGameSgfController *self);
+gboolean ggame_sgf_controller_step_backward(GGameSgfController *self);
+gboolean ggame_sgf_controller_step_forward(GGameSgfController *self);
+gboolean ggame_sgf_controller_step_forward_to_branch(GGameSgfController *self);
+gboolean ggame_sgf_controller_step_forward_to_end(GGameSgfController *self);
+gboolean ggame_sgf_controller_select_node(GGameSgfController *self, const SgfNode *node);
+gboolean ggame_sgf_controller_refresh_current_node(GGameSgfController *self);
+gboolean ggame_sgf_controller_get_current_node_move(GGameSgfController *self, gpointer out_move);
+gboolean ggame_sgf_controller_load_file(GGameSgfController *self, const char *path, GError **error);
+gboolean ggame_sgf_controller_save_file(GGameSgfController *self, const char *path, GError **error);
+gboolean ggame_sgf_controller_save_position_file(GGameSgfController *self, const char *path, GError **error);
+GtkWidget *ggame_sgf_controller_get_widget(GGameSgfController *self);
+SgfTree *ggame_sgf_controller_get_tree(GGameSgfController *self);
+SgfView *ggame_sgf_controller_get_view(GGameSgfController *self);
+gboolean ggame_sgf_controller_is_replaying(GGameSgfController *self);
+void ggame_sgf_controller_force_layout_resync(GGameSgfController *self);
 
 G_END_DECLS
 

@@ -135,6 +135,6 @@ gboolean piece_palette_draw(PiecePalette *self,
     return FALSE;
   }
 
-  gcheckers_man_paintable_draw(cr, width, height, fill_color, stroke_color, layer_count);
+  ggame_man_paintable_draw(cr, width, height, fill_color, stroke_color, layer_count);
   return TRUE;
 }
