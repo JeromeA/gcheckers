@@ -1,5 +1,16 @@
 # Project overview
 
+This repository contains the `ggame` application framework plus the currently shipped checkers game build
+(`gcheckers`). The shared code in top-level `src/` owns the application shell, GTK UI, SGF/puzzle workflows, and the
+generic AI/model/backend interfaces. Game-specific code lives under `src/games/<game>/` and provides the rules,
+position and move types, search evaluation, notation helpers, optional puzzle tooling, and any board-specific callbacks
+needed by the selected backend.
+
+The build selects exactly one active game at compile time through `GAME` in the `Makefile`, which in turn defines the
+active `GameBackend` callback table. Shared code talks to that backend through generic APIs such as `GGameModel`,
+`ai_search`, and the square-grid board callbacks, so adding another game is mostly a matter of adding a new backend
+directory plus the corresponding build and packaging entries.
+
 ## `GGameWindow` (`src/window.c`)
 Class: `GGameWindow` (`GtkApplicationWindow`).
 Role: composition root that binds model state to UI updates, keeps board input available, and coordinates auto-play.
