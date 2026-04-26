@@ -30,7 +30,7 @@ static void test_backend_metadata(void) {
   assert(backend->variant_count == 0);
   assert(!backend->supports_move_list);
   assert(backend->supports_move_builder);
-  assert(!backend->supports_ai_search);
+  assert(backend->supports_ai_search);
   assert(backend->list_good_moves != NULL);
   assert(strcmp(backend->side_label(0), "Player 1") == 0);
   assert(strcmp(backend->side_label(1), "Player 2") == 0);
@@ -92,10 +92,14 @@ static void test_backend_position_and_move_flow(void) {
   GameBackendMoveBuilder builder = {0};
   assert(backend->move_builder_init(position, &builder));
   GameBackendMoveList candidates = backend->move_builder_list_candidates(&builder);
-  assert(candidates.count == 0);
+  assert(candidates.count > 0);
   backend->move_list_free(&candidates);
   assert(!backend->move_builder_is_complete(&builder));
   backend->move_builder_clear(&builder);
+
+  GameBackendMoveList good_moves = backend->list_good_moves(position, 4, 1);
+  assert(good_moves.count > 0);
+  backend->move_list_free(&good_moves);
   backend->position_clear(position);
   g_free(position);
 #else

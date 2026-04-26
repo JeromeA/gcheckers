@@ -15,6 +15,10 @@ CURL_LIBS := $(shell pkg-config --libs libcurl)
 LDLIBS := $(GLIB_LIBS) $(GOBJECT_LIBS) $(GIO_LIBS) $(CURL_LIBS) -lm
 GAME ?= checkers
 CHECKERS_DIR := src/games/checkers
+HOMEWORLDS_DIR := src/games/homeworlds
+HOMEWORLDS_GAME_SRCS := $(HOMEWORLDS_DIR)/homeworlds_game.c $(HOMEWORLDS_DIR)/homeworlds_move_builder.c
+HOMEWORLDS_BACKEND_SRCS := $(HOMEWORLDS_DIR)/homeworlds_backend.c
+HOMEWORLDS_ALL_SRCS := $(HOMEWORLDS_GAME_SRCS) $(HOMEWORLDS_BACKEND_SRCS)
 
 ifeq ($(GAME),checkers)
 APP_ID := io.github.jeromea.gcheckers
@@ -36,9 +40,7 @@ APP_ID := io.github.jeromea.ghomeworlds
 APP_BIN_NAME := ghomeworlds
 APP_MAIN_SRC := src/ghomeworlds.c
 GAME_BACKEND_DEFINE := -DGGAME_GAME_HOMEWORLDS
-HOMEWORLDS_DIR := src/games/homeworlds
-HOMEWORLDS_BACKEND_SRCS := $(HOMEWORLDS_DIR)/homeworlds_backend.c
-GAME_SRCS :=
+GAME_SRCS := $(HOMEWORLDS_GAME_SRCS)
 GAME_BACKEND_SRCS := $(HOMEWORLDS_BACKEND_SRCS)
 APP_BIN = $(BIN_DIR)/$(APP_BIN_NAME)
 ALL_TOOLS =
@@ -113,6 +115,8 @@ TEST_GAME_BIN := $(TESTS_DIR)/test_game
 TEST_GAME_PRINT_BIN := $(TESTS_DIR)/test_game_print
 TEST_GAME_BACKEND_BIN := $(TESTS_DIR)/test_game_backend
 TEST_GAME_MODEL_BIN := $(TESTS_DIR)/test_game_model
+TEST_HOMEWORLDS_GAME_BIN := $(TESTS_DIR)/test_homeworlds_game
+TEST_HOMEWORLDS_BACKEND_BIN := $(TESTS_DIR)/test_homeworlds_backend
 TEST_BOARD_BIN := $(TESTS_DIR)/test_board
 TEST_BOARD_GEOMETRY_BIN := $(TESTS_DIR)/test_board_geometry
 TEST_MOVE_GEN_BIN := $(TESTS_DIR)/test_move_gen
@@ -147,7 +151,7 @@ PROFILE_CMD = $(PROFILE_BIN) $(PROFILE_ARGS)
 
 .PHONY: all clean test coverage install validate-desktop-metadata \
 	gcheckers create_puzzles libgame.a \
-	test_game test_game_print test_game_backend test_game_model test_board test_board_geometry test_move_gen test_create_puzzles_cli test_create_puzzles_check \
+	test_game test_game_print test_game_backend test_game_model test_homeworlds_game test_homeworlds_backend test_board test_board_geometry test_move_gen test_create_puzzles_cli test_create_puzzles_check \
 	test_checkers_model test_ai_search test_ai_transposition_table test_bga_client \
 	test_file_dialog_history test_app_settings test_app_paths test_desktop_metadata test_flatpak_manifest test_sgf_tree test_sgf_io \
 	test_sgf_view test_board_view test_player_controls_panel test_sgf_controller test_window test_puzzle_generation test_puzzle_catalog \
@@ -234,6 +238,16 @@ $(TEST_GAME_MODEL_BIN): tests/test_game_model.c src/active_game_backend.h src/ga
 	$(CHECKERS_DIR)/checkers_constants.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_game_model.c $(SRCS) $(LDLIBS)
+
+test_homeworlds_game: $(TEST_HOMEWORLDS_GAME_BIN)
+$(TEST_HOMEWORLDS_GAME_BIN): tests/test_homeworlds_game.c $(HOMEWORLDS_GAME_SRCS) $(HOMEWORLDS_DIR)/homeworlds_game.h $(HOMEWORLDS_DIR)/homeworlds_types.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -o $@ tests/test_homeworlds_game.c $(HOMEWORLDS_GAME_SRCS) $(LDLIBS)
+
+test_homeworlds_backend: $(TEST_HOMEWORLDS_BACKEND_BIN)
+$(TEST_HOMEWORLDS_BACKEND_BIN): tests/test_homeworlds_backend.c $(HOMEWORLDS_ALL_SRCS) $(HOMEWORLDS_DIR)/homeworlds_backend.h $(HOMEWORLDS_DIR)/homeworlds_game.h $(HOMEWORLDS_DIR)/homeworlds_move_builder.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -o $@ tests/test_homeworlds_backend.c $(HOMEWORLDS_ALL_SRCS) $(LDLIBS)
 
 test_board: $(TEST_BOARD_BIN)
 $(TEST_BOARD_BIN): tests/test_board.c $(BOARD_SRCS) $(CHECKERS_DIR)/board.h $(CHECKERS_DIR)/checkers_constants.h

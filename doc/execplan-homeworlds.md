@@ -27,7 +27,9 @@ starts their turn with no ships at their Homeworld.
       `src/games/homeworlds/RULES.md`, then write this initial ExecPlan.
 - [x] (2026-04-25 17:15Z) Complete Milestone 1 by adding `GAME=homeworlds` selection, a branded `ghomeworlds`
       skeleton binary, the stub Homeworlds backend, and backend-selection coverage for the second game.
-- [ ] Implement a Homeworlds engine and backend under `src/games/homeworlds/`.
+- [x] (2026-04-26 10:55Z) Complete Milestone 2 by adding the slot-based Homeworlds engine, staged move builder,
+      backend-owned `list_good_moves`, shared AI support for good-move-only backends, and focused engine/backend
+      tests.
 - [ ] Add the missing backend-owned board widget path to shared UI so non-square games can render and accept input.
 - [ ] Integrate Homeworlds into the window and new-game flows as a playable local game with limited AI and with
       unsupported features disabled.
@@ -39,12 +41,11 @@ starts their turn with no ships at their Homeworld.
 - Observation: the rules folder currently contains only prose rules, not an engine skeleton or test data.
   Evidence: `find src/games/homeworlds -maxdepth 2 -type f` returns only `src/games/homeworlds/RULES.md`.
 
-- Observation: the repository can already mark AI as optional and separate gameplay move listing from future AI move
-  selection, but it does not yet have a heuristic “good moves” API and the shared board UI still assumes square-grid
-  rendering and, for interactive play, still assumes full move-list support.
-  Evidence: `src/game_backend.h` now exposes `supports_move_builder` and `supports_ai_search`, but
-  `src/board_view.c` still guards on `backend->supports_square_grid_board`, and
-  `src/board_selection_controller.c` logs that it “requires list-move backends”.
+- Observation: the shared AI layer can now search a backend that exposes only `list_good_moves`, but the shared GTK
+  board input path still assumes square-grid rendering and full move-list support for human interaction.
+  Evidence: `src/ai_search.c` now falls back to `list_good_moves`, while `src/board_view.c` still guards on
+  `backend->supports_square_grid_board`, and `src/board_selection_controller.c` still logs that it “requires
+  list-move backends”.
 
 - Observation: the product naming is still checkers-branded in several shared build/package variables.
   Evidence: `Makefile` still sets `APP_ID := io.github.jeromea.gcheckers`, `GCHECKERS_BIN := $(BIN_DIR)/gcheckers`,
@@ -92,11 +93,12 @@ starts their turn with no ships at their Homeworld.
 
 ## Outcomes & Retrospective
 
-Milestone 1 is complete. The repository now has a second compile-time backend selection path, a stub
-`src/games/homeworlds/homeworlds_backend.c`, and a branded `build/bin/ghomeworlds` skeleton binary that proves the
-build/package split works. The main gap is unchanged: the real shared application shell still cannot host Homeworlds,
-which is exactly why the next milestone remains the real engine/backend implementation rather than pretending the UI is
-already generic.
+Milestones 1 and 2 are complete. The repository now has a second compile-time backend selection path, a real
+Homeworlds rules engine in `src/games/homeworlds/homeworlds_game.c`, a staged Homeworlds move builder in
+`src/games/homeworlds/homeworlds_move_builder.c`, a backend adapter with heuristic `list_good_moves`, and focused
+engine/backend tests. The next hard gap is no longer the rules layer; it is the missing backend-owned board/widget
+path in shared GTK code, because Homeworlds still cannot plug into `src/window.c` and the square-grid interaction
+stack.
 
 ## Context and Orientation
 
@@ -181,11 +183,18 @@ For example, if player 0’s homeworld uses star sizes 1 and 3, and player 1’s
 the layer nearest player 0 contains the systems one hop from player 0, which therefore use only size-2 stars; the
 layer nearest player 1 contains the systems one hop from player 1, which therefore use only size-1 stars; and a
 central layer contains everything else. If the two players are more directly connected, collapse the middle into one
-central layer containing all remaining systems. On each system, ships (triangles of 3 different sizes) should be
-pointing away from their owner, and be aligned at the right of the star from the owner's perspective.
+central layer containing all remaining systems. On each system, the stars are shown as squares (of 3 different sizes),
+and ships (triangles of 3 different sizes) should be
+pointing away from their owner, and be aligned at the right of the star from the owner's perspective. The bank is
+is shown on the right, with all the triangles available, in 4 parts under each other. Each part has all the triangles
+available from smallest to biggest.
 The user must be able to click systems, ships, and available action targets to drive the move builder. The widget
 must also make pending sacrifice counts and chosen action types visible, because those are essential parts of
-Homeworlds turns.
+Homeworlds turns. To create a homeworld, the user selects two stars and a ship from the bank. When playing, the
+user selects a ship to activate, then selects one of its legal actions (capture, move, build, trade, sacrifice),
+then select a extra target when relevant (for a move, the target can either be a system or a new star from the bank).
+For sacrifices, we already know the action, so the user just needs to select the ship to activate and extra relevant
+target n times. A button pass can also be selected.
 
 Once the custom widget path exists, integrate Homeworlds into the window and new-game flows. `src/new_game_dialog.c`
 must stop assuming that every backend’s AI is based on exhaustive move generation. For Homeworlds, the dialog should

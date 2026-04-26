@@ -6,6 +6,15 @@
 #include "../src/games/checkers/game.h"
 #include "../src/games/checkers/rulesets.h"
 
+typedef struct {
+  gint total;
+  guint turn;
+} TestGoodMoveOnlyPosition;
+
+typedef struct {
+  gint delta;
+} TestGoodMoveOnlyMove;
+
 static void test_init_game_with_ruleset(Game *game, PlayerRuleset ruleset) {
   const CheckersRules *rules = checkers_ruleset_get_rules(ruleset);
 
@@ -166,11 +175,178 @@ static void test_ai_search_rejects_backend_without_ai(void) {
   assert(!game_ai_evaluate_static(&no_ai_backend, &position, &score));
 }
 
+static void test_good_move_only_position_init(gpointer position, const GameBackendVariant * /*variant_or_null*/) {
+  TestGoodMoveOnlyPosition *good_position = position;
+
+  g_return_if_fail(good_position != NULL);
+
+  good_position->total = 0;
+  good_position->turn = 0;
+}
+
+static void test_good_move_only_position_clear(gpointer /*position*/) {
+}
+
+static void test_good_move_only_position_copy(gpointer dest, gconstpointer src) {
+  TestGoodMoveOnlyPosition *dest_position = dest;
+  const TestGoodMoveOnlyPosition *src_position = src;
+
+  g_return_if_fail(dest_position != NULL);
+  g_return_if_fail(src_position != NULL);
+
+  *dest_position = *src_position;
+}
+
+static GameBackendOutcome test_good_move_only_position_outcome(gconstpointer position) {
+  const TestGoodMoveOnlyPosition *good_position = position;
+
+  g_return_val_if_fail(good_position != NULL, GAME_BACKEND_OUTCOME_ONGOING);
+
+  if (good_position->total >= 2) {
+    return GAME_BACKEND_OUTCOME_SIDE_0_WIN;
+  }
+
+  return GAME_BACKEND_OUTCOME_ONGOING;
+}
+
+static guint test_good_move_only_position_turn(gconstpointer position) {
+  const TestGoodMoveOnlyPosition *good_position = position;
+
+  g_return_val_if_fail(good_position != NULL, 0);
+
+  return good_position->turn;
+}
+
+static GameBackendMoveList test_good_move_only_list_good_moves(gconstpointer position,
+                                                              guint max_count,
+                                                              guint /*depth_hint*/) {
+  const TestGoodMoveOnlyPosition *good_position = position;
+  TestGoodMoveOnlyMove *moves = NULL;
+  gsize count = 0;
+
+  g_return_val_if_fail(good_position != NULL, (GameBackendMoveList){0});
+
+  if (good_position->total >= 2) {
+    return (GameBackendMoveList){0};
+  }
+
+  moves = g_new0(TestGoodMoveOnlyMove, 2);
+  g_return_val_if_fail(moves != NULL, (GameBackendMoveList){0});
+  moves[count++].delta = 2;
+  if (max_count == 0 || max_count > 1) {
+    moves[count++].delta = 1;
+  }
+
+  return (GameBackendMoveList){
+    .moves = moves,
+    .count = count,
+  };
+}
+
+static void test_good_move_only_move_list_free(GameBackendMoveList *moves) {
+  g_return_if_fail(moves != NULL);
+
+  g_clear_pointer(&moves->moves, g_free);
+  moves->count = 0;
+}
+
+static const void *test_good_move_only_move_list_get(const GameBackendMoveList *moves, gsize index) {
+  const TestGoodMoveOnlyMove *entries = NULL;
+
+  g_return_val_if_fail(moves != NULL, NULL);
+  g_return_val_if_fail(index < moves->count, NULL);
+
+  entries = moves->moves;
+  g_return_val_if_fail(entries != NULL, NULL);
+  return &entries[index];
+}
+
+static gboolean test_good_move_only_moves_equal(gconstpointer left, gconstpointer right) {
+  const TestGoodMoveOnlyMove *left_move = left;
+  const TestGoodMoveOnlyMove *right_move = right;
+
+  g_return_val_if_fail(left_move != NULL, FALSE);
+  g_return_val_if_fail(right_move != NULL, FALSE);
+
+  return left_move->delta == right_move->delta;
+}
+
+static gboolean test_good_move_only_apply_move(gpointer position, gconstpointer move) {
+  TestGoodMoveOnlyPosition *good_position = position;
+  const TestGoodMoveOnlyMove *good_move = move;
+
+  g_return_val_if_fail(good_position != NULL, FALSE);
+  g_return_val_if_fail(good_move != NULL, FALSE);
+
+  good_position->total += good_move->delta;
+  good_position->turn = 1 - good_position->turn;
+  return TRUE;
+}
+
+static gint test_good_move_only_evaluate_static(gconstpointer position) {
+  const TestGoodMoveOnlyPosition *good_position = position;
+
+  g_return_val_if_fail(good_position != NULL, 0);
+
+  return good_position->total * 10;
+}
+
+static gint test_good_move_only_terminal_score(GameBackendOutcome outcome, guint ply_depth) {
+  return outcome == GAME_BACKEND_OUTCOME_SIDE_0_WIN ? 3000 - (gint) ply_depth : 0;
+}
+
+static guint64 test_good_move_only_hash_position(gconstpointer position) {
+  const TestGoodMoveOnlyPosition *good_position = position;
+
+  g_return_val_if_fail(good_position != NULL, 0);
+
+  return ((guint64) (good_position->total + 7) << 8) | good_position->turn;
+}
+
+static void test_ai_search_accepts_good_move_only_backend(void) {
+  static const GameBackend good_move_only_backend = {
+    .id = "good-move-only",
+    .display_name = "Good Move Only",
+    .variant_count = 0,
+    .position_size = sizeof(TestGoodMoveOnlyPosition),
+    .move_size = sizeof(TestGoodMoveOnlyMove),
+    .supports_move_list = FALSE,
+    .supports_move_builder = FALSE,
+    .supports_ai_search = TRUE,
+    .position_init = test_good_move_only_position_init,
+    .position_clear = test_good_move_only_position_clear,
+    .position_copy = test_good_move_only_position_copy,
+    .position_outcome = test_good_move_only_position_outcome,
+    .position_turn = test_good_move_only_position_turn,
+    .list_good_moves = test_good_move_only_list_good_moves,
+    .move_list_free = test_good_move_only_move_list_free,
+    .move_list_get = test_good_move_only_move_list_get,
+    .moves_equal = test_good_move_only_moves_equal,
+    .apply_move = test_good_move_only_apply_move,
+    .evaluate_static = test_good_move_only_evaluate_static,
+    .terminal_score = test_good_move_only_terminal_score,
+    .hash_position = test_good_move_only_hash_position,
+  };
+  TestGoodMoveOnlyPosition position = {0};
+  GameAiScoredMoveList scored_moves = {0};
+  TestGoodMoveOnlyMove selected = {0};
+
+  test_good_move_only_position_init(&position, NULL);
+  assert(game_ai_search_analyze_moves(&good_move_only_backend, &position, 2, &scored_moves));
+  assert(scored_moves.count == 2);
+  assert(((TestGoodMoveOnlyMove *) scored_moves.moves[0].move)->delta == 2);
+  game_ai_scored_move_list_free(&scored_moves);
+
+  assert(game_ai_search_choose_move(&good_move_only_backend, &position, 2, &selected));
+  assert(selected.delta == 2);
+}
+
 int main(void) {
   test_ai_search_analyze_and_choose_move();
   test_ai_search_evaluate_terminal_position();
   test_ai_search_tt_roundtrip_and_reuse();
   test_ai_search_rejects_backend_without_ai();
+  test_ai_search_accepts_good_move_only_backend();
 
   return 0;
 }

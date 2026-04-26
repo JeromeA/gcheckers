@@ -292,8 +292,9 @@ move generation, position copying, applying moves, static evaluation, terminal s
 hashing. Root move choice randomizes among all equal best-scoring moves, so repeated games can vary without lowering
 evaluation quality. Analysis APIs can report searched node counts and TT stats (probes/hits/cutoffs), and TT stats
 accumulate when callers reuse the same `GameAiSearchStats` across calls.
-This is now an optional backend capability: only backends that opt into `supports_ai_search` and also provide the full
-move-list API can use the generic alpha-beta layer.
+This is now an optional backend capability: backends that opt into `supports_ai_search` must provide backend-sized move
+records plus either `list_good_moves` or the full move-list API. The search layer now prefers `list_good_moves`, so a
+backend can expose heuristic best-first subsets to AI without also exposing exhaustive move lists to shared code.
 Depth accounting treats forced plies (`exactly one legal move`) as free extensions: depth is consumed only on
 decision nodes with multiple legal moves.
 Score convention: search scores are white-centric at all plies (`+` good for white, `-` good for black). Root move
@@ -404,15 +405,38 @@ Role: resolve installed or local read-only data subdirectories such as `puzzles`
 override first, then `g_get_user_data_dir()`, then `g_get_system_data_dirs()`, then the local checkout fallback.
 Collaborates with: `window.c` for packaging-safe puzzle discovery and `tests/test_app_paths.c`.
 
+## Homeworlds engine (`src/games/homeworlds/homeworlds_types.h`, `src/games/homeworlds/homeworlds_game.c`,
+`src/games/homeworlds/homeworlds_game.h`)
+Module: slot-based Homeworlds rules engine.
+Role: represent Homeworlds positions as fixed-size slots: a 36-slot bank, 16 system slots (systems `0` and `1` are
+the players' homeworlds), two star slots per system, and fourteen ship slots per side per system. Inline helpers in
+`homeworlds_types.h` own pyramid encoding/decoding and low-level slot semantics so the representation can change in
+one place later if needed.
+Rules covered: setup, construct, trade, attack, move, discover, sacrifice, catastrophe resolution, empty-system
+cleanup, start-of-turn loss detection, static evaluation, terminal scoring, hashing, and move formatting.
+Collaborates with: `homeworlds_move_builder.c`, `homeworlds_backend.c`, `tests/test_homeworlds_game.c`, and the
+future Homeworlds GTK view.
+
+## Homeworlds move builder (`src/games/homeworlds/homeworlds_move_builder.c`,
+`src/games/homeworlds/homeworlds_move_builder.h`)
+Module: staged Homeworlds move construction.
+Role: expose incremental legal choices without enumerating the full legal move space. The builder owns a working copy
+of the position plus the partial move under construction, and advances through setup-star selection, setup-ship
+selection, source-ship selection, action choice, and target-specific substages for trade, attack, and move/discover.
+Sacrifices are modeled as a prefix step that fixes the remaining action color and count, after which the builder loops
+back through source-ship selection for each granted action.
+Collaborates with: `homeworlds_game.c`, `homeworlds_backend.c`, and `tests/test_homeworlds_backend.c`.
+
 ## Game backend interface (`src/game_backend.h`, `src/active_game_backend.h`,
 `src/games/checkers/checkers_backend.c`, `src/games/homeworlds/homeworlds_backend.c`)
 Module: generic game-selection boundary plus the compiled game adapters.
 Role: `game_backend.h` defines the generic callback table used to describe one compiled game backend.
 `active_game_backend.h` maps the build-time define `GGAME_GAME_CHECKERS` to the active backend object, and
 `src/games/checkers/checkers_backend.c` adapts the moved checkers engine, ruleset catalog, move list, AI, and move
-formatting APIs into that generic table. `src/games/homeworlds/homeworlds_backend.c` is currently only a Milestone 1
-stub: it advertises a move-builder Homeworlds backend, a placeholder `list_good_moves` path, and enough callbacks for
-`GAME=homeworlds` to compile, but it does not implement gameplay yet.
+formatting APIs into that generic table. `src/games/homeworlds/homeworlds_backend.c` now adapts the slot-based
+Homeworlds engine and staged move builder, advertises `supports_move_builder = TRUE`, `supports_move_list = FALSE`,
+`supports_ai_search = TRUE`, and implements `list_good_moves` by exploring the builder in heuristic order and stopping
+after a bounded subset.
 Scope: shared application code still has some checkers-native compatibility layers, but the physical checkers source
 ownership boundary is now explicit under `src/games/checkers/`.
 Backends now advertise whether they support full move-list enumeration, incremental move-building, and AI search.

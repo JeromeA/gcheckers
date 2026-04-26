@@ -32,6 +32,21 @@ typedef struct {
   GameAiTranspositionTable *tt;
 } GameAiSearchContext;
 
+static GameBackendMoveList game_ai_search_list_candidate_moves(const GameBackend *backend,
+                                                               gconstpointer position,
+                                                               guint max_count,
+                                                               guint depth_hint) {
+  g_return_val_if_fail(backend != NULL, (GameBackendMoveList){0});
+  g_return_val_if_fail(position != NULL, (GameBackendMoveList){0});
+
+  if (backend->list_good_moves != NULL) {
+    return backend->list_good_moves(position, max_count, depth_hint);
+  }
+
+  g_return_val_if_fail(backend->list_moves != NULL, (GameBackendMoveList){0});
+  return backend->list_moves(position);
+}
+
 static guint32 game_ai_tt_floor_pow2(guint64 value) {
   if (value == 0) {
     return 0;
@@ -333,7 +348,7 @@ static gint game_ai_search_recursive(gpointer position,
     return score;
   }
 
-  GameBackendMoveList moves = backend->list_moves(position);
+  GameBackendMoveList moves = game_ai_search_list_candidate_moves(backend, position, 0, depth_remaining);
   if (moves.count == 0) {
     gint score = backend->terminal_score(game_ai_search_derived_outcome(backend, position), ply_depth);
     backend->move_list_free(&moves);
@@ -568,15 +583,15 @@ gboolean game_ai_search_analyze_moves_cancellable_with_tt(const GameBackend *bac
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(out_moves != NULL, FALSE);
   g_return_val_if_fail(out_stats != NULL, FALSE);
-  if (!backend->supports_ai_search || !backend->supports_move_list) {
-    g_debug("AI analysis requires a backend with AI and full move-list support");
+  if (!backend->supports_ai_search) {
+    g_debug("AI analysis requires a backend with AI support");
     return FALSE;
   }
   g_return_val_if_fail(backend->position_copy != NULL, FALSE);
   g_return_val_if_fail(backend->position_clear != NULL, FALSE);
   g_return_val_if_fail(backend->position_outcome != NULL, FALSE);
   g_return_val_if_fail(backend->position_turn != NULL, FALSE);
-  g_return_val_if_fail(backend->list_moves != NULL, FALSE);
+  g_return_val_if_fail(backend->list_good_moves != NULL || backend->list_moves != NULL, FALSE);
   g_return_val_if_fail(backend->move_list_free != NULL, FALSE);
   g_return_val_if_fail(backend->move_list_get != NULL, FALSE);
   g_return_val_if_fail(backend->moves_equal != NULL, FALSE);
@@ -588,7 +603,7 @@ gboolean game_ai_search_analyze_moves_cancellable_with_tt(const GameBackend *bac
   out_moves->moves = NULL;
   out_moves->count = 0;
 
-  GameBackendMoveList moves = backend->list_moves(position);
+  GameBackendMoveList moves = game_ai_search_list_candidate_moves(backend, position, 0, max_depth);
   if (moves.count == 0) {
     backend->move_list_free(&moves);
     g_debug("No available moves for alpha-beta analysis");
@@ -685,15 +700,15 @@ gboolean game_ai_search_evaluate_position(const GameBackend *backend,
   g_return_val_if_fail(backend != NULL, FALSE);
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(out_score != NULL, FALSE);
-  if (!backend->supports_ai_search || !backend->supports_move_list) {
-    g_debug("Position evaluation requires a backend with AI and full move-list support");
+  if (!backend->supports_ai_search) {
+    g_debug("Position evaluation requires a backend with AI support");
     return FALSE;
   }
   g_return_val_if_fail(backend->position_copy != NULL, FALSE);
   g_return_val_if_fail(backend->position_clear != NULL, FALSE);
   g_return_val_if_fail(backend->position_outcome != NULL, FALSE);
   g_return_val_if_fail(backend->position_turn != NULL, FALSE);
-  g_return_val_if_fail(backend->list_moves != NULL, FALSE);
+  g_return_val_if_fail(backend->list_good_moves != NULL || backend->list_moves != NULL, FALSE);
   g_return_val_if_fail(backend->move_list_free != NULL, FALSE);
   g_return_val_if_fail(backend->move_list_get != NULL, FALSE);
   g_return_val_if_fail(backend->moves_equal != NULL, FALSE);
