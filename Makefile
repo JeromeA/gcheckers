@@ -16,9 +16,13 @@ LDLIBS := $(GLIB_LIBS) $(GOBJECT_LIBS) $(GIO_LIBS) $(CURL_LIBS) -lm
 GAME ?= checkers
 CHECKERS_DIR := src/games/checkers
 HOMEWORLDS_DIR := src/games/homeworlds
+BOOP_DIR := src/games/boop
 HOMEWORLDS_GAME_SRCS := $(HOMEWORLDS_DIR)/homeworlds_game.c $(HOMEWORLDS_DIR)/homeworlds_move_builder.c
 HOMEWORLDS_BACKEND_SRCS := $(HOMEWORLDS_DIR)/homeworlds_backend.c
 HOMEWORLDS_ALL_SRCS := $(HOMEWORLDS_GAME_SRCS) $(HOMEWORLDS_BACKEND_SRCS)
+BOOP_GAME_SRCS := $(BOOP_DIR)/boop_game.c
+BOOP_BACKEND_SRCS := $(BOOP_DIR)/boop_backend.c
+BOOP_ALL_SRCS := $(BOOP_GAME_SRCS) $(BOOP_BACKEND_SRCS)
 
 ifeq ($(GAME),checkers)
 APP_ID := io.github.jeromea.gcheckers
@@ -42,6 +46,17 @@ APP_MAIN_SRC := src/ghomeworlds.c
 GAME_BACKEND_DEFINE := -DGGAME_GAME_HOMEWORLDS
 GAME_SRCS := $(HOMEWORLDS_GAME_SRCS)
 GAME_BACKEND_SRCS := $(HOMEWORLDS_BACKEND_SRCS)
+APP_BIN = $(BIN_DIR)/$(APP_BIN_NAME)
+ALL_TOOLS =
+ALL_SCHEMA_TARGETS =
+SUPPORTS_CREATE_PUZZLES := no
+else ifeq ($(GAME),boop)
+APP_ID := io.github.jeromea.gboop
+APP_BIN_NAME := gboop
+APP_MAIN_SRC := src/gboop.c
+GAME_BACKEND_DEFINE := -DGGAME_GAME_BOOP
+GAME_SRCS := $(BOOP_GAME_SRCS)
+GAME_BACKEND_SRCS := $(BOOP_BACKEND_SRCS)
 APP_BIN = $(BIN_DIR)/$(APP_BIN_NAME)
 ALL_TOOLS =
 ALL_SCHEMA_TARGETS =
@@ -117,6 +132,8 @@ TEST_GAME_BACKEND_BIN := $(TESTS_DIR)/test_game_backend
 TEST_GAME_MODEL_BIN := $(TESTS_DIR)/test_game_model
 TEST_HOMEWORLDS_GAME_BIN := $(TESTS_DIR)/test_homeworlds_game
 TEST_HOMEWORLDS_BACKEND_BIN := $(TESTS_DIR)/test_homeworlds_backend
+TEST_BOOP_GAME_BIN := $(TESTS_DIR)/test_boop_game
+TEST_BOOP_BACKEND_BIN := $(TESTS_DIR)/test_boop_backend
 TEST_BOARD_BIN := $(TESTS_DIR)/test_board
 TEST_BOARD_GEOMETRY_BIN := $(TESTS_DIR)/test_board_geometry
 TEST_MOVE_GEN_BIN := $(TESTS_DIR)/test_move_gen
@@ -151,7 +168,7 @@ PROFILE_CMD = $(PROFILE_BIN) $(PROFILE_ARGS)
 
 .PHONY: all clean test coverage install validate-desktop-metadata \
 	gcheckers create_puzzles libgame.a \
-	test_game test_game_print test_game_backend test_game_model test_homeworlds_game test_homeworlds_backend test_board test_board_geometry test_move_gen test_create_puzzles_cli test_create_puzzles_check \
+	test_game test_game_print test_game_backend test_game_model test_homeworlds_game test_homeworlds_backend test_boop_game test_boop_backend test_board test_board_geometry test_move_gen test_create_puzzles_cli test_create_puzzles_check \
 	test_checkers_model test_ai_search test_ai_transposition_table test_bga_client \
 	test_file_dialog_history test_app_settings test_app_paths test_desktop_metadata test_flatpak_manifest test_sgf_tree test_sgf_io \
 	test_sgf_view test_board_view test_player_controls_panel test_sgf_controller test_window test_puzzle_generation test_puzzle_catalog \
@@ -248,6 +265,16 @@ test_homeworlds_backend: $(TEST_HOMEWORLDS_BACKEND_BIN)
 $(TEST_HOMEWORLDS_BACKEND_BIN): tests/test_homeworlds_backend.c $(HOMEWORLDS_ALL_SRCS) $(HOMEWORLDS_DIR)/homeworlds_backend.h $(HOMEWORLDS_DIR)/homeworlds_game.h $(HOMEWORLDS_DIR)/homeworlds_move_builder.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_homeworlds_backend.c $(HOMEWORLDS_ALL_SRCS) $(LDLIBS)
+
+test_boop_game: $(TEST_BOOP_GAME_BIN)
+$(TEST_BOOP_GAME_BIN): tests/test_boop_game.c $(BOOP_GAME_SRCS) $(BOOP_DIR)/boop_game.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -o $@ tests/test_boop_game.c $(BOOP_GAME_SRCS) $(LDLIBS)
+
+test_boop_backend: $(TEST_BOOP_BACKEND_BIN)
+$(TEST_BOOP_BACKEND_BIN): tests/test_boop_backend.c $(BOOP_ALL_SRCS) $(BOOP_DIR)/boop_backend.h $(BOOP_DIR)/boop_game.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -o $@ tests/test_boop_backend.c $(BOOP_ALL_SRCS) $(LDLIBS)
 
 test_board: $(TEST_BOARD_BIN)
 $(TEST_BOARD_BIN): tests/test_board.c $(BOARD_SRCS) $(CHECKERS_DIR)/board.h $(CHECKERS_DIR)/checkers_constants.h
@@ -540,6 +567,10 @@ else ifeq ($(GAME),homeworlds)
 $(APP_BIN): src/ghomeworlds.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/ghomeworlds.c $(LDLIBS) $(GTK_LIBS)
+else ifeq ($(GAME),boop)
+$(APP_BIN): src/gboop.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/gboop.c $(LDLIBS) $(GTK_LIBS)
 endif
 
 $(GSETTINGS_SCHEMA_COMPILED): $(GSETTINGS_SCHEMA_XML)

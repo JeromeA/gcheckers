@@ -9,8 +9,11 @@
 #elif defined(GGAME_GAME_HOMEWORLDS)
 #include "games/homeworlds/homeworlds_backend.h"
 #define GGAME_ACTIVE_GAME_BACKEND (&homeworlds_game_backend)
+#elif defined(GGAME_GAME_BOOP)
+#include "games/boop/boop_backend.h"
+#define GGAME_ACTIVE_GAME_BACKEND (&boop_game_backend)
 #else
-#error "No game backend selected. Define GGAME_GAME_CHECKERS, GGAME_GAME_HOMEWORLDS, or another backend define."
+#error "No game backend selected. Define GGAME_GAME_CHECKERS, GGAME_GAME_HOMEWORLDS, GGAME_GAME_BOOP, or another backend define."
 #endif
 
 #endif

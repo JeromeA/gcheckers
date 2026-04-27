@@ -4,7 +4,9 @@ This repository contains the `ggame` application framework plus the currently sh
 (`gcheckers`). The shared code in top-level `src/` owns the application shell, GTK UI, SGF/puzzle workflows, and the
 generic AI/model/backend interfaces. Game-specific code lives under `src/games/<game>/` and provides the rules,
 position and move types, search evaluation, notation helpers, optional puzzle tooling, and any board-specific callbacks
-needed by the selected backend.
+needed by the selected backend. `src/games/boop/` now exists as a Milestone 1 scaffold for a future boop build: it
+contains a tiny placeholder position module and backend so `GAME=boop` can compile and generic backend/model tests can
+run before real gameplay integration lands.
 
 The build selects exactly one active game at compile time through `GAME` in the `Makefile`, which in turn defines the
 active `GameBackend` callback table. Shared code talks to that backend through generic APIs such as `GGameModel`,
@@ -427,16 +429,30 @@ Sacrifices are modeled as a prefix step that fixes the remaining action color an
 back through source-ship selection for each granted action.
 Collaborates with: `homeworlds_game.c`, `homeworlds_backend.c`, and `tests/test_homeworlds_backend.c`.
 
+## Boop scaffold (`src/games/boop/boop_game.c`, `src/games/boop/boop_game.h`,
+`src/games/boop/boop_backend.c`, `src/games/boop/boop_backend.h`)
+Module: Milestone 1 boop placeholder engine and backend.
+Role: provide the smallest valid boop-specific position type, move type, staged builder, and backend adapter needed
+for `GAME=boop` to compile, for `src/active_game_backend.h` to select a boop backend, and for the generic
+`tests/test_game_backend.c` and `tests/test_game_model.c` coverage to run against a third backend. The placeholder
+builder currently offers exactly one selectable square and toggles the side to move when applied; it is intentionally
+not real boop gameplay yet.
+Collaborates with: `src/gboop.c`, `tests/test_boop_game.c`, and `tests/test_boop_backend.c`.
+
 ## Game backend interface (`src/game_backend.h`, `src/active_game_backend.h`,
-`src/games/checkers/checkers_backend.c`, `src/games/homeworlds/homeworlds_backend.c`)
+`src/games/checkers/checkers_backend.c`, `src/games/homeworlds/homeworlds_backend.c`,
+`src/games/boop/boop_backend.c`)
 Module: generic game-selection boundary plus the compiled game adapters.
 Role: `game_backend.h` defines the generic callback table used to describe one compiled game backend.
-`active_game_backend.h` maps the build-time define `GGAME_GAME_CHECKERS` to the active backend object, and
+`active_game_backend.h` maps the build-time defines `GGAME_GAME_CHECKERS`, `GGAME_GAME_HOMEWORLDS`, and
+`GGAME_GAME_BOOP` to the active backend object, and
 `src/games/checkers/checkers_backend.c` adapts the moved checkers engine, ruleset catalog, move list, AI, and move
 formatting APIs into that generic table. `src/games/homeworlds/homeworlds_backend.c` now adapts the slot-based
 Homeworlds engine and staged move builder, advertises `supports_move_builder = TRUE`, `supports_move_list = FALSE`,
 `supports_ai_search = TRUE`, and implements `list_good_moves` by exploring the builder in heuristic order and stopping
-after a bounded subset.
+after a bounded subset. `src/games/boop/boop_backend.c` is currently a Milestone 1 scaffold that advertises a staged
+builder without AI or square-grid rendering yet, keeping the boop build branch alive while later milestones add real
+rules and interaction.
 Scope: shared application code still has some checkers-native compatibility layers, but the physical checkers source
 ownership boundary is now explicit under `src/games/checkers/`.
 Backends now advertise whether they support full move-list enumeration, incremental move-building, and AI search.
@@ -453,18 +469,19 @@ validation and status text reports move counts as unavailable.
 Collaborates with: `src/game_backend.h`, `src/games/checkers/checkers_backend.c`,
 `src/games/checkers/checkers_model.c`, and `tests/test_game_model.c`.
 
-## GTK application entry (`src/gcheckers.c`, `src/application.c`, `src/application.h`, `src/ghomeworlds.c`)
-Class: `GGameApplication` (`GtkApplication`) for the checkers build; plain `GtkApplication` stub for the Homeworlds
-Milestone 1 build.
+## GTK application entry (`src/gcheckers.c`, `src/application.c`, `src/application.h`, `src/ghomeworlds.c`,
+`src/gboop.c`)
+Class: `GGameApplication` (`GtkApplication`) for the checkers build; plain `GtkApplication` stubs for the Homeworlds
+and boop Milestone 1 builds.
 Role: define the GTK application type and activation flow that creates the main window and model, installs app actions
 (`app.new-game`, `app.import`, `app.quit`), installs window game/SGF/navigation/analysis/puzzle/view actions, and
 publishes a menubar model (`File` -> `New game...`, `Import...`, `Load...`, `Save as...`, `Save position...`, `Quit`;
 `Game` -> `Force move` + navigation section; `Analysis` -> current-position and whole-game analysis; `Puzzle` ->
-`Play puzzles`; `View` -> drawer toggles) with keyboard accelerators. `src/ghomeworlds.c` is currently a branded
-Milestone 1 skeleton that opens a simple GTK window explaining that the Homeworlds gameplay integration has not landed
-yet.
-The checkers build uses application ID `io.github.jeromea.gcheckers`; the current Homeworlds Milestone 1 skeleton uses
-`io.github.jeromea.ghomeworlds`.
+`Play puzzles`; `View` -> drawer toggles) with keyboard accelerators. `src/ghomeworlds.c` and `src/gboop.c` are
+currently branded Milestone 1 skeletons that open simple GTK windows explaining that their gameplay integrations have
+not landed yet.
+The checkers build uses application ID `io.github.jeromea.gcheckers`; the current Homeworlds and boop Milestone 1
+skeletons use `io.github.jeromea.ghomeworlds` and `io.github.jeromea.gboop`.
 Collaborates with: `GGameWindow` for UI wiring and new-game dialog presentation.
 
 ## Board view subsystem

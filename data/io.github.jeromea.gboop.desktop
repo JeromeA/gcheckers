@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=gboop
+Comment=Play boop with a staged move-selection interface
+Exec=gboop
+Icon=io.github.jeromea.gboop
+Terminal=false
+Categories=Game;BoardGame;GTK;
+Keywords=boop;board;game;cat;kitten;
+StartupNotify=true

@@ -34,6 +34,15 @@ static void test_backend_metadata(void) {
   assert(backend->list_good_moves != NULL);
   assert(strcmp(backend->side_label(0), "Player 1") == 0);
   assert(strcmp(backend->side_label(1), "Player 2") == 0);
+#elif defined(GGAME_GAME_BOOP)
+  assert(strcmp(backend->id, "boop") == 0);
+  assert(strcmp(backend->display_name, "Boop") == 0);
+  assert(backend->variant_count == 0);
+  assert(!backend->supports_move_list);
+  assert(backend->supports_move_builder);
+  assert(!backend->supports_ai_search);
+  assert(strcmp(backend->side_label(0), "Player 1") == 0);
+  assert(strcmp(backend->side_label(1), "Player 2") == 0);
 #else
 #error "Add metadata expectations for the selected backend."
 #endif
@@ -101,6 +110,47 @@ static void test_backend_position_and_move_flow(void) {
   assert(good_moves.count > 0);
   backend->move_list_free(&good_moves);
   backend->position_clear(position);
+  g_free(position);
+#elif defined(GGAME_GAME_BOOP)
+  assert(!backend->supports_move_list);
+  assert(backend->supports_move_builder);
+  assert(backend->move_builder_init != NULL);
+  assert(backend->move_builder_clear != NULL);
+  assert(backend->move_builder_list_candidates != NULL);
+  assert(backend->move_builder_step != NULL);
+  assert(backend->move_builder_is_complete != NULL);
+  assert(backend->move_builder_build_move != NULL);
+
+  gpointer position = g_malloc0(backend->position_size);
+  assert(position != NULL);
+  backend->position_init(position, NULL);
+  assert(backend->position_outcome(position) == GAME_BACKEND_OUTCOME_ONGOING);
+  assert(backend->position_turn(position) == 0);
+
+  GameBackendMoveBuilder builder = {0};
+  assert(backend->move_builder_init(position, &builder));
+  GameBackendMoveList candidates = backend->move_builder_list_candidates(&builder);
+  assert(candidates.count > 0);
+
+  const void *first_candidate = backend->move_list_get(&candidates, 0);
+  assert(first_candidate != NULL);
+  assert(backend->move_builder_step(&builder, first_candidate));
+  assert(backend->move_builder_is_complete(&builder));
+
+  gpointer move = g_malloc0(backend->move_size);
+  assert(move != NULL);
+  assert(backend->move_builder_build_move(&builder, move));
+
+  char notation[32] = {0};
+  assert(backend->format_move(move, notation, sizeof(notation)));
+  assert(notation[0] != '\0');
+  assert(backend->apply_move(position, move));
+  assert(backend->position_turn(position) == 1);
+
+  backend->move_list_free(&candidates);
+  backend->move_builder_clear(&builder);
+  backend->position_clear(position);
+  g_free(move);
   g_free(position);
 #else
 #error "Add move-flow expectations for the selected backend."

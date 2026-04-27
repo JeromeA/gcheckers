@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.jeromea.gboop</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <name>gboop</name>
+  <summary>Play boop on a 6x6 board</summary>
+  <developer id="io.github.jeromea">
+    <name>JeromeA</name>
+  </developer>
+  <launchable type="desktop-id">io.github.jeromea.gboop.desktop</launchable>
+  <provides>
+    <binary>gboop</binary>
+  </provides>
+  <description>
+    <p>
+      gboop is the boop build target of the shared ggame repository.
+    </p>
+    <p>
+      The first milestone wires build-time game selection and a stub backend while the gameplay-specific GTK
+      integration is still under development.
+    </p>
+  </description>
+  <categories>
+    <category>Game</category>
+    <category>BoardGame</category>
+  </categories>
+  <url type="homepage">https://github.com/JeromeA/gcheckers</url>
+  <url type="bugtracker">https://github.com/JeromeA/gcheckers/issues</url>
+  <url type="vcs-browser">https://github.com/JeromeA/gcheckers</url>
+</component>

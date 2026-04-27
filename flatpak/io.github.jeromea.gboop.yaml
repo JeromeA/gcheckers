@@ -1,0 +1,18 @@
+id: io.github.jeromea.gboop
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+command: gboop
+finish-args:
+  - --device=dri
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+modules:
+  - name: gboop
+    buildsystem: simple
+    build-commands:
+      - make GAME=boop install PREFIX=/app
+    sources:
+      - type: dir
+        path: .

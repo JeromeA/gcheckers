@@ -252,13 +252,18 @@ static void test_game_model_init_and_apply_move(void) {
   assert(ggame_model_peek_backend(model) == backend);
   assert(ggame_model_peek_position(model) != NULL);
 
+#if defined(GGAME_GAME_CHECKERS)
   const GameBackendVariant *variant = ggame_model_peek_variant(model);
   assert(variant != NULL);
   assert(strcmp(variant->short_name, "american") == 0);
+#else
+  assert(ggame_model_peek_variant(model) == NULL);
+#endif
 
   handler_id = g_signal_connect(model, "state-changed", G_CALLBACK(test_game_model_state_changed_cb), &probe);
   assert(handler_id > 0);
 
+#if defined(GGAME_GAME_CHECKERS)
   GameBackendMoveList moves = ggame_model_list_moves(model);
   assert(moves.count > 0);
 
@@ -274,6 +279,13 @@ static void test_game_model_init_and_apply_move(void) {
 
   backend->move_list_free(&moves);
   g_free(move_copy);
+#else
+  gpointer move = g_malloc0(backend->move_size);
+  assert(move != NULL);
+  assert(ggame_model_apply_move(model, move));
+  assert(probe.calls == 1);
+  g_free(move);
+#endif
   g_object_unref(model);
 }
 
@@ -288,6 +300,7 @@ static void test_game_model_reset_and_status(void) {
   handler_id = g_signal_connect(model, "state-changed", G_CALLBACK(test_game_model_state_changed_cb), &probe);
   assert(handler_id > 0);
 
+#if defined(GGAME_GAME_CHECKERS)
   const GameBackendVariant *russian = backend->variant_by_short_name("russian");
   assert(russian != NULL);
 
@@ -306,6 +319,31 @@ static void test_game_model_reset_and_status(void) {
   GameBackendMoveList moves = ggame_model_list_moves(model);
   assert(moves.count > 0);
   backend->move_list_free(&moves);
+#elif defined(GGAME_GAME_HOMEWORLDS)
+  ggame_model_reset(model, NULL);
+  assert(probe.calls == 1);
+  assert(ggame_model_peek_variant(model) == NULL);
+
+  char *status = ggame_model_format_status(model);
+  assert(status != NULL);
+  assert(strstr(status, "Game: Homeworlds") != NULL);
+  assert(strstr(status, "Variant: Default") != NULL);
+  assert(strstr(status, "Moves available: unavailable") != NULL);
+  g_free(status);
+#elif defined(GGAME_GAME_BOOP)
+  ggame_model_reset(model, NULL);
+  assert(probe.calls == 1);
+  assert(ggame_model_peek_variant(model) == NULL);
+
+  char *status = ggame_model_format_status(model);
+  assert(status != NULL);
+  assert(strstr(status, "Game: Boop") != NULL);
+  assert(strstr(status, "Variant: Default") != NULL);
+  assert(strstr(status, "Moves available: unavailable") != NULL);
+  g_free(status);
+#else
+#error "Add reset/status expectations for the selected backend."
+#endif
 
   g_object_unref(model);
 }
