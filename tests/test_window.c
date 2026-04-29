@@ -2310,6 +2310,44 @@ int main(int argc, char **argv) {
   g_test_add_func("/analysis-graph/axis-range-minimum-window", test_analysis_graph_axis_range_minimum_window);
   g_test_add_func("/analysis-graph/axis-range-expands", test_analysis_graph_axis_range_expands_for_large_scores);
 
+#if defined(GGAME_GAME_BOOP)
+  g_test_add_func("/analysis-graph/progress-node-accessors", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/dispose-unparents-controls", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/dispose-without-panel-ref", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/dispose-after-panel-removed", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/computer-selection-keeps-board-enabled", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/auto-move-next-player-computer", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/sgf-navigation-resets-controls", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/force-move-user-turn", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/toolbar-actions", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/sgf-actions-navigate", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/analysis-actions", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/analysis-depth-slider", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/node-selection-updates-report", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/settings-dialog", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/puzzle-mode", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/puzzle-dialog-scrolls-to-first-untried", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/puzzle-first-move-failure", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/puzzle-analyze-records-analyze", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/puzzle-open-no-move-records-failure", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/drawer-visibility-actions", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/drawer-width-preservation", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/edit-mode-disables-navigation", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/graph-selection-sync", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/graph-activation-selects-node", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/import-wizard-flow", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/ruleset-switch", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/new-game-rotates-for-black-player", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/hotseat-follows-turn", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/new-game-keeps-computer-controls", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/manual-review-keeps-current-orientation", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/puzzle-analyze-keeps-black-orientation", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/puzzle-next-keeps-selected-ruleset", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/new-game-clears-loaded-title", test_ggame_window_skip);
+  g_test_add_func("/gcheckers-window/new-game-ruleset-options-russian", test_ggame_window_skip);
+  return g_test_run();
+#endif
+
   if (!gtk_init_check()) {
     g_test_add_func("/analysis-graph/progress-node-accessors", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/dispose-unparents-controls", test_ggame_window_skip);

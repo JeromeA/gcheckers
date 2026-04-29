@@ -14,16 +14,33 @@ G_DECLARE_FINAL_TYPE(BoardSelectionController,
                      GObject)
 
 typedef gboolean (*BoardSelectionControllerMoveHandler)(gconstpointer move, gpointer user_data);
+typedef gboolean (*BoardSelectionControllerCandidatePreference)(gconstpointer move, gpointer user_data);
+typedef gboolean (*BoardSelectionControllerCompletionConfirmation)(const GameBackendMoveBuilder *builder,
+                                                                  gconstpointer move,
+                                                                  gpointer user_data);
 
 BoardSelectionController *board_selection_controller_new(void);
 void board_selection_controller_set_model(BoardSelectionController *self, GGameModel *model);
 void board_selection_controller_set_move_handler(BoardSelectionController *self,
                                                  BoardSelectionControllerMoveHandler handler,
                                                  gpointer user_data);
+void board_selection_controller_set_candidate_preference(BoardSelectionController *self,
+                                                         BoardSelectionControllerCandidatePreference preference,
+                                                         gpointer user_data);
+void board_selection_controller_set_completion_confirmation(BoardSelectionController *self,
+                                                            BoardSelectionControllerCompletionConfirmation confirmation,
+                                                            gpointer user_data);
 void board_selection_controller_clear(BoardSelectionController *self);
 const guint *board_selection_controller_peek_path(BoardSelectionController *self, guint *length);
+const GameBackendMoveBuilder *board_selection_controller_peek_builder(BoardSelectionController *self);
+gboolean board_selection_controller_completion_pending(BoardSelectionController *self);
+gboolean board_selection_controller_confirm(BoardSelectionController *self);
 
 gboolean board_selection_controller_contains(BoardSelectionController *self, guint index);
+gboolean board_selection_controller_collect_highlights(BoardSelectionController *self,
+                                                       gboolean *out_selectable,
+                                                       gboolean *out_destinations,
+                                                       gsize out_count);
 
 gboolean board_selection_controller_handle_click(BoardSelectionController *self, guint index);
 

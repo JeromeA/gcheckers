@@ -27,7 +27,7 @@ static const char *homeworlds_backend_outcome_banner_text(GameBackendOutcome out
       return "Draw";
     case GAME_BACKEND_OUTCOME_ONGOING:
     default:
-      return "Ongoing";
+      return NULL;
   }
 }
 

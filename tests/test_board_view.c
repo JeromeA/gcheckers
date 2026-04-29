@@ -40,6 +40,16 @@ static void test_board_move_overlay_winner_banner_text(void) {
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
 
   g_assert_nonnull(backend);
+#if defined(GGAME_GAME_BOOP)
+  g_assert_null(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_ONGOING));
+  g_assert_cmpstr(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_SIDE_0_WIN),
+                  ==,
+                  "Player 1 wins");
+  g_assert_cmpstr(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_SIDE_1_WIN),
+                  ==,
+                  "Player 2 wins");
+  g_assert_cmpstr(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_DRAW), ==, "Draw");
+#else
   g_assert_null(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_ONGOING));
   g_assert_cmpstr(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_SIDE_0_WIN),
                   ==,
@@ -48,6 +58,7 @@ static void test_board_move_overlay_winner_banner_text(void) {
                   ==,
                   "Black wins!");
   g_assert_cmpstr(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_DRAW), ==, "Draw!");
+#endif
 }
 
 static void test_board_view_highlights_black_turn_moves(void) {

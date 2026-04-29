@@ -1,5 +1,9 @@
 #include "board_move_overlay.h"
 
+#if defined(GGAME_GAME_CHECKERS)
+#include "games/checkers/game.h"
+#include "sgf_controller.h"
+#endif
 #include "widget_utils.h"
 
 #include <math.h>
@@ -16,13 +20,16 @@ struct _BoardMoveOverlay {
 
 G_DEFINE_TYPE(BoardMoveOverlay, board_move_overlay, G_TYPE_OBJECT)
 
+#if defined(GGAME_GAME_CHECKERS)
 static const double board_move_overlay_alpha = 0.5;
 static const double board_move_overlay_stroke_width = 4.0;
 static const double board_move_overlay_arrow_scale = 0.28;
+#endif
 static const double board_move_overlay_banner_padding_x = 24.0;
 static const double board_move_overlay_banner_padding_y = 14.0;
 static const double board_move_overlay_banner_radius = 18.0;
 
+#if defined(GGAME_GAME_CHECKERS)
 static void board_move_overlay_transform_for_bottom_side(guint *row,
                                                          guint *col,
                                                          guint rows,
@@ -38,6 +45,7 @@ static void board_move_overlay_transform_for_bottom_side(guint *row,
   *row = rows - 1 - *row;
   *col = cols - 1 - *col;
 }
+#endif
 
 static void board_move_overlay_draw_rounded_rect(cairo_t *cr,
                                                  double x,
@@ -67,9 +75,14 @@ const char *board_move_overlay_get_winner_banner_text(const GameBackend *backend
   g_return_val_if_fail(backend != NULL, NULL);
   g_return_val_if_fail(backend->outcome_banner_text != NULL, NULL);
 
+  if (outcome == GAME_BACKEND_OUTCOME_ONGOING) {
+    return NULL;
+  }
+
   return backend->outcome_banner_text(outcome);
 }
 
+#if defined(GGAME_GAME_CHECKERS)
 static void board_move_overlay_draw_arrow(cairo_t *cr,
                                           double start_x,
                                           double start_y,
@@ -107,6 +120,7 @@ static void board_move_overlay_draw_arrow(cairo_t *cr,
   cairo_close_path(cr);
   cairo_fill(cr);
 }
+#endif
 
 static void board_move_overlay_draw(GtkDrawingArea * /*area*/,
                                     cairo_t *cr,
@@ -147,6 +161,7 @@ static void board_move_overlay_draw(GtkDrawingArea * /*area*/,
   const char *winner_banner = self->banner_text != NULL ? self->banner_text
                                                         : board_move_overlay_get_winner_banner_text(backend, outcome);
 
+#if defined(GGAME_GAME_CHECKERS)
   CheckersMove move = {0};
   if (self->sgf_controller != NULL &&
       ggame_sgf_controller_get_current_node_move(self->sgf_controller, &move) &&
@@ -190,6 +205,7 @@ static void board_move_overlay_draw(GtkDrawingArea * /*area*/,
       cairo_restore(cr);
     }
   }
+#endif
 
   if (winner_banner == NULL) {
     return;
@@ -301,7 +317,11 @@ void board_move_overlay_set_banner(BoardMoveOverlay *self,
 
 void board_move_overlay_set_sgf_controller(BoardMoveOverlay *self, GGameSgfController *controller) {
   g_return_if_fail(BOARD_IS_MOVE_OVERLAY(self));
+#if defined(GGAME_GAME_CHECKERS)
   g_return_if_fail(GGAME_IS_SGF_CONTROLLER(controller));
+#else
+  g_return_if_fail(controller != NULL);
+#endif
 
   g_set_object(&self->sgf_controller, controller);
 }

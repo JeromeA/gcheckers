@@ -163,8 +163,20 @@ void board_square_set_piece(BoardSquare *self, const GameBackendSquarePieceView 
   g_set_object(&self->piece_palette, palette);
 
   if (is_empty) {
+    gtk_widget_remove_css_class(self->piece_label, "piece-side-0");
+    gtk_widget_remove_css_class(self->piece_label, "piece-side-1");
     gtk_widget_set_visible(self->piece_stack, FALSE);
     return;
+  }
+
+  gtk_widget_remove_css_class(self->piece_label, "piece-side-0");
+  gtk_widget_remove_css_class(self->piece_label, "piece-side-1");
+  if (piece->side == 0) {
+    gtk_widget_add_css_class(self->piece_label, "piece-side-0");
+  } else if (piece->side == 1) {
+    gtk_widget_add_css_class(self->piece_label, "piece-side-1");
+  } else {
+    g_debug("Unsupported piece side %u for board symbol styling", piece->side);
   }
 
   if (piece_palette_can_draw(palette, piece)) {

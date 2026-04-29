@@ -4,9 +4,9 @@ This repository contains the `ggame` application framework plus the currently sh
 (`gcheckers`). The shared code in top-level `src/` owns the application shell, GTK UI, SGF/puzzle workflows, and the
 generic AI/model/backend interfaces. Game-specific code lives under `src/games/<game>/` and provides the rules,
 position and move types, search evaluation, notation helpers, optional puzzle tooling, and any board-specific callbacks
-needed by the selected backend. `src/games/boop/` now exists as a Milestone 1 scaffold for a future boop build: it
-contains a tiny placeholder position module and backend so `GAME=boop` can compile and generic backend/model tests can
-run before real gameplay integration lands.
+needed by the selected backend. `src/games/boop/` now contains a playable boop rules engine and backend for
+`GAME=boop`: it models the 6x6 board, kitten/cat supplies, boops, promotion choices, win detection, move notation,
+square-grid rendering callbacks, staged move construction, and search hooks.
 
 The build selects exactly one active game at compile time through `GAME` in the `Makefile`, which in turn defines the
 active `GameBackend` callback table. Shared code talks to that backend through generic APIs such as `GGameModel`,
@@ -429,15 +429,23 @@ Sacrifices are modeled as a prefix step that fixes the remaining action color an
 back through source-ship selection for each granted action.
 Collaborates with: `homeworlds_game.c`, `homeworlds_backend.c`, and `tests/test_homeworlds_backend.c`.
 
-## Boop scaffold (`src/games/boop/boop_game.c`, `src/games/boop/boop_game.h`,
-`src/games/boop/boop_backend.c`, `src/games/boop/boop_backend.h`)
-Module: Milestone 1 boop placeholder engine and backend.
-Role: provide the smallest valid boop-specific position type, move type, staged builder, and backend adapter needed
-for `GAME=boop` to compile, for `src/active_game_backend.h` to select a boop backend, and for the generic
-`tests/test_game_backend.c` and `tests/test_game_model.c` coverage to run against a third backend. The placeholder
-builder currently offers exactly one selectable square and toggles the side to move when applied; it is intentionally
-not real boop gameplay yet.
-Collaborates with: `src/gboop.c`, `tests/test_boop_game.c`, and `tests/test_boop_backend.c`.
+## Boop engine (`src/games/boop/boop_types.h`, `src/games/boop/boop_game.c`,
+`src/games/boop/boop_game.h`, `src/games/boop/boop_backend.c`, `src/games/boop/boop_backend.h`)
+Module: boop position, move, rules, builder, and backend adapter.
+Role: implement the 6x6 boop rules from `src/games/boop/RULES.md`. Positions store board cells, side to move,
+per-side kitten/cat supplies, promoted-kitten counts, and terminal outcome. Moves store placement square, placed rank,
+and an optional promotion/graduation mask so fully resolved turns can be serialized and replayed.
+The engine applies simultaneous one-square boops from the newly placed piece, returns booped-off pieces to the owner
+supply, resolves mandatory line promotions, supports optional one-kitten graduation when all eight pieces are on board,
+and awards the active player an end-of-turn win for three cats in a row or all eight kittens promoted.
+The backend exposes full move lists for validation/search, a staged square-grid builder for interactive placement plus
+promotion selection, deterministic notation such as `K@a1+a1,b1,c1`, symbol-only board pieces, static evaluation,
+terminal scores, and position hashing. When both kittens and cats are available, the placement builder exposes both
+ranks for each empty square and leaves the active rank choice to the UI candidate-preference hook. Promotion-stage
+selection paths contain only the promotion squares, so the just-placed piece is highlighted only when it is actually
+one of the candidate promotion squares.
+Collaborates with: `src/gboop.c`, `GGameModel`, `BoardView`, `tests/test_boop_game.c`,
+`tests/test_boop_backend.c`, and the generic backend/model/SGF tests.
 
 ## Game backend interface (`src/game_backend.h`, `src/active_game_backend.h`,
 `src/games/checkers/checkers_backend.c`, `src/games/homeworlds/homeworlds_backend.c`,
@@ -450,12 +458,14 @@ Role: `game_backend.h` defines the generic callback table used to describe one c
 formatting APIs into that generic table. `src/games/homeworlds/homeworlds_backend.c` now adapts the slot-based
 Homeworlds engine and staged move builder, advertises `supports_move_builder = TRUE`, `supports_move_list = FALSE`,
 `supports_ai_search = TRUE`, and implements `list_good_moves` by exploring the builder in heuristic order and stopping
-after a bounded subset. `src/games/boop/boop_backend.c` is currently a Milestone 1 scaffold that advertises a staged
-builder without AI or square-grid rendering yet, keeping the boop build branch alive while later milestones add real
-rules and interaction.
+after a bounded subset. `src/games/boop/boop_backend.c` adapts the boop engine, advertises move lists, staged
+move-building, square-grid rendering, AI search, notation formatting/parsing, and hashing.
 Scope: shared application code still has some checkers-native compatibility layers, but the physical checkers source
 ownership boundary is now explicit under `src/games/checkers/`.
-Backends now advertise whether they support full move-list enumeration, incremental move-building, and AI search.
+Backends now advertise whether they support full move-list enumeration, incremental move-building, AI search, and
+backend-owned move parsing/formatting for SGF. Move-builder backends can also expose preview positions, builder-owned
+selection paths, and selection reset behavior for multi-stage interactions such as boop promotion choices. Backend
+outcome banner text is reserved for terminal outcomes; ongoing positions should return no banner text.
 Collaborates with: `Makefile` backend selection, `tests/test_game_backend.c`, and future generic model/search work.
 
 ## Generic game model (`src/game_model.c`, `src/game_model.h`)
@@ -464,24 +474,27 @@ Role: wrap one active `GameBackend` plus one opaque current position behind a GT
 `state-changed` signal. The model owns backend-sized position storage, initializes it from the backend's first
 variant when one exists, exposes generic move listing, application, and whole-position replacement, and now backs the
 shared square-grid UI through `GCheckersModel`'s compatibility bridge. Construction accepts either a full move-list
-backend or a move-builder backend; if move lists are unavailable, move application falls back to direct backend
-validation and status text reports move counts as unavailable.
+backend or a move-builder backend; boop and checkers support both, while builder-only games can still apply moves
+through direct backend validation.
 Collaborates with: `src/game_backend.h`, `src/games/checkers/checkers_backend.c`,
 `src/games/checkers/checkers_model.c`, and `tests/test_game_model.c`.
 
 ## GTK application entry (`src/gcheckers.c`, `src/application.c`, `src/application.h`, `src/ghomeworlds.c`,
 `src/gboop.c`)
-Class: `GGameApplication` (`GtkApplication`) for the checkers build; plain `GtkApplication` stubs for the Homeworlds
-and boop Milestone 1 builds.
+Class: `GGameApplication` (`GtkApplication`) for the checkers build; plain `GtkApplication` apps for the Homeworlds
+and boop builds.
 Role: define the GTK application type and activation flow that creates the main window and model, installs app actions
 (`app.new-game`, `app.import`, `app.quit`), installs window game/SGF/navigation/analysis/puzzle/view actions, and
 publishes a menubar model (`File` -> `New game...`, `Import...`, `Load...`, `Save as...`, `Save position...`, `Quit`;
 `Game` -> `Force move` + navigation section; `Analysis` -> current-position and whole-game analysis; `Puzzle` ->
-`Play puzzles`; `View` -> drawer toggles) with keyboard accelerators. `src/ghomeworlds.c` and `src/gboop.c` are
-currently branded Milestone 1 skeletons that open simple GTK windows explaining that their gameplay integrations have
-not landed yet.
-The checkers build uses application ID `io.github.jeromea.gcheckers`; the current Homeworlds and boop Milestone 1
-skeletons use `io.github.jeromea.ghomeworlds` and `io.github.jeromea.gboop`.
+`Play puzzles`; `View` -> drawer toggles) with keyboard accelerators. `src/gboop.c` opens a focused local-play boop
+window backed by `GGameModel` and `BoardView`, with a status label, `New Game` button, blue board styling, and side
+supply panels showing each player's color-coded kitten/cat piles plus the active player's selected placement rank. The
+active supply panel also owns the promotion confirmation button, which appears during boop promotion-square selection
+and only enables once the selected squares form a legal promotion choice. The boop binary intentionally leaves the
+checkers puzzle/import/analysis shell out. `src/ghomeworlds.c` remains a branded skeleton window.
+The checkers build uses application ID `io.github.jeromea.gcheckers`; Homeworlds and boop use
+`io.github.jeromea.ghomeworlds` and `io.github.jeromea.gboop`.
 Collaborates with: `GGameWindow` for UI wiring and new-game dialog presentation.
 
 ## Board view subsystem
@@ -490,8 +503,10 @@ Collaborates with: `GGameWindow` for UI wiring and new-game dialog presentation.
 Class: `BoardView` (`GtkWidget`).
 Role: coordinate rendering updates, input handling, and active-turn move highlighting for the shared square-grid board
 path. It now consumes backend-provided square-grid callbacks (rows/cols, playable squares, dense square indexes, piece
-views, move-path prefixes, and start/destination highlight sets) through `GGameModel`, while still accepting the
-legacy `GCheckersModel` via an internal compatibility bridge.
+views, and staged move-candidate paths) through `GGameModel`, while still accepting the legacy `GCheckersModel` in
+checkers builds via an internal compatibility bridge.
+When a backend exposes a move-builder preview position, the board renders that provisional position instead of the
+committed model position; boop uses this to show the post-boop board state during promotion selection.
 Primary-click input is routed through each square button's `clicked` signal, and right-click input uses a dedicated
 secondary-button `GtkGestureClick`. A button-aware square callback allows window-level edit-mode logic to intercept
 square actions (left/right) before play-mode move-selection handling.
@@ -517,15 +532,27 @@ Collaborates with: `BoardGrid` and `PiecePalette`.
 ### Last move overlay (`src/board_move_overlay.c`, `src/board_move_overlay.h`)
 Module: move overlay renderer.
 Role: draw the selected SGF node's move arrow via cairo on top of the shared square-grid board and, when the game is
-over, a centered backend-provided winner banner across the board.
+over, a centered backend-provided winner banner across the board. Ongoing positions never draw a banner, even if a
+backend accidentally returns non-NULL text for `GAME_BACKEND_OUTCOME_ONGOING`.
 Collaborates with: `BoardView`, `GGameModel` for backend-driven board state, and `GGameSgfController` for the
 selected-node move.
 
 ### Selection controller (`src/board_selection_controller.c`, `src/board_selection_controller.h`)
 Module: selection path logic.
-Role: manage click-path selection and move application orchestration using backend move-path prefix callbacks rather
-than direct checkers-move inspection. The current shared square-grid controller still requires backends that support
-full move lists.
+Role: manage click-path selection and move application orchestration using backend `GameBackendMoveBuilder`
+candidates. The controller initializes a backend builder from the current position, highlights the next square choices
+from candidate paths, steps the builder on each click, and applies the completed backend move. Checkers now exposes
+its ordinary move paths through this staged builder, while boop uses the same flow for placement and promotion-square
+selection. Cached builder state is invalidated on `GGameModel::state-changed` so computer replies, SGF navigation,
+and other external position changes cannot leave stale candidate highlights on the board. During a partial selection,
+only continuations are highlighted; clicking a non-continuation clears the current builder and reprocesses the same
+click as a fresh first step. A candidate-preference callback can break ties when several backend candidates share the
+same visible square path, which the boop supply UI uses to choose kitten or cat placement on a selected square. A
+completion-confirmation callback can defer applying a completed builder move until the UI explicitly confirms it, used
+by boop promotion selections.
+Backends with multi-stage selection can override the visible selected path and reset only the current selection stage;
+boop uses that to keep promotion selection independent from the placement square and to let ordinary board clicks
+change or clear an unconfirmed promotion choice without applying it.
 Collaborates with: `BoardView` and `GGameModel` for applying moves.
 
 ### Piece palette (`src/piece_palette.c`, `src/piece_palette.h`)
@@ -555,17 +582,16 @@ Collaborates with: SGF view and controller modules.
 ### SGF move properties (`src/sgf_move_props.c`, `src/sgf_move_props.h`)
 Module: SGF move property helpers.
 Role: convert between SGF move properties (`B[...]`/`W[...]`) and typed move storage supplied by the active backend.
-The current implementation still parses and formats checkers notation internally, but the public helper API now only
-accepts opaque move storage pointers.
+Parsing and formatting are delegated to the active backend, so checkers notation and boop notation share the same SGF
+property helpers while the public API only accepts opaque move storage pointers.
 Collaborates with: `sgf_io` and `GGameSgfController`.
 
 ### SGF IO (`src/sgf_io.c`, `src/sgf_io.h`)
 Module: SGF load/save core.
 Role: serialize and deserialize SGF trees using SGF syntax (`(`, `)`, `;`, `PROP[...]`) with move properties
 `B[...]`/`W[...]` and standard SGF variation nesting for branches. gcheckers writes SGF metadata (`FF`, `CA`, `AP`,
-`GM`, `RU`) and does not persist current UI selection. `RU` stores the active backend variant short name and is
-exposed through small tree helpers so controllers and puzzle tooling can parse or stamp the active variant. Loaders
-that open playable SGFs now require `RU` to be present and valid instead of inferring a variant heuristically. Node
+`GM`, `RU`) and does not persist current UI selection. `RU` stores the active backend variant short name when the
+backend has variants, and is omitted/accepted as missing for zero-variant games such as boop. Node
 analysis persists through custom properties:
 `GCAD[depth]`, `GCAS[nodes=...;tt_probes=...;tt_hits=...;tt_cutoffs=...]`, and repeated
 `GCAN[move:score:nodes]` for scored moves, while still accepting older `GCAN[move:score]` data when loading. This

@@ -144,3 +144,21 @@ instead of applying the move.
 
 The fix lets the checkers backend answer length-only path queries when `out_indices == NULL`, and a regression test now
 verifies that a simple opening move can be queried that way and still reports its full two-square path.
+
+## Boop promotion selection could show the pre-boop board and ask for confirmation with no real choice
+
+Once a boop placement is made, any follow-up promotion selection should render the board after the boops have already
+happened. Forced single-line promotions should also apply immediately instead of surfacing a confirm step with nothing
+selectable.
+
+The shared board view always painted the committed model position, even while a backend move builder was in an
+intermediate post-selection state. Boop therefore showed the pre-boop board during promotion handling. Separately, the
+UI deferred completion whenever a move carried any promotion mask at all, even when the backend had already resolved the
+only legal promotion set and exposed no selectable continuation squares.
+
+The fix lets backends provide a builder preview position and teaches boop to expose its post-placement board during the
+promotion stage. Promotion selection paths are now separate from the placement path, so the placed piece is not shown as
+selected unless the user explicitly selects it for promotion. Pending promotion choices also reset or change selection
+on board clicks instead of applying a move; only the confirmation button can apply an unresolved promotion move. The
+promotion confirmation UI appears only when the backend still has real promotion choices to resolve, while forced
+three-kitten promotions auto-apply again.

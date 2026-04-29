@@ -4,13 +4,17 @@
 #include "board_move_overlay.h"
 #include "board_selection_controller.h"
 #include "piece_palette.h"
+#if defined(GGAME_GAME_CHECKERS)
 #include "sgf_controller.h"
+#endif
 #include "widget_utils.h"
 
 #include <stdbool.h>
 
+#if defined(GGAME_GAME_CHECKERS)
 typedef struct _GCheckersModel GCheckersModel;
 GGameModel *gcheckers_model_peek_game_model(GCheckersModel *self);
+#endif
 
 struct _BoardView {
   GObject parent_instance;
@@ -22,6 +26,8 @@ struct _BoardView {
   PiecePalette *piece_palette;
   BoardViewMoveHandler move_handler;
   gpointer move_handler_data;
+  BoardViewSelectionChangedHandler selection_changed_handler;
+  gpointer selection_changed_handler_data;
   BoardViewSquareHandler square_handler;
   gpointer square_handler_data;
   gboolean input_enabled;
@@ -31,6 +37,37 @@ struct _BoardView {
 G_DEFINE_TYPE(BoardView, board_view, G_TYPE_OBJECT)
 
 static const int board_view_square_size = 31;
+
+static void board_view_notify_selection_changed(BoardView *self) {
+  g_return_if_fail(BOARD_IS_VIEW(self));
+
+  if (self->selection_changed_handler != NULL) {
+    self->selection_changed_handler(self->selection_changed_handler_data);
+  }
+}
+
+static gconstpointer board_view_get_display_position(BoardView *self, gconstpointer model_position) {
+  const GameBackend *backend = NULL;
+  const GameBackendMoveBuilder *builder = NULL;
+  gconstpointer preview_position = NULL;
+
+  g_return_val_if_fail(BOARD_IS_VIEW(self), model_position);
+  g_return_val_if_fail(model_position != NULL, NULL);
+  g_return_val_if_fail(GGAME_IS_MODEL(self->model), model_position);
+
+  backend = ggame_model_peek_backend(self->model);
+  if (backend == NULL || backend->move_builder_preview_position == NULL) {
+    return model_position;
+  }
+
+  builder = board_selection_controller_peek_builder(self->selection_controller);
+  if (builder == NULL) {
+    return model_position;
+  }
+
+  preview_position = backend->move_builder_preview_position(builder);
+  return preview_position != NULL ? preview_position : model_position;
+}
 
 static void board_view_update_board(BoardView *self, gconstpointer position) {
   const GameBackend *backend = NULL;
@@ -49,7 +86,12 @@ static void board_view_update_board(BoardView *self, gconstpointer position) {
   g_return_if_fail(backend->position_outcome != NULL);
   g_return_if_fail(backend->square_grid_piece_view != NULL);
 
-  if (backend->position_outcome(position) == GAME_BACKEND_OUTCOME_ONGOING && backend->supports_move_list) {
+  if (backend->position_outcome(position) == GAME_BACKEND_OUTCOME_ONGOING && backend->supports_move_builder) {
+    highlight_moves = board_selection_controller_collect_highlights(self->selection_controller,
+                                                                    playable_starts,
+                                                                    possible_destinations,
+                                                                    G_N_ELEMENTS(playable_starts));
+  } else if (backend->position_outcome(position) == GAME_BACKEND_OUTCOME_ONGOING && backend->supports_move_list) {
     moves = ggame_model_list_moves(self->model);
     moves_loaded = TRUE;
     highlight_moves = moves.count > 0;
@@ -168,6 +210,7 @@ static gboolean board_view_handle_square_action(BoardView *self, GtkWidget *squa
   if (self->square_handler != NULL && self->square_handler((guint) index, button, self->square_handler_data)) {
     board_selection_controller_clear(self->selection_controller);
     board_view_update(self);
+    board_view_notify_selection_changed(self);
     return TRUE;
   }
 
@@ -179,6 +222,7 @@ static gboolean board_view_handle_square_action(BoardView *self, GtkWidget *squa
 
   if (board_selection_controller_handle_click(self->selection_controller, (guint) index)) {
     board_view_update(self);
+    board_view_notify_selection_changed(self);
     return TRUE;
   }
 
@@ -253,9 +297,12 @@ void board_view_set_model(BoardView *self, gpointer model) {
 
   if (GGAME_IS_MODEL(model)) {
     game_model = GGAME_MODEL(model);
-  } else {
+  }
+#if defined(GGAME_GAME_CHECKERS)
+  else {
     game_model = gcheckers_model_peek_game_model((GCheckersModel *) model);
   }
+#endif
 
   g_return_if_fail(GGAME_IS_MODEL(game_model));
   g_set_object(&self->model, game_model);
@@ -272,7 +319,11 @@ void board_view_set_model(BoardView *self, gpointer model) {
 
 void board_view_set_sgf_controller(BoardView *self, GGameSgfController *controller) {
   g_return_if_fail(BOARD_IS_VIEW(self));
+#if defined(GGAME_GAME_CHECKERS)
   g_return_if_fail(GGAME_IS_SGF_CONTROLLER(controller));
+#else
+  g_return_if_fail(controller != NULL);
+#endif
 
   board_move_overlay_set_sgf_controller(self->board_overlay, controller);
 }
@@ -287,6 +338,35 @@ void board_view_set_move_handler(BoardView *self, gpointer handler, gpointer use
                                               self->move_handler_data);
 }
 
+void board_view_set_move_candidate_preference(BoardView *self,
+                                              BoardViewMoveCandidatePreference preference,
+                                              gpointer user_data) {
+  g_return_if_fail(BOARD_IS_VIEW(self));
+
+  board_selection_controller_set_candidate_preference(self->selection_controller,
+                                                      preference,
+                                                      user_data);
+}
+
+void board_view_set_move_completion_confirmation(BoardView *self,
+                                                 BoardViewMoveCompletionConfirmation confirmation,
+                                                 gpointer user_data) {
+  g_return_if_fail(BOARD_IS_VIEW(self));
+
+  board_selection_controller_set_completion_confirmation(self->selection_controller,
+                                                        (BoardSelectionControllerCompletionConfirmation)confirmation,
+                                                        user_data);
+}
+
+void board_view_set_selection_changed_handler(BoardView *self,
+                                              BoardViewSelectionChangedHandler handler,
+                                              gpointer user_data) {
+  g_return_if_fail(BOARD_IS_VIEW(self));
+
+  self->selection_changed_handler = handler;
+  self->selection_changed_handler_data = user_data;
+}
+
 void board_view_set_square_handler(BoardView *self, gpointer handler, gpointer user_data) {
   g_return_if_fail(BOARD_IS_VIEW(self));
 
@@ -297,6 +377,7 @@ void board_view_set_square_handler(BoardView *self, gpointer handler, gpointer u
 void board_view_update(BoardView *self) {
   const GameBackend *backend = NULL;
   gconstpointer position = NULL;
+  gconstpointer display_position = NULL;
 
   g_return_if_fail(BOARD_IS_VIEW(self));
 
@@ -312,13 +393,16 @@ void board_view_update(BoardView *self) {
     return;
   }
 
-  if (board_grid_get_board_size(self->board_grid) != backend->square_grid_rows(position)) {
+  display_position = board_view_get_display_position(self, position);
+  g_return_if_fail(display_position != NULL);
+
+  if (board_grid_get_board_size(self->board_grid) != backend->square_grid_rows(display_position)) {
     board_selection_controller_clear(self->selection_controller);
     board_view_build_board(self);
   }
 
-  board_view_update_board(self, position);
-  board_view_update_sensitivity(self, position);
+  board_view_update_board(self, display_position);
+  board_view_update_sensitivity(self, display_position);
   board_move_overlay_queue_draw(self->board_overlay);
 }
 
@@ -327,6 +411,30 @@ void board_view_clear_selection(BoardView *self) {
 
   board_selection_controller_clear(self->selection_controller);
   board_view_update(self);
+  board_view_notify_selection_changed(self);
+}
+
+const GameBackendMoveBuilder *board_view_peek_move_builder(BoardView *self) {
+  g_return_val_if_fail(BOARD_IS_VIEW(self), NULL);
+
+  return board_selection_controller_peek_builder(self->selection_controller);
+}
+
+gboolean board_view_move_selection_completion_pending(BoardView *self) {
+  g_return_val_if_fail(BOARD_IS_VIEW(self), FALSE);
+
+  return board_selection_controller_completion_pending(self->selection_controller);
+}
+
+gboolean board_view_confirm_move_selection(BoardView *self) {
+  gboolean confirmed = FALSE;
+
+  g_return_val_if_fail(BOARD_IS_VIEW(self), FALSE);
+
+  confirmed = board_selection_controller_confirm(self->selection_controller);
+  board_view_update(self);
+  board_view_notify_selection_changed(self);
+  return confirmed;
 }
 
 void board_view_set_input_enabled(BoardView *self, gboolean enabled) {

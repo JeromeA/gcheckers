@@ -73,11 +73,18 @@ typedef struct {
   gboolean (*move_builder_step)(GameBackendMoveBuilder *builder, gconstpointer candidate);
   gboolean (*move_builder_is_complete)(const GameBackendMoveBuilder *builder);
   gboolean (*move_builder_build_move)(const GameBackendMoveBuilder *builder, gpointer out_move);
+  gconstpointer (*move_builder_preview_position)(const GameBackendMoveBuilder *builder);
+  gboolean (*move_builder_get_selection_path)(const GameBackendMoveBuilder *builder,
+                                              guint *out_length,
+                                              guint *out_indices,
+                                              gsize max_indices);
+  gboolean (*move_builder_reset_selection)(GameBackendMoveBuilder *builder);
   gboolean (*apply_move)(gpointer position, gconstpointer move);
   gint (*evaluate_static)(gconstpointer position);
   gint (*terminal_score)(GameBackendOutcome outcome, guint ply_depth);
   guint64 (*hash_position)(gconstpointer position);
   gboolean (*format_move)(gconstpointer move, char *buffer, gsize size);
+  gboolean (*parse_move)(const char *notation, gpointer out_move);
   gboolean supports_square_grid_board;
   guint (*square_grid_rows)(gconstpointer position);
   guint (*square_grid_cols)(gconstpointer position);

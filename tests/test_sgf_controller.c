@@ -612,6 +612,22 @@ static void test_ggame_sgf_controller_replay_node_into_game_applies_setup_root(v
 
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
+#if defined(GGAME_GAME_BOOP)
+  g_test_add_func("/sgf-controller/appends-move-property", test_ggame_sgf_controller_skip);
+  g_test_add_func("/sgf-controller/replay-branching", test_ggame_sgf_controller_skip);
+  g_test_add_func("/sgf-controller/new-game", test_ggame_sgf_controller_skip);
+  g_test_add_func("/sgf-controller/step-ai-move", test_ggame_sgf_controller_skip);
+  g_test_add_func("/sgf-controller/navigation-step-and-rewind", test_ggame_sgf_controller_skip);
+  g_test_add_func("/sgf-controller/current-node-move", test_ggame_sgf_controller_skip);
+  g_test_add_func("/sgf-controller/navigation-forward-to-branch-and-end", test_ggame_sgf_controller_skip);
+  g_test_add_func("/sgf-controller/select-node-emits-node-changed", test_ggame_sgf_controller_skip);
+  g_test_add_func("/sgf-controller/load-applies-setup-properties", test_ggame_sgf_controller_skip);
+  g_test_add_func("/sgf-controller/load-file-requires-ru", test_ggame_sgf_controller_skip);
+  g_test_add_func("/sgf-controller/replay-node-into-game-applies-setup-root", test_ggame_sgf_controller_skip);
+  g_test_add_func("/sgf-controller/save-position-file", test_ggame_sgf_controller_skip);
+  g_test_add_func("/sgf-controller/load-file-applies-ruleset-from-ru", test_ggame_sgf_controller_skip);
+  return g_test_run();
+#endif
   if (!gtk_init_check()) {
     g_test_add_func("/sgf-controller/appends-move-property", test_ggame_sgf_controller_skip);
     g_test_add_func("/sgf-controller/replay-branching", test_ggame_sgf_controller_skip);

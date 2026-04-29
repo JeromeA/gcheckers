@@ -5,9 +5,10 @@
 
 #include "game_backend.h"
 #include "game_model.h"
-#include "sgf_controller.h"
 
 G_BEGIN_DECLS
+
+typedef struct _GGameSgfController GGameSgfController;
 
 #define BOARD_TYPE_MOVE_OVERLAY (board_move_overlay_get_type())
 

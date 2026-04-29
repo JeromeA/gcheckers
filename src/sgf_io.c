@@ -1,7 +1,6 @@
 #include "sgf_io.h"
 
 #include "active_game_backend.h"
-#include "games/checkers/game.h"
 #include "sgf_move_props.h"
 
 #include <string.h>
@@ -56,7 +55,6 @@ static GQuark sgf_io_error_quark(void) {
 gboolean sgf_io_tree_get_variant(const SgfTree *tree, const GameBackendVariant **out_variant, GError **error) {
   g_return_val_if_fail(SGF_IS_TREE((SgfTree *)tree), FALSE);
   g_return_val_if_fail(GGAME_ACTIVE_GAME_BACKEND != NULL, FALSE);
-  g_return_val_if_fail(GGAME_ACTIVE_GAME_BACKEND->variant_by_short_name != NULL, FALSE);
 
   const SgfNode *root = sgf_tree_get_root((SgfTree *)tree);
   if (root == NULL) {
@@ -65,6 +63,18 @@ gboolean sgf_io_tree_get_variant(const SgfTree *tree, const GameBackendVariant *
   }
 
   const char *ru = sgf_node_get_property_first(root, "RU");
+  if (GGAME_ACTIVE_GAME_BACKEND->variant_count == 0) {
+    if (ru != NULL && ru[0] != '\0') {
+      g_set_error(error, sgf_io_error_quark(), 22, "%s does not support SGF RU variants", ru);
+      return FALSE;
+    }
+    if (out_variant != NULL) {
+      *out_variant = NULL;
+    }
+    return TRUE;
+  }
+
+  g_return_val_if_fail(GGAME_ACTIVE_GAME_BACKEND->variant_by_short_name != NULL, FALSE);
   if (ru == NULL) {
     g_set_error_literal(error, sgf_io_error_quark(), 23, "Missing SGF RU value");
     return FALSE;
@@ -88,13 +98,7 @@ gboolean sgf_io_tree_get_variant(const SgfTree *tree, const GameBackendVariant *
 
 gboolean sgf_io_tree_set_variant(SgfTree *tree, const GameBackendVariant *variant) {
   g_return_val_if_fail(SGF_IS_TREE(tree), FALSE);
-  g_return_val_if_fail(variant != NULL, FALSE);
-
-  const char *short_name = variant->short_name;
-  if (short_name == NULL) {
-    g_debug("Unable to map variant to SGF RU value");
-    return FALSE;
-  }
+  g_return_val_if_fail(GGAME_ACTIVE_GAME_BACKEND != NULL, FALSE);
 
   SgfNode *root = (SgfNode *)sgf_tree_get_root(tree);
   if (root == NULL) {
@@ -106,6 +110,19 @@ gboolean sgf_io_tree_set_variant(SgfTree *tree, const GameBackendVariant *varian
     g_debug("Failed to clear existing SGF RU property");
     return FALSE;
   }
+
+  if (GGAME_ACTIVE_GAME_BACKEND->variant_count == 0) {
+    return TRUE;
+  }
+
+  g_return_val_if_fail(variant != NULL, FALSE);
+
+  const char *short_name = variant->short_name;
+  if (short_name == NULL) {
+    g_debug("Unable to map variant to SGF RU value");
+    return FALSE;
+  }
+
   if (!sgf_node_add_property(root, "RU", short_name)) {
     g_debug("Failed to write SGF RU property");
     return FALSE;
@@ -760,13 +777,17 @@ static gboolean sgf_io_parse_tree(SgfIoParser *p,
         return FALSE;
       }
       if (black_move != NULL || white_move != NULL) {
-        CheckersMove move = {0};
-        if (!sgf_move_props_parse_notation(black_move != NULL ? black_move : white_move, &move, error)) {
+        g_autofree gpointer move = g_malloc0(GGAME_ACTIVE_GAME_BACKEND->move_size);
+        if (move == NULL) {
+          g_set_error_literal(error, sgf_io_error_quark(), 24, "Unable to allocate SGF move storage");
+          return FALSE;
+        }
+        if (!sgf_move_props_parse_notation(black_move != NULL ? black_move : white_move, move, error)) {
           return FALSE;
         }
 
         char move_text[128] = {0};
-        if (!sgf_move_props_format_notation(&move, move_text, sizeof(move_text), error)) {
+        if (!sgf_move_props_format_notation(move, move_text, sizeof(move_text), error)) {
           return FALSE;
         }
         SgfColor color = black_move != NULL ? SGF_COLOR_BLACK : SGF_COLOR_WHITE;

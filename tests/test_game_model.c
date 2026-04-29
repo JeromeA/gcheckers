@@ -242,6 +242,56 @@ static void test_game_model_state_changed_cb(GGameModel * /*model*/, gpointer us
   probe->calls++;
 }
 
+#if defined(GGAME_GAME_HOMEWORLDS)
+static gboolean test_game_model_build_first_builder_move(const GameBackend *backend,
+                                                         gconstpointer position,
+                                                         gpointer out_move) {
+  GameBackendMoveBuilder builder = {0};
+  gboolean built = FALSE;
+
+  g_return_val_if_fail(backend != NULL, FALSE);
+  g_return_val_if_fail(position != NULL, FALSE);
+  g_return_val_if_fail(out_move != NULL, FALSE);
+  g_return_val_if_fail(backend->supports_move_builder, FALSE);
+  g_return_val_if_fail(backend->move_builder_init != NULL, FALSE);
+  g_return_val_if_fail(backend->move_builder_clear != NULL, FALSE);
+  g_return_val_if_fail(backend->move_builder_list_candidates != NULL, FALSE);
+  g_return_val_if_fail(backend->move_builder_step != NULL, FALSE);
+  g_return_val_if_fail(backend->move_builder_is_complete != NULL, FALSE);
+  g_return_val_if_fail(backend->move_builder_build_move != NULL, FALSE);
+  g_return_val_if_fail(backend->move_list_free != NULL, FALSE);
+  g_return_val_if_fail(backend->move_list_get != NULL, FALSE);
+
+  if (!backend->move_builder_init(position, &builder)) {
+    return FALSE;
+  }
+
+  while (!backend->move_builder_is_complete(&builder)) {
+    GameBackendMoveList candidates = backend->move_builder_list_candidates(&builder);
+    const void *candidate = NULL;
+
+    if (candidates.count == 0) {
+      backend->move_list_free(&candidates);
+      backend->move_builder_clear(&builder);
+      return FALSE;
+    }
+
+    candidate = backend->move_list_get(&candidates, 0);
+    if (candidate == NULL || !backend->move_builder_step(&builder, candidate)) {
+      backend->move_list_free(&candidates);
+      backend->move_builder_clear(&builder);
+      return FALSE;
+    }
+
+    backend->move_list_free(&candidates);
+  }
+
+  built = backend->move_builder_build_move(&builder, out_move);
+  backend->move_builder_clear(&builder);
+  return built;
+}
+#endif
+
 static void test_game_model_init_and_apply_move(void) {
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   GGameModel *model = ggame_model_new(backend);
@@ -263,7 +313,7 @@ static void test_game_model_init_and_apply_move(void) {
   handler_id = g_signal_connect(model, "state-changed", G_CALLBACK(test_game_model_state_changed_cb), &probe);
   assert(handler_id > 0);
 
-#if defined(GGAME_GAME_CHECKERS)
+#if defined(GGAME_GAME_CHECKERS) || defined(GGAME_GAME_BOOP)
   GameBackendMoveList moves = ggame_model_list_moves(model);
   assert(moves.count > 0);
 
@@ -279,12 +329,15 @@ static void test_game_model_init_and_apply_move(void) {
 
   backend->move_list_free(&moves);
   g_free(move_copy);
-#else
+#elif defined(GGAME_GAME_HOMEWORLDS)
   gpointer move = g_malloc0(backend->move_size);
   assert(move != NULL);
+  assert(test_game_model_build_first_builder_move(backend, ggame_model_peek_position(model), move));
   assert(ggame_model_apply_move(model, move));
   assert(probe.calls == 1);
   g_free(move);
+#else
+#error "Add move application expectations for the selected backend."
 #endif
   g_object_unref(model);
 }
@@ -339,7 +392,7 @@ static void test_game_model_reset_and_status(void) {
   assert(status != NULL);
   assert(strstr(status, "Game: Boop") != NULL);
   assert(strstr(status, "Variant: Default") != NULL);
-  assert(strstr(status, "Moves available: unavailable") != NULL);
+  assert(strstr(status, "Moves available: 36") != NULL);
   g_free(status);
 #else
 #error "Add reset/status expectations for the selected backend."

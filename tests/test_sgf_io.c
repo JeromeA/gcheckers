@@ -1,12 +1,23 @@
 #include <glib.h>
 
 #include "../src/active_game_backend.h"
+#if defined(GGAME_GAME_BOOP)
+#include "../src/games/boop/boop_game.h"
+#endif
 #include "../src/games/checkers/game.h"
 #include "../src/games/checkers/rulesets.h"
 #include "../src/sgf_io.h"
 #include "../src/sgf_move_props.h"
 
-static CheckersMove test_sgf_io_make_move(const guint8 *path, guint8 length, guint8 captures) {
+#if defined(GGAME_GAME_BOOP)
+#define TEST_SGF_IO_CHECKERS_ONLY G_GNUC_UNUSED
+#else
+#define TEST_SGF_IO_CHECKERS_ONLY
+#endif
+
+static CheckersMove TEST_SGF_IO_CHECKERS_ONLY test_sgf_io_make_move(const guint8 *path,
+                                                                    guint8 length,
+                                                                    guint8 captures) {
   g_return_val_if_fail(path != NULL, (CheckersMove){0});
   g_return_val_if_fail(length >= 2, (CheckersMove){0});
   g_return_val_if_fail(length <= CHECKERS_MAX_MOVE_LENGTH, (CheckersMove){0});
@@ -110,7 +121,9 @@ static gboolean test_sgf_io_nodes_equal(const SgfNode *left, const SgfNode *righ
   return TRUE;
 }
 
-static const SgfNode *test_sgf_io_append_move(SgfTree *tree, SgfColor color, const CheckersMove *move) {
+static const SgfNode * TEST_SGF_IO_CHECKERS_ONLY test_sgf_io_append_move(SgfTree *tree,
+                                                                         SgfColor color,
+                                                                         const CheckersMove *move) {
   g_return_val_if_fail(SGF_IS_TREE(tree), NULL);
   g_return_val_if_fail(move != NULL, NULL);
 
@@ -142,7 +155,7 @@ static void test_sgf_io_assert_roundtrip(SgfTree *source) {
   g_assert_cmpuint(sgf_node_get_move_number(loaded_current), ==, 0);
 }
 
-static void test_sgf_io_roundtrip_single_move(void) {
+static void TEST_SGF_IO_CHECKERS_ONLY test_sgf_io_roundtrip_single_move(void) {
   g_autoptr(SgfTree) source = sgf_tree_new();
   const guint8 path[] = {12, 16};
   CheckersMove move = test_sgf_io_make_move(path, 2, 0);
@@ -152,7 +165,7 @@ static void test_sgf_io_roundtrip_single_move(void) {
   test_sgf_io_assert_roundtrip(source);
 }
 
-static void test_sgf_io_roundtrip_multiple_moves(void) {
+static void TEST_SGF_IO_CHECKERS_ONLY test_sgf_io_roundtrip_multiple_moves(void) {
   g_autoptr(SgfTree) source = sgf_tree_new();
   const guint8 path_a[] = {12, 16};
   const guint8 path_b[] = {23, 18};
@@ -173,7 +186,7 @@ static void test_sgf_io_roundtrip_multiple_moves(void) {
   test_sgf_io_assert_roundtrip(source);
 }
 
-static void test_sgf_io_roundtrip_single_capture(void) {
+static void TEST_SGF_IO_CHECKERS_ONLY test_sgf_io_roundtrip_single_capture(void) {
   g_autoptr(SgfTree) source = sgf_tree_new();
   const guint8 path[] = {23, 18};
   CheckersMove move = test_sgf_io_make_move(path, 2, 1);
@@ -189,7 +202,7 @@ static void test_sgf_io_roundtrip_single_capture(void) {
   test_sgf_io_assert_roundtrip(source);
 }
 
-static void test_sgf_io_roundtrip_multi_capture(void) {
+static void TEST_SGF_IO_CHECKERS_ONLY test_sgf_io_roundtrip_multi_capture(void) {
   g_autoptr(SgfTree) source = sgf_tree_new();
   const guint8 path[] = {31, 24, 17, 10};
   CheckersMove move = test_sgf_io_make_move(path, 4, 3);
@@ -205,7 +218,7 @@ static void test_sgf_io_roundtrip_multi_capture(void) {
   test_sgf_io_assert_roundtrip(source);
 }
 
-static void test_sgf_io_roundtrip_branches(void) {
+static void TEST_SGF_IO_CHECKERS_ONLY test_sgf_io_roundtrip_branches(void) {
   g_autoptr(SgfTree) source = sgf_tree_new();
   const SgfNode *root = sgf_tree_get_root(source);
   g_assert_nonnull(root);
@@ -251,7 +264,7 @@ static void test_sgf_io_load_rejects_invalid_header(void) {
   g_assert_error(error, g_quark_from_static_string("sgf-io-error"), 1);
 }
 
-static void test_sgf_io_preserves_repeated_property_values(void) {
+static void TEST_SGF_IO_CHECKERS_ONLY test_sgf_io_preserves_repeated_property_values(void) {
   const char *content = "(;FF[4]CA[UTF-8]AP[gcheckers]GM[40]C[root-a][root-b];B[12-16]N[line-a][line-b])";
 
   g_autoptr(SgfTree) loaded = NULL;
@@ -296,7 +309,7 @@ static void test_sgf_io_preserves_repeated_property_values(void) {
   g_assert_cmpstr(g_ptr_array_index((GPtrArray *)roundtrip_comments, 1), ==, "root-b");
 }
 
-static void test_sgf_io_roundtrip_node_analysis_properties(void) {
+static void TEST_SGF_IO_CHECKERS_ONLY test_sgf_io_roundtrip_node_analysis_properties(void) {
   g_autoptr(SgfTree) source = sgf_tree_new();
   const guint8 path[] = {12, 16};
   CheckersMove move = test_sgf_io_make_move(path, 2, 0);
@@ -342,7 +355,7 @@ static void test_sgf_io_roundtrip_node_analysis_properties(void) {
   g_assert_cmpstr(loaded_move->move_text, ==, "13-17");
 }
 
-static void test_sgf_io_roundtrip_ruleset_property(void) {
+static void TEST_SGF_IO_CHECKERS_ONLY test_sgf_io_roundtrip_ruleset_property(void) {
   g_autoptr(SgfTree) tree = sgf_tree_new();
   const GameBackendVariant *variant = GGAME_ACTIVE_GAME_BACKEND->variant_by_short_name("russian");
   g_assert_nonnull(variant);
@@ -366,7 +379,7 @@ static void test_sgf_io_roundtrip_ruleset_property(void) {
   g_assert_cmpstr(loaded_variant->short_name, ==, "russian");
 }
 
-static void test_sgf_io_rejects_unknown_ruleset_property(void) {
+static void TEST_SGF_IO_CHECKERS_ONLY test_sgf_io_rejects_unknown_ruleset_property(void) {
   g_autoptr(SgfTree) tree = NULL;
   g_autoptr(GError) error = NULL;
   g_assert_true(sgf_io_load_data("(;FF[4]CA[UTF-8]AP[gcheckers]GM[40]RU[unknown])", &tree, &error));
@@ -378,7 +391,7 @@ static void test_sgf_io_rejects_unknown_ruleset_property(void) {
   g_assert_error(error, g_quark_from_static_string("sgf-io-error"), 22);
 }
 
-static void test_sgf_io_rejects_missing_ruleset_property(void) {
+static void TEST_SGF_IO_CHECKERS_ONLY test_sgf_io_rejects_missing_ruleset_property(void) {
   g_autoptr(SgfTree) tree = NULL;
   g_autoptr(GError) error = NULL;
   g_assert_true(sgf_io_load_data("(;FF[4]CA[UTF-8]AP[gcheckers]GM[40])", &tree, &error));
@@ -390,7 +403,7 @@ static void test_sgf_io_rejects_missing_ruleset_property(void) {
   g_assert_error(error, g_quark_from_static_string("sgf-io-error"), 23);
 }
 
-static void test_sgf_io_load_setup_and_player_to_play_properties(void) {
+static void TEST_SGF_IO_CHECKERS_ONLY test_sgf_io_load_setup_and_player_to_play_properties(void) {
   const char *content =
       "(;FF[4]CA[UTF-8]AP[gcheckers]GM[40]AB[ab][cd]AW[bc]ABK[ab]AE[ef]PL[B];AE[ab]AW[ab]AWK[ab]PL[W])";
 
@@ -442,7 +455,7 @@ static void test_sgf_io_load_setup_and_player_to_play_properties(void) {
   g_assert_nonnull(strstr(saved, ";AE[ab]AW[ab]AWK[ab]PL[W]"));
 }
 
-static void test_sgf_io_load_legacy_analysis_move_properties(void) {
+static void TEST_SGF_IO_CHECKERS_ONLY test_sgf_io_load_legacy_analysis_move_properties(void) {
   const char *content =
       "(;FF[4]CA[UTF-8]AP[gcheckers]GM[40];GCAD[7]GCAS[nodes=1500;tt_probes=700;tt_hits=250;tt_cutoffs=90]"
       "GCAN[13-17:12]W[13-17])";
@@ -470,9 +483,118 @@ static void test_sgf_io_load_legacy_analysis_move_properties(void) {
   g_assert_true(entry->nodes == 0);
 }
 
+#if defined(GGAME_GAME_BOOP)
+static const SgfNode *test_sgf_io_append_boop_move(SgfTree *tree, SgfColor color, const BoopMove *move) {
+  g_return_val_if_fail(SGF_IS_TREE(tree), NULL);
+  g_return_val_if_fail(move != NULL, NULL);
+
+  char notation[128] = {0};
+  g_autoptr(GError) error = NULL;
+  if (!sgf_move_props_format_notation(move, notation, sizeof(notation), &error)) {
+    return NULL;
+  }
+  return sgf_tree_append_move(tree, color, notation);
+}
+
+static void test_sgf_io_boop_roundtrip_single_move(void) {
+  g_autoptr(SgfTree) source = sgf_tree_new();
+  BoopMove move = {
+    .square = 0,
+    .rank = BOOP_PIECE_RANK_KITTEN,
+  };
+  const SgfNode *node = test_sgf_io_append_boop_move(source, SGF_COLOR_BLACK, &move);
+  g_assert_nonnull(node);
+
+  g_autoptr(GError) error = NULL;
+  g_autofree char *serialized = sgf_io_save_data(source, &error);
+  g_assert_no_error(error);
+  g_assert_nonnull(serialized);
+  g_assert_nonnull(strstr(serialized, "B[K@a1]"));
+
+  test_sgf_io_assert_roundtrip(source);
+}
+
+static void test_sgf_io_boop_roundtrip_promotion_move(void) {
+  g_autoptr(SgfTree) source = sgf_tree_new();
+  BoopMove move = {
+    .square = 0,
+    .rank = BOOP_PIECE_RANK_KITTEN,
+    .promotion_mask = G_GUINT64_CONSTANT(0x7),
+  };
+  const SgfNode *node = test_sgf_io_append_boop_move(source, SGF_COLOR_BLACK, &move);
+  g_assert_nonnull(node);
+
+  g_autoptr(GError) error = NULL;
+  g_autofree char *serialized = sgf_io_save_data(source, &error);
+  g_assert_no_error(error);
+  g_assert_nonnull(serialized);
+  g_assert_nonnull(strstr(serialized, "B[K@a1+a1,b1,c1]"));
+
+  test_sgf_io_assert_roundtrip(source);
+}
+
+static void test_sgf_io_boop_preserves_repeated_property_values(void) {
+  const char *content = "(;FF[4]CA[UTF-8]AP[gboop]GM[0]C[root-a][root-b];B[K@a1]N[line-a][line-b])";
+
+  g_autoptr(SgfTree) loaded = NULL;
+  g_autoptr(GError) error = NULL;
+  g_assert_true(sgf_io_load_data(content, &loaded, &error));
+  g_assert_no_error(error);
+  g_assert_nonnull(loaded);
+
+  const SgfNode *root = sgf_tree_get_root(loaded);
+  g_assert_nonnull(root);
+  const GPtrArray *root_comments = sgf_node_get_property_values(root, "C");
+  g_assert_nonnull(root_comments);
+  g_assert_cmpuint(root_comments->len, ==, 2);
+
+  const GPtrArray *root_children = sgf_node_get_children(root);
+  g_assert_nonnull(root_children);
+  g_assert_cmpuint(root_children->len, ==, 1);
+  const SgfNode *move = g_ptr_array_index((GPtrArray *)root_children, 0);
+  g_assert_nonnull(move);
+  const GPtrArray *names = sgf_node_get_property_values(move, "N");
+  g_assert_nonnull(names);
+  g_assert_cmpuint(names->len, ==, 2);
+}
+
+static void test_sgf_io_boop_accepts_missing_ruleset_property(void) {
+  g_autoptr(SgfTree) tree = NULL;
+  g_autoptr(GError) error = NULL;
+  g_assert_true(sgf_io_load_data("(;FF[4]CA[UTF-8]AP[gboop]GM[0])", &tree, &error));
+  g_assert_no_error(error);
+  g_assert_nonnull(tree);
+
+  const GameBackendVariant *variant = NULL;
+  g_assert_true(sgf_io_tree_get_variant(tree, &variant, &error));
+  g_assert_no_error(error);
+  g_assert_null(variant);
+}
+
+static void test_sgf_io_boop_rejects_ruleset_property(void) {
+  g_autoptr(SgfTree) tree = NULL;
+  g_autoptr(GError) error = NULL;
+  g_assert_true(sgf_io_load_data("(;FF[4]CA[UTF-8]AP[gboop]GM[0]RU[unknown])", &tree, &error));
+  g_assert_no_error(error);
+  g_assert_nonnull(tree);
+
+  const GameBackendVariant *variant = NULL;
+  g_assert_false(sgf_io_tree_get_variant(tree, &variant, &error));
+  g_assert_error(error, g_quark_from_static_string("sgf-io-error"), 22);
+}
+#endif
+
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
 
+#if defined(GGAME_GAME_BOOP)
+  g_test_add_func("/sgf-io/roundtrip-single-move", test_sgf_io_boop_roundtrip_single_move);
+  g_test_add_func("/sgf-io/roundtrip-promotion-move", test_sgf_io_boop_roundtrip_promotion_move);
+  g_test_add_func("/sgf-io/load-invalid-header", test_sgf_io_load_rejects_invalid_header);
+  g_test_add_func("/sgf-io/repeated-property-values", test_sgf_io_boop_preserves_repeated_property_values);
+  g_test_add_func("/sgf-io/ruleset-missing", test_sgf_io_boop_accepts_missing_ruleset_property);
+  g_test_add_func("/sgf-io/ruleset-invalid", test_sgf_io_boop_rejects_ruleset_property);
+#else
   g_test_add_func("/sgf-io/roundtrip-single-move", test_sgf_io_roundtrip_single_move);
   g_test_add_func("/sgf-io/roundtrip-multiple-moves", test_sgf_io_roundtrip_multiple_moves);
   g_test_add_func("/sgf-io/roundtrip-single-capture", test_sgf_io_roundtrip_single_capture);
@@ -486,5 +608,6 @@ int main(int argc, char **argv) {
   g_test_add_func("/sgf-io/analysis-roundtrip", test_sgf_io_roundtrip_node_analysis_properties);
   g_test_add_func("/sgf-io/load-legacy-analysis-move", test_sgf_io_load_legacy_analysis_move_properties);
   g_test_add_func("/sgf-io/load-setup-and-pl", test_sgf_io_load_setup_and_player_to_play_properties);
+#endif
   return g_test_run();
 }

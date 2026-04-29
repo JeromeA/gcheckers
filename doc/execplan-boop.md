@@ -29,12 +29,16 @@ staged move selection works for both checkers and boop, and focused boop tests p
       updated end-of-turn win rule in `src/games/boop/RULES.md`.
 - [x] (2026-04-27 01:20Z) Complete Milestone 1 by adding `GAME=boop` build selection, a stub boop backend and game
       module, a branded `gboop` skeleton binary, boop metadata files, and boop-aware backend/model test coverage.
-- [ ] Migrate square-grid interaction from path-only move picking to backend-driven staged selection, and port
-      checkers to that model first.
-- [ ] Implement the boop engine and backend under `src/games/boop/` using the same staged-selection interface.
-- [ ] Generalize backend-owned SGF move notation so boop turns can be saved and replayed through the shared SGF tree.
-- [ ] Integrate boop into the shared application/window flows while disabling unsupported checkers-only features.
-- [ ] Add boop engine/backend/UI regression tests and update `doc/OVERVIEW.md` as `src/` changes land.
+- [x] (2026-04-27 23:05Z) Complete Milestone 2 by moving square-grid board clicks to backend builder candidates and
+      porting checkers to a staged move builder while preserving the old visible move path.
+- [x] (2026-04-27 23:35Z) Complete Milestone 3 by replacing the boop placeholder with a real 6x6 engine, backend move
+      lists, staged promotion selection, square-grid rendering, notation, hashing, and search callbacks.
+- [x] (2026-04-27 23:50Z) Generalize backend-owned SGF move notation so boop turns can round-trip through the shared
+      SGF IO helpers, and allow zero-variant games to omit `RU`.
+- [x] (2026-04-27 00:05Z) Replace the boop skeleton app with a focused playable `gboop` GTK window using
+      `GGameModel`, `BoardView`, and the staged square-grid controller. Checkers-only `GGameWindow` tests compile but
+      are skipped in `GAME=boop` because that window remains checkers-specific.
+- [x] (2026-04-27 00:10Z) Add boop engine/backend/shared regression tests and update `doc/OVERVIEW.md`.
 
 ## Surprises & Discoveries
 
@@ -60,6 +64,12 @@ staged move selection works for both checkers and boop, and focused boop tests p
   selection semantics unchanged.
   Evidence: `src/board_view.c` already paints arbitrary square-grid boards through `GameBackendSquarePieceView`, but
   it relies on `BoardSelectionController` for primary-click move selection.
+
+- Observation: the full `GGameWindow` shell is still too checkers-specific to be the boop application shell without a
+  larger window refactor.
+  Evidence: `src/window.c`, `src/application.c`, and `src/sgf_controller.c` still own `GCheckersModel`, puzzle setup,
+  checkers ruleset mappings, and checkers analysis flows directly. The boop build therefore uses a focused
+  `src/gboop.c` window and skips those checkers-window tests under `GAME=boop`.
 
 ## Decision Log
 
@@ -102,15 +112,25 @@ staged move selection works for both checkers and boop, and focused boop tests p
   directly instead of inventing draw behavior for simultaneous-looking positions.
   Date/Author: 2026-04-27 / Codex
 
+- Decision: `gboop` will ship as a focused local-play app using the shared board/model pieces rather than forcing the
+  checkers `GGameWindow` to support boop in this pass.
+  Rationale: the shared window still owns puzzle, import, setup editing, and analysis behaviors that assume checkers
+  storage. Reusing `GGameModel`, `BoardView`, and the staged controller gives boop a playable window without
+  pretending unsupported checkers-only features are generic.
+  Date/Author: 2026-04-27 / Codex
+
 ## Outcomes & Retrospective
 
-Milestone 1 is complete. The repository now accepts `GAME=boop`, builds `build/bin/gboop`, archives a boop-flavored
-`build/lib/libgame.a`, and selects a stub boop backend through `src/active_game_backend.h`. The new boop code is still
-only a scaffold: `src/games/boop/boop_game.c` and `src/games/boop/boop_backend.c` implement a tiny placeholder
-position plus one-step builder so the generic backend/model tests can compile and run, and `src/gboop.c` opens a
-branded GTK placeholder window instead of the full shared application shell. The next major implementation risk is no
-longer build selection; it is the amount of remaining checkers-specific code in SGF, board input, window, and
-application modules. The next milestone therefore remains the staged-selection migration for square-grid games.
+The plan is implemented to a playable boop build. The repository accepts `GAME=boop`, builds `build/bin/gboop`,
+archives a boop-flavored `build/lib/libgame.a`, and selects the boop backend through `src/active_game_backend.h`.
+`src/games/boop/` now contains real board/supply/rules logic, move generation, builder-driven placement and promotion
+selection, notation parsing/formatting, square-grid callbacks, search evaluation, and hashing. Checkers board clicks
+also use the shared staged-selection controller.
+
+SGF move notation is backend-owned, and boop moves round-trip through `sgf_io` as values such as
+`K@a1+a1,b1,c1`. Zero-variant games can omit `RU`. The remaining architectural gap is the full shared
+`GGameWindow` shell: it still contains checkers puzzle/import/edit/analysis assumptions, so `gboop` uses a smaller
+local-play GTK window that reuses the generic model and board rather than that shell.
 
 ## Context and Orientation
 
@@ -208,13 +228,11 @@ SGF-analysis helpers must stop including `games/checkers/game.h` directly. `src/
 `RU[...]` when the active backend has zero variants. The initial boop SGF path only needs empty-start games plus move
 trees; it does not need arbitrary setup nodes or puzzle setup properties.
 
-Once board interaction and SGF move notation are generic enough, integrate boop into the shared application shell. The
-construction path in `src/application.c` and `src/window.c` must stop requiring `GCheckersModel` to create a playable
-window. Replace the remaining model ownership with `GGameModel` where possible, and gate boop-unsupported features by
-backend capability instead of by silent failure. For boop, the New Game dialog should offer only the player controls
-and AI depth because there are no variants. Puzzle actions, puzzle dialogs, and arbitrary setup editing must be hidden
-or insensitive in boop builds. SGF import/export may remain available only for the supported empty-start move-tree
-format.
+Once board interaction and SGF move notation are generic enough, replace the boop skeleton with a focused playable
+window that reuses shared `GGameModel`, `BoardView`, and staged-selection pieces. Do not force the full
+`GGameWindow` shell to support boop in this pass because `src/application.c`, `src/window.c`, and
+`src/sgf_controller.c` still own checkers puzzle, setup-editing, import, and analysis assumptions. Those paths should
+compile in `GAME=boop` only where needed by shared tests, with checkers-only behaviors skipped explicitly.
 
 Finally, add focused boop tests and update the architecture documentation. Add engine-level tests for boops,
 boop-off-board supply returns, kitten promotions, cat-line wins, the "all eight pieces are on the board" graduation
@@ -299,16 +317,16 @@ Acceptance for this milestone is that boop rule tests pass, backend metadata and
 backend can initialize a starting position, list legal placements, format a move, apply one move successfully, and
 walk through promotion-choice interactions when multiple kitten alignments are available.
 
-### Milestone 4: boop SGF move generalization and shared app integration
+### Milestone 4: boop SGF move generalization and shared staged interaction
 
 At the end of this milestone, a boop move can be entered through staged square-grid interaction and can be stored in
 and replayed from the shared SGF tree.
 
 Update `src/sgf_move_props.c`, `src/sgf_move_props.h`, `src/sgf_controller.c`, and `src/sgf_io.c` so move parsing and
-formatting are backend-owned and zero-variant games are supported without `RU[...]`. Integrate boop into the shared
-application/window flows using the new staged-selection controller, and gate unsupported checkers-only features by
-backend capability rather than by silent failure. Add regression tests for boop move notation and for staged
-controller behavior across both checkers and boop.
+formatting are backend-owned and zero-variant games are supported without `RU[...]`. Ensure the shared board and
+selection controller can drive boop moves, and make checkers-only controller/window tests compile or skip cleanly under
+`GAME=boop`. Add regression tests for boop move notation and for staged controller behavior across both checkers and
+boop.
 
 Run:
 
@@ -320,14 +338,14 @@ Run:
   build/tests/test_window
 
 Acceptance for this milestone is that a boop move can be serialized into the SGF tree, loaded back into a fresh model,
-and replayed to the same position, and that the shared application can drive both checkers and boop through staged
-selection without regressing checkers behavior.
+and replayed to the same position, and that the shared board-selection path can drive both checkers and boop through
+staged selection without regressing checkers behavior.
 
 ### Milestone 5: focused boop app validation
 
-At the end of this milestone, `gboop` is a coherent playable application. A user can start a boop game, choose human
-or computer players, place pieces, resolve promotion choices when necessary, navigate move history, and finish a game.
-Unsupported puzzle and edit-mode features are clearly unavailable rather than silently broken.
+At the end of this milestone, `gboop` is a coherent playable local-play application. A user can start a boop game,
+place pieces, resolve promotion choices when necessary, and finish a game. Unsupported puzzle, import/export,
+analysis, and edit-mode features are absent from the focused boop window rather than silently broken.
 
 Run:
 
@@ -336,8 +354,8 @@ Run:
   build/bin/gboop
 
 Acceptance for this milestone is that the boop application window opens, a local game is playable through the board,
-promotion-choice turns are resolvable through the staged UI, history navigation works, and unsupported boop features
-are absent or insensitive rather than failing at runtime.
+promotion-choice turns are resolvable through the staged UI, and unsupported boop features are absent rather than
+failing at runtime.
 
 ## Concrete Steps
 
@@ -407,8 +425,8 @@ window interaction. The boop test suite must cover at least these observable rul
   - end-of-turn win detection awards the move to the active player even if the opponent also has a winning position;
   - staged square-grid interaction can complete both a simple placement turn and a promotion-choice turn.
 
-Third, manual play in `build/bin/gboop` shows that the window can start a game, complete staged selections, navigate
-history, and finish with the correct winner banner text.
+Third, manual play in `build/bin/gboop` shows that the window can start a game, complete staged selections, and finish
+with the correct winner banner text.
 
 ## Idempotence and Recovery
 

@@ -194,6 +194,215 @@ static gboolean checkers_backend_moves_equal(gconstpointer left, gconstpointer r
   return memcmp(left_move->path, right_move->path, left_move->length * sizeof(left_move->path[0])) == 0;
 }
 
+typedef struct {
+  GameBackendMoveList legal_moves;
+  guint8 path[CHECKERS_MAX_MOVE_LENGTH];
+  guint8 path_length;
+  gboolean complete;
+  CheckersMove completed_move;
+} CheckersMoveBuilderState;
+
+static gboolean checkers_backend_move_matches_builder_path(const CheckersMove *move,
+                                                           const guint8 *path,
+                                                           guint8 path_length) {
+  g_return_val_if_fail(move != NULL, FALSE);
+  g_return_val_if_fail(path != NULL || path_length == 0, FALSE);
+
+  if (move->length < path_length) {
+    return FALSE;
+  }
+
+  for (guint i = 0; i < path_length; ++i) {
+    if (move->path[i] != path[i]) {
+      return FALSE;
+    }
+  }
+
+  return TRUE;
+}
+
+static gboolean checkers_backend_builder_candidate_exists(const CheckersMove *candidates,
+                                                          gsize count,
+                                                          const CheckersMove *candidate) {
+  g_return_val_if_fail(candidate != NULL, FALSE);
+
+  for (gsize i = 0; i < count; ++i) {
+    if (checkers_backend_moves_equal(&candidates[i], candidate)) {
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
+static gboolean checkers_backend_builder_append_candidate(CheckersMove **candidates,
+                                                          gsize *count,
+                                                          gsize *capacity,
+                                                          const CheckersMove *candidate) {
+  g_return_val_if_fail(candidates != NULL, FALSE);
+  g_return_val_if_fail(count != NULL, FALSE);
+  g_return_val_if_fail(capacity != NULL, FALSE);
+  g_return_val_if_fail(candidate != NULL, FALSE);
+
+  if (checkers_backend_builder_candidate_exists(*candidates, *count, candidate)) {
+    return TRUE;
+  }
+
+  if (*count == *capacity) {
+    gsize next_capacity = *capacity == 0 ? 8 : *capacity * 2;
+    CheckersMove *next_candidates = g_realloc_n(*candidates, next_capacity, sizeof(*next_candidates));
+    g_return_val_if_fail(next_candidates != NULL, FALSE);
+    *candidates = next_candidates;
+    *capacity = next_capacity;
+  }
+
+  (*candidates)[*count] = *candidate;
+  (*count)++;
+  return TRUE;
+}
+
+static gboolean checkers_backend_move_builder_init(gconstpointer position, GameBackendMoveBuilder *out_builder) {
+  CheckersMoveBuilderState *state = NULL;
+
+  g_return_val_if_fail(position != NULL, FALSE);
+  g_return_val_if_fail(out_builder != NULL, FALSE);
+
+  state = g_new0(CheckersMoveBuilderState, 1);
+  g_return_val_if_fail(state != NULL, FALSE);
+
+  state->legal_moves = checkers_backend_list_moves(position);
+  if (state->legal_moves.count == 0) {
+    g_free(state);
+    return FALSE;
+  }
+
+  out_builder->builder_state = state;
+  out_builder->builder_state_size = sizeof(*state);
+  return TRUE;
+}
+
+static void checkers_backend_move_builder_clear(GameBackendMoveBuilder *builder) {
+  CheckersMoveBuilderState *state = NULL;
+
+  g_return_if_fail(builder != NULL);
+
+  state = builder->builder_state;
+  if (state != NULL) {
+    checkers_backend_move_list_free(&state->legal_moves);
+  }
+  g_clear_pointer(&builder->builder_state, g_free);
+  builder->builder_state_size = 0;
+}
+
+static GameBackendMoveList checkers_backend_move_builder_list_candidates(const GameBackendMoveBuilder *builder) {
+  const CheckersMoveBuilderState *state = NULL;
+  CheckersMove *candidates = NULL;
+  gsize count = 0;
+  gsize capacity = 0;
+
+  g_return_val_if_fail(builder != NULL, (GameBackendMoveList){0});
+
+  state = builder->builder_state;
+  g_return_val_if_fail(state != NULL, (GameBackendMoveList){0});
+  if (state->complete || state->path_length >= CHECKERS_MAX_MOVE_LENGTH) {
+    return (GameBackendMoveList){0};
+  }
+
+  const CheckersMove *legal_moves = state->legal_moves.moves;
+  for (gsize i = 0; i < state->legal_moves.count; ++i) {
+    const CheckersMove *move = &legal_moves[i];
+    if (!checkers_backend_move_matches_builder_path(move, state->path, state->path_length) ||
+        move->length <= state->path_length) {
+      continue;
+    }
+
+    CheckersMove candidate = {0};
+    candidate.length = state->path_length + 1;
+    for (guint path_index = 0; path_index < candidate.length; ++path_index) {
+      candidate.path[path_index] = move->path[path_index];
+    }
+
+    if (!checkers_backend_builder_append_candidate(&candidates, &count, &capacity, &candidate)) {
+      g_free(candidates);
+      return (GameBackendMoveList){0};
+    }
+  }
+
+  return (GameBackendMoveList){
+      .moves = candidates,
+      .count = count,
+  };
+}
+
+static gboolean checkers_backend_move_builder_step(GameBackendMoveBuilder *builder, gconstpointer candidate) {
+  CheckersMoveBuilderState *state = NULL;
+  const CheckersMove *candidate_move = candidate;
+  gboolean has_continuation = FALSE;
+
+  g_return_val_if_fail(builder != NULL, FALSE);
+  g_return_val_if_fail(candidate_move != NULL, FALSE);
+
+  state = builder->builder_state;
+  g_return_val_if_fail(state != NULL, FALSE);
+  if (state->complete || candidate_move->length != state->path_length + 1 ||
+      candidate_move->length > CHECKERS_MAX_MOVE_LENGTH) {
+    return FALSE;
+  }
+
+  for (guint i = 0; i < state->path_length; ++i) {
+    if (candidate_move->path[i] != state->path[i]) {
+      return FALSE;
+    }
+  }
+
+  memcpy(state->path, candidate_move->path, candidate_move->length * sizeof(state->path[0]));
+  state->path_length = candidate_move->length;
+
+  const CheckersMove *legal_moves = state->legal_moves.moves;
+  for (gsize i = 0; i < state->legal_moves.count; ++i) {
+    const CheckersMove *move = &legal_moves[i];
+    if (!checkers_backend_move_matches_builder_path(move, state->path, state->path_length)) {
+      continue;
+    }
+
+    if (move->length == state->path_length) {
+      state->completed_move = *move;
+      state->complete = TRUE;
+      return TRUE;
+    }
+    has_continuation = TRUE;
+  }
+
+  return has_continuation;
+}
+
+static gboolean checkers_backend_move_builder_is_complete(const GameBackendMoveBuilder *builder) {
+  const CheckersMoveBuilderState *state = NULL;
+
+  g_return_val_if_fail(builder != NULL, FALSE);
+
+  state = builder->builder_state;
+  g_return_val_if_fail(state != NULL, FALSE);
+  return state->complete;
+}
+
+static gboolean checkers_backend_move_builder_build_move(const GameBackendMoveBuilder *builder, gpointer out_move) {
+  const CheckersMoveBuilderState *state = NULL;
+  CheckersMove *move = out_move;
+
+  g_return_val_if_fail(builder != NULL, FALSE);
+  g_return_val_if_fail(move != NULL, FALSE);
+
+  state = builder->builder_state;
+  g_return_val_if_fail(state != NULL, FALSE);
+  if (!state->complete) {
+    return FALSE;
+  }
+
+  *move = state->completed_move;
+  return TRUE;
+}
+
 static gboolean checkers_backend_apply_move(gpointer position, gconstpointer move) {
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(move != NULL, FALSE);
@@ -478,6 +687,65 @@ static gboolean checkers_backend_format_move(gconstpointer move, char *buffer, g
   return game_format_move_notation(move, buffer, size);
 }
 
+static gboolean checkers_backend_parse_move(const char *notation, gpointer out_move) {
+  g_return_val_if_fail(notation != NULL, FALSE);
+  g_return_val_if_fail(out_move != NULL, FALSE);
+
+  gsize len = strlen(notation);
+  if (len == 0) {
+    return FALSE;
+  }
+
+  CheckersMove move = {0};
+  gboolean captures = FALSE;
+  char separator = '\0';
+  gsize pos = 0;
+
+  while (pos < len) {
+    gsize start = pos;
+    while (pos < len && g_ascii_isdigit(notation[pos])) {
+      pos++;
+    }
+
+    if (start == pos) {
+      return FALSE;
+    }
+
+    g_autofree char *square_text = g_strndup(notation + start, pos - start);
+    char *end_ptr = NULL;
+    guint64 square_1based = g_ascii_strtoull(square_text, &end_ptr, 10);
+    if (end_ptr == square_text || (end_ptr != NULL && *end_ptr != '\0') || square_1based == 0 ||
+        square_1based > CHECKERS_MAX_SQUARES || move.length >= CHECKERS_MAX_MOVE_LENGTH) {
+      return FALSE;
+    }
+
+    move.path[move.length++] = (uint8_t)(square_1based - 1);
+    if (pos >= len) {
+      break;
+    }
+
+    if (notation[pos] != '-' && notation[pos] != 'x') {
+      return FALSE;
+    }
+
+    if (separator == '\0') {
+      separator = notation[pos];
+      captures = separator == 'x';
+    } else if (separator != notation[pos]) {
+      return FALSE;
+    }
+    pos++;
+  }
+
+  if (move.length < 2) {
+    return FALSE;
+  }
+
+  move.captures = captures ? (uint8_t)(move.length - 1) : 0;
+  *(CheckersMove *)out_move = move;
+  return TRUE;
+}
+
 const GameBackend checkers_game_backend = {
     .id = "checkers",
     .display_name = "Checkers",
@@ -485,7 +753,7 @@ const GameBackend checkers_game_backend = {
     .position_size = sizeof(Game),
     .move_size = sizeof(CheckersMove),
     .supports_move_list = TRUE,
-    .supports_move_builder = FALSE,
+    .supports_move_builder = TRUE,
     .supports_ai_search = TRUE,
     .variant_at = checkers_backend_variant_at,
     .variant_by_short_name = checkers_backend_variant_by_short_name,
@@ -501,11 +769,18 @@ const GameBackend checkers_game_backend = {
     .move_list_free = checkers_backend_move_list_free,
     .move_list_get = checkers_backend_move_list_get,
     .moves_equal = checkers_backend_moves_equal,
+    .move_builder_init = checkers_backend_move_builder_init,
+    .move_builder_clear = checkers_backend_move_builder_clear,
+    .move_builder_list_candidates = checkers_backend_move_builder_list_candidates,
+    .move_builder_step = checkers_backend_move_builder_step,
+    .move_builder_is_complete = checkers_backend_move_builder_is_complete,
+    .move_builder_build_move = checkers_backend_move_builder_build_move,
     .apply_move = checkers_backend_apply_move,
     .evaluate_static = checkers_backend_evaluate_static,
     .terminal_score = checkers_backend_terminal_score,
     .hash_position = checkers_backend_hash_position,
     .format_move = checkers_backend_format_move,
+    .parse_move = checkers_backend_parse_move,
     .supports_square_grid_board = TRUE,
     .square_grid_rows = checkers_backend_square_grid_rows,
     .square_grid_cols = checkers_backend_square_grid_cols,
