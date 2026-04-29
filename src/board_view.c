@@ -19,6 +19,7 @@ GGameModel *gcheckers_model_peek_game_model(GCheckersModel *self);
 struct _BoardView {
   GObject parent_instance;
   GGameModel *model;
+  gulong model_state_changed_handler_id;
   GtkWidget *root;
   BoardGrid *board_grid;
   BoardMoveOverlay *board_overlay;
@@ -37,6 +38,15 @@ struct _BoardView {
 G_DEFINE_TYPE(BoardView, board_view, G_TYPE_OBJECT)
 
 static const int board_view_square_size = 31;
+
+static void board_view_disconnect_model(BoardView *self) {
+  g_return_if_fail(BOARD_IS_VIEW(self));
+
+  if (self->model != NULL && self->model_state_changed_handler_id != 0) {
+    g_signal_handler_disconnect(self->model, self->model_state_changed_handler_id);
+    self->model_state_changed_handler_id = 0;
+  }
+}
 
 static void board_view_notify_selection_changed(BoardView *self) {
   g_return_if_fail(BOARD_IS_VIEW(self));
@@ -67,6 +77,20 @@ static gconstpointer board_view_get_display_position(BoardView *self, gconstpoin
 
   preview_position = backend->move_builder_preview_position(builder);
   return preview_position != NULL ? preview_position : model_position;
+}
+
+static void board_view_on_model_state_changed(GGameModel *model, gpointer user_data) {
+  BoardView *self = BOARD_VIEW(user_data);
+
+  g_return_if_fail(BOARD_IS_VIEW(self));
+  g_return_if_fail(GGAME_IS_MODEL(model));
+
+  if (self->model != model) {
+    g_debug("Ignoring state change from a stale board view model");
+    return;
+  }
+
+  board_view_update(self);
 }
 
 static void board_view_update_board(BoardView *self, gconstpointer position) {
@@ -305,6 +329,7 @@ void board_view_set_model(BoardView *self, gpointer model) {
 #endif
 
   g_return_if_fail(GGAME_IS_MODEL(game_model));
+  board_view_disconnect_model(self);
   g_set_object(&self->model, game_model);
 
   backend = ggame_model_peek_backend(self->model);
@@ -313,6 +338,10 @@ void board_view_set_model(BoardView *self, gpointer model) {
 
   board_selection_controller_set_model(self->selection_controller, self->model);
   board_move_overlay_set_model(self->board_overlay, self->model);
+  self->model_state_changed_handler_id = g_signal_connect(self->model,
+                                                          "state-changed",
+                                                          G_CALLBACK(board_view_on_model_state_changed),
+                                                          self);
   board_view_build_board(self);
   board_view_update(self);
 }
@@ -450,6 +479,7 @@ static void board_view_dispose(GObject *object) {
   BoardView *self = BOARD_VIEW(object);
   gboolean root_removed = TRUE;
 
+  board_view_disconnect_model(self);
   if (self->root != NULL) {
     root_removed = ggame_widget_remove_from_parent(self->root);
     if (!root_removed && gtk_widget_get_parent(self->root) != NULL) {
@@ -497,6 +527,7 @@ static void board_view_init(BoardView *self) {
   self->square_handler_data = NULL;
   self->input_enabled = TRUE;
   self->bottom_side = 0;
+  self->model_state_changed_handler_id = 0;
 }
 
 BoardView *board_view_new(void) {

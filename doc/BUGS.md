@@ -162,3 +162,20 @@ selected unless the user explicitly selects it for promotion. Pending promotion 
 on board clicks instead of applying a move; only the confirmation button can apply an unresolved promotion move. The
 promotion confirmation UI appears only when the backend still has real promotion choices to resolve, while forced
 three-kitten promotions auto-apply again.
+
+## Boop SGF updates could leave the SGF pane or board one step behind
+
+The boop SGF pane should add a visible node as soon as a move is played, and navigation buttons should move both the
+visible SGF selection and the board state in lockstep.
+
+Two refresh paths had drifted apart. First, move application still appended to the SGF tree and updated the bound
+model, but the SGF widget was no longer rebuilt after adding a new node. That left the internal current-node pointer
+ahead of the visible node widgets. Second, the shared board view did not subscribe to `GGameModel::state-changed`, so
+SGF replay in boop could update the model position without forcing a board redraw. Because replay also cleared board
+selection before publishing the new model position, each navigation click repainted the old board first and only showed
+the newly selected node's board on the next click.
+
+The fix restores an SGF view refresh after appended moves so the widget tree is rebuilt immediately from the mutated
+SGF tree, and it teaches `BoardView` to redraw itself whenever its bound `GGameModel` emits `state-changed`. Regression
+tests now check the visible SGF disc count after the first appended move and verify that the board highlights update
+after an external model move without a manual `board_view_update()` call.

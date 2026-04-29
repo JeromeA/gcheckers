@@ -2,12 +2,14 @@
 #include "board_view.h"
 #include "game_model.h"
 #include "games/boop/boop_types.h"
+#include "sgf_controller.h"
 
 #include <gtk/gtk.h>
 
 typedef struct {
   GGameModel *model;
   BoardView *board_view;
+  GGameSgfController *sgf_controller;
   GtkWidget *status_label;
   GtkWidget *supply_panels[2];
   GtkWidget *promotion_buttons[2];
@@ -29,6 +31,10 @@ static const char *gboop_css =
     ".boop-pile-selected { border-color: #2f624d; box-shadow: 0 0 0 2px rgba(47,98,77,0.25); }"
     ".boop-pile-empty { opacity: 0.35; }"
     ".boop-promotion-button { margin-top: 6px; }"
+    ".boop-sgf-panel { padding: 12px; background: rgba(255,255,255,0.34); border: 1px solid rgba(15,61,102,0.22); "
+    "border-radius: 12px; }"
+    ".boop-sgf-title { color: #2b2118; font-size: 15px; font-weight: 800; }"
+    ".boop-sgf-toolbar button { min-width: 40px; }"
     ".board { background: #0f3d66; padding: 8px; border-radius: 18px; }"
     ".board-square { border: 2px solid #0f3d66; border-radius: 8px; }"
     ".board-dark { background: #b9e4ff; background-image: none; color: #0f3d66; }"
@@ -274,6 +280,42 @@ static void gboop_on_board_selection_changed(gpointer user_data) {
   gboop_update_status(state);
 }
 
+static void gboop_on_sgf_rewind_clicked(GtkButton * /*button*/, gpointer user_data) {
+  GBoopWindowState *state = user_data;
+
+  g_return_if_fail(state != NULL);
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(state->sgf_controller));
+
+  ggame_sgf_controller_rewind_to_start(state->sgf_controller);
+}
+
+static void gboop_on_sgf_backward_clicked(GtkButton * /*button*/, gpointer user_data) {
+  GBoopWindowState *state = user_data;
+
+  g_return_if_fail(state != NULL);
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(state->sgf_controller));
+
+  ggame_sgf_controller_step_backward(state->sgf_controller);
+}
+
+static void gboop_on_sgf_forward_clicked(GtkButton * /*button*/, gpointer user_data) {
+  GBoopWindowState *state = user_data;
+
+  g_return_if_fail(state != NULL);
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(state->sgf_controller));
+
+  ggame_sgf_controller_step_forward(state->sgf_controller);
+}
+
+static void gboop_on_sgf_end_clicked(GtkButton * /*button*/, gpointer user_data) {
+  GBoopWindowState *state = user_data;
+
+  g_return_if_fail(state != NULL);
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(state->sgf_controller));
+
+  ggame_sgf_controller_step_forward_to_end(state->sgf_controller);
+}
+
 static GtkWidget *gboop_create_supply_panel(GBoopWindowState *state, guint side) {
   g_return_val_if_fail(state != NULL, NULL);
   g_return_val_if_fail(side <= 1, NULL);
@@ -311,11 +353,57 @@ static GtkWidget *gboop_create_supply_panel(GBoopWindowState *state, guint side)
   return panel;
 }
 
+static GtkWidget *gboop_create_sgf_panel(GBoopWindowState *state) {
+  g_return_val_if_fail(state != NULL, NULL);
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(state->sgf_controller), NULL);
+
+  GtkWidget *panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+  gtk_widget_add_css_class(panel, "boop-sgf-panel");
+  gtk_widget_set_hexpand(panel, TRUE);
+  gtk_widget_set_vexpand(panel, TRUE);
+
+  GtkWidget *header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+  gtk_box_append(GTK_BOX(panel), header);
+
+  GtkWidget *title = gtk_label_new("SGF");
+  gtk_widget_add_css_class(title, "boop-sgf-title");
+  gtk_widget_set_hexpand(title, TRUE);
+  gtk_label_set_xalign(GTK_LABEL(title), 0.0f);
+  gtk_box_append(GTK_BOX(header), title);
+
+  GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+  gtk_widget_add_css_class(toolbar, "boop-sgf-toolbar");
+  gtk_box_append(GTK_BOX(header), toolbar);
+
+  GtkWidget *rewind = gtk_button_new_with_label("|<");
+  GtkWidget *backward = gtk_button_new_with_label("<");
+  GtkWidget *forward = gtk_button_new_with_label(">");
+  GtkWidget *end = gtk_button_new_with_label(">|");
+
+  g_signal_connect(rewind, "clicked", G_CALLBACK(gboop_on_sgf_rewind_clicked), state);
+  g_signal_connect(backward, "clicked", G_CALLBACK(gboop_on_sgf_backward_clicked), state);
+  g_signal_connect(forward, "clicked", G_CALLBACK(gboop_on_sgf_forward_clicked), state);
+  g_signal_connect(end, "clicked", G_CALLBACK(gboop_on_sgf_end_clicked), state);
+  gtk_box_append(GTK_BOX(toolbar), rewind);
+  gtk_box_append(GTK_BOX(toolbar), backward);
+  gtk_box_append(GTK_BOX(toolbar), forward);
+  gtk_box_append(GTK_BOX(toolbar), end);
+
+  GtkWidget *view = sgf_view_get_widget(ggame_sgf_controller_get_view(state->sgf_controller));
+  gtk_widget_set_hexpand(view, TRUE);
+  gtk_widget_set_vexpand(view, TRUE);
+  gtk_widget_set_size_request(view, -1, 190);
+  gtk_box_append(GTK_BOX(panel), view);
+
+  return panel;
+}
+
 static void gboop_window_state_free(GBoopWindowState *state) {
   if (state == NULL) {
     return;
   }
 
+  g_clear_object(&state->sgf_controller);
   g_clear_object(&state->model);
   g_clear_object(&state->board_view);
   g_free(state);
@@ -349,15 +437,14 @@ static gboolean gboop_apply_player_move(gconstpointer move, gpointer user_data) 
   GBoopWindowState *state = user_data;
 
   g_return_val_if_fail(state != NULL, FALSE);
-  g_return_val_if_fail(GGAME_IS_MODEL(state->model), FALSE);
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(state->sgf_controller), FALSE);
   g_return_val_if_fail(move != NULL, FALSE);
 
-  if (!ggame_model_apply_move(state->model, move)) {
+  if (!ggame_sgf_controller_apply_move(state->sgf_controller, move)) {
     g_debug("Failed to apply boop move");
     return FALSE;
   }
 
-  gboop_update_status(state);
   return TRUE;
 }
 
@@ -372,7 +459,7 @@ static void gboop_on_new_game_clicked(GtkButton * /*button*/, gpointer user_data
 
   g_return_if_fail(state != NULL);
   ggame_model_reset(state->model, NULL);
-  board_view_clear_selection(state->board_view);
+  ggame_sgf_controller_new_game(state->sgf_controller);
 }
 
 static void gboop_install_css(void) {
@@ -393,15 +480,17 @@ static void gboop_on_activate(GtkApplication *app, gpointer /*user_data*/) {
   g_return_if_fail(state != NULL);
   state->model = ggame_model_new(GGAME_ACTIVE_GAME_BACKEND);
   state->board_view = board_view_new();
+  state->sgf_controller = ggame_sgf_controller_new(state->board_view);
   state->selected_rank[0] = BOOP_PIECE_RANK_KITTEN;
   state->selected_rank[1] = BOOP_PIECE_RANK_KITTEN;
   g_return_if_fail(GGAME_IS_MODEL(state->model));
   g_return_if_fail(BOARD_IS_VIEW(state->board_view));
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(state->sgf_controller));
 
   GtkWidget *window = gtk_application_window_new(app);
   g_return_if_fail(GTK_IS_APPLICATION_WINDOW(window));
   gtk_window_set_title(GTK_WINDOW(window), "Boop");
-  gtk_window_set_default_size(GTK_WINDOW(window), 760, 680);
+  gtk_window_set_default_size(GTK_WINDOW(window), 900, 860);
   g_object_set_data_full(G_OBJECT(window), "gboop-state", state, (GDestroyNotify)gboop_window_state_free);
 
   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
@@ -425,15 +514,22 @@ static void gboop_on_activate(GtkApplication *app, gpointer /*user_data*/) {
   gtk_label_set_xalign(GTK_LABEL(state->status_label), 0.0f);
   gtk_box_append(GTK_BOX(box), state->status_label);
 
+  GtkWidget *content = gtk_paned_new(GTK_ORIENTATION_VERTICAL);
+  gtk_widget_set_hexpand(content, TRUE);
+  gtk_widget_set_vexpand(content, TRUE);
+  gtk_box_append(GTK_BOX(box), content);
+
   GtkWidget *play_area = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 14);
   gtk_widget_add_css_class(play_area, "boop-play-area");
   gtk_widget_set_hexpand(play_area, TRUE);
   gtk_widget_set_vexpand(play_area, TRUE);
-  gtk_box_append(GTK_BOX(box), play_area);
+  gtk_paned_set_start_child(GTK_PANED(content), play_area);
 
   gtk_box_append(GTK_BOX(play_area), gboop_create_supply_panel(state, 0));
 
   board_view_set_model(state->board_view, state->model);
+  ggame_sgf_controller_set_game_model(state->sgf_controller, state->model);
+  board_view_set_sgf_controller(state->board_view, state->sgf_controller);
   board_view_set_move_handler(state->board_view, gboop_apply_player_move, state);
   board_view_set_move_candidate_preference(state->board_view, gboop_prefer_selected_supply_candidate, state);
   board_view_set_move_completion_confirmation(state->board_view, gboop_defer_promotion_confirmation, state);
@@ -444,9 +540,12 @@ static void gboop_on_activate(GtkApplication *app, gpointer /*user_data*/) {
   gtk_box_append(GTK_BOX(play_area), board);
 
   gtk_box_append(GTK_BOX(play_area), gboop_create_supply_panel(state, 1));
+  gtk_paned_set_end_child(GTK_PANED(content), gboop_create_sgf_panel(state));
+  gtk_paned_set_position(GTK_PANED(content), 560);
 
   g_signal_connect(state->model, "state-changed", G_CALLBACK(gboop_on_model_state_changed), state);
   g_signal_connect(new_game, "clicked", G_CALLBACK(gboop_on_new_game_clicked), state);
+  ggame_sgf_controller_new_game(state->sgf_controller);
   gboop_update_status(state);
 
   gtk_window_present(GTK_WINDOW(window));

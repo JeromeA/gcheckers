@@ -2,6 +2,7 @@
 #define GGAME_SGF_CONTROLLER_H
 
 #include "board_view.h"
+#include "game_model.h"
 #include "games/checkers/checkers_model.h"
 #include "sgf_tree.h"
 #include "sgf_view.h"
@@ -20,6 +21,7 @@ G_DECLARE_FINAL_TYPE(GGameSgfController,
 
 GGameSgfController *ggame_sgf_controller_new(BoardView *board_view);
 void ggame_sgf_controller_set_model(GGameSgfController *self, GCheckersModel *model);
+void ggame_sgf_controller_set_game_model(GGameSgfController *self, GGameModel *model);
 void ggame_sgf_controller_new_game(GGameSgfController *self);
 gboolean ggame_sgf_controller_replay_node_into_game(const SgfNode *node, Game *game, GError **error);
 gboolean ggame_sgf_controller_apply_move(GGameSgfController *self, gconstpointer move);

@@ -121,6 +121,71 @@ static void test_board_view_highlights_black_turn_moves(void) {
   g_clear_object(&model);
 }
 
+static void test_board_view_updates_on_model_state_changed(void) {
+  const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
+  GGameModel *model = ggame_model_new(backend);
+  BoardView *view = board_view_new();
+  GtkWidget *root = NULL;
+  g_autoptr(GHashTable) buttons_by_index = NULL;
+  GameBackendMoveList white_moves = {0};
+  GameBackendMoveList black_moves = {0};
+  gconstpointer first_move = NULL;
+  gconstpointer position = NULL;
+
+  board_view_set_model(view, model);
+
+  root = board_view_get_widget(view);
+  g_assert_nonnull(root);
+  buttons_by_index = g_hash_table_new(g_direct_hash, g_direct_equal);
+  test_board_view_collect_indexed_buttons(root, buttons_by_index);
+
+  white_moves = ggame_model_list_moves(model);
+  g_assert_cmpuint(white_moves.count, >, 0);
+  first_move = backend->move_list_get(&white_moves, 0);
+  g_assert_nonnull(first_move);
+  g_assert_true(ggame_model_apply_move(model, first_move));
+  backend->move_list_free(&white_moves);
+
+  position = ggame_model_peek_position(model);
+  g_assert_nonnull(position);
+  g_assert_cmpuint(backend->position_turn(position), ==, 1);
+
+  black_moves = ggame_model_list_moves(model);
+  g_assert_cmpuint(black_moves.count, >, 0);
+
+  gboolean expected_starts[128] = {FALSE};
+  backend->square_grid_moves_collect_starts(&black_moves, expected_starts, G_N_ELEMENTS(expected_starts));
+
+  guint rows = backend->square_grid_rows(position);
+  guint cols = backend->square_grid_cols(position);
+  for (guint row = 0; row < rows; ++row) {
+    for (guint col = 0; col < cols; ++col) {
+      guint idx = 0;
+      GtkWidget *button = NULL;
+      gboolean has_halo = FALSE;
+
+      if (!backend->square_grid_square_playable(position, row, col) ||
+          !backend->square_grid_square_index(position, row, col, &idx)) {
+        continue;
+      }
+
+      button = g_hash_table_lookup(buttons_by_index, GINT_TO_POINTER(idx));
+      g_assert_nonnull(button);
+
+      has_halo = gtk_widget_has_css_class(button, "board-halo");
+      if (expected_starts[idx]) {
+        g_assert_true(has_halo);
+      } else {
+        g_assert_false(has_halo);
+      }
+    }
+  }
+
+  backend->move_list_free(&black_moves);
+  g_clear_object(&view);
+  g_clear_object(&model);
+}
+
 static void test_board_view_repeated_primary_clicks_are_processed(void) {
   GGameModel *model = ggame_model_new(GGAME_ACTIVE_GAME_BACKEND);
   BoardView *view = board_view_new();
@@ -153,6 +218,7 @@ int main(int argc, char **argv) {
   if (!gtk_init_check()) {
     g_test_add_func("/board-move-overlay/winner-banner-text", test_board_move_overlay_winner_banner_text);
     g_test_add_func("/board-view/highlights-black-turn-moves", test_board_view_skip);
+    g_test_add_func("/board-view/updates-on-model-state-changed", test_board_view_skip);
     g_test_add_func("/board-view/repeated-primary-clicks-are-processed", test_board_view_skip);
     return g_test_run();
   }
@@ -160,6 +226,8 @@ int main(int argc, char **argv) {
   g_test_add_func("/board-move-overlay/winner-banner-text", test_board_move_overlay_winner_banner_text);
   g_test_add_func("/board-view/highlights-black-turn-moves",
                   test_board_view_highlights_black_turn_moves);
+  g_test_add_func("/board-view/updates-on-model-state-changed",
+                  test_board_view_updates_on_model_state_changed);
   g_test_add_func("/board-view/repeated-primary-clicks-are-processed",
                   test_board_view_repeated_primary_clicks_are_processed);
   return g_test_run();

@@ -581,11 +581,19 @@ else ifeq ($(GAME),boop)
 $(APP_BIN): src/gboop.c src/board_view.c src/board_view.h src/board_grid.c src/board_grid.h \
 	src/board_square.c src/board_square.h src/board_move_overlay.c src/board_move_overlay.h \
 	src/board_selection_controller.c src/board_selection_controller.h src/piece_palette.c src/piece_palette.h \
-	src/man_paintable.c src/man_paintable.h $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS) $(SRCS)
+	src/man_paintable.c src/man_paintable.h src/sgf_controller.c src/sgf_controller.h src/sgf_io.c src/sgf_io.h \
+	src/sgf_move_props.c src/sgf_move_props.h src/sgf_tree.c src/sgf_tree.h src/sgf_view.c src/sgf_view.h \
+	src/sgf_view_disc_factory.c src/sgf_view_disc_factory.h src/sgf_view_layout.c src/sgf_view_layout.h \
+	src/sgf_view_link_renderer.c src/sgf_view_link_renderer.h src/sgf_view_scroller.c \
+	src/sgf_view_scroller.h src/sgf_view_selection_controller.c src/sgf_view_selection_controller.h \
+	$(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS) $(SRCS) $(CHECKERS_COMPAT_SRCS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/gboop.c src/board_view.c src/board_grid.c src/board_square.c \
 		src/board_move_overlay.c src/board_selection_controller.c src/piece_palette.c src/man_paintable.c \
-		$(WIDGET_UTILS_SRCS) $(SRCS) $(LDLIBS) $(GTK_LIBS)
+		src/sgf_controller.c src/sgf_io.c src/sgf_move_props.c src/sgf_tree.c src/sgf_view.c \
+		src/sgf_view_disc_factory.c src/sgf_view_layout.c src/sgf_view_link_renderer.c \
+		src/sgf_view_scroller.c src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(SRCS) \
+		$(CHECKERS_COMPAT_SRCS) $(LDLIBS) $(GTK_LIBS)
 endif
 
 $(GSETTINGS_SCHEMA_COMPILED): $(GSETTINGS_SCHEMA_XML)

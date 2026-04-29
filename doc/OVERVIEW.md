@@ -115,17 +115,22 @@ UI keeps generic two-side semantics while the compiled backend decides how those
 ## `GGameSgfController` (`src/sgf_controller.c`)
 Class: `GGameSgfController` (`GObject`).
 Role: SGF timeline authority and synchronization point between SGF current-node transitions and game state updates.
-Move application is SGF-first: validate model move, append under SGF current, set SGF current, then project that
-transition to the model (`single move` if parent->child, otherwise reset+replay from root).
+Move application is SGF-first: validate the move against the bound model, append or reuse the matching SGF child
+under SGF current, set SGF current, then project that transition back into the model (`single move` if parent->child,
+otherwise reset+replay from root).
 Replay applies SGF setup properties (`AB`, `AE`, `AW`) and side-to-play (`PL`) on every visited node before move
 replay, so loading/setup-only SGF nodes can drive board state and turn correctly. Custom king markers (`ABK`, `AWK`)
 are validated as subsets of `AB`/`AW` and then applied as kings. Root `RU[<ruleset-short-name>]` is now read on load
 to switch the model to the matching ruleset before replay, and SGF loads now fail if `RU` is missing or unknown
 instead of falling back to the current model rules. `RU` is stamped back onto fresh trees and saved SGFs so
-variant-specific files round-trip explicitly.
-`ggame_sgf_controller_set_model()` only binds/disconnects model references; timeline clearing is explicit via
-`ggame_sgf_controller_new_game()`. Exposes SGF navigation helpers used by window actions: rewind to root, step
-backward, step forward on main line, step to next branch point, and step to main-line end.
+variant-specific files round-trip explicitly. The controller now also supports plain `GGameModel` consumers:
+zero-variant backends such as boop accept SGF files with no `RU`, generic AI stepping uses `ai_search.c`, and
+generic replay allocates a temporary backend position, replays SGF moves into it, then publishes that position back
+through `ggame_model_set_position()`.
+`ggame_sgf_controller_set_model()` binds the legacy checkers wrapper plus its inner `GGameModel`;
+`ggame_sgf_controller_set_game_model()` binds generic callers directly. Timeline clearing remains explicit via
+`ggame_sgf_controller_new_game()`. Exposes SGF navigation helpers used by window actions and the boop shell: rewind
+to root, step backward, step forward on main line, step to next branch point, and step to main-line end.
 Selection-only navigation updates SGF view selection in place (`sgf_view_set_selected`) instead of rebuilding the
 entire SGF layout.
 Exposes a current-node refresh helper that replays SGF state into the model after setup-property edits on the current
@@ -133,10 +138,11 @@ node.
 Owns: `SgfTree` and `SgfView`, plus replay guard (`is_replaying`).
 Signals: `manual-requested` when analysis panel content should refresh for the selected node, and `node-changed`
 whenever SGF current node changes so other UI (analysis graph) can synchronize cursor state.
-Collaborates with: `GCheckersModel` for move validation/application, `BoardView` to clear selection on replay/reset,
-and `GGameWindow` via the `manual-requested` signal for SGF navigation/edit flows. Starting a fresh game resets
-the SGF tree and emits `node-changed`, but does not force player controls back to user mode. Also exposes the current
-node's move so board overlays can use the same path for step-by-step and replay-based navigation.
+Collaborates with: `GCheckersModel` and generic `GGameModel` callers for move validation/application, `BoardView` to
+clear selection on replay/reset, and `GGameWindow` plus the boop shell via the `manual-requested` signal for SGF
+navigation/edit flows. Starting a fresh game resets the SGF tree and emits `node-changed`, but does not force player
+controls back to user mode. Also exposes the current node's move so board overlays can use the same path for
+step-by-step and replay-based navigation.
 
 ## `AnalysisGraph` (`src/analysis_graph.c`, `src/analysis_graph.h`)
 Class: `AnalysisGraph` (`GObject`).
@@ -488,11 +494,13 @@ Role: define the GTK application type and activation flow that creates the main 
 publishes a menubar model (`File` -> `New game...`, `Import...`, `Load...`, `Save as...`, `Save position...`, `Quit`;
 `Game` -> `Force move` + navigation section; `Analysis` -> current-position and whole-game analysis; `Puzzle` ->
 `Play puzzles`; `View` -> drawer toggles) with keyboard accelerators. `src/gboop.c` opens a focused local-play boop
-window backed by `GGameModel` and `BoardView`, with a status label, `New Game` button, blue board styling, and side
-supply panels showing each player's color-coded kitten/cat piles plus the active player's selected placement rank. The
-active supply panel also owns the promotion confirmation button, which appears during boop promotion-square selection
-and only enables once the selected squares form a legal promotion choice. The boop binary intentionally leaves the
-checkers puzzle/import/analysis shell out. `src/ghomeworlds.c` remains a branded skeleton window.
+window backed by `GGameModel`, `BoardView`, and `GGameSgfController`, with a status label, `New Game` button, blue
+board styling, side supply panels showing each player's color-coded kitten/cat piles plus the active player's selected
+placement rank, and a dedicated SGF pane with basic timeline navigation buttons under the board. The active supply
+panel also owns the promotion confirmation button, which appears during boop promotion-square selection and only
+enables once the selected squares form a legal promotion choice. Player moves now flow through the SGF controller so
+the boop SGF tree stays live and node navigation replays the board state correctly. The boop binary intentionally
+leaves the checkers puzzle/import/analysis shell out. `src/ghomeworlds.c` remains a branded skeleton window.
 The checkers build uses application ID `io.github.jeromea.gcheckers`; Homeworlds and boop use
 `io.github.jeromea.ghomeworlds` and `io.github.jeromea.gboop`.
 Collaborates with: `GGameWindow` for UI wiring and new-game dialog presentation.
