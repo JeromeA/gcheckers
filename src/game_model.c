@@ -178,12 +178,19 @@ void ggame_model_reset(GGameModel *self, const GameBackendVariant *variant_or_nu
 }
 
 gboolean ggame_model_set_position(GGameModel *self, gconstpointer position) {
+  return ggame_model_set_position_variant(self, position, self->variant);
+}
+
+gboolean ggame_model_set_position_variant(GGameModel *self,
+                                          gconstpointer position,
+                                          const GameBackendVariant *variant_or_null) {
   g_return_val_if_fail(GGAME_IS_MODEL(self), FALSE);
   g_return_val_if_fail(self->backend != NULL, FALSE);
   g_return_val_if_fail(self->position != NULL, FALSE);
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(self->backend->position_copy != NULL, FALSE);
 
+  self->variant = variant_or_null != NULL ? variant_or_null : ggame_model_pick_initial_variant(self->backend);
   self->backend->position_copy(self->position, position);
   ggame_model_emit_state_changed(self);
   return TRUE;

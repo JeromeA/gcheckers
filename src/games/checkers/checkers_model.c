@@ -1,5 +1,5 @@
 #include "ai_alpha_beta.h"
-#include "active_game_backend.h"
+#include "checkers_backend.h"
 #include "checkers_model.h"
 #include "rulesets.h"
 
@@ -29,10 +29,32 @@ static void gcheckers_model_emit_state_changed(GCheckersModel *self) {
 }
 
 static void gcheckers_model_sync_game_model(GCheckersModel *self) {
+  PlayerRuleset ruleset = PLAYER_RULESET_AMERICAN;
+  const char *short_name = NULL;
+  const GameBackendVariant *variant = NULL;
+
   g_return_if_fail(GCHECKERS_IS_MODEL(self));
   g_return_if_fail(GGAME_IS_MODEL(self->game_model));
+  g_return_if_fail(self->game.rules != NULL);
 
-  if (!ggame_model_set_position(self->game_model, &self->game)) {
+  if (!checkers_ruleset_find_by_rules(self->game.rules, &ruleset)) {
+    g_debug("Failed to resolve checkers model ruleset");
+    return;
+  }
+
+  short_name = checkers_ruleset_short_name(ruleset);
+  if (short_name == NULL) {
+    g_debug("Failed to resolve checkers model ruleset short name");
+    return;
+  }
+
+  variant = checkers_game_backend.variant_by_short_name(short_name);
+  if (variant == NULL) {
+    g_debug("Failed to resolve checkers model backend variant");
+    return;
+  }
+
+  if (!ggame_model_set_position_variant(self->game_model, &self->game, variant)) {
     g_debug("Failed to sync generic game model from checkers model");
   }
 }
@@ -68,7 +90,7 @@ static void gcheckers_model_init(GCheckersModel *self) {
   g_return_if_fail(rules != NULL);
   game_init_with_rules(&self->game, rules);
   self->has_last_move = FALSE;
-  self->game_model = ggame_model_new(GGAME_ACTIVE_GAME_BACKEND);
+  self->game_model = ggame_model_new(&checkers_game_backend);
   gcheckers_model_sync_game_model(self);
   self->analysis_tt = checkers_ai_tt_new(GCHECKERS_MODEL_ANALYSIS_TT_SIZE_MB);
   if (self->analysis_tt == NULL) {

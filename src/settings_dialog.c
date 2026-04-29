@@ -1,10 +1,9 @@
 #include "settings_dialog.h"
 
-#include "active_game_backend.h"
 #include "app_settings.h"
 #include "application.h"
+#include "game_app_profile.h"
 #include "puzzle_catalog.h"
-#include "games/checkers/rulesets.h"
 #include "puzzle_progress.h"
 
 typedef struct {
@@ -46,21 +45,23 @@ static void ggame_window_settings_dialog_close(GtkWindow *dialog) {
 }
 
 static guint ggame_window_settings_dialog_count_known_puzzles(GHashTable *known_puzzle_ids) {
+  const GGameAppProfile *profile = ggame_active_app_profile();
+  const GameBackend *backend = profile != NULL ? profile->backend : NULL;
+
   g_return_val_if_fail(known_puzzle_ids != NULL, 0);
+  g_return_val_if_fail(backend != NULL, 0);
+  g_return_val_if_fail(backend->variant_at != NULL || backend->variant_count == 0, 0);
 
   guint total = 0;
-  guint ruleset_count = checkers_ruleset_count();
-  for (guint i = 0; i < ruleset_count; i++) {
-    const char *short_name = checkers_ruleset_short_name((PlayerRuleset) i);
-    const GameBackendVariant *variant =
-        short_name != NULL ? GGAME_ACTIVE_GAME_BACKEND->variant_by_short_name(short_name) : NULL;
-    if (variant == NULL) {
-      g_debug("Failed to resolve puzzle variant for ruleset %u", i);
+  for (guint i = 0; i < backend->variant_count; i++) {
+    const GameBackendVariant *variant = backend->variant_at(i);
+    if (variant == NULL || variant->short_name == NULL) {
+      g_debug("Skipping invalid puzzle variant at index %u", i);
       continue;
     }
 
     g_autoptr(GError) error = NULL;
-    g_autoptr(GPtrArray) entries = game_puzzle_catalog_load_variant(GGAME_ACTIVE_GAME_BACKEND, variant, &error);
+    g_autoptr(GPtrArray) entries = game_puzzle_catalog_load_variant(backend, variant, &error);
     if (entries == NULL) {
       g_debug("Failed to load puzzle catalog for settings summary: %s",
               error != NULL ? error->message : "unknown error");
@@ -81,7 +82,10 @@ static guint ggame_window_settings_dialog_count_known_puzzles(GHashTable *known_
 
 static void ggame_window_settings_dialog_update_puzzle_progress(GGameWindowSettingsDialogData *data) {
   g_return_if_fail(data != NULL);
-  g_return_if_fail(GTK_IS_LABEL(data->puzzle_progress_label));
+
+  if (!GTK_IS_LABEL(data->puzzle_progress_label)) {
+    return;
+  }
 
   g_autoptr(GHashTable) known_puzzle_ids = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
   guint total = ggame_window_settings_dialog_count_known_puzzles(known_puzzle_ids);
@@ -166,6 +170,9 @@ static void ggame_window_on_settings_dialog_clear_progress_clicked(GtkButton * /
 }
 
 void ggame_window_present_settings_dialog(GGameWindow *self) {
+  const GGameAppProfile *profile = ggame_active_app_profile();
+  gboolean show_puzzle_progress = ggame_app_profile_supports_puzzle_catalog(profile);
+
   g_return_if_fail(GGAME_IS_WINDOW(self));
 
   GtkWidget *dialog = gtk_window_new();
@@ -200,27 +207,31 @@ void ggame_window_present_settings_dialog(GGameWindow *self) {
   gtk_widget_set_halign(send_application_usage_check, GTK_ALIGN_START);
   gtk_box_append(GTK_BOX(group), send_application_usage_check);
 
-  GtkWidget *progress_group = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-  gtk_box_append(GTK_BOX(content), progress_group);
+  GtkWidget *progress_label = NULL;
+  GtkWidget *clear_progress_button = NULL;
+  if (show_puzzle_progress) {
+    GtkWidget *progress_group = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_box_append(GTK_BOX(content), progress_group);
 
-  GtkWidget *progress_title = gtk_label_new("Puzzle Progress");
-  gtk_widget_set_halign(progress_title, GTK_ALIGN_START);
-  gtk_widget_add_css_class(progress_title, "title-4");
-  gtk_box_append(GTK_BOX(progress_group), progress_title);
+    GtkWidget *progress_title = gtk_label_new("Puzzle Progress");
+    gtk_widget_set_halign(progress_title, GTK_ALIGN_START);
+    gtk_widget_add_css_class(progress_title, "title-4");
+    gtk_box_append(GTK_BOX(progress_group), progress_title);
 
-  GtkWidget *progress_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
-  gtk_widget_set_halign(progress_row, GTK_ALIGN_FILL);
-  gtk_box_append(GTK_BOX(progress_group), progress_row);
+    GtkWidget *progress_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_widget_set_halign(progress_row, GTK_ALIGN_FILL);
+    gtk_box_append(GTK_BOX(progress_group), progress_row);
 
-  GtkWidget *progress_label = gtk_label_new("0 of 0 puzzles solved");
-  gtk_widget_set_halign(progress_label, GTK_ALIGN_START);
-  gtk_widget_set_hexpand(progress_label, TRUE);
-  gtk_label_set_xalign(GTK_LABEL(progress_label), 0.0f);
-  gtk_box_append(GTK_BOX(progress_row), progress_label);
+    progress_label = gtk_label_new("0 of 0 puzzles solved");
+    gtk_widget_set_halign(progress_label, GTK_ALIGN_START);
+    gtk_widget_set_hexpand(progress_label, TRUE);
+    gtk_label_set_xalign(GTK_LABEL(progress_label), 0.0f);
+    gtk_box_append(GTK_BOX(progress_row), progress_label);
 
-  GtkWidget *clear_progress_button = gtk_button_new_with_label("Clear Progress");
-  gtk_widget_set_halign(clear_progress_button, GTK_ALIGN_END);
-  gtk_box_append(GTK_BOX(progress_row), clear_progress_button);
+    clear_progress_button = gtk_button_new_with_label("Clear Progress");
+    gtk_widget_set_halign(clear_progress_button, GTK_ALIGN_END);
+    gtk_box_append(GTK_BOX(progress_row), clear_progress_button);
+  }
 
   GtkWidget *actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
   gtk_widget_set_halign(actions, GTK_ALIGN_END);
@@ -239,11 +250,13 @@ void ggame_window_present_settings_dialog(GGameWindow *self) {
   data->puzzle_progress_label = GTK_LABEL(progress_label);
   data->settings = ggame_app_settings_create();
 
-  GtkApplication *app = gtk_window_get_application(GTK_WINDOW(self));
-  if (GGAME_IS_APPLICATION(app)) {
-    GGamePuzzleProgressStore *store = ggame_application_get_puzzle_progress_store(GGAME_APPLICATION(app));
-    if (store != NULL) {
-      data->puzzle_progress_store = ggame_puzzle_progress_store_ref(store);
+  if (show_puzzle_progress) {
+    GtkApplication *app = gtk_window_get_application(GTK_WINDOW(self));
+    if (GGAME_IS_APPLICATION(app)) {
+      GGamePuzzleProgressStore *store = ggame_application_get_puzzle_progress_store(GGAME_APPLICATION(app));
+      if (store != NULL) {
+        data->puzzle_progress_store = ggame_puzzle_progress_store_ref(store);
+      }
     }
   }
 
@@ -259,12 +272,16 @@ void ggame_window_present_settings_dialog(GGameWindow *self) {
     gtk_check_button_set_active(data->send_puzzle_usage_check, TRUE);
     gtk_check_button_set_active(data->send_application_usage_check, TRUE);
   }
-  ggame_window_settings_dialog_update_puzzle_progress(data);
+  if (show_puzzle_progress) {
+    ggame_window_settings_dialog_update_puzzle_progress(data);
+  }
 
-  g_signal_connect(clear_progress_button,
-                   "clicked",
-                   G_CALLBACK(ggame_window_on_settings_dialog_clear_progress_clicked),
-                   data);
+  if (clear_progress_button != NULL) {
+    g_signal_connect(clear_progress_button,
+                     "clicked",
+                     G_CALLBACK(ggame_window_on_settings_dialog_clear_progress_clicked),
+                     data);
+  }
   g_signal_connect(cancel_button,
                    "clicked",
                    G_CALLBACK(ggame_window_on_settings_dialog_cancel_clicked),

@@ -22,7 +22,9 @@ HOMEWORLDS_BACKEND_SRCS := $(HOMEWORLDS_DIR)/homeworlds_backend.c
 HOMEWORLDS_ALL_SRCS := $(HOMEWORLDS_GAME_SRCS) $(HOMEWORLDS_BACKEND_SRCS)
 BOOP_GAME_SRCS := $(BOOP_DIR)/boop_game.c
 BOOP_BACKEND_SRCS := $(BOOP_DIR)/boop_backend.c
-BOOP_ALL_SRCS := $(BOOP_GAME_SRCS) $(BOOP_BACKEND_SRCS)
+BOOP_STUB_SRCS := $(BOOP_DIR)/boop_controls_stub.c
+BOOP_UI_SRCS := $(BOOP_DIR)/boop_controls.c
+BOOP_RULES_SRCS := $(BOOP_GAME_SRCS) $(BOOP_BACKEND_SRCS) $(BOOP_STUB_SRCS)
 
 ifeq ($(GAME),checkers)
 APP_ID := io.github.jeromea.gcheckers
@@ -34,6 +36,7 @@ GAME_SRCS := $(CHECKERS_DIR)/board.c $(CHECKERS_DIR)/board_geometry.c $(CHECKERS
 	$(CHECKERS_DIR)/game_print.c $(CHECKERS_DIR)/move_gen.c $(CHECKERS_DIR)/rulesets.c \
 	$(CHECKERS_DIR)/ai_alpha_beta.c $(CHECKERS_DIR)/ai_transposition_table.c $(CHECKERS_DIR)/ai_zobrist.c \
 	$(CHECKERS_DIR)/checkers_model.c
+GAME_UI_SRCS :=
 GAME_BACKEND_SRCS := $(CHECKERS_BACKEND_SRCS)
 APP_BIN = $(BIN_DIR)/$(APP_BIN_NAME)
 ALL_TOOLS = $(CREATE_PUZZLES_BIN)
@@ -45,6 +48,7 @@ APP_BIN_NAME := ghomeworlds
 APP_MAIN_SRC := src/ghomeworlds.c
 GAME_BACKEND_DEFINE := -DGGAME_GAME_HOMEWORLDS
 GAME_SRCS := $(HOMEWORLDS_GAME_SRCS)
+GAME_UI_SRCS :=
 GAME_BACKEND_SRCS := $(HOMEWORLDS_BACKEND_SRCS)
 APP_BIN = $(BIN_DIR)/$(APP_BIN_NAME)
 ALL_TOOLS =
@@ -53,13 +57,14 @@ SUPPORTS_CREATE_PUZZLES := no
 else ifeq ($(GAME),boop)
 APP_ID := io.github.jeromea.gboop
 APP_BIN_NAME := gboop
-APP_MAIN_SRC := src/gboop.c
+APP_MAIN_SRC := src/gcheckers.c
 GAME_BACKEND_DEFINE := -DGGAME_GAME_BOOP
-GAME_SRCS := $(BOOP_GAME_SRCS)
-GAME_BACKEND_SRCS := $(BOOP_BACKEND_SRCS)
+GAME_SRCS := $(BOOP_RULES_SRCS)
+GAME_UI_SRCS := $(BOOP_UI_SRCS)
+GAME_BACKEND_SRCS :=
 APP_BIN = $(BIN_DIR)/$(APP_BIN_NAME)
 ALL_TOOLS =
-ALL_SCHEMA_TARGETS =
+ALL_SCHEMA_TARGETS = $(GSETTINGS_SCHEMA_COMPILED)
 SUPPORTS_CREATE_PUZZLES := no
 else
 $(error Unknown GAME '$(GAME)')
@@ -88,7 +93,7 @@ CHECKERS_COMPAT_SRCS :=
 else
 CHECKERS_COMPAT_SRCS := $(CHECKERS_SRCS) $(CHECKERS_DIR)/checkers_backend.c
 endif
-SRCS := $(GAME_SRCS) src/ai_search.c src/game_model.c $(GAME_BACKEND_SRCS)
+SRCS := $(GAME_SRCS) src/ai_search.c src/game_model.c src/game_app_profile.c $(GAME_BACKEND_SRCS)
 BOARD_SRCS := $(CHECKERS_DIR)/board.c
 SGF_TREE_SRCS := src/sgf_tree.c
 SGF_MOVE_PROPS_SRCS := src/sgf_move_props.c
@@ -160,6 +165,11 @@ TEST_BOARD_VIEW_BIN := $(TESTS_DIR)/test_board_view
 TEST_PLAYER_CONTROLS_PANEL_BIN := $(TESTS_DIR)/test_player_controls_panel
 TEST_SGF_CONTROLLER_BIN := $(TESTS_DIR)/test_sgf_controller
 TEST_WINDOW_BIN := $(TESTS_DIR)/test_window
+ifeq ($(GAME),boop)
+TEST_WINDOW_SRC := tests/test_window_boop.c
+else
+TEST_WINDOW_SRC := tests/test_window.c
+endif
 TEST_PUZZLE_GENERATION_BIN := $(TESTS_DIR)/test_puzzle_generation
 TEST_PUZZLE_CATALOG_BIN := $(TESTS_DIR)/test_puzzle_catalog
 TEST_PIECE_PALETTE_BIN := $(TESTS_DIR)/test_piece_palette
@@ -170,6 +180,29 @@ CALLGRIND_ANNOTATION := $(CALLGRIND_DIR)/callgrind.annotated
 PROFILE_BIN ?= $(CREATE_PUZZLES_BIN)
 PROFILE_ARGS ?= 1
 PROFILE_CMD = $(PROFILE_BIN) $(PROFILE_ARGS)
+
+ifeq ($(GAME),checkers)
+TEST_BINS := $(TEST_GAME_BIN) $(TEST_GAME_PRINT_BIN) $(TEST_GAME_BACKEND_BIN) $(TEST_GAME_MODEL_BIN) \
+	$(TEST_BOARD_BIN) $(TEST_BOARD_GEOMETRY_BIN) $(TEST_MOVE_GEN_BIN) $(TEST_CHECKERS_MODEL_BIN) \
+	$(TEST_AI_SEARCH_BIN) $(TEST_AI_TRANSPOSITION_TABLE_BIN) $(TEST_SGF_TREE_BIN) $(TEST_SGF_IO_BIN) \
+	$(TEST_SGF_VIEW_BIN) $(TEST_BGA_CLIENT_BIN) $(TEST_FILE_DIALOG_HISTORY_BIN) $(TEST_APP_SETTINGS_BIN) \
+	$(TEST_APP_PATHS_BIN) $(TEST_BOARD_VIEW_BIN) $(TEST_PLAYER_CONTROLS_PANEL_BIN) $(TEST_SGF_CONTROLLER_BIN) \
+	$(TEST_WINDOW_BIN) $(TEST_CREATE_PUZZLES_CLI_BIN) $(TEST_CREATE_PUZZLES_CHECK_BIN) \
+	$(TEST_DESKTOP_METADATA_BIN) $(TEST_FLATPAK_MANIFEST_BIN) $(TEST_PUZZLE_GENERATION_BIN) \
+	$(TEST_PUZZLE_CATALOG_BIN) $(TEST_PIECE_PALETTE_BIN) $(TEST_PUZZLE_PROGRESS_BIN)
+else ifeq ($(GAME),boop)
+TEST_BINS := $(TEST_GAME_BACKEND_BIN) $(TEST_GAME_MODEL_BIN) $(TEST_BOOP_GAME_BIN) $(TEST_BOOP_BACKEND_BIN) \
+	$(TEST_SGF_TREE_BIN) $(TEST_SGF_IO_BIN) $(TEST_SGF_VIEW_BIN) \
+	$(TEST_BGA_CLIENT_BIN) $(TEST_FILE_DIALOG_HISTORY_BIN) $(TEST_APP_SETTINGS_BIN) $(TEST_APP_PATHS_BIN) \
+	$(TEST_DESKTOP_METADATA_BIN) $(TEST_FLATPAK_MANIFEST_BIN) $(TEST_BOARD_VIEW_BIN) \
+	$(TEST_PLAYER_CONTROLS_PANEL_BIN) $(TEST_SGF_CONTROLLER_BIN) $(TEST_WINDOW_BIN) $(TEST_PIECE_PALETTE_BIN)
+else ifeq ($(GAME),homeworlds)
+TEST_BINS := $(TEST_GAME_BACKEND_BIN) $(TEST_GAME_MODEL_BIN) $(TEST_HOMEWORLDS_GAME_BIN) \
+	$(TEST_HOMEWORLDS_BACKEND_BIN) $(TEST_APP_PATHS_BIN) $(TEST_DESKTOP_METADATA_BIN) \
+	$(TEST_FLATPAK_MANIFEST_BIN)
+else
+TEST_BINS :=
+endif
 
 .PHONY: all clean test coverage install validate-desktop-metadata \
 	gcheckers create_puzzles libgame.a \
@@ -200,43 +233,8 @@ $(OBJ_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-test: $(TEST_GAME_BIN) $(TEST_GAME_PRINT_BIN) $(TEST_GAME_BACKEND_BIN) $(TEST_GAME_MODEL_BIN) $(TEST_BOARD_BIN) $(TEST_BOARD_GEOMETRY_BIN) $(TEST_MOVE_GEN_BIN) \
-	$(TEST_CHECKERS_MODEL_BIN) $(TEST_AI_SEARCH_BIN) \
-	$(TEST_AI_TRANSPOSITION_TABLE_BIN) $(TEST_SGF_TREE_BIN) \
-	$(TEST_SGF_IO_BIN) $(TEST_SGF_VIEW_BIN) $(TEST_BGA_CLIENT_BIN) $(TEST_FILE_DIALOG_HISTORY_BIN) \
-	$(TEST_APP_SETTINGS_BIN) $(TEST_APP_PATHS_BIN) $(TEST_BOARD_VIEW_BIN) $(TEST_PLAYER_CONTROLS_PANEL_BIN) $(TEST_SGF_CONTROLLER_BIN) \
-	$(TEST_WINDOW_BIN) $(TEST_CREATE_PUZZLES_CLI_BIN) $(TEST_CREATE_PUZZLES_CHECK_BIN) $(TEST_DESKTOP_METADATA_BIN) \
-	$(TEST_FLATPAK_MANIFEST_BIN) $(TEST_PUZZLE_GENERATION_BIN) $(TEST_PUZZLE_CATALOG_BIN) $(TEST_PIECE_PALETTE_BIN) \
-	$(TEST_PUZZLE_PROGRESS_BIN)
-	$(TEST_GAME_BIN)
-	$(TEST_GAME_PRINT_BIN)
-	$(TEST_GAME_BACKEND_BIN)
-	$(TEST_GAME_MODEL_BIN)
-	$(TEST_BOARD_BIN)
-	$(TEST_BOARD_GEOMETRY_BIN)
-	$(TEST_MOVE_GEN_BIN)
-	$(TEST_CHECKERS_MODEL_BIN)
-	$(TEST_AI_SEARCH_BIN)
-	$(TEST_AI_TRANSPOSITION_TABLE_BIN)
-	$(TEST_SGF_TREE_BIN)
-	$(TEST_SGF_IO_BIN)
-	$(TEST_SGF_VIEW_BIN)
-	$(TEST_BGA_CLIENT_BIN)
-	$(TEST_FILE_DIALOG_HISTORY_BIN)
-	$(TEST_APP_SETTINGS_BIN)
-	$(TEST_APP_PATHS_BIN)
-	$(TEST_DESKTOP_METADATA_BIN)
-	$(TEST_FLATPAK_MANIFEST_BIN)
-	$(TEST_CREATE_PUZZLES_CLI_BIN)
-	$(TEST_CREATE_PUZZLES_CHECK_BIN)
-	$(TEST_PUZZLE_GENERATION_BIN)
-	$(TEST_PUZZLE_CATALOG_BIN)
-	$(TEST_BOARD_VIEW_BIN)
-	$(TEST_PLAYER_CONTROLS_PANEL_BIN)
-	$(TEST_SGF_CONTROLLER_BIN)
-	$(TEST_WINDOW_BIN)
-	$(TEST_PIECE_PALETTE_BIN)
-	$(TEST_PUZZLE_PROGRESS_BIN)
+test: $(TEST_BINS)
+	@/bin/bash -lc 'set -eu; for test_bin in $(TEST_BINS); do "$$test_bin"; done'
 
 test_game: $(TEST_GAME_BIN)
 $(TEST_GAME_BIN): tests/test_game.c $(SRCS) $(CHECKERS_DIR)/game.h
@@ -279,9 +277,9 @@ $(TEST_BOOP_GAME_BIN): tests/test_boop_game.c $(BOOP_GAME_SRCS) $(BOOP_DIR)/boop
 	$(CC) $(CFLAGS) -o $@ tests/test_boop_game.c $(BOOP_GAME_SRCS) $(LDLIBS)
 
 test_boop_backend: $(TEST_BOOP_BACKEND_BIN)
-$(TEST_BOOP_BACKEND_BIN): tests/test_boop_backend.c $(BOOP_ALL_SRCS) $(BOOP_DIR)/boop_backend.h $(BOOP_DIR)/boop_game.h
+$(TEST_BOOP_BACKEND_BIN): tests/test_boop_backend.c $(BOOP_RULES_SRCS) $(BOOP_DIR)/boop_backend.h $(BOOP_DIR)/boop_game.h
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ tests/test_boop_backend.c $(BOOP_ALL_SRCS) $(LDLIBS)
+	$(CC) $(CFLAGS) -o $@ tests/test_boop_backend.c $(BOOP_RULES_SRCS) $(LDLIBS)
 
 test_board: $(TEST_BOARD_BIN)
 $(TEST_BOARD_BIN): tests/test_board.c $(BOARD_SRCS) $(CHECKERS_DIR)/board.h $(CHECKERS_DIR)/checkers_constants.h
@@ -347,14 +345,16 @@ $(TEST_BGA_CLIENT_BIN): tests/test_bga_client.c src/bga_client.c src/bga_client.
 
 test_file_dialog_history: $(TEST_FILE_DIALOG_HISTORY_BIN)
 $(TEST_FILE_DIALOG_HISTORY_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_file_dialog_history.c \
-	src/file_dialog_history.c src/file_dialog_history.h src/app_settings.c src/app_settings.h
+	src/file_dialog_history.c src/file_dialog_history.h src/app_settings.c src/app_settings.h $(SRCS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ tests/test_file_dialog_history.c src/file_dialog_history.c src/app_settings.c $(LDLIBS)
+	$(CC) $(CFLAGS) -o $@ tests/test_file_dialog_history.c src/file_dialog_history.c src/app_settings.c $(SRCS) \
+		$(LDLIBS)
 
 test_app_settings: $(TEST_APP_SETTINGS_BIN)
-$(TEST_APP_SETTINGS_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_app_settings.c src/app_settings.c src/app_settings.h
+$(TEST_APP_SETTINGS_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_app_settings.c src/app_settings.c \
+	src/app_settings.h $(SRCS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ tests/test_app_settings.c src/app_settings.c $(LDLIBS)
+	$(CC) $(CFLAGS) -o $@ tests/test_app_settings.c src/app_settings.c $(SRCS) $(LDLIBS)
 
 test_app_paths: $(TEST_APP_PATHS_BIN)
 $(TEST_APP_PATHS_BIN): tests/test_app_paths.c $(APP_PATHS_SRCS) src/app_paths.h
@@ -365,10 +365,12 @@ test_puzzle_progress: $(TEST_PUZZLE_PROGRESS_BIN)
 $(TEST_PUZZLE_PROGRESS_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_puzzle_progress.c $(APP_PATHS_SRCS) \
 	src/puzzle_progress.c src/puzzle_progress.h src/file_dialog_history.c src/file_dialog_history.h \
 	$(CHECKERS_DIR)/rulesets.c $(CHECKERS_DIR)/rulesets.h $(CHECKERS_DIR)/game.h $(CHECKERS_DIR)/board.h \
+	$(filter-out $(CHECKERS_DIR)/rulesets.c,$(SRCS)) \
 	$(CHECKERS_DIR)/checkers_constants.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_puzzle_progress.c $(APP_PATHS_SRCS) src/puzzle_progress.c \
-		src/file_dialog_history.c $(CHECKERS_DIR)/rulesets.c $(LDLIBS)
+		src/file_dialog_history.c $(CHECKERS_DIR)/rulesets.c \
+		$(filter-out $(CHECKERS_DIR)/rulesets.c,$(SRCS)) $(LDLIBS)
 
 test_puzzle_progress_report_server: $(TEST_PUZZLE_PROGRESS_REPORT_SERVER_BIN)
 	@set -eu; \
@@ -496,7 +498,7 @@ $(TEST_SGF_CONTROLLER_BIN): tests/test_sgf_controller.c src/sgf_controller.c src
 		$(LDLIBS) $(GTK_LIBS)
 
 test_window: $(TEST_WINDOW_BIN)
-$(TEST_WINDOW_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_window.c src/window.c src/application.c \
+$(TEST_WINDOW_BIN): $(GSETTINGS_SCHEMA_COMPILED) $(TEST_WINDOW_SRC) src/window.c src/application.c \
 	src/application.h $(APP_PATHS_SRCS) $(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c \
 	src/app_settings.h \
 	src/new_game_dialog.c src/puzzle_dialog.c src/puzzle_dialog.h $(CHECKERS_DIR)/rulesets.c $(CHECKERS_DIR)/rulesets.h \
@@ -512,9 +514,9 @@ $(TEST_WINDOW_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_window.c src/window.
 	src/sgf_view_disc_factory.c src/sgf_view_disc_factory.h src/sgf_view_layout.c src/sgf_view_layout.h \
 	src/sgf_view_link_renderer.c src/sgf_view_link_renderer.h src/sgf_view_scroller.c \
 	src/sgf_view_scroller.h src/sgf_view_selection_controller.c src/sgf_view_selection_controller.h \
-	$(SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
+	$(SRCS) $(GAME_UI_SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_window.c src/application.c src/window.c \
+	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ $(TEST_WINDOW_SRC) src/application.c src/window.c \
 		$(APP_PATHS_SRCS) $(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c \
 		src/new_game_dialog.c src/puzzle_dialog.c src/import_dialog.c src/settings_dialog.c src/file_dialog_history.c \
 		src/sgf_file_actions.c src/bga_client.c src/style.c src/player_controls_panel.c \
@@ -522,7 +524,7 @@ $(TEST_WINDOW_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_window.c src/window.
 		src/board_move_overlay.c src/board_selection_controller.c src/piece_palette.c src/man_paintable.c \
 		src/sgf_io.c src/sgf_move_props.c src/sgf_tree.c src/sgf_view.c src/sgf_view_disc_factory.c \
 		src/sgf_view_layout.c src/sgf_view_link_renderer.c src/sgf_view_scroller.c \
-		src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(SRCS) $(CHECKERS_COMPAT_SRCS) \
+		src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(SRCS) $(GAME_UI_SRCS) $(CHECKERS_COMPAT_SRCS) \
 		$(LDLIBS) $(GTK_LIBS)
 
 test_puzzle_generation: $(TEST_PUZZLE_GENERATION_BIN)
@@ -545,7 +547,7 @@ $(TEST_PIECE_PALETTE_BIN): tests/test_piece_palette.c src/piece_palette.c src/pi
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_piece_palette.c src/piece_palette.c \
 		src/man_paintable.c $(LDLIBS) $(GTK_LIBS)
 
-ifeq ($(GAME),checkers)
+ifneq ($(GAME),homeworlds)
 $(APP_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c src/application.c src/window.c $(APP_PATHS_SRCS) \
 	$(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c src/app_settings.h src/settings_dialog.c \
 	src/settings_dialog.h \
@@ -562,7 +564,7 @@ $(APP_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c src/application.c src/w
 	src/sgf_view_disc_factory.c src/sgf_view_disc_factory.h src/sgf_view_layout.c src/sgf_view_layout.h \
 	src/sgf_view_link_renderer.c src/sgf_view_link_renderer.h src/sgf_view_scroller.c \
 	src/sgf_view_scroller.h src/sgf_view_selection_controller.c src/sgf_view_selection_controller.h \
-	$(SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
+	$(SRCS) $(GAME_UI_SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/gcheckers.c src/application.c $(APP_PATHS_SRCS) \
 		$(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c src/window.c src/settings_dialog.c \
@@ -571,29 +573,12 @@ $(APP_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c src/application.c src/w
 		src/sgf_controller.c src/board_view.c src/board_grid.c src/board_square.c src/board_move_overlay.c \
 		src/board_selection_controller.c src/piece_palette.c src/man_paintable.c src/sgf_io.c \
 		src/sgf_move_props.c src/sgf_tree.c src/sgf_view.c src/sgf_view_disc_factory.c src/sgf_view_layout.c \
-		src/sgf_view_link_renderer.c src/sgf_view_scroller.c \
-		src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(SRCS) $(LDLIBS) $(GTK_LIBS)
+		src/sgf_view_link_renderer.c src/sgf_view_scroller.c src/sgf_view_selection_controller.c \
+		$(WIDGET_UTILS_SRCS) $(SRCS) $(GAME_UI_SRCS) $(CHECKERS_COMPAT_SRCS) $(LDLIBS) $(GTK_LIBS)
 else ifeq ($(GAME),homeworlds)
 $(APP_BIN): src/ghomeworlds.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/ghomeworlds.c $(LDLIBS) $(GTK_LIBS)
-else ifeq ($(GAME),boop)
-$(APP_BIN): src/gboop.c src/board_view.c src/board_view.h src/board_grid.c src/board_grid.h \
-	src/board_square.c src/board_square.h src/board_move_overlay.c src/board_move_overlay.h \
-	src/board_selection_controller.c src/board_selection_controller.h src/piece_palette.c src/piece_palette.h \
-	src/man_paintable.c src/man_paintable.h src/sgf_controller.c src/sgf_controller.h src/sgf_io.c src/sgf_io.h \
-	src/sgf_move_props.c src/sgf_move_props.h src/sgf_tree.c src/sgf_tree.h src/sgf_view.c src/sgf_view.h \
-	src/sgf_view_disc_factory.c src/sgf_view_disc_factory.h src/sgf_view_layout.c src/sgf_view_layout.h \
-	src/sgf_view_link_renderer.c src/sgf_view_link_renderer.h src/sgf_view_scroller.c \
-	src/sgf_view_scroller.h src/sgf_view_selection_controller.c src/sgf_view_selection_controller.h \
-	$(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS) $(SRCS) $(CHECKERS_COMPAT_SRCS)
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/gboop.c src/board_view.c src/board_grid.c src/board_square.c \
-		src/board_move_overlay.c src/board_selection_controller.c src/piece_palette.c src/man_paintable.c \
-		src/sgf_controller.c src/sgf_io.c src/sgf_move_props.c src/sgf_tree.c src/sgf_view.c \
-		src/sgf_view_disc_factory.c src/sgf_view_layout.c src/sgf_view_link_renderer.c \
-		src/sgf_view_scroller.c src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(SRCS) \
-		$(CHECKERS_COMPAT_SRCS) $(LDLIBS) $(GTK_LIBS)
 endif
 
 $(GSETTINGS_SCHEMA_COMPILED): $(GSETTINGS_SCHEMA_XML)

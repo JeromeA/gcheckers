@@ -22,41 +22,44 @@ such as puzzles or checkers import disabled or absent according to an explicit f
 - [x] (2026-04-28 00:00Z) Read `doc/PLANS.md`, the existing boop ExecPlan, the current `Makefile`, `src/gboop.c`,
       `src/application.c`, `src/window.c`, `src/sgf_controller.c`, and the player controls code, then write this
       initial ExecPlan.
-- [ ] Introduce an explicit game application profile as the top-level description of the active compiled app. Review
-      `GameBackend` in that context, split its callbacks into feature families where useful, and make the backend
-      table owned by or reachable through the profile rather than a separate top-level global concept.
-- [ ] Make both `GAME=checkers` and `GAME=boop` build from the same application entry point and window source set.
-- [ ] Migrate `GGameWindow` from `GCheckersModel` ownership to `GGameModel` ownership, keeping checkers-only services
-      behind feature gates.
-- [ ] Generalize `GGameSgfController` so SGF append, replay, navigation, load, and save operate on `GGameModel` and
-      backend move callbacks.
-- [ ] Move boop supply and promotion controls out of `src/gboop.c` into a reusable game-side-panel hook installed in
-      the shared window.
-- [ ] Update tests so `GAME=boop` runs real SGF controller/window/player-control coverage instead of skip stubs.
-- [ ] Remove or retire the standalone `src/gboop.c` app shell once `gboop` is built from the same sources as
-      `gcheckers`.
+- [x] (2026-04-29 11:20Z) Introduced `src/game_app_profile.[ch]` as the top-level description of the compiled app,
+      moved app identity / settings schema / feature flags / board-host hooks there, and made
+      `GGAME_ACTIVE_GAME_BACKEND` resolve through the active profile.
+- [x] (2026-04-29 11:45Z) Made both `GAME=checkers` and `GAME=boop` build from the same application entry point and
+      shared window source set.
+- [x] (2026-04-29 12:10Z) Migrated `GGameWindow` ownership to `GGameModel`, while keeping checkers-only services
+      behind feature gates and compatibility helpers.
+- [x] (2026-04-29 12:30Z) Generalized `GGameSgfController` so SGF append, replay, navigation, load, and save operate
+      on `GGameModel` plus backend move callbacks, with checkers-only setup handling retained as a compatibility path.
+- [x] (2026-04-29 12:50Z) Moved boop supply and promotion controls out of `src/gboop.c` into
+      `src/games/boop/boop_controls.[ch]`, exposed through a profile-owned board-host hook in the shared window.
+- [x] (2026-04-29 13:05Z) Updated boop coverage so `GAME=boop` builds and runs real SGF controller/window/profile
+      tests instead of standalone-shell-specific stubs.
+- [x] (2026-04-29 13:15Z) Removed the standalone `src/gboop.c` app shell from the build after `gboop` reached shared
+      shell parity.
 
 ## Surprises & Discoveries
 
-- Observation: boop already has backend-owned move notation and SGF file IO, but not a user-visible SGF history panel.
-  Evidence: `tests/test_sgf_io.c` has `GGAME_GAME_BOOP` tests for `K@a1` and `K@a1+a1,b1,c1`, while `src/gboop.c`
-  constructs only a board, status label, supply panels, and a `New Game` button.
+- Observation: the profile split was valuable immediately, but a full breakup of `GameBackend` into capability-family
+  structs was larger than Milestone 1 needed.
+  Evidence: `src/game_app_profile.[ch]` now owns app identity, settings schema, feature flags, and UI hooks, while the
+  low-level rules/search/notation callbacks remain in `GameBackend` and are reached through `profile->backend`.
 
-- Observation: the current shared SGF controller is still checkers-specific even though `sgf_move_props.c` now calls
-  backend parse/format hooks.
-  Evidence: `src/sgf_controller.h` exposes `ggame_sgf_controller_set_model(GGameSgfController *, GCheckersModel *)`
-  and `ggame_sgf_controller_replay_node_into_game(const SgfNode *, Game *, GError **)`; `src/sgf_controller.c` replays
-  through `Game`, `GameState`, and `CheckersMove`.
+- Observation: a profile-owned UI hook creates a link-time dependency from headless tests onto boop GTK code unless the
+  hook has a non-GTK fallback.
+  Evidence: the boop profile now points at `gboop_controls_create_board_host()`, so non-GTK boop targets link
+  `src/games/boop/boop_controls_stub.c` as a weak fallback while app/window builds also link the real
+  `src/games/boop/boop_controls.c`.
 
-- Observation: the current shared window shell already contains the UI the user wants boop to share, but its state and
-  feature logic are checkers-owned.
-  Evidence: `src/window.c` creates `PlayerControlsPanel`, `BoardView`, `GGameSgfController`, navigation actions, SGF
-  mode controls, analysis widgets, and menu-backed toolbar actions, but `src/window.h` and `ggame_window_set_model()`
-  require `GCheckersModel`.
+- Observation: the shared window can be generic for normal play while still carrying a deliberate checkers
+  compatibility slice for puzzles, analysis, and setup-root SGF behavior.
+  Evidence: `src/window.c` now owns `GGameModel *`, but non-checkers builds still link `CHECKERS_COMPAT_SRCS` so the
+  gated checkers-only code paths compile without changing the current puzzle/analysis implementation.
 
-- Observation: the current build split selects a different application main source for boop.
-  Evidence: in `Makefile`, `GAME=checkers` uses `APP_MAIN_SRC := src/gcheckers.c`, while `GAME=boop` uses
-  `APP_MAIN_SRC := src/gboop.c`.
+- Observation: boop now has real shared-shell window coverage, but GTK display availability still determines whether
+  those tests execute assertions or skip at runtime.
+  Evidence: `tests/test_window_boop.c` builds and runs under `GAME=boop`; in this environment the binary reports
+  `GTK display not available` skips, matching the repository’s established GTK-test behavior.
 
 ## Decision Log
 
@@ -93,19 +96,45 @@ such as puzzles or checkers import disabled or absent according to an explicit f
 
 ## Outcomes & Retrospective
 
-No implementation has been completed yet. This plan records the integration path needed to replace the current split
-between the full checkers shell and the smaller boop shell with one shared application shell.
+The shared-shell migration is complete for checkers and boop. `build/bin/gcheckers` and `build/bin/gboop` now come
+from the same `src/gcheckers.c` / `src/application.c` / `src/window.c` shell, with the active compiled target
+described by `src/game_app_profile.[ch]`. Boop-specific supply/promotion UI moved into
+`src/games/boop/boop_controls.[ch]`, and `src/gboop.c` was removed from the build.
+
+The most important compatibility compromise is that `GameBackend` is still a flat low-level capability table rather
+than several profile-owned sub-structs, and the shared window / SGF controller still retain checkers-only helper paths
+for puzzles, analysis, and setup-root SGF behavior. Those remaining checkers-specific paths are now explicit and
+feature-gated instead of being the default ownership model for the whole app.
+
+Validation completed with:
+
+  make -B all test_game_backend test_game_model test_sgf_io test_sgf_controller test_window
+  ./build/tests/test_game_backend
+  ./build/tests/test_game_model
+  ./build/tests/test_sgf_io
+  ./build/tests/test_sgf_controller
+  ./build/tests/test_window
+  GAME=boop make -B all test_game_backend test_game_model test_sgf_io test_sgf_controller test_window
+  ./build/tests/test_game_backend
+  ./build/tests/test_game_model
+  ./build/tests/test_sgf_io
+  ./build/tests/test_sgf_controller
+  ./build/tests/test_window
+  GAME=homeworlds make -B all test_game_backend test_game_model
+  ./build/tests/test_game_backend
+  ./build/tests/test_game_model
+
+The GTK-dependent test binaries still skip display-bound cases in this environment when `gtk_init_check()` cannot open
+any display backend, but the binaries build and the executed headless coverage passes.
 
 ## Context and Orientation
 
-The top-level `Makefile` selects one compiled game through `GAME`. The active backend is currently exposed through
-`src/active_game_backend.h` as `GGAME_ACTIVE_GAME_BACKEND`, and the generic backend interface lives in
-`src/game_backend.h`. A backend is a table of callbacks for model storage, move generation, move parsing/formatting,
-AI search, board rendering, and staged move selection. This table is already doing more than "rules engine" work: it
-also contains UI-facing labels and feature availability bits. This plan introduces an app profile as the larger
-description of the compiled target, so `GameBackend` must be reviewed as part of that profile instead of being treated
-as an unrelated global. Today `GAME=checkers` builds `build/bin/gcheckers` from `src/gcheckers.c`,
-`src/application.c`, and `src/window.c`, while `GAME=boop` builds `build/bin/gboop` from `src/gboop.c`.
+The top-level `Makefile` selects one compiled game through `GAME`. The active compiled target is now described by
+`src/game_app_profile.[ch]`, and `src/active_game_backend.h` exposes the profile-owned backend as
+`GGAME_ACTIVE_GAME_BACKEND`. `src/game_backend.h` still defines the low-level callback table for model storage, move
+generation, move parsing/formatting, AI search, board rendering, and staged move selection. `GAME=checkers` and
+`GAME=boop` now both build their binaries from `src/gcheckers.c`, `src/application.c`, and `src/window.c`; only
+`GAME=homeworlds` still uses its separate prototype shell.
 
 The current checkers application shell has the full user experience. `src/application.c` defines
 `GGameApplication`, installs app actions such as `app.new-game`, `app.import`, `app.settings`, and `app.quit`, and
@@ -113,16 +142,15 @@ creates a `GGameWindow`. `src/window.c` defines `GGameWindow`, which owns the bo
 SGF tree view, SGF navigation actions, analysis drawer, puzzle UI, file actions, and dialogs. This is the shell that
 both `gcheckers` and `gboop` should use.
 
-The current boop shell in `src/gboop.c` is intentionally smaller. It creates a plain `GtkApplication`, a
-`GGameModel`, a `BoardView`, a status label, side supply panels, boop-specific colors, and the promotion confirmation
-button. It does not install the shared menu, SGF controller, SGF view, navigation actions, save/load actions,
-analysis UI, or `PlayerControlsPanel`. This file is the duplication this plan removes.
+Boop no longer has a standalone shell. Its game-specific UI now lives in `src/games/boop/boop_controls.[ch]`, which
+installs the boop supply piles, selected-rank highlight, promotion confirmation button, and boop-specific colors into
+the shared `GGameWindow` board area through a profile-owned hook.
 
 `GGameModel` in `src/game_model.c` is the generic state container. It owns a backend-sized current position and can
-initialize, reset, list moves, apply moves, and replace a position through `GameBackend` callbacks. `GCheckersModel`
-in `src/games/checkers/checkers_model.c` is an older checkers-specific wrapper used by the current shared window and
-SGF controller. It should remain only where checkers-only features still need checkers internals, such as puzzle
-generation or existing analysis helpers, while normal play, SGF navigation, and computer play move to `GGameModel`.
+initialize, reset, list moves, apply moves, replace a position, and now also replace a whole position plus variant
+through `GameBackend` callbacks. `GCheckersModel` in `src/games/checkers/checkers_model.c` remains as a
+checkers-specific wrapper for existing puzzle/analysis/setup helpers, but normal play, SGF navigation, and computer
+play in the shared shell now flow through `GGameModel`.
 
 `GGameSgfController` in `src/sgf_controller.c` currently owns the SGF tree and view, but still replays through
 checkers data structures. SGF means Smart Game Format: in this repository it is a tree of game positions and moves
@@ -437,7 +465,7 @@ same behavior. The UI test may skip only the display-specific rendering assertio
 
 ## Artifacts and Notes
 
-The current build split to remove is:
+The former build split before this plan was:
 
   GAME=checkers:
     APP_MAIN_SRC := src/gcheckers.c

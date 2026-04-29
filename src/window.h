@@ -1,8 +1,10 @@
 #ifndef GGAME_WINDOW_H
 #define GGAME_WINDOW_H
 
-#include "games/checkers/checkers_model.h"
 #include "game_backend.h"
+#include "game_model.h"
+#include "games/checkers/game.h"
+#include "games/checkers/rulesets.h"
 #include "sgf_controller.h"
 #include "player_controls_panel.h"
 
@@ -20,7 +22,7 @@ typedef enum {
   GGAME_WINDOW_BOARD_ORIENTATION_FOLLOW_TURN
 } GGameWindowBoardOrientationMode;
 
-GGameWindow *ggame_window_new(GtkApplication *app, GCheckersModel *model);
+GGameWindow *ggame_window_new(GtkApplication *app, GGameModel *model);
 void ggame_window_present_new_game_dialog(GGameWindow *self);
 void ggame_window_present_puzzle_dialog(GGameWindow *self);
 void ggame_window_present_import_dialog(GGameWindow *self);

@@ -4,9 +4,57 @@
 
 #include "../src/active_game_backend.h"
 #include "../src/board_selection_controller.h"
+#include "../src/game_app_profile.h"
 #if defined(GGAME_GAME_BOOP)
 #include "../src/games/boop/boop_types.h"
 #endif
+
+static void test_app_profile_metadata(void) {
+  const GGameAppProfile *profile = ggame_active_app_profile();
+  const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
+
+  assert(profile != NULL);
+  assert(backend != NULL);
+  assert(profile->backend == backend);
+  assert(profile->app_id != NULL);
+  assert(profile->display_name != NULL);
+  assert(profile->window_title_name != NULL);
+
+#if defined(GGAME_GAME_CHECKERS)
+  assert(profile->kind == GGAME_APP_KIND_CHECKERS);
+  assert(profile->features.supports_shared_shell);
+  assert(profile->features.supports_sgf_files);
+  assert(profile->features.supports_ai_players);
+  assert(profile->features.supports_puzzles);
+  assert(profile->features.supports_import);
+  assert(profile->features.supports_settings);
+  assert(profile->features.supports_save_position);
+  assert(profile->features.supports_edit_mode);
+  assert(profile->features.supports_analysis);
+  assert(profile->ui.create_board_host == NULL);
+#elif defined(GGAME_GAME_HOMEWORLDS)
+  assert(profile->kind == GGAME_APP_KIND_HOMEWORLDS);
+  assert(!profile->features.supports_shared_shell);
+  assert(!profile->features.supports_puzzles);
+  assert(!profile->features.supports_import);
+  assert(!profile->features.supports_settings);
+  assert(profile->ui.create_board_host == NULL);
+#elif defined(GGAME_GAME_BOOP)
+  assert(profile->kind == GGAME_APP_KIND_BOOP);
+  assert(profile->features.supports_shared_shell);
+  assert(profile->features.supports_sgf_files);
+  assert(profile->features.supports_ai_players);
+  assert(!profile->features.supports_puzzles);
+  assert(!profile->features.supports_import);
+  assert(profile->features.supports_settings);
+  assert(!profile->features.supports_save_position);
+  assert(!profile->features.supports_edit_mode);
+  assert(!profile->features.supports_analysis);
+  assert(profile->ui.create_board_host != NULL);
+#else
+#error "Add profile expectations for the selected game."
+#endif
+}
 
 static void test_backend_metadata(void) {
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
@@ -729,6 +777,7 @@ static void test_backend_selection_controller_resets_on_model_change(void) {
 }
 
 int main(void) {
+  test_app_profile_metadata();
   test_backend_metadata();
   test_backend_position_and_move_flow();
   test_backend_move_path_length_only_query();

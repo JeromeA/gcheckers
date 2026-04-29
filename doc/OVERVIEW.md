@@ -1,28 +1,45 @@
 # Project overview
 
-This repository contains the `ggame` application framework plus the currently shipped checkers game build
-(`gcheckers`). The shared code in top-level `src/` owns the application shell, GTK UI, SGF/puzzle workflows, and the
-generic AI/model/backend interfaces. Game-specific code lives under `src/games/<game>/` and provides the rules,
-position and move types, search evaluation, notation helpers, optional puzzle tooling, and any board-specific callbacks
-needed by the selected backend. `src/games/boop/` now contains a playable boop rules engine and backend for
-`GAME=boop`: it models the 6x6 board, kitten/cat supplies, boops, promotion choices, win detection, move notation,
-square-grid rendering callbacks, staged move construction, and search hooks.
+This repository contains the `ggame` application framework plus two shared-shell GTK targets, `gcheckers` and
+`gboop`, and the separate Homeworlds prototype target `ghomeworlds`. The shared code in top-level `src/` owns the
+application shell, GTK UI, SGF workflows, puzzle/import/reporting flows, and the generic AI/model/backend interfaces.
+Game-specific code lives under `src/games/<game>/` and provides the rules, position and move types, search
+evaluation, notation helpers, optional puzzle tooling, and any board-specific callbacks needed by the selected
+backend. `src/games/boop/` contains both the boop rules/backend and the boop-only supply/promotion controls that now
+plug into the shared window.
 
-The build selects exactly one active game at compile time through `GAME` in the `Makefile`, which in turn defines the
-active `GameBackend` callback table. Shared code talks to that backend through generic APIs such as `GGameModel`,
+The build selects exactly one active game at compile time through `GAME` in the `Makefile`. Shared code first queries
+`src/game_app_profile.[ch]` for the active app profile, then reaches the profile-owned `GameBackend` and feature/UI
+hooks from there. Shared code talks to the rules/search/rendering layer through generic APIs such as `GGameModel`,
 `ai_search`, and the square-grid board callbacks, so adding another game is mostly a matter of adding a new backend
-directory plus the corresponding build and packaging entries.
+directory plus the corresponding profile and packaging entries.
+
+## `GGameAppProfile` (`src/game_app_profile.c`, `src/game_app_profile.h`)
+Module: top-level compiled-app description.
+Role: describe the active target selected by `GAME`, including app ID, display strings, settings schema ID, the
+profile-owned `GameBackend *`, feature flags, derived helpers such as puzzle-catalog support, shared-window layout
+defaults, and optional UI hooks such as boop's custom board host. Checkers and boop both advertise
+`supports_shared_shell = TRUE`, while Homeworlds still reports no shared-shell support.
+Collaborates with: `src/application.c`, `src/window.c`, `src/app_settings.c`, `src/file_dialog_history.c`, and
+`src/active_game_backend.h`.
 
 ## `GGameWindow` (`src/window.c`)
 Class: `GGameWindow` (`GtkApplicationWindow`).
 Role: composition root that binds model state to UI updates, keeps board input available, and coordinates auto-play.
-Owns: `GCheckersModel`, `BoardView`, `PlayerControlsPanel`, and `GGameSgfController`.
-Collaborates with: `ggame_style_init()` for CSS, model signals for refresh, and SGF analysis signals to reset
-player dropdowns. Computer turns are routed by control mode with alpha-beta depth configured from the shared
-`Computer depth` slider (`0..16`). Uses a three-pane layout: board and player controls (left), SGF mode selector
-and SGF view (middle), and analysis (right). Analysis is launched from shared window actions exposed in the
-`Analysis` menubar submenu: current-position analysis iterates on the selected node, and full-game analysis always
-processes nodes in reverse order so TT state is reused from later positions first.
+Owns: the active `GGameAppProfile`, one `GGameModel`, `BoardView`, `PlayerControlsPanel`, `GGameSgfController`, and
+an optional profile-owned board host around the board. For boop, that board host adds the supply piles, selected-rank
+highlight, promotion confirmation button, and boop color styling while keeping the same shared shell.
+Collaborates with: `ggame_style_init()` for CSS, model signals for refresh, profile feature flags to enable/disable
+actions, and SGF analysis signals to reset player dropdowns. Computer turns are routed by control mode with
+alpha-beta depth configured from the shared `Computer depth` slider (`0..16`). Uses a three-pane layout: board and
+player controls (left), SGF mode selector and SGF view (middle), and analysis (right). Analysis is launched from
+shared window actions exposed in the `Analysis` menubar submenu: current-position analysis iterates on the selected
+node, and full-game analysis always processes nodes in reverse order so TT state is reused from later positions
+first.
+Shared pane defaults also come from the active profile. Checkers keeps the historical `500/300/300` board,
+navigation, and analysis widths with both drawers visible by default, while boop starts with a wider `760` board pane
+and the unsupported analysis drawer hidden so its square board host can reach the same practical size as the old
+standalone `gboop` window.
 The analysis pane owns its own `Analysis depth` slider; analysis no longer reuses the player `Computer depth`
 setting. Current-position analysis iterates up to the selected depth, and full-game analysis uses the same selected
 depth as a fixed search limit. Analysis menu entries are one-shot actions, so SGF navigation does not implicitly keep
@@ -129,8 +146,8 @@ generic replay allocates a temporary backend position, replays SGF moves into it
 through `ggame_model_set_position()`.
 `ggame_sgf_controller_set_model()` binds the legacy checkers wrapper plus its inner `GGameModel`;
 `ggame_sgf_controller_set_game_model()` binds generic callers directly. Timeline clearing remains explicit via
-`ggame_sgf_controller_new_game()`. Exposes SGF navigation helpers used by window actions and the boop shell: rewind
-to root, step backward, step forward on main line, step to next branch point, and step to main-line end.
+`ggame_sgf_controller_new_game()`. Exposes SGF navigation helpers used by the shared window: rewind to root, step
+backward, step forward on main line, step to next branch point, and step to main-line end.
 Selection-only navigation updates SGF view selection in place (`sgf_view_set_selected`) instead of rebuilding the
 entire SGF layout.
 Exposes a current-node refresh helper that replays SGF state into the model after setup-property edits on the current
@@ -138,11 +155,11 @@ node.
 Owns: `SgfTree` and `SgfView`, plus replay guard (`is_replaying`).
 Signals: `manual-requested` when analysis panel content should refresh for the selected node, and `node-changed`
 whenever SGF current node changes so other UI (analysis graph) can synchronize cursor state.
-Collaborates with: `GCheckersModel` and generic `GGameModel` callers for move validation/application, `BoardView` to
-clear selection on replay/reset, and `GGameWindow` plus the boop shell via the `manual-requested` signal for SGF
-navigation/edit flows. Starting a fresh game resets the SGF tree and emits `node-changed`, but does not force player
-controls back to user mode. Also exposes the current node's move so board overlays can use the same path for
-step-by-step and replay-based navigation.
+Collaborates with: `GCheckersModel` compatibility callers plus generic `GGameModel` callers for move
+validation/application, `BoardView` to clear selection on replay/reset, and `GGameWindow` via the `manual-requested`
+signal for SGF navigation/edit flows. Starting a fresh game resets the SGF tree and emits `node-changed`, but does
+not force player controls back to user mode. Also exposes the current node's move so board overlays can use the same
+path for step-by-step and replay-based navigation.
 
 ## `AnalysisGraph` (`src/analysis_graph.c`, `src/analysis_graph.h`)
 Class: `AnalysisGraph` (`GObject`).
@@ -189,32 +206,35 @@ Role: top-level application shell that installs menu actions, creates the main w
 progress reporting state.
 Owns: the application menubar/actions plus one `GGamePuzzleProgressStore` for the process, the configured report
 URL (`GCHECKERS_PUZZLE_REPORT_URL`), the privacy/settings action, and the single in-flight background upload task.
-Collaborates with: `GGameWindow`, which asks for the shared store indirectly by attaching to this application, and
-`puzzle_progress.c`, which provides history storage, threshold decisions, and upload JSON formatting. Puzzle uploads are
-also gated by the `send-puzzle-usage-data` application setting before any network request is attempted. The shared
-progress store accessor refreshes the store if `GCHECKERS_PUZZLE_PROGRESS_DIR` resolves to a different state directory,
-which keeps test and manual override sessions isolated.
+Collaborates with: `GGameAppProfile` for app ID and feature availability, `GGameWindow`, which asks for the shared
+store indirectly by attaching to this application, and `puzzle_progress.c`, which provides history storage, threshold
+decisions, and upload JSON formatting. Puzzle uploads are also gated by the `send-puzzle-usage-data` application
+setting before any network request is attempted. The shared progress store accessor refreshes the store if
+`GCHECKERS_PUZZLE_PROGRESS_DIR` resolves to a different state directory, which keeps test and manual override sessions
+isolated.
 
 ## Application Settings (`src/app_settings.c`, `src/app_settings.h`, `src/settings_dialog.c`, `src/settings_dialog.h`)
 Module: GSettings-backed application preferences and the modal settings UI.
-Role: load the shared `io.github.jeromea.gcheckers` schema, expose the new privacy keys, and present the `Settings`
-dialog from the File menu.
+Role: load the active profile's settings schema (currently `io.github.jeromea.gcheckers` or
+`io.github.jeromea.gboop`), expose the privacy keys, and present the `Settings` dialog from the File menu.
 Settings: `send-puzzle-usage-data` defaults to true and is consulted before puzzle progress uploads; `send-
 application-usage-data` also defaults to true and is stored for future telemetry work but is not consumed yet; and
 `privacy-settings-shown` records whether the privacy dialog has already been presented to this user.
 UI: the settings dialog is a small modal window with two checkboxes and `Cancel`/`Save` actions, following the same
-simple GTK window pattern as the new-game and import dialogs. It also shows a `Puzzle Progress` section with the
-number of solved puzzles out of the currently available puzzle catalog and a `Clear Progress` button that clears local
-attempt history plus the chooser status cache. On first launch, `GGameApplication` presents this dialog
-automatically after creating the main window so the user can review the privacy controls before continuing.
+simple GTK window pattern as the new-game and import dialogs. When the active profile also exposes a puzzle catalog,
+it adds a `Puzzle Progress` section with the number of solved puzzles out of the currently available puzzle catalog and
+a `Clear Progress` button that clears local attempt history plus the chooser status cache. Boop reuses the same dialog
+but only shows the privacy controls. On first launch, `GGameApplication` presents this dialog automatically after
+creating the main window so the user can review the privacy controls before continuing.
 
-## Puzzle Progress Reporting (`src/puzzle_progress.c`, `data/schemas/io.github.jeromea.gcheckers.gschema.xml`)
+## Puzzle Progress Reporting (`src/puzzle_progress.c`, `data/schemas/io.github.jeromea.gcheckers.gschema.xml`,
+`data/schemas/io.github.jeromea.gboop.gschema.xml`)
 Module: persistent puzzle attempt storage and report payload preparation.
 Role: keep a stable per-user identifier, store local puzzle attempt history, maintain a derived per-puzzle status
 cache for the chooser grid, decide when unsent data is old or large enough to send, and build the full-history JSON
 payload for the reporting server.
 Storage layout: the preferred user ID storage is the `puzzle-user-id` GSettings key in
-`data/schemas/io.github.jeromea.gcheckers.gschema.xml`. Local history lives under
+the active profile schema. Local history lives under
 `~/.local/share/gcheckers/puzzle-progress/attempt-history.jsonl` by default, or under
 `GCHECKERS_PUZZLE_PROGRESS_DIR` when that override is set for tests/manual runs. The derived chooser-status cache
 lives beside it as `puzzle-status.json` in the same directory; no extra nested per-file directories are used.
@@ -403,8 +423,8 @@ Collaborates with: `create_puzzles.c` and `tests/test_puzzle_generation.c`.
 ## File dialog history helpers (`src/file_dialog_history.c`, `src/file_dialog_history.h`)
 Module: SGF file dialog folder persistence helpers.
 Role: create `GSettings` with the app schema, read the remembered SGF folder as a `GFile`, and store the parent folder
-of a chosen SGF file so future dialogs can reopen there. The helper first probes the installed
-`io.github.jeromea.gcheckers` schema, then falls back to the in-tree `data/schemas` directory for local builds/tests.
+of a chosen SGF file so future dialogs can reopen there. The helper uses the active profile's schema ID, then falls
+back to the in-tree `data/schemas` directory for local builds/tests.
 Collaborates with: `sgf_file_actions.c` and `tests/test_file_dialog_history.c`.
 
 ## App data path helpers (`src/app_paths.c`, `src/app_paths.h`)
@@ -450,16 +470,25 @@ terminal scores, and position hashing. When both kittens and cats are available,
 ranks for each empty square and leaves the active rank choice to the UI candidate-preference hook. Promotion-stage
 selection paths contain only the promotion squares, so the just-placed piece is highlighted only when it is actually
 one of the candidate promotion squares.
-Collaborates with: `src/gboop.c`, `GGameModel`, `BoardView`, `tests/test_boop_game.c`,
+Collaborates with: `src/games/boop/boop_controls.c`, `GGameModel`, `BoardView`, `GGameWindow`, `tests/test_boop_game.c`,
 `tests/test_boop_backend.c`, and the generic backend/model/SGF tests.
 
-## Game backend interface (`src/game_backend.h`, `src/active_game_backend.h`,
+## Boop controls (`src/games/boop/boop_controls.c`, `src/games/boop/boop_controls.h`,
+`src/games/boop/boop_controls_stub.c`)
+Module: boop-specific shared-shell board host.
+Role: build the boop supply/promotion side panels around the shared `BoardView`, install boop CSS, track the active
+side's selected kitten/cat rank, show the `Confirm promotions` button only when the move builder requires it, and
+bridge boop's move-candidate preference / selection-changed / completion-confirmation hooks into the shared board
+input flow. `boop_controls_stub.c` provides a weak non-GTK fallback so profile/model/backend tests can link without
+pulling GTK UI code into headless targets.
+Collaborates with: `GGameAppProfile`, `GGameWindow`, `BoardView`, `GGameModel`, and `tests/test_window_boop.c`.
+
+## Game backend interface (`src/game_backend.h`, `src/active_game_backend.h`, `src/game_app_profile.h`,
 `src/games/checkers/checkers_backend.c`, `src/games/homeworlds/homeworlds_backend.c`,
 `src/games/boop/boop_backend.c`)
 Module: generic game-selection boundary plus the compiled game adapters.
 Role: `game_backend.h` defines the generic callback table used to describe one compiled game backend.
-`active_game_backend.h` maps the build-time defines `GGAME_GAME_CHECKERS`, `GGAME_GAME_HOMEWORLDS`, and
-`GGAME_GAME_BOOP` to the active backend object, and
+`active_game_backend.h` exposes the backend owned by the active `GGameAppProfile`, and
 `src/games/checkers/checkers_backend.c` adapts the moved checkers engine, ruleset catalog, move list, AI, and move
 formatting APIs into that generic table. `src/games/homeworlds/homeworlds_backend.c` now adapts the slot-based
 Homeworlds engine and staged move builder, advertises `supports_move_builder = TRUE`, `supports_move_list = FALSE`,
@@ -478,32 +507,29 @@ Collaborates with: `Makefile` backend selection, `tests/test_game_backend.c`, an
 Class: `GGameModel` (`GObject`).
 Role: wrap one active `GameBackend` plus one opaque current position behind a GTK-friendly state container with a
 `state-changed` signal. The model owns backend-sized position storage, initializes it from the backend's first
-variant when one exists, exposes generic move listing, application, and whole-position replacement, and now backs the
-shared square-grid UI through `GCheckersModel`'s compatibility bridge. Construction accepts either a full move-list
-backend or a move-builder backend; boop and checkers support both, while builder-only games can still apply moves
-through direct backend validation.
+variant when one exists, exposes generic move listing, application, whole-position replacement, and whole-position
+replacement plus variant changes, and now backs the shared square-grid UI directly. `GCheckersModel` still mirrors it
+for checkers-only compatibility paths such as puzzles, analysis, and setup-root SGF helpers. Construction accepts
+either a full move-list backend or a move-builder backend; boop and checkers support both, while builder-only games
+can still apply moves through direct backend validation.
 Collaborates with: `src/game_backend.h`, `src/games/checkers/checkers_backend.c`,
-`src/games/checkers/checkers_model.c`, and `tests/test_game_model.c`.
+`src/games/checkers/checkers_model.c`, `src/window.c`, and `tests/test_game_model.c`.
 
-## GTK application entry (`src/gcheckers.c`, `src/application.c`, `src/application.h`, `src/ghomeworlds.c`,
-`src/gboop.c`)
-Class: `GGameApplication` (`GtkApplication`) for the checkers build; plain `GtkApplication` apps for the Homeworlds
-and boop builds.
+## GTK application entry (`src/gcheckers.c`, `src/application.c`, `src/application.h`, `src/ghomeworlds.c`)
+Class: `GGameApplication` (`GtkApplication`) for the shared-shell checkers and boop builds; plain `GtkApplication`
+for the separate Homeworlds prototype.
 Role: define the GTK application type and activation flow that creates the main window and model, installs app actions
-(`app.new-game`, `app.import`, `app.quit`), installs window game/SGF/navigation/analysis/puzzle/view actions, and
-publishes a menubar model (`File` -> `New game...`, `Import...`, `Load...`, `Save as...`, `Save position...`, `Quit`;
-`Game` -> `Force move` + navigation section; `Analysis` -> current-position and whole-game analysis; `Puzzle` ->
-`Play puzzles`; `View` -> drawer toggles) with keyboard accelerators. `src/gboop.c` opens a focused local-play boop
-window backed by `GGameModel`, `BoardView`, and `GGameSgfController`, with a status label, `New Game` button, blue
-board styling, side supply panels showing each player's color-coded kitten/cat piles plus the active player's selected
-placement rank, and a dedicated SGF pane with basic timeline navigation buttons under the board. The active supply
-panel also owns the promotion confirmation button, which appears during boop promotion-square selection and only
-enables once the selected squares form a legal promotion choice. Player moves now flow through the SGF controller so
-the boop SGF tree stays live and node navigation replays the board state correctly. The boop binary intentionally
-leaves the checkers puzzle/import/analysis shell out. `src/ghomeworlds.c` remains a branded skeleton window.
-The checkers build uses application ID `io.github.jeromea.gcheckers`; Homeworlds and boop use
-`io.github.jeromea.ghomeworlds` and `io.github.jeromea.gboop`.
-Collaborates with: `GGameWindow` for UI wiring and new-game dialog presentation.
+(`app.new-game`, `app.import`, `app.quit`, `app.settings`), installs window game/SGF/navigation/analysis/puzzle/view
+actions, and publishes one shared menubar model (`File` -> `New game...`, `Import...`, `Load...`, `Save as...`,
+`Save position...`, `Settings`, `Quit`; `Game` -> `Force move` + navigation section; `Analysis` -> current-position
+and whole-game analysis; `Puzzle` -> `Play puzzles`; `View` -> drawer toggles) with keyboard accelerators. Both
+`gcheckers` and `gboop` are built from this same shell and diverge through `GGameAppProfile` feature flags and boop's
+optional board-host hook. Unsupported actions stay in the same shared shell but are disabled for profiles that do not
+support them. `src/ghomeworlds.c` remains a branded skeleton window outside that shared shell.
+The active application ID, display strings, settings schema ID, and backend all come from `GGameAppProfile`, with the
+current profiles selecting `io.github.jeromea.gcheckers`, `io.github.jeromea.gboop`, or
+`io.github.jeromea.ghomeworlds`.
+Collaborates with: `GGameWindow`, `GGameAppProfile`, and new-game/settings dialog presentation.
 
 ## Board view subsystem
 

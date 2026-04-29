@@ -14,6 +14,9 @@ G_DECLARE_FINAL_TYPE(GGameModel, ggame_model, GGAME, MODEL, GObject)
 GGameModel *ggame_model_new(const GameBackend *backend);
 void ggame_model_reset(GGameModel *self, const GameBackendVariant *variant_or_null);
 gboolean ggame_model_set_position(GGameModel *self, gconstpointer position);
+gboolean ggame_model_set_position_variant(GGameModel *self,
+                                          gconstpointer position,
+                                          const GameBackendVariant *variant_or_null);
 GameBackendMoveList ggame_model_list_moves(GGameModel *self);
 gboolean ggame_model_apply_move(GGameModel *self, gconstpointer move);
 gconstpointer ggame_model_peek_position(GGameModel *self);

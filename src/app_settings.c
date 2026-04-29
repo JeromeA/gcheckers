@@ -1,10 +1,18 @@
 #include "app_settings.h"
 
+#include "game_app_profile.h"
+
 GSettings *ggame_app_settings_create(void) {
+  const GGameAppProfile *profile = ggame_active_app_profile();
+  const char *schema_id = profile != NULL ? profile->settings_schema_id : NULL;
   GSettingsSchemaSource *default_source = g_settings_schema_source_get_default();
   GSettingsSchema *schema = NULL;
+  if (schema_id == NULL || schema_id[0] == '\0') {
+    g_debug("No application settings schema configured for the active profile");
+    return NULL;
+  }
   if (default_source != NULL) {
-    schema = g_settings_schema_source_lookup(default_source, GCHECKERS_APP_SETTINGS_SCHEMA_ID, TRUE);
+    schema = g_settings_schema_source_lookup(default_source, schema_id, TRUE);
   }
 
   g_autoptr(GSettingsSchemaSource) local_source = NULL;
@@ -17,11 +25,11 @@ GSettings *ggame_app_settings_create(void) {
       return NULL;
     }
 
-    schema = g_settings_schema_source_lookup(local_source, GCHECKERS_APP_SETTINGS_SCHEMA_ID, FALSE);
+    schema = g_settings_schema_source_lookup(local_source, schema_id, FALSE);
   }
 
   if (schema == NULL) {
-    g_debug("Missing GSettings schema %s", GCHECKERS_APP_SETTINGS_SCHEMA_ID);
+    g_debug("Missing GSettings schema %s", schema_id);
     return NULL;
   }
 

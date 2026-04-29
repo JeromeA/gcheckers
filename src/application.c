@@ -2,7 +2,8 @@
 
 #include "app_settings.h"
 #include "app_paths.h"
-#include "games/checkers/checkers_model.h"
+#include "game_app_profile.h"
+#include "game_model.h"
 #include "window.h"
 
 #include <curl/curl.h>
@@ -23,6 +24,24 @@ struct _GGameApplication {
 };
 
 G_DEFINE_TYPE(GGameApplication, ggame_application, GTK_TYPE_APPLICATION)
+
+static void ggame_application_set_action_enabled(GActionMap *map, const char *name, gboolean enabled) {
+  g_return_if_fail(map != NULL);
+  g_return_if_fail(name != NULL);
+
+  GAction *action = g_action_map_lookup_action(map, name);
+  if (action == NULL) {
+    g_debug("Missing application action while toggling enabled state: %s", name);
+    return;
+  }
+
+  if (!G_IS_SIMPLE_ACTION(action)) {
+    g_debug("Unsupported non-simple application action while toggling enabled state: %s", name);
+    return;
+  }
+
+  g_simple_action_set_enabled(G_SIMPLE_ACTION(action), enabled);
+}
 
 static size_t ggame_application_discard_upload_response(char *ptr,
                                                             size_t size,
@@ -202,7 +221,7 @@ static void ggame_application_on_new_game(GSimpleAction * /*action*/,
     return;
   }
   if (!GGAME_IS_WINDOW(window)) {
-    g_debug("Active window is not a gcheckers window");
+    g_debug("Active window is not a shared game window");
     return;
   }
 
@@ -221,7 +240,7 @@ static void ggame_application_on_import(GSimpleAction * /*action*/,
     return;
   }
   if (!GGAME_IS_WINDOW(window)) {
-    g_debug("Active window is not a gcheckers window");
+    g_debug("Active window is not a shared game window");
     return;
   }
 
@@ -240,7 +259,7 @@ static void ggame_application_on_settings(GSimpleAction * /*action*/,
     return;
   }
   if (!GGAME_IS_WINDOW(window)) {
-    g_debug("Active window is not a gcheckers window");
+    g_debug("Active window is not a shared game window");
     return;
   }
 
@@ -258,26 +277,31 @@ static void ggame_application_on_quit(GSimpleAction * /*action*/,
 
 static void ggame_application_startup(GApplication *app) {
   GGameApplication *self = GGAME_APPLICATION(app);
+  const GGameAppProfile *profile = ggame_active_app_profile();
   g_return_if_fail(GGAME_IS_APPLICATION(self));
+  g_return_if_fail(profile != NULL);
+  g_return_if_fail(profile->backend != NULL);
 
   G_APPLICATION_CLASS(ggame_application_parent_class)->startup(app);
 
-  if (curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK) {
-    self->curl_initialized = TRUE;
-  } else {
-    g_debug("Failed to initialize libcurl globally for puzzle progress uploads");
-  }
+  if (profile->features.supports_puzzles) {
+    if (curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK) {
+      self->curl_initialized = TRUE;
+    } else {
+      g_debug("Failed to initialize libcurl globally for puzzle progress uploads");
+    }
 
-  g_autoptr(GError) error = NULL;
-  g_autofree char *state_dir =
-      ggame_app_paths_get_user_state_subdir("GCHECKERS_PUZZLE_PROGRESS_DIR", "puzzle-progress", &error);
-  if (state_dir == NULL) {
-    g_debug("Failed to initialize puzzle progress storage: %s",
-            error != NULL ? error->message : "unknown error");
-  } else {
-    self->puzzle_progress_store = ggame_puzzle_progress_store_new(state_dir);
+    g_autoptr(GError) error = NULL;
+    g_autofree char *state_dir =
+        ggame_app_paths_get_user_state_subdir("GCHECKERS_PUZZLE_PROGRESS_DIR", "puzzle-progress", &error);
+    if (state_dir == NULL) {
+      g_debug("Failed to initialize puzzle progress storage: %s",
+              error != NULL ? error->message : "unknown error");
+    } else {
+      self->puzzle_progress_store = ggame_puzzle_progress_store_new(state_dir);
+    }
+    self->puzzle_report_url = g_strdup(g_getenv("GCHECKERS_PUZZLE_REPORT_URL"));
   }
-  self->puzzle_report_url = g_strdup(g_getenv("GCHECKERS_PUZZLE_REPORT_URL"));
 
   static const GActionEntry app_actions[] = {
       {
@@ -314,6 +338,8 @@ static void ggame_application_startup(GApplication *app) {
       },
   };
   g_action_map_add_action_entries(G_ACTION_MAP(app), app_actions, G_N_ELEMENTS(app_actions), app);
+  ggame_application_set_action_enabled(G_ACTION_MAP(app), "import", profile->features.supports_import);
+  ggame_application_set_action_enabled(G_ACTION_MAP(app), "settings", profile->features.supports_settings);
 
   GMenu *menubar = g_menu_new();
   GMenu *file_menu = g_menu_new();
@@ -390,7 +416,10 @@ static void ggame_application_startup(GApplication *app) {
 
 static void ggame_application_activate(GApplication *app) {
   GGameApplication *self = GGAME_APPLICATION(app);
+  const GGameAppProfile *profile = ggame_active_app_profile();
   g_return_if_fail(GGAME_IS_APPLICATION(self));
+  g_return_if_fail(profile != NULL);
+  g_return_if_fail(profile->backend != NULL);
 
   GtkWindow *existing = gtk_application_get_active_window(GTK_APPLICATION(app));
   if (existing) {
@@ -398,14 +427,15 @@ static void ggame_application_activate(GApplication *app) {
     return;
   }
 
-  GCheckersModel *model = gcheckers_model_new();
+  GGameModel *model = ggame_model_new(profile->backend);
   GtkWindow *window = GTK_WINDOW(ggame_window_new(GTK_APPLICATION(app), model));
   g_object_unref(model);
 
   gtk_window_present(window);
 
   g_autoptr(GSettings) settings = ggame_app_settings_create();
-  if (G_IS_SETTINGS(settings) &&
+  if (profile->features.supports_settings &&
+      G_IS_SETTINGS(settings) &&
       !ggame_app_settings_get_privacy_settings_shown(settings)) {
     ggame_window_present_settings_dialog(GGAME_WINDOW(window));
   }
@@ -468,9 +498,14 @@ static void ggame_application_init(GGameApplication *self) {
 }
 
 GGameApplication *ggame_application_new(void) {
+  const GGameAppProfile *profile = ggame_active_app_profile();
+
+  g_return_val_if_fail(profile != NULL, NULL);
+  g_return_val_if_fail(profile->app_id != NULL, NULL);
+
   return g_object_new(GGAME_TYPE_APPLICATION,
                       "application-id",
-                      "io.github.jeromea.gcheckers",
+                      profile->app_id,
                       "flags",
                       G_APPLICATION_NON_UNIQUE,
                       NULL);

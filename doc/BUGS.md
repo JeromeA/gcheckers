@@ -179,3 +179,33 @@ The fix restores an SGF view refresh after appended moves so the widget tree is 
 SGF tree, and it teaches `BoardView` to redraw itself whenever its bound `GGameModel` emits `state-changed`. Regression
 tests now check the visible SGF disc count after the first appended move and verify that the board highlights update
 after an external model move without a manual `board_view_update()` call.
+
+## Boop could crash on startup when the shared settings dialog auto-opened
+
+Boop should reuse the shared settings dialog for privacy controls without assuming that it also exposes checkers puzzle
+catalog features.
+
+The shared dialog always built the `Puzzle Progress` section and counted puzzles through
+`GGAME_ACTIVE_GAME_BACKEND->variant_by_short_name(...)`. That was safe for checkers, but boop's backend does not
+implement `variant_by_short_name` because it has no puzzle variants. On first launch, `GGameApplication` auto-opened
+the settings dialog and immediately dereferenced that null function pointer, so `gboop` could segfault before the user
+even started a game.
+
+The fix makes puzzle-progress support a derived `GGameAppProfile` capability, builds that settings section only when
+the active profile really has a puzzle catalog, and counts variants generically through `backend->variant_at()`
+instead of using checkers-only ruleset helpers. A boop window regression test now opens the shared settings dialog and
+asserts that the puzzle-progress section is absent.
+
+## Boop board size was capped by checkers pane defaults after the shared-shell merge
+
+The merged boop target should preserve roughly the same usable board size as the old standalone `gboop` window.
+
+After boop moved into the shared shell, `GGameWindow` still initialized every target with the checkers layout defaults:
+`500px` for the board pane, `300px` for the SGF pane, and another `300px` for the analysis pane. Boop's custom board
+host is much wider than checkers because it keeps both supply panels beside the board. With only `500px` of board-pane
+width, the square board host could only allocate a small square in the middle, leaving large empty bands above and
+below. The always-visible but unsupported analysis drawer also wasted width that boop could not use.
+
+The fix moves shared-shell layout defaults into `GGameAppProfile`. Boop now starts with a wider `760px` board pane and
+the analysis drawer hidden by default, while checkers keeps the previous defaults. A boop window regression test now
+checks that the wider board pane request and hidden analysis drawer are both applied at startup.
