@@ -1,7 +1,9 @@
 #include "board_move_overlay.h"
 
-#if defined(GGAME_GAME_CHECKERS)
-#include "games/checkers/game.h"
+#if defined(GGAME_GAME_BOOP)
+#include "games/boop/boop_game.h"
+#endif
+#if defined(GGAME_GAME_CHECKERS) || defined(GGAME_GAME_BOOP)
 #include "sgf_controller.h"
 #endif
 #include "widget_utils.h"
@@ -20,21 +22,22 @@ struct _BoardMoveOverlay {
 
 G_DEFINE_TYPE(BoardMoveOverlay, board_move_overlay, G_TYPE_OBJECT)
 
-#if defined(GGAME_GAME_CHECKERS)
 static const double board_move_overlay_alpha = 0.5;
 static const double board_move_overlay_stroke_width = 4.0;
 static const double board_move_overlay_arrow_scale = 0.28;
+#if defined(GGAME_GAME_BOOP)
+static const double board_move_overlay_circle_radius_scale = 0.32;
+static const double board_move_overlay_cross_scale = 0.26;
 #endif
 static const double board_move_overlay_banner_padding_x = 24.0;
 static const double board_move_overlay_banner_padding_y = 14.0;
 static const double board_move_overlay_banner_radius = 18.0;
 
-#if defined(GGAME_GAME_CHECKERS)
-static void board_move_overlay_transform_for_bottom_side(guint *row,
-                                                         guint *col,
-                                                         guint rows,
-                                                         guint cols,
-                                                         guint bottom_side) {
+static void board_move_overlay_transform_point_for_bottom_side(double *row,
+                                                               double *col,
+                                                               guint rows,
+                                                               guint cols,
+                                                               guint bottom_side) {
   g_return_if_fail(row != NULL);
   g_return_if_fail(col != NULL);
 
@@ -42,10 +45,9 @@ static void board_move_overlay_transform_for_bottom_side(guint *row,
     return;
   }
 
-  *row = rows - 1 - *row;
-  *col = cols - 1 - *col;
+  *row = ((double)rows - 1.0) - *row;
+  *col = ((double)cols - 1.0) - *col;
 }
-#endif
 
 static void board_move_overlay_draw_rounded_rect(cairo_t *cr,
                                                  double x,
@@ -82,7 +84,6 @@ const char *board_move_overlay_get_winner_banner_text(const GameBackend *backend
   return backend->outcome_banner_text(outcome);
 }
 
-#if defined(GGAME_GAME_CHECKERS)
 static void board_move_overlay_draw_arrow(cairo_t *cr,
                                           double start_x,
                                           double start_y,
@@ -120,6 +121,268 @@ static void board_move_overlay_draw_arrow(cairo_t *cr,
   cairo_close_path(cr);
   cairo_fill(cr);
 }
+
+#if defined(GGAME_GAME_BOOP)
+static void board_move_overlay_draw_circle(cairo_t *cr,
+                                           double center_x,
+                                           double center_y,
+                                           double radius) {
+  g_return_if_fail(cr != NULL);
+  g_return_if_fail(radius > 0.0);
+
+  cairo_arc(cr, center_x, center_y, radius, 0.0, G_PI * 2.0);
+  cairo_stroke(cr);
+}
+
+static void board_move_overlay_draw_cross(cairo_t *cr,
+                                          double center_x,
+                                          double center_y,
+                                          double half_size) {
+  g_return_if_fail(cr != NULL);
+  g_return_if_fail(half_size > 0.0);
+
+  cairo_move_to(cr, center_x - half_size, center_y - half_size);
+  cairo_line_to(cr, center_x + half_size, center_y + half_size);
+  cairo_move_to(cr, center_x - half_size, center_y + half_size);
+  cairo_line_to(cr, center_x + half_size, center_y - half_size);
+  cairo_stroke(cr);
+}
+#endif
+
+#if defined(GGAME_GAME_CHECKERS)
+static void board_move_overlay_draw_checkers_last_move(BoardMoveOverlay *self,
+                                                       const GameBackend *backend,
+                                                       gconstpointer position,
+                                                       cairo_t *cr,
+                                                       guint rows,
+                                                       guint cols,
+                                                       gint width,
+                                                       gint height) {
+  CheckersMove move = {0};
+
+  g_return_if_fail(self != NULL);
+  g_return_if_fail(backend != NULL);
+  g_return_if_fail(position != NULL);
+  g_return_if_fail(cr != NULL);
+
+  if (self->sgf_controller == NULL ||
+      !ggame_sgf_controller_get_current_node_move(self->sgf_controller, &move) ||
+      move.length < 2) {
+    return;
+  }
+
+  guint path_length = 0;
+  guint path[128] = {0};
+  if (!backend->square_grid_move_get_path(&move, &path_length, path, G_N_ELEMENTS(path)) || path_length < 2) {
+    return;
+  }
+
+  double cell_width = (double)width / cols;
+  double cell_height = (double)height / rows;
+  double arrow_size = fmin(cell_width, cell_height) * board_move_overlay_arrow_scale;
+
+  cairo_save(cr);
+  cairo_set_line_width(cr, board_move_overlay_stroke_width);
+  cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+  cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+  cairo_set_source_rgba(cr, 0.2, 0.85, 0.2, board_move_overlay_alpha);
+
+  for (guint i = 1; i < path_length; ++i) {
+    guint start_row_index = 0;
+    guint start_col_index = 0;
+    guint end_row_index = 0;
+    guint end_col_index = 0;
+
+    if (!backend->square_grid_index_coord(position, path[i - 1], &start_row_index, &start_col_index) ||
+        !backend->square_grid_index_coord(position, path[i], &end_row_index, &end_col_index)) {
+      continue;
+    }
+
+    double start_row = start_row_index;
+    double start_col = start_col_index;
+    double end_row = end_row_index;
+    double end_col = end_col_index;
+    board_move_overlay_transform_point_for_bottom_side(&start_row, &start_col, rows, cols, self->bottom_side);
+    board_move_overlay_transform_point_for_bottom_side(&end_row, &end_col, rows, cols, self->bottom_side);
+
+    double start_x = (start_col + 0.5) * cell_width;
+    double start_y = (start_row + 0.5) * cell_height;
+    double end_x = (end_col + 0.5) * cell_width;
+    double end_y = (end_row + 0.5) * cell_height;
+    board_move_overlay_draw_arrow(cr, start_x, start_y, end_x, end_y, arrow_size);
+  }
+
+  cairo_restore(cr);
+}
+#endif
+
+#if defined(GGAME_GAME_BOOP)
+static gboolean board_move_overlay_replay_position_for_node(BoardMoveOverlay *self,
+                                                            const SgfNode *node,
+                                                            gpointer position,
+                                                            GError **error) {
+  const GameBackend *backend = NULL;
+
+  g_return_val_if_fail(self != NULL, FALSE);
+  g_return_val_if_fail(node != NULL, FALSE);
+  g_return_val_if_fail(position != NULL, FALSE);
+  g_return_val_if_fail(GGAME_IS_MODEL(self->model), FALSE);
+
+  backend = ggame_model_peek_backend(self->model);
+  g_return_val_if_fail(backend != NULL, FALSE);
+  return ggame_sgf_controller_replay_node_into_position(node, backend, position, error);
+}
+
+void board_move_overlay_render_boop_overlay_info(cairo_t *cr,
+                                                 const BoopMoveOverlayInfo *overlay_info,
+                                                 guint rows,
+                                                 guint cols,
+                                                 gint width,
+                                                 gint height,
+                                                 guint bottom_side) {
+  g_return_if_fail(cr != NULL);
+  g_return_if_fail(overlay_info != NULL);
+  g_return_if_fail(rows > 0);
+  g_return_if_fail(cols > 0);
+  g_return_if_fail(width > 0);
+  g_return_if_fail(height > 0);
+
+  double cell_width = (double)width / cols;
+  double cell_height = (double)height / rows;
+  double arrow_size = fmin(cell_width, cell_height) * board_move_overlay_arrow_scale;
+  double circle_radius = fmin(cell_width, cell_height) * board_move_overlay_circle_radius_scale;
+  double cross_half_size = fmin(cell_width, cell_height) * board_move_overlay_cross_scale;
+
+  cairo_save(cr);
+  cairo_set_line_width(cr, board_move_overlay_stroke_width);
+  cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+  cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+  cairo_set_source_rgba(cr, 0.2, 0.85, 0.2, board_move_overlay_alpha);
+
+  guint placed_row_index = 0;
+  guint placed_col_index = 0;
+  if (boop_square_to_coord(overlay_info->placed_square, &placed_row_index, &placed_col_index)) {
+    double placed_row = placed_row_index;
+    double placed_col = placed_col_index;
+    board_move_overlay_transform_point_for_bottom_side(&placed_row, &placed_col, rows, cols, bottom_side);
+    board_move_overlay_draw_circle(cr,
+                                   (placed_col + 0.5) * cell_width,
+                                   (placed_row + 0.5) * cell_height,
+                                   circle_radius);
+  }
+
+  for (guint i = 0; i < overlay_info->arrow_count; ++i) {
+    const BoopMoveOverlayArrow *arrow = &overlay_info->arrows[i];
+    guint start_row_index = 0;
+    guint start_col_index = 0;
+
+    if (!boop_square_to_coord(arrow->from_square, &start_row_index, &start_col_index)) {
+      continue;
+    }
+
+    double start_row = start_row_index;
+    double start_col = start_col_index;
+    double end_row = start_row + arrow->row_delta;
+    double end_col = start_col + arrow->col_delta;
+    if (!arrow->leaves_board) {
+      guint end_row_index = 0;
+      guint end_col_index = 0;
+      if (!boop_square_to_coord(arrow->to_square, &end_row_index, &end_col_index)) {
+        continue;
+      }
+      end_row = end_row_index;
+      end_col = end_col_index;
+    }
+
+    board_move_overlay_transform_point_for_bottom_side(&start_row, &start_col, rows, cols, bottom_side);
+    board_move_overlay_transform_point_for_bottom_side(&end_row, &end_col, rows, cols, bottom_side);
+
+    board_move_overlay_draw_arrow(cr,
+                                  (start_col + 0.5) * cell_width,
+                                  (start_row + 0.5) * cell_height,
+                                  (end_col + 0.5) * cell_width,
+                                  (end_row + 0.5) * cell_height,
+                                  arrow_size);
+  }
+
+  cairo_set_source_rgba(cr, 0.95, 0.2, 0.2, board_move_overlay_alpha + 0.15);
+  for (guint i = 0; i < overlay_info->removed_square_count; ++i) {
+    guint row_index = 0;
+    guint col_index = 0;
+
+    if (!boop_square_to_coord(overlay_info->removed_squares[i], &row_index, &col_index)) {
+      continue;
+    }
+
+    double row = row_index;
+    double col = col_index;
+    board_move_overlay_transform_point_for_bottom_side(&row, &col, rows, cols, bottom_side);
+    board_move_overlay_draw_cross(cr,
+                                  (col + 0.5) * cell_width,
+                                  (row + 0.5) * cell_height,
+                                  cross_half_size);
+  }
+
+  cairo_restore(cr);
+}
+
+static void board_move_overlay_draw_boop_last_move(BoardMoveOverlay *self,
+                                                   const GameBackend *backend,
+                                                   cairo_t *cr,
+                                                   guint rows,
+                                                   guint cols,
+                                                   gint width,
+                                                   gint height) {
+  BoopMove move = {0};
+  BoopMoveOverlayInfo overlay_info = {0};
+  const SgfNode *current = NULL;
+  const SgfNode *parent = NULL;
+  const GameBackendVariant *variant = NULL;
+
+  g_return_if_fail(self != NULL);
+  g_return_if_fail(backend != NULL);
+  g_return_if_fail(cr != NULL);
+  g_return_if_fail(self->sgf_controller != NULL);
+  g_return_if_fail(GGAME_IS_MODEL(self->model));
+  g_return_if_fail(backend->position_size > 0);
+  g_return_if_fail(backend->position_init != NULL);
+  g_return_if_fail(backend->position_clear != NULL);
+
+  if (!ggame_sgf_controller_get_current_node_move(self->sgf_controller, &move)) {
+    return;
+  }
+
+  current = sgf_tree_get_current(ggame_sgf_controller_get_tree(self->sgf_controller));
+  if (current == NULL) {
+    return;
+  }
+
+  parent = sgf_node_get_parent(current);
+  if (parent == NULL) {
+    return;
+  }
+
+  variant = ggame_model_peek_variant(self->model);
+  g_autofree guint8 *before_position = g_malloc0(backend->position_size);
+  g_return_if_fail(before_position != NULL);
+  backend->position_init(before_position, variant);
+
+  g_autoptr(GError) replay_error = NULL;
+  if (!board_move_overlay_replay_position_for_node(self, parent, before_position, &replay_error)) {
+    g_debug("Failed to reconstruct boop parent position for overlay: %s",
+            replay_error != NULL ? replay_error->message : "unknown error");
+    backend->position_clear(before_position);
+    return;
+  }
+
+  if (!boop_move_describe_overlay((const BoopPosition *)before_position, &move, &overlay_info)) {
+    backend->position_clear(before_position);
+    return;
+  }
+
+  backend->position_clear(before_position);
+  board_move_overlay_render_boop_overlay_info(cr, &overlay_info, rows, cols, width, height, self->bottom_side);
+}
 #endif
 
 static void board_move_overlay_draw(GtkDrawingArea * /*area*/,
@@ -147,8 +410,6 @@ static void board_move_overlay_draw(GtkDrawingArea * /*area*/,
   g_return_if_fail(backend->position_outcome != NULL);
   g_return_if_fail(backend->square_grid_rows != NULL);
   g_return_if_fail(backend->square_grid_cols != NULL);
-  g_return_if_fail(backend->square_grid_index_coord != NULL);
-  g_return_if_fail(backend->square_grid_move_get_path != NULL);
 
   guint rows = backend->square_grid_rows(position);
   guint cols = backend->square_grid_cols(position);
@@ -162,49 +423,12 @@ static void board_move_overlay_draw(GtkDrawingArea * /*area*/,
                                                         : board_move_overlay_get_winner_banner_text(backend, outcome);
 
 #if defined(GGAME_GAME_CHECKERS)
-  CheckersMove move = {0};
-  if (self->sgf_controller != NULL &&
-      ggame_sgf_controller_get_current_node_move(self->sgf_controller, &move) &&
-      move.length >= 2) {
-    guint path_length = 0;
-    guint path[128] = {0};
-
-    if (backend->square_grid_move_get_path(&move, &path_length, path, G_N_ELEMENTS(path)) && path_length >= 2) {
-      double cell_width = (double) width / cols;
-      double cell_height = (double) height / rows;
-      double arrow_size = fmin(cell_width, cell_height) * board_move_overlay_arrow_scale;
-
-      cairo_save(cr);
-      cairo_set_line_width(cr, board_move_overlay_stroke_width);
-      cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
-      cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
-      cairo_set_source_rgba(cr, 0.2, 0.85, 0.2, board_move_overlay_alpha);
-
-      for (guint i = 1; i < path_length; ++i) {
-        guint start_row = 0;
-        guint start_col = 0;
-        guint end_row = 0;
-        guint end_col = 0;
-
-        if (!backend->square_grid_index_coord(position, path[i - 1], &start_row, &start_col) ||
-            !backend->square_grid_index_coord(position, path[i], &end_row, &end_col)) {
-          continue;
-        }
-
-        board_move_overlay_transform_for_bottom_side(&start_row, &start_col, rows, cols, self->bottom_side);
-        board_move_overlay_transform_for_bottom_side(&end_row, &end_col, rows, cols, self->bottom_side);
-
-        double start_x = ((double) start_col + 0.5) * cell_width;
-        double start_y = ((double) start_row + 0.5) * cell_height;
-        double end_x = ((double) end_col + 0.5) * cell_width;
-        double end_y = ((double) end_row + 0.5) * cell_height;
-
-        board_move_overlay_draw_arrow(cr, start_x, start_y, end_x, end_y, arrow_size);
-      }
-
-      cairo_restore(cr);
-    }
+  if (backend->square_grid_index_coord != NULL && backend->square_grid_move_get_path != NULL) {
+    board_move_overlay_draw_checkers_last_move(self, backend, position, cr, rows, cols, width, height);
   }
+#endif
+#if defined(GGAME_GAME_BOOP)
+  board_move_overlay_draw_boop_last_move(self, backend, cr, rows, cols, width, height);
 #endif
 
   if (winner_banner == NULL) {

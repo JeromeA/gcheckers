@@ -284,43 +284,69 @@ static gboolean boop_position_mask_is_choice(const BoopPromotionChoices *choices
   return FALSE;
 }
 
-static gboolean boop_position_resolve_placement(const BoopPosition *position,
-                                                guint side,
-                                                guint rank,
-                                                guint square,
-                                                BoopPosition *out_position) {
+static gboolean boop_move_overlay_append_arrow(BoopMoveOverlayInfo *info,
+                                               guint from_square,
+                                               guint to_square,
+                                               gint row_delta,
+                                               gint col_delta,
+                                               gboolean leaves_board) {
+  g_return_val_if_fail(info != NULL, FALSE);
+  g_return_val_if_fail(boop_square_valid(from_square), FALSE);
+  g_return_val_if_fail(leaves_board || boop_square_valid(to_square), FALSE);
+  g_return_val_if_fail(row_delta >= G_MININT8 && row_delta <= G_MAXINT8, FALSE);
+  g_return_val_if_fail(col_delta >= G_MININT8 && col_delta <= G_MAXINT8, FALSE);
+
+  if (info->arrow_count >= G_N_ELEMENTS(info->arrows)) {
+    g_debug("Too many boop overlay arrows");
+    return FALSE;
+  }
+
+  info->arrows[info->arrow_count] = (BoopMoveOverlayArrow){
+    .from_square = (guint8)from_square,
+    .to_square = leaves_board ? BOOP_INVALID_SQUARE : (guint8)to_square,
+    .row_delta = (gint8)row_delta,
+    .col_delta = (gint8)col_delta,
+    .leaves_board = leaves_board,
+  };
+  info->arrow_count++;
+  return TRUE;
+}
+
+static gboolean boop_move_overlay_append_removed_square(BoopMoveOverlayInfo *info, guint square) {
+  g_return_val_if_fail(info != NULL, FALSE);
+  g_return_val_if_fail(boop_square_valid(square), FALSE);
+
+  for (guint i = 0; i < info->removed_square_count; ++i) {
+    if (info->removed_squares[i] == square) {
+      return TRUE;
+    }
+  }
+
+  if (info->removed_square_count >= G_N_ELEMENTS(info->removed_squares)) {
+    g_debug("Too many boop overlay removed squares");
+    return FALSE;
+  }
+
+  info->removed_squares[info->removed_square_count] = (guint8) square;
+  info->removed_square_count++;
+  return TRUE;
+}
+
+static gboolean boop_position_apply_boop_effects(BoopPosition *position,
+                                                 guint placed_square,
+                                                 guint rank,
+                                                 BoopMoveOverlayInfo *overlay_info) {
   BoopPiece before[BOOP_SQUARE_COUNT];
 
   g_return_val_if_fail(position != NULL, FALSE);
-  g_return_val_if_fail(out_position != NULL, FALSE);
-  g_return_val_if_fail(boop_side_valid(side), FALSE);
+  g_return_val_if_fail(boop_square_valid(placed_square), FALSE);
   g_return_val_if_fail(boop_piece_rank_valid(rank), FALSE);
-  g_return_val_if_fail(boop_square_valid(square), FALSE);
-  g_return_val_if_fail(boop_piece_is_empty(position->board[square]), FALSE);
-  g_return_val_if_fail(boop_position_has_supply_for_rank(position, side, rank), FALSE);
 
-  *out_position = *position;
-  switch ((BoopPieceRank)rank) {
-    case BOOP_PIECE_RANK_KITTEN:
-      out_position->kittens_in_supply[side]--;
-      break;
-    case BOOP_PIECE_RANK_CAT:
-      out_position->cats_in_supply[side]--;
-      break;
-    case BOOP_PIECE_RANK_NONE:
-    default:
-      return FALSE;
-  }
-  out_position->board[square] = (BoopPiece){
-    .side = (guint8)side,
-    .rank = (guint8)rank,
-  };
-
-  memcpy(before, out_position->board, sizeof(before));
+  memcpy(before, position->board, sizeof(before));
 
   guint placed_row = 0;
   guint placed_col = 0;
-  if (!boop_square_to_coord(square, &placed_row, &placed_col)) {
+  if (!boop_square_to_coord(placed_square, &placed_row, &placed_col)) {
     return FALSE;
   }
 
@@ -349,8 +375,20 @@ static gboolean boop_position_resolve_placement(const BoopPosition *position,
       gint destination_row = adjacent_row + row_delta;
       gint destination_col = adjacent_col + col_delta;
       if (!boop_coord_to_square_signed(destination_row, destination_col, &destination_square)) {
-        out_position->board[adjacent_square] = boop_piece_empty();
-        boop_return_piece_to_supply(out_position, target);
+        position->board[adjacent_square] = boop_piece_empty();
+        boop_return_piece_to_supply(position, target);
+        if (overlay_info != NULL && !boop_move_overlay_append_removed_square(overlay_info, adjacent_square)) {
+          return FALSE;
+        }
+        if (overlay_info != NULL &&
+            !boop_move_overlay_append_arrow(overlay_info,
+                                            adjacent_square,
+                                            BOOP_INVALID_SQUARE,
+                                            row_delta,
+                                            col_delta,
+                                            TRUE)) {
+          return FALSE;
+        }
         continue;
       }
 
@@ -358,17 +396,62 @@ static gboolean boop_position_resolve_placement(const BoopPosition *position,
         continue;
       }
 
-      out_position->board[adjacent_square] = boop_piece_empty();
-      out_position->board[destination_square] = target;
+      position->board[adjacent_square] = boop_piece_empty();
+      position->board[destination_square] = target;
+      if (overlay_info != NULL &&
+          !boop_move_overlay_append_arrow(overlay_info,
+                                          adjacent_square,
+                                          destination_square,
+                                          row_delta,
+                                          col_delta,
+                                          FALSE)) {
+        return FALSE;
+      }
     }
   }
 
   return TRUE;
 }
 
-static void boop_position_apply_promotion_mask(BoopPosition *position, guint side, guint64 mask) {
-  g_return_if_fail(position != NULL);
-  g_return_if_fail(boop_side_valid(side));
+static gboolean boop_position_resolve_placement(const BoopPosition *position,
+                                                guint side,
+                                                guint rank,
+                                                guint square,
+                                                BoopPosition *out_position,
+                                                BoopMoveOverlayInfo *overlay_info) {
+  g_return_val_if_fail(position != NULL, FALSE);
+  g_return_val_if_fail(out_position != NULL, FALSE);
+  g_return_val_if_fail(boop_side_valid(side), FALSE);
+  g_return_val_if_fail(boop_piece_rank_valid(rank), FALSE);
+  g_return_val_if_fail(boop_square_valid(square), FALSE);
+  g_return_val_if_fail(boop_piece_is_empty(position->board[square]), FALSE);
+  g_return_val_if_fail(boop_position_has_supply_for_rank(position, side, rank), FALSE);
+
+  *out_position = *position;
+  switch ((BoopPieceRank)rank) {
+    case BOOP_PIECE_RANK_KITTEN:
+      out_position->kittens_in_supply[side]--;
+      break;
+    case BOOP_PIECE_RANK_CAT:
+      out_position->cats_in_supply[side]--;
+      break;
+    case BOOP_PIECE_RANK_NONE:
+    default:
+      return FALSE;
+  }
+  out_position->board[square] = (BoopPiece){
+    .side = (guint8)side,
+    .rank = (guint8)rank,
+  };
+  return boop_position_apply_boop_effects(out_position, square, rank, overlay_info);
+}
+
+static gboolean boop_position_apply_promotion_mask(BoopPosition *position,
+                                                   guint side,
+                                                   guint64 mask,
+                                                   BoopMoveOverlayInfo *overlay_info) {
+  g_return_val_if_fail(position != NULL, FALSE);
+  g_return_val_if_fail(boop_side_valid(side), FALSE);
 
   for (guint square = 0; square < BOOP_SQUARE_COUNT; ++square) {
     if ((mask & boop_square_mask(square)) == 0) {
@@ -386,7 +469,12 @@ static void boop_position_apply_promotion_mask(BoopPosition *position, guint sid
     }
     position->cats_in_supply[side]++;
     position->board[square] = boop_piece_empty();
+    if (overlay_info != NULL && !boop_move_overlay_append_removed_square(overlay_info, square)) {
+      return FALSE;
+    }
   }
+
+  return TRUE;
 }
 
 static gboolean boop_move_array_append(GArray *moves, BoopMove move) {
@@ -407,7 +495,7 @@ static gboolean boop_position_append_resolved_moves_for_placement(const BoopPosi
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(moves != NULL, FALSE);
 
-  if (!boop_position_resolve_placement(position, side, rank, square, &after_placement) ||
+  if (!boop_position_resolve_placement(position, side, rank, square, &after_placement, NULL) ||
       !boop_position_collect_turn_choices(&after_placement, side, &choices)) {
     return FALSE;
   }
@@ -726,7 +814,7 @@ gboolean boop_position_apply_move(BoopPosition *position, const BoopMove *move) 
   g_return_val_if_fail(boop_piece_rank_valid(move->rank), FALSE);
 
   side = position->turn;
-  if (!boop_position_resolve_placement(position, side, move->rank, move->square, &after_placement) ||
+  if (!boop_position_resolve_placement(position, side, move->rank, move->square, &after_placement, NULL) ||
       !boop_position_collect_turn_choices(&after_placement, side, &choices)) {
     return FALSE;
   }
@@ -743,7 +831,9 @@ gboolean boop_position_apply_move(BoopPosition *position, const BoopMove *move) 
     return FALSE;
   }
 
-  boop_position_apply_promotion_mask(&after_placement, side, move->promotion_mask);
+  if (!boop_position_apply_promotion_mask(&after_placement, side, move->promotion_mask, NULL)) {
+    return FALSE;
+  }
   if (boop_position_has_cat_line(&after_placement, side) || after_placement.promoted_count[side] >= BOOP_SUPPLY_COUNT) {
     after_placement.outcome = side == 0 ? GAME_BACKEND_OUTCOME_SIDE_0_WIN : GAME_BACKEND_OUTCOME_SIDE_1_WIN;
   } else {
@@ -1005,6 +1095,47 @@ gboolean boop_move_get_path(const BoopMove *move, guint *out_length, guint *out_
   return TRUE;
 }
 
+gboolean boop_move_describe_overlay(const BoopPosition *position,
+                                    const BoopMove *move,
+                                    BoopMoveOverlayInfo *out_info) {
+  BoopPosition after_placement = {0};
+  BoopPromotionChoices choices = {0};
+
+  g_return_val_if_fail(position != NULL, FALSE);
+  g_return_val_if_fail(move != NULL, FALSE);
+  g_return_val_if_fail(out_info != NULL, FALSE);
+  g_return_val_if_fail(position->outcome == GAME_BACKEND_OUTCOME_ONGOING, FALSE);
+  g_return_val_if_fail(boop_side_valid(position->turn), FALSE);
+  g_return_val_if_fail(boop_square_valid(move->square), FALSE);
+  g_return_val_if_fail(boop_piece_rank_valid(move->rank), FALSE);
+
+  memset(out_info, 0, sizeof(*out_info));
+  out_info->placed_square = move->square;
+  if (!boop_position_resolve_placement(position,
+                                       position->turn,
+                                       move->rank,
+                                       move->square,
+                                       &after_placement,
+                                       out_info)) {
+    return FALSE;
+  }
+  if (!boop_position_collect_turn_choices(&after_placement, position->turn, &choices)) {
+    return FALSE;
+  }
+  if (choices.count == 0) {
+    return move->promotion_mask == 0;
+  }
+  if (choices.mandatory) {
+    if (!boop_position_mask_is_choice(&choices, move->promotion_mask)) {
+      return FALSE;
+    }
+  } else if (move->promotion_mask != 0 && !boop_position_mask_is_choice(&choices, move->promotion_mask)) {
+    return FALSE;
+  }
+
+  return boop_position_apply_promotion_mask(&after_placement, position->turn, move->promotion_mask, out_info);
+}
+
 gboolean boop_move_builder_init(const BoopPosition *position, GameBackendMoveBuilder *out_builder) {
   BoopMoveBuilderState *state = NULL;
 
@@ -1134,7 +1265,8 @@ gboolean boop_move_builder_step(GameBackendMoveBuilder *builder, const BoopMove 
                                        side,
                                        candidate->rank,
                                        candidate->square,
-                                       &state->after_placement) ||
+                                       &state->after_placement,
+                                       NULL) ||
       !boop_position_collect_turn_choices(&state->after_placement, side, &choices)) {
     return FALSE;
   }

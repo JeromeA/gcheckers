@@ -24,6 +24,10 @@ void ggame_sgf_controller_set_model(GGameSgfController *self, GCheckersModel *mo
 void ggame_sgf_controller_set_game_model(GGameSgfController *self, GGameModel *model);
 void ggame_sgf_controller_new_game(GGameSgfController *self);
 gboolean ggame_sgf_controller_replay_node_into_game(const SgfNode *node, Game *game, GError **error);
+gboolean ggame_sgf_controller_replay_node_into_position(const SgfNode *node,
+                                                        const GameBackend *backend,
+                                                        gpointer position,
+                                                        GError **error);
 gboolean ggame_sgf_controller_apply_move(GGameSgfController *self, gconstpointer move);
 gboolean ggame_sgf_controller_step_ai_move(GGameSgfController *self, guint depth, gpointer out_move);
 gboolean ggame_sgf_controller_rewind_to_start(GGameSgfController *self);

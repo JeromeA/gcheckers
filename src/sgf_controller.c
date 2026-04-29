@@ -484,10 +484,10 @@ gboolean ggame_sgf_controller_replay_node_into_game(const SgfNode *node, Game *g
   return TRUE;
 }
 
-static gboolean ggame_sgf_controller_replay_node_into_position(const SgfNode *node,
-                                                               const GameBackend *backend,
-                                                               gpointer position,
-                                                               GError **error) {
+gboolean ggame_sgf_controller_replay_node_into_position(const SgfNode *node,
+                                                        const GameBackend *backend,
+                                                        gpointer position,
+                                                        GError **error) {
   g_return_val_if_fail(node != NULL, FALSE);
   g_return_val_if_fail(backend != NULL, FALSE);
   g_return_val_if_fail(position != NULL, FALSE);

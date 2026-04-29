@@ -209,3 +209,15 @@ below. The always-visible but unsupported analysis drawer also wasted width that
 The fix moves shared-shell layout defaults into `GGameAppProfile`. Boop now starts with a wider `760px` board pane and
 the analysis drawer hidden by default, while checkers keeps the previous defaults. A boop window regression test now
 checks that the wider board pane request and hidden analysis drawer are both applied at startup.
+
+## Boop removed-piece markers could disappear underneath off-board arrows
+
+When a booped kitten or cat left the board, the last-move overlay should still make the removal square obvious.
+
+The boop overlay painted red removal crosses before the green boop arrows. For off-board boops, the arrow starts in the
+same square that is being marked as removed, so the later arrow stroke could cover the cross and make the removal
+marker look absent.
+
+The fix factors boop overlay painting into a reusable helper and paints removal crosses after arrows so the removed
+square remains visible. A cairo-level regression test now checks that an off-board removal still leaves a red marker on
+top of the arrow.

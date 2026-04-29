@@ -469,7 +469,8 @@ promotion selection, deterministic notation such as `K@a1+a1,b1,c1`, symbol-only
 terminal scores, and position hashing. When both kittens and cats are available, the placement builder exposes both
 ranks for each empty square and leaves the active rank choice to the UI candidate-preference hook. Promotion-stage
 selection paths contain only the promotion squares, so the just-placed piece is highlighted only when it is actually
-one of the candidate promotion squares.
+one of the candidate promotion squares. The boop engine also exposes last-move overlay metadata so the GTK board can
+circle the placed piece and draw arrows for every booped piece, including off-board boops that return to supply.
 Collaborates with: `src/games/boop/boop_controls.c`, `GGameModel`, `BoardView`, `GGameWindow`, `tests/test_boop_game.c`,
 `tests/test_boop_backend.c`, and the generic backend/model/SGF tests.
 
@@ -565,8 +566,12 @@ Collaborates with: `BoardGrid` and `PiecePalette`.
 
 ### Last move overlay (`src/board_move_overlay.c`, `src/board_move_overlay.h`)
 Module: move overlay renderer.
-Role: draw the selected SGF node's move arrow via cairo on top of the shared square-grid board and, when the game is
-over, a centered backend-provided winner banner across the board. Ongoing positions never draw a banner, even if a
+Role: draw the selected SGF node's last-move overlay via cairo on top of the shared square-grid board and, when the
+game is over, a centered backend-provided winner banner across the board. Checkers draws its move path as translucent
+green arrows. Boop circles the placed kitten/cat in the same translucent green, draws arrows for every piece that was
+booped, and marks each removed kitten/cat with a red cross, reconstructing the pre-move position from the SGF parent
+node so the overlay matches the actual boop resolution. Removed-piece crosses are painted above boop arrows so
+off-board returns to supply still leave a visible removal mark. Ongoing positions never draw a banner, even if a
 backend accidentally returns non-NULL text for `GAME_BACKEND_OUTCOME_ONGOING`.
 Collaborates with: `BoardView`, `GGameModel` for backend-driven board state, and `GGameSgfController` for the
 selected-node move.

@@ -36,6 +36,73 @@ static gboolean test_board_view_count_square_click(guint /*index*/, guint /*butt
   return TRUE;
 }
 
+#if defined(GGAME_GAME_BOOP)
+static void test_board_view_surface_read_pixel(cairo_surface_t *surface,
+                                               int x,
+                                               int y,
+                                               guint8 *out_red,
+                                               guint8 *out_green,
+                                               guint8 *out_blue,
+                                               guint8 *out_alpha) {
+  g_return_if_fail(surface != NULL);
+  g_return_if_fail(out_red != NULL);
+  g_return_if_fail(out_green != NULL);
+  g_return_if_fail(out_blue != NULL);
+  g_return_if_fail(out_alpha != NULL);
+
+  int width = cairo_image_surface_get_width(surface);
+  int height = cairo_image_surface_get_height(surface);
+  g_return_if_fail(x >= 0 && x < width);
+  g_return_if_fail(y >= 0 && y < height);
+
+  cairo_surface_flush(surface);
+  unsigned char *data = cairo_image_surface_get_data(surface);
+  int stride = cairo_image_surface_get_stride(surface);
+  unsigned char *pixel = data + y * stride + x * 4;
+  *out_blue = pixel[0];
+  *out_green = pixel[1];
+  *out_red = pixel[2];
+  *out_alpha = pixel[3];
+}
+
+static void test_board_move_overlay_removed_markers_paint_above_off_board_arrows(void) {
+  cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 120, 120);
+  cairo_t *cr = cairo_create(surface);
+  BoopMoveOverlayInfo overlay_info = {
+    .placed_square = BOOP_INVALID_SQUARE,
+    .arrow_count = 1,
+    .arrows =
+        {
+          {
+            .from_square = 0,
+            .to_square = BOOP_INVALID_SQUARE,
+            .row_delta = -1,
+            .col_delta = -1,
+            .leaves_board = TRUE,
+          },
+        },
+    .removed_square_count = 1,
+    .removed_squares = {0},
+  };
+
+  cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.0);
+  cairo_paint(cr);
+  board_move_overlay_render_boop_overlay_info(cr, &overlay_info, BOOP_BOARD_SIZE, BOOP_BOARD_SIZE, 120, 120, 0);
+  cairo_destroy(cr);
+
+  guint8 red = 0;
+  guint8 green = 0;
+  guint8 blue = 0;
+  guint8 alpha = 0;
+  test_board_view_surface_read_pixel(surface, 10, 10, &red, &green, &blue, &alpha);
+  g_assert_cmpuint(alpha, >, 0);
+  g_assert_cmpuint(red, >, green);
+  g_assert_cmpuint(red, >, blue);
+
+  cairo_surface_destroy(surface);
+}
+#endif
+
 static void test_board_move_overlay_winner_banner_text(void) {
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
 
@@ -104,15 +171,15 @@ static void test_board_view_highlights_black_turn_moves(void) {
         continue;
       }
 
-    GtkWidget *button = g_hash_table_lookup(buttons_by_index, GINT_TO_POINTER(idx));
-    g_assert_nonnull(button);
+      GtkWidget *button = g_hash_table_lookup(buttons_by_index, GINT_TO_POINTER(idx));
+      g_assert_nonnull(button);
 
-    gboolean has_halo = gtk_widget_has_css_class(button, "board-halo");
-    if (expected_starts[idx]) {
-      g_assert_true(has_halo);
-    } else {
-      g_assert_false(has_halo);
-    }
+      gboolean has_halo = gtk_widget_has_css_class(button, "board-halo");
+      if (expected_starts[idx]) {
+        g_assert_true(has_halo);
+      } else {
+        g_assert_false(has_halo);
+      }
     }
   }
 
@@ -217,6 +284,10 @@ int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   if (!gtk_init_check()) {
     g_test_add_func("/board-move-overlay/winner-banner-text", test_board_move_overlay_winner_banner_text);
+#if defined(GGAME_GAME_BOOP)
+    g_test_add_func("/board-move-overlay/removed-markers-paint-above-off-board-arrows",
+                    test_board_move_overlay_removed_markers_paint_above_off_board_arrows);
+#endif
     g_test_add_func("/board-view/highlights-black-turn-moves", test_board_view_skip);
     g_test_add_func("/board-view/updates-on-model-state-changed", test_board_view_skip);
     g_test_add_func("/board-view/repeated-primary-clicks-are-processed", test_board_view_skip);
@@ -224,6 +295,10 @@ int main(int argc, char **argv) {
   }
 
   g_test_add_func("/board-move-overlay/winner-banner-text", test_board_move_overlay_winner_banner_text);
+#if defined(GGAME_GAME_BOOP)
+  g_test_add_func("/board-move-overlay/removed-markers-paint-above-off-board-arrows",
+                  test_board_move_overlay_removed_markers_paint_above_off_board_arrows);
+#endif
   g_test_add_func("/board-view/highlights-black-turn-moves",
                   test_board_view_highlights_black_turn_moves);
   g_test_add_func("/board-view/updates-on-model-state-changed",

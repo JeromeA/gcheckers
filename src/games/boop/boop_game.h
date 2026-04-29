@@ -5,6 +5,22 @@
 
 #include <glib.h>
 
+typedef struct {
+  guint8 from_square;
+  guint8 to_square;
+  gint8 row_delta;
+  gint8 col_delta;
+  gboolean leaves_board;
+} BoopMoveOverlayArrow;
+
+typedef struct {
+  guint8 placed_square;
+  guint8 arrow_count;
+  BoopMoveOverlayArrow arrows[8];
+  guint8 removed_square_count;
+  guint8 removed_squares[8];
+} BoopMoveOverlayInfo;
+
 void boop_position_init(BoopPosition *position);
 void boop_position_clear(BoopPosition *position);
 void boop_position_copy(BoopPosition *dest, const BoopPosition *src);
@@ -24,6 +40,9 @@ gboolean boop_move_parse(const char *notation, BoopMove *out_move);
 gboolean boop_square_to_coord(guint square, guint *out_row, guint *out_col);
 gboolean boop_coord_to_square(guint row, guint col, guint *out_square);
 gboolean boop_move_get_path(const BoopMove *move, guint *out_length, guint *out_indices, gsize max_indices);
+gboolean boop_move_describe_overlay(const BoopPosition *position,
+                                    const BoopMove *move,
+                                    BoopMoveOverlayInfo *out_info);
 
 gboolean boop_move_builder_init(const BoopPosition *position, GameBackendMoveBuilder *out_builder);
 void boop_move_builder_clear(GameBackendMoveBuilder *builder);

@@ -222,6 +222,72 @@ static void test_builder_selects_promotion_squares(void) {
   boop_move_builder_clear(&builder);
 }
 
+static void test_overlay_describes_on_board_boop(void) {
+  BoopPosition position = {0};
+  BoopMove move = {
+    .square = (guint8)square_at(2, 2),
+    .rank = BOOP_PIECE_RANK_KITTEN,
+  };
+  BoopMoveOverlayInfo overlay = {0};
+
+  boop_position_init(&position);
+  position.cats_in_supply[1] = 1;
+  setup_piece(&position, 1, BOOP_PIECE_RANK_KITTEN, 1, 2);
+  setup_piece(&position, 1, BOOP_PIECE_RANK_CAT, 2, 3);
+
+  assert(boop_move_describe_overlay(&position, &move, &overlay));
+  assert(overlay.placed_square == square_at(2, 2));
+  assert(overlay.arrow_count == 1);
+  assert(overlay.arrows[0].from_square == square_at(1, 2));
+  assert(overlay.arrows[0].to_square == square_at(0, 2));
+  assert(overlay.arrows[0].row_delta == -1);
+  assert(overlay.arrows[0].col_delta == 0);
+  assert(!overlay.arrows[0].leaves_board);
+}
+
+static void test_overlay_describes_off_board_boop(void) {
+  BoopPosition position = {0};
+  BoopMove move = {
+    .square = (guint8)square_at(1, 1),
+    .rank = BOOP_PIECE_RANK_KITTEN,
+  };
+  BoopMoveOverlayInfo overlay = {0};
+
+  boop_position_init(&position);
+  setup_piece(&position, 1, BOOP_PIECE_RANK_KITTEN, 0, 0);
+
+  assert(boop_move_describe_overlay(&position, &move, &overlay));
+  assert(overlay.placed_square == square_at(1, 1));
+  assert(overlay.arrow_count == 1);
+  assert(overlay.arrows[0].from_square == square_at(0, 0));
+  assert(overlay.arrows[0].to_square == BOOP_INVALID_SQUARE);
+  assert(overlay.arrows[0].row_delta == -1);
+  assert(overlay.arrows[0].col_delta == -1);
+  assert(overlay.arrows[0].leaves_board);
+  assert(overlay.removed_square_count == 1);
+  assert(overlay.removed_squares[0] == square_at(0, 0));
+}
+
+static void test_overlay_describes_promoted_kittens_as_removed(void) {
+  BoopPosition position = {0};
+  BoopMove move = {
+    .square = (guint8) square_at(0, 0),
+    .rank = BOOP_PIECE_RANK_KITTEN,
+    .promotion_mask = square_mask(0, 0) | square_mask(0, 1) | square_mask(0, 2),
+  };
+  BoopMoveOverlayInfo overlay = {0};
+
+  boop_position_init(&position);
+  setup_piece(&position, 0, BOOP_PIECE_RANK_KITTEN, 0, 1);
+  setup_piece(&position, 0, BOOP_PIECE_RANK_KITTEN, 0, 2);
+
+  assert(boop_move_describe_overlay(&position, &move, &overlay));
+  assert(overlay.removed_square_count == 3);
+  assert(overlay.removed_squares[0] == square_at(0, 0));
+  assert(overlay.removed_squares[1] == square_at(0, 1));
+  assert(overlay.removed_squares[2] == square_at(0, 2));
+}
+
 int main(void) {
   test_initial_move_list_and_notation();
   test_kitten_boops_kittens_not_cats();
@@ -231,6 +297,9 @@ int main(void) {
   test_graduation_can_promote_one_kitten();
   test_three_cats_win();
   test_builder_selects_promotion_squares();
+  test_overlay_describes_on_board_boop();
+  test_overlay_describes_off_board_boop();
+  test_overlay_describes_promoted_kittens_as_removed();
 
   return 0;
 }
