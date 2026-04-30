@@ -89,6 +89,12 @@ static SgfColor ggame_sgf_controller_color_from_side(guint side) {
   }
 }
 
+static gboolean ggame_sgf_controller_backend_uses_checkers_game_state(const GameBackend *backend) {
+  g_return_val_if_fail(backend != NULL, FALSE);
+
+  return g_strcmp0(backend->id, "checkers") == 0;
+}
+
 static void ggame_sgf_controller_disconnect_model(GGameSgfController *self) {
   g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self));
 
@@ -494,6 +500,10 @@ gboolean ggame_sgf_controller_replay_node_into_position(const SgfNode *node,
   g_return_val_if_fail(backend->move_size > 0, FALSE);
   g_return_val_if_fail(backend->position_turn != NULL, FALSE);
   g_return_val_if_fail(backend->apply_move != NULL, FALSE);
+
+  if (ggame_sgf_controller_backend_uses_checkers_game_state(backend)) {
+    return ggame_sgf_controller_replay_node_into_game(node, position, error);
+  }
 
   g_autoptr(GPtrArray) path = ggame_sgf_controller_build_node_path(node);
   if (path == NULL) {

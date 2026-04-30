@@ -3,15 +3,14 @@
 #include "game_model.h"
 #include "active_game_backend.h"
 #include "board_view.h"
-#if defined(GGAME_GAME_BOOP)
 #include "games/boop/boop_game.h"
 #include "games/boop/boop_types.h"
-#endif
 #include "games/checkers/checkers_model.h"
 #include "games/checkers/rulesets.h"
 #include "sgf_controller.h"
 #include "sgf_io.h"
 #include "sgf_move_props.h"
+#include "test_profile_utils.h"
 
 #include <glib/gstdio.h>
 #include <string.h>
@@ -693,7 +692,55 @@ static void test_ggame_sgf_controller_replay_node_into_game_applies_setup_root(v
   game_destroy(&game);
 }
 
-#if defined(GGAME_GAME_BOOP)
+static void test_ggame_sgf_controller_replay_node_into_position_applies_checkers_setup_root(void) {
+  const GameBackend *backend = NULL;
+  const GameBackendVariant *variant = NULL;
+  g_autoptr(SgfTree) tree = NULL;
+  SgfNode *root = NULL;
+  Game game = {0};
+
+  if (!ggame_test_require_profile_kind(GGAME_APP_KIND_CHECKERS)) {
+    return;
+  }
+
+  backend = GGAME_ACTIVE_GAME_BACKEND;
+  g_assert_nonnull(backend);
+  g_assert_cmpstr(backend->id, ==, "checkers");
+  g_assert_nonnull(backend->variant_by_short_name);
+  g_assert_nonnull(backend->position_init);
+  g_assert_nonnull(backend->position_clear);
+
+  variant = backend->variant_by_short_name("american");
+  g_assert_nonnull(variant);
+
+  tree = sgf_tree_new();
+  g_assert_nonnull(tree);
+
+  root = (SgfNode *)sgf_tree_get_root(tree);
+  g_assert_nonnull(root);
+  g_assert_true(sgf_node_add_property(root, "AE", "1:32"));
+  g_assert_true(sgf_node_add_property(root, "AW", "1"));
+  g_assert_true(sgf_node_add_property(root, "AB", "2"));
+  g_assert_true(sgf_node_add_property(root, "PL", "B"));
+
+  backend->position_init(&game, variant);
+
+  g_autoptr(GError) replay_error = NULL;
+  g_assert_true(ggame_sgf_controller_replay_node_into_position((const SgfNode *)root,
+                                                               backend,
+                                                               &game,
+                                                               &replay_error));
+  g_assert_no_error(replay_error);
+
+  g_assert_cmpuint(game.state.turn, ==, CHECKERS_COLOR_BLACK);
+  g_assert_cmpint(board_get(&game.state.board, 0), ==, CHECKERS_PIECE_WHITE_MAN);
+  g_assert_cmpint(board_get(&game.state.board, 1), ==, CHECKERS_PIECE_BLACK_MAN);
+  g_assert_cmpint(board_get(&game.state.board, 2), ==, CHECKERS_PIECE_EMPTY);
+  g_assert_cmpint(board_get(&game.state.board, 31), ==, CHECKERS_PIECE_EMPTY);
+
+  backend->position_clear(&game);
+}
+
 static gboolean boop_moves_match(const BoopMove *left, const BoopMove *right) {
   g_return_val_if_fail(left != NULL, FALSE);
   g_return_val_if_fail(right != NULL, FALSE);
@@ -1045,51 +1092,16 @@ static void test_ggame_sgf_controller_boop_load_file_without_ru(void) {
   g_clear_object(&model);
   g_clear_object(&board_view);
 }
-#endif
 
 int main(int argc, char **argv) {
+  ggame_test_init_profile(&argc, &argv, "checkers");
   g_test_init(&argc, &argv, NULL);
-#if defined(GGAME_GAME_BOOP)
-  if (!gtk_init_check()) {
-    g_test_add_func("/sgf-controller/appends-move-property", test_ggame_sgf_controller_skip);
-    g_test_add_func("/sgf-controller/replay-branching", test_ggame_sgf_controller_skip);
-    g_test_add_func("/sgf-controller/new-game", test_ggame_sgf_controller_skip);
-    g_test_add_func("/sgf-controller/step-ai-move", test_ggame_sgf_controller_skip);
-    g_test_add_func("/sgf-controller/navigation-step-and-rewind", test_ggame_sgf_controller_skip);
-    g_test_add_func("/sgf-controller/current-node-move", test_ggame_sgf_controller_skip);
-    g_test_add_func("/sgf-controller/navigation-forward-to-branch-and-end", test_ggame_sgf_controller_skip);
-    g_test_add_func("/sgf-controller/select-node-emits-node-changed", test_ggame_sgf_controller_skip);
-    g_test_add_func("/sgf-controller/load-file-without-ru", test_ggame_sgf_controller_skip);
-    g_test_add_func("/sgf-controller/load-applies-setup-properties", test_ggame_sgf_controller_skip);
-    g_test_add_func("/sgf-controller/load-file-requires-ru", test_ggame_sgf_controller_skip);
-    g_test_add_func("/sgf-controller/replay-node-into-game-applies-setup-root", test_ggame_sgf_controller_skip);
-    g_test_add_func("/sgf-controller/save-position-file", test_ggame_sgf_controller_skip);
-    g_test_add_func("/sgf-controller/load-file-applies-ruleset-from-ru", test_ggame_sgf_controller_skip);
-    return g_test_run();
-  }
+  g_test_add_func("/sgf-controller/replay-node-into-position-applies-checkers-setup-root",
+                  test_ggame_sgf_controller_replay_node_into_position_applies_checkers_setup_root);
 
-  g_test_add_func("/sgf-controller/appends-move-property",
-                  test_ggame_sgf_controller_boop_appends_move_property);
-  g_test_add_func("/sgf-controller/replay-branching", test_ggame_sgf_controller_boop_replay_branching);
-  g_test_add_func("/sgf-controller/new-game", test_ggame_sgf_controller_boop_new_game_clears_tree);
-  g_test_add_func("/sgf-controller/step-ai-move", test_ggame_sgf_controller_boop_step_ai_move);
-  g_test_add_func("/sgf-controller/navigation-step-and-rewind",
-                  test_ggame_sgf_controller_boop_navigation_step_and_rewind);
-  g_test_add_func("/sgf-controller/current-node-move",
-                  test_ggame_sgf_controller_boop_current_node_move_accessor);
-  g_test_add_func("/sgf-controller/navigation-forward-to-branch-and-end",
-                  test_ggame_sgf_controller_boop_navigation_forward_to_branch_and_end);
-  g_test_add_func("/sgf-controller/select-node-emits-node-changed",
-                  test_ggame_sgf_controller_boop_select_node_emits_node_changed);
-  g_test_add_func("/sgf-controller/load-file-without-ru",
-                  test_ggame_sgf_controller_boop_load_file_without_ru);
-  g_test_add_func("/sgf-controller/load-applies-setup-properties", test_ggame_sgf_controller_skip);
-  g_test_add_func("/sgf-controller/load-file-requires-ru", test_ggame_sgf_controller_skip);
-  g_test_add_func("/sgf-controller/replay-node-into-game-applies-setup-root", test_ggame_sgf_controller_skip);
-  g_test_add_func("/sgf-controller/save-position-file", test_ggame_sgf_controller_skip);
-  g_test_add_func("/sgf-controller/load-file-applies-ruleset-from-ru", test_ggame_sgf_controller_skip);
-  return g_test_run();
-#endif
+  const GGameAppProfile *profile = ggame_active_app_profile();
+  g_assert_nonnull(profile);
+
   if (!gtk_init_check()) {
     g_test_add_func("/sgf-controller/appends-move-property", test_ggame_sgf_controller_skip);
     g_test_add_func("/sgf-controller/replay-branching", test_ggame_sgf_controller_skip);
@@ -1107,27 +1119,71 @@ int main(int argc, char **argv) {
     return g_test_run();
   }
 
-  g_test_add_func("/sgf-controller/appends-move-property", test_ggame_sgf_controller_appends_move_property);
-  g_test_add_func("/sgf-controller/replay-branching", test_ggame_sgf_controller_replay_branching);
-  g_test_add_func("/sgf-controller/new-game", test_ggame_sgf_controller_new_game_clears_tree);
-  g_test_add_func("/sgf-controller/new-game-no-manual-request",
-                  test_ggame_sgf_controller_new_game_does_not_request_manual_mode);
-  g_test_add_func("/sgf-controller/step-ai-move", test_ggame_sgf_controller_step_ai_move);
-  g_test_add_func("/sgf-controller/navigation-step-and-rewind",
-                  test_ggame_sgf_controller_navigation_step_and_rewind);
-  g_test_add_func("/sgf-controller/current-node-move",
-                  test_ggame_sgf_controller_current_node_move_accessor);
-  g_test_add_func("/sgf-controller/navigation-forward-to-branch-and-end",
-                  test_ggame_sgf_controller_navigation_forward_to_branch_and_end);
-  g_test_add_func("/sgf-controller/select-node-emits-node-changed",
-                  test_ggame_sgf_controller_select_node_emits_node_changed);
-  g_test_add_func("/sgf-controller/load-applies-setup-properties",
-                  test_ggame_sgf_controller_load_applies_setup_properties);
-  g_test_add_func("/sgf-controller/load-file-requires-ru", test_ggame_sgf_controller_load_file_requires_ru);
-  g_test_add_func("/sgf-controller/replay-node-into-game-applies-setup-root",
-                  test_ggame_sgf_controller_replay_node_into_game_applies_setup_root);
-  g_test_add_func("/sgf-controller/save-position-file", test_ggame_sgf_controller_save_position_file);
-  g_test_add_func("/sgf-controller/load-file-applies-ruleset-from-ru",
-                  test_ggame_sgf_controller_load_file_applies_ruleset_from_ru);
+  switch (profile->kind) {
+    case GGAME_APP_KIND_BOOP:
+      g_test_add_func("/sgf-controller/appends-move-property",
+                      test_ggame_sgf_controller_boop_appends_move_property);
+      g_test_add_func("/sgf-controller/replay-branching", test_ggame_sgf_controller_boop_replay_branching);
+      g_test_add_func("/sgf-controller/new-game", test_ggame_sgf_controller_boop_new_game_clears_tree);
+      g_test_add_func("/sgf-controller/step-ai-move", test_ggame_sgf_controller_boop_step_ai_move);
+      g_test_add_func("/sgf-controller/navigation-step-and-rewind",
+                      test_ggame_sgf_controller_boop_navigation_step_and_rewind);
+      g_test_add_func("/sgf-controller/current-node-move",
+                      test_ggame_sgf_controller_boop_current_node_move_accessor);
+      g_test_add_func("/sgf-controller/navigation-forward-to-branch-and-end",
+                      test_ggame_sgf_controller_boop_navigation_forward_to_branch_and_end);
+      g_test_add_func("/sgf-controller/select-node-emits-node-changed",
+                      test_ggame_sgf_controller_boop_select_node_emits_node_changed);
+      g_test_add_func("/sgf-controller/load-file-without-ru",
+                      test_ggame_sgf_controller_boop_load_file_without_ru);
+      g_test_add_func("/sgf-controller/load-applies-setup-properties", test_ggame_sgf_controller_skip);
+      g_test_add_func("/sgf-controller/load-file-requires-ru", test_ggame_sgf_controller_skip);
+      g_test_add_func("/sgf-controller/replay-node-into-game-applies-setup-root", test_ggame_sgf_controller_skip);
+      g_test_add_func("/sgf-controller/save-position-file", test_ggame_sgf_controller_skip);
+      g_test_add_func("/sgf-controller/load-file-applies-ruleset-from-ru", test_ggame_sgf_controller_skip);
+      break;
+    case GGAME_APP_KIND_CHECKERS:
+      g_test_add_func("/sgf-controller/appends-move-property", test_ggame_sgf_controller_appends_move_property);
+      g_test_add_func("/sgf-controller/replay-branching", test_ggame_sgf_controller_replay_branching);
+      g_test_add_func("/sgf-controller/new-game", test_ggame_sgf_controller_new_game_clears_tree);
+      g_test_add_func("/sgf-controller/new-game-no-manual-request",
+                      test_ggame_sgf_controller_new_game_does_not_request_manual_mode);
+      g_test_add_func("/sgf-controller/step-ai-move", test_ggame_sgf_controller_step_ai_move);
+      g_test_add_func("/sgf-controller/navigation-step-and-rewind",
+                      test_ggame_sgf_controller_navigation_step_and_rewind);
+      g_test_add_func("/sgf-controller/current-node-move",
+                      test_ggame_sgf_controller_current_node_move_accessor);
+      g_test_add_func("/sgf-controller/navigation-forward-to-branch-and-end",
+                      test_ggame_sgf_controller_navigation_forward_to_branch_and_end);
+      g_test_add_func("/sgf-controller/select-node-emits-node-changed",
+                      test_ggame_sgf_controller_select_node_emits_node_changed);
+      g_test_add_func("/sgf-controller/load-applies-setup-properties",
+                      test_ggame_sgf_controller_load_applies_setup_properties);
+      g_test_add_func("/sgf-controller/load-file-requires-ru", test_ggame_sgf_controller_load_file_requires_ru);
+      g_test_add_func("/sgf-controller/replay-node-into-game-applies-setup-root",
+                      test_ggame_sgf_controller_replay_node_into_game_applies_setup_root);
+      g_test_add_func("/sgf-controller/save-position-file", test_ggame_sgf_controller_save_position_file);
+      g_test_add_func("/sgf-controller/load-file-applies-ruleset-from-ru",
+                      test_ggame_sgf_controller_load_file_applies_ruleset_from_ru);
+      break;
+    case GGAME_APP_KIND_HOMEWORLDS:
+      g_test_add_func("/sgf-controller/appends-move-property", test_ggame_sgf_controller_skip);
+      g_test_add_func("/sgf-controller/replay-branching", test_ggame_sgf_controller_skip);
+      g_test_add_func("/sgf-controller/new-game", test_ggame_sgf_controller_skip);
+      g_test_add_func("/sgf-controller/step-ai-move", test_ggame_sgf_controller_skip);
+      g_test_add_func("/sgf-controller/navigation-step-and-rewind", test_ggame_sgf_controller_skip);
+      g_test_add_func("/sgf-controller/current-node-move", test_ggame_sgf_controller_skip);
+      g_test_add_func("/sgf-controller/navigation-forward-to-branch-and-end", test_ggame_sgf_controller_skip);
+      g_test_add_func("/sgf-controller/select-node-emits-node-changed", test_ggame_sgf_controller_skip);
+      g_test_add_func("/sgf-controller/load-applies-setup-properties", test_ggame_sgf_controller_skip);
+      g_test_add_func("/sgf-controller/load-file-requires-ru", test_ggame_sgf_controller_skip);
+      g_test_add_func("/sgf-controller/replay-node-into-game-applies-setup-root", test_ggame_sgf_controller_skip);
+      g_test_add_func("/sgf-controller/save-position-file", test_ggame_sgf_controller_skip);
+      g_test_add_func("/sgf-controller/load-file-applies-ruleset-from-ru", test_ggame_sgf_controller_skip);
+      break;
+    default:
+      g_assert_not_reached();
+  }
+
   return g_test_run();
 }

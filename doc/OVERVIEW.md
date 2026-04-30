@@ -1,25 +1,28 @@
 # Project overview
 
-This repository contains the `ggame` application framework plus two shared-shell GTK targets, `gcheckers` and
-`gboop`, and the separate Homeworlds prototype target `ghomeworlds`. The shared code in top-level `src/` owns the
+This repository contains the `ggame` application framework plus three branded GTK targets, `gcheckers`, `gboop`, and
+`ghomeworlds`. The shared code in top-level `src/` owns the
 application shell, GTK UI, SGF workflows, puzzle/import/reporting flows, and the generic AI/model/backend interfaces.
 Game-specific code lives under `src/games/<game>/` and provides the rules, position and move types, search
 evaluation, notation helpers, optional puzzle tooling, and any board-specific callbacks needed by the selected
 backend. `src/games/boop/` contains both the boop rules/backend and the boop-only supply/promotion controls that now
-plug into the shared window.
+plug into the shared window, while `src/games/homeworlds/` provides the rules/backend plus a profile-owned toplevel
+window hook.
 
-The build selects exactly one active game at compile time through `GAME` in the `Makefile`. Shared code first queries
-`src/game_app_profile.[ch]` for the active app profile, then reaches the profile-owned `GameBackend` and feature/UI
-hooks from there. Shared code talks to the rules/search/rendering layer through generic APIs such as `GGameModel`,
+The default build now compiles one shared object graph and links all three application binaries. Each process selects
+exactly one `GGameAppProfile` at startup through its launcher, then shared code queries
+`src/game_app_profile.[ch]` for the active profile and reaches the profile-owned `GameBackend` and feature/UI hooks
+from there. Shared code talks to the rules/search/rendering layer through generic APIs such as `GGameModel`,
 `ai_search`, and the square-grid board callbacks, so adding another game is mostly a matter of adding a new backend
 directory plus the corresponding profile and packaging entries.
 
 ## `GGameAppProfile` (`src/game_app_profile.c`, `src/game_app_profile.h`)
-Module: top-level compiled-app description.
-Role: describe the active target selected by `GAME`, including app ID, display strings, settings schema ID, the
-profile-owned `GameBackend *`, feature flags, derived helpers such as puzzle-catalog support, shared-window layout
-defaults, and optional UI hooks such as boop's custom board host. Checkers and boop both advertise
-`supports_shared_shell = TRUE`, while Homeworlds still reports no shared-shell support.
+Module: runtime app-profile registry and descriptors.
+Role: describe each branded target, including app ID, display strings, settings schema ID, the profile-owned
+`GameBackend *`, feature flags, derived helpers such as puzzle-catalog support, shared-window layout defaults, and
+optional UI hooks such as boop's custom board host or the Homeworlds toplevel window creator. Launchers select one of
+these profiles at startup, and `ggame_active_app_profile()` exposes the chosen profile to shared code. Checkers and
+boop both advertise `supports_shared_shell = TRUE`, while Homeworlds still reports no shared-shell support.
 Collaborates with: `src/application.c`, `src/window.c`, `src/app_settings.c`, `src/file_dialog_history.c`, and
 `src/active_game_backend.h`.
 
@@ -130,7 +133,7 @@ Lifecycle: sinks and retains an owned `PlayerControlsPanel` reference, removes i
 during dispose via `ggame_widget_remove_from_parent()`, and then clears its references.
 during dispose, cancels any pending auto-move idle source, and then clears its references.
 At construction time it also pushes the active backend's side labels into `PlayerControlsPanel`, so the shared board
-UI keeps generic two-side semantics while the compiled backend decides how those sides are named.
+UI keeps generic two-side semantics while the active backend decides how those sides are named.
 
 ## `GGameSgfController` (`src/sgf_controller.c`)
 Class: `GGameSgfController` (`GObject`).
@@ -146,7 +149,9 @@ instead of falling back to the current model rules. `RU` is stamped back onto fr
 variant-specific files round-trip explicitly. The controller now also supports plain `GGameModel` consumers:
 zero-variant backends such as boop accept SGF files with no `RU`, generic AI stepping uses `ai_search.c`, and
 generic replay allocates a temporary backend position, replays SGF moves into it, then publishes that position back
-through `ggame_model_set_position()`.
+through `ggame_model_set_position()`. Checkers still routes generic position replay through the same setup-aware
+checkers path as the legacy wrapper, so root setup properties keep driving puzzle and edited-position loads even when
+the shared shell binds only the generic `GGameModel`.
 `ggame_sgf_controller_set_model()` binds the legacy checkers wrapper plus its inner `GGameModel`;
 `ggame_sgf_controller_set_game_model()` binds generic callers directly. Timeline clearing remains explicit via
 `ggame_sgf_controller_new_game()`. Exposes SGF navigation helpers used by the shared window: rewind to root, step
@@ -276,7 +281,7 @@ while initializing the static geometry tables.
 ## Constants (`src/games/checkers/checkers_constants.h`)
 Module: shared constants.
 Role: centralize size limits for boards, moves, and byte storage used throughout the engine and UI.
-Collaborates with: all game and model modules via compile-time limits.
+Collaborates with: all game and model modules via shared size limits.
 
 ## Game engine (`src/games/checkers/game.c`, `src/games/checkers/game.h`)
 Module: core game rules and state.

@@ -233,3 +233,16 @@ coordinate guide around the board edge.
 The fix hides the shared dense square numbers through boop-local CSS and paints boop coordinates onto the board's
 existing border instead of reserving space around it. Letters run along the bottom edge, numbers run down the left
 edge, and both update when board orientation flips so the visible coordinates stay aligned with the rotated board.
+
+## Checkers puzzles could reopen at the starting position
+
+Checkers puzzles should load the setup-root position stored in the SGF file, not the normal starting layout.
+
+After the shared window switched to binding the generic `GGameModel`, SGF replay for checkers puzzle loads started
+flowing through the generic backend-position path. That replay helper only reapplied moves, so a puzzle whose root
+used SGF setup properties such as `AE`, `AB`, `AW`, or `PL` would ignore them and leave the board at the default
+starting position.
+
+The fix keeps runtime profile selection intact but routes checkers generic-position replay back through the
+setup-aware checkers replay helper. A headless SGF controller regression now checks that replaying a root setup node
+into a generic checkers backend position produces the configured puzzle state.
