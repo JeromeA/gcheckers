@@ -35,11 +35,14 @@ alpha-beta depth configured from the shared `Computer depth` slider (`0..16`). U
 player controls (left), SGF mode selector and SGF view (middle), and analysis (right). Analysis is launched from
 shared window actions exposed in the `Analysis` menubar submenu: current-position analysis iterates on the selected
 node, and full-game analysis always processes nodes in reverse order so TT state is reused from later positions
-first.
+first. Current-position analysis now runs through the generic backend AI API for every shared-shell build, while
+full-game analysis keeps the checkers setup-aware replay path for checkers and uses backend-position SGF replay for
+boop.
 Shared pane defaults also come from the active profile. Checkers keeps the historical `500/300/300` board,
 navigation, and analysis widths with both drawers visible by default, while boop starts with a wider `760` board pane
-and the unsupported analysis drawer hidden so its square board host can reach the same practical size as the old
-standalone `gboop` window.
+and the analysis drawer hidden by default so its square board host can reach the same practical size as the old
+standalone `gboop` window. Even with that hidden default, boop now enables the shared `Analysis` actions and
+populates the drawer on demand.
 The analysis pane owns its own `Analysis depth` slider; analysis no longer reuses the player `Computer depth`
 setting. Current-position analysis iterates up to the selected depth, and full-game analysis uses the same selected
 depth as a fixed search limit. Analysis menu entries are one-shot actions, so SGF navigation does not implicitly keep
@@ -480,7 +483,9 @@ Module: boop-specific shared-shell board host.
 Role: build the boop supply/promotion side panels around the shared `BoardView`, install boop CSS, track the active
 side's selected kitten/cat rank, show the `Confirm promotions` button only when the move builder requires it, and
 bridge boop's move-candidate preference / selection-changed / completion-confirmation hooks into the shared board
-input flow. `boop_controls_stub.c` provides a weak non-GTK fallback so profile/model/backend tests can link without
+input flow. The host also hides the shared per-square numbering and adds boop edge coordinates directly on the board's
+existing border (letters along the bottom, numbers on the left) that stay synchronized with `BoardView` orientation
+changes. `boop_controls_stub.c` provides a weak non-GTK fallback so profile/model/backend tests can link without
 pulling GTK UI code into headless targets.
 Collaborates with: `GGameAppProfile`, `GGameWindow`, `BoardView`, `GGameModel`, and `tests/test_window_boop.c`.
 
@@ -546,7 +551,8 @@ Primary-click input is routed through each square button's `clicked` signal, and
 secondary-button `GtkGestureClick`. A button-aware square callback allows window-level edit-mode logic to intercept
 square actions (left/right) before play-mode move-selection handling.
 Board orientation is driven by a generic two-side bottom-index property; the grid and last-move overlay both mirror
-rows/columns when the bottom side is side 1 so rotated boards keep pieces and arrows aligned.
+rows/columns when the bottom side is side 1 so rotated boards keep pieces and arrows aligned. Hosts can also register a
+small bottom-side-changed callback when they need orientation-aware chrome such as boop's border-mounted coordinates.
 Collaborates with: selection, overlays, and square/grid helpers.
 
 ### `BoardGrid` (`src/board_grid.c`, `src/board_grid.h`)
@@ -561,7 +567,8 @@ Collaborates with: `BoardView` and `BoardSquare`.
 Class: `BoardSquare` (`GtkWidget`).
 Role: represent individual dense playable squares and update piece/index rendering state from a generic
 `GameBackendSquarePieceView`. Piece artwork is drawn directly with a `GtkDrawingArea` at the square's allocated size so
-checker men avoid `GtkPicture` downscaling artifacts.
+checker men avoid `GtkPicture` downscaling artifacts. The square also owns the small dense-index overlay used by the
+shared square-grid board.
 Collaborates with: `BoardGrid` and `PiecePalette`.
 
 ### Last move overlay (`src/board_move_overlay.c`, `src/board_move_overlay.h`)

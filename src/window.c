@@ -1,9 +1,9 @@
 #include "application.h"
 #include "active_game_backend.h"
 #include "game_app_profile.h"
-#include "games/checkers/ai_alpha_beta.h"
 #include "window.h"
 
+#include "ai_search.h"
 #include "app_paths.h"
 #include "analysis_graph.h"
 #include "board_view.h"
@@ -102,13 +102,14 @@ G_DEFINE_TYPE(GGameWindow, ggame_window, GTK_TYPE_APPLICATION_WINDOW)
 
 typedef struct {
   GGameWindow *self;
-  Game game;
+  const GameBackend *backend;
+  guint8 *position;
   gint generation;
-  CheckersAiTranspositionTable *tt;
+  GameAiTranspositionTable *tt;
   guint current_depth;
   guint target_depth;
   gint64 last_progress_publish_us;
-  CheckersAiSearchStats cumulative_stats;
+  GameAiSearchStats cumulative_stats;
   guint last_completed_depth;
   SgfNodeAnalysis *last_completed_analysis;
   const SgfNode *target_node;
@@ -143,9 +144,12 @@ typedef struct {
 typedef struct {
   GGameWindow *self;
   gint generation;
-  const CheckersRules *rules;
+  gboolean use_checkers_replay;
+  const CheckersRules *checkers_rules;
+  const GameBackend *backend;
+  const GameBackendVariant *variant;
   guint depth;
-  CheckersAiTranspositionTable *tt;
+  GameAiTranspositionTable *tt;
   GPtrArray *jobs;
   guint64 explored_nodes;
   guint current_job_index;
@@ -277,18 +281,47 @@ static const GameState *ggame_window_get_checkers_state(GGameWindow *self) {
   return &game->state;
 }
 
-static gboolean ggame_window_copy_checkers_game(GGameWindow *self, Game *out_game) {
-  const Game *game = NULL;
+static gboolean ggame_window_copy_analysis_position(GGameWindow *self,
+                                                    const GameBackend **out_backend,
+                                                    const GameBackendVariant **out_variant,
+                                                    guint8 **out_position) {
+  const GameBackend *backend = NULL;
+  const GameBackendVariant *variant = NULL;
+  gconstpointer position = NULL;
+  guint8 *copy = NULL;
 
-  g_return_val_if_fail(out_game != NULL, FALSE);
+  g_return_val_if_fail(out_backend != NULL, FALSE);
+  g_return_val_if_fail(out_position != NULL, FALSE);
 
-  game = ggame_window_get_checkers_game(self);
-  if (game == NULL) {
-    g_debug("Missing checkers game snapshot");
+  backend = ggame_window_get_game_backend(self);
+  position = ggame_window_get_game_position(self);
+  variant = ggame_window_get_variant(self);
+  g_return_val_if_fail(backend != NULL, FALSE);
+  g_return_val_if_fail(position != NULL, FALSE);
+  g_return_val_if_fail(backend->position_size > 0, FALSE);
+  g_return_val_if_fail(backend->position_init != NULL, FALSE);
+  g_return_val_if_fail(backend->position_clear != NULL, FALSE);
+  g_return_val_if_fail(backend->position_copy != NULL, FALSE);
+
+  if (backend->variant_count > 0 && variant == NULL) {
+    g_debug("Missing active backend variant while copying analysis position");
     return FALSE;
   }
 
-  *out_game = *game;
+  copy = g_malloc0(backend->position_size);
+  if (copy == NULL) {
+    g_debug("Failed to allocate analysis position snapshot");
+    return FALSE;
+  }
+
+  backend->position_init(copy, variant);
+  backend->position_copy(copy, position);
+
+  *out_backend = backend;
+  if (out_variant != NULL) {
+    *out_variant = variant;
+  }
+  *out_position = copy;
   return TRUE;
 }
 
@@ -1882,11 +1915,14 @@ static gboolean ggame_window_should_cancel_full_analysis(gpointer user_data) {
   return g_atomic_int_get(&task->self->analysis_generation) != task->generation;
 }
 
-static SgfNodeAnalysis *ggame_window_analysis_from_scored_moves(const CheckersScoredMoveList *moves,
-                                                                    guint depth,
-                                                                    const CheckersAiSearchStats *stats) {
+static SgfNodeAnalysis *ggame_window_analysis_from_scored_moves(const GameBackend *backend,
+                                                                const GameAiScoredMoveList *moves,
+                                                                guint depth,
+                                                                const GameAiSearchStats *stats) {
+  g_return_val_if_fail(backend != NULL, NULL);
   g_return_val_if_fail(moves != NULL, NULL);
   g_return_val_if_fail(stats != NULL, NULL);
+  g_return_val_if_fail(backend->format_move != NULL, NULL);
 
   SgfNodeAnalysis *analysis = sgf_node_analysis_new();
   if (analysis == NULL) {
@@ -1899,9 +1935,9 @@ static SgfNodeAnalysis *ggame_window_analysis_from_scored_moves(const CheckersSc
   analysis->tt_hits = stats->tt_hits;
   analysis->tt_cutoffs = stats->tt_cutoffs;
 
-  for (guint i = 0; i < moves->count; ++i) {
+  for (gsize i = 0; i < moves->count; ++i) {
     char notation[128] = {0};
-    if (!game_format_move_notation(&moves->moves[i].move, notation, sizeof(notation))) {
+    if (moves->moves[i].move == NULL || !backend->format_move(moves->moves[i].move, notation, sizeof(notation))) {
       sgf_node_analysis_free(analysis);
       return NULL;
     }
@@ -2152,6 +2188,10 @@ char *ggame_window_format_analysis_score(gint score) {
     gint distance = 3000 - abs_score;
     return g_strdup_printf("%c#%d", score > 0 ? 'W' : 'B', distance);
   }
+  if (abs_score >= 99000 && abs_score <= 100000) {
+    gint distance = 100000 - abs_score;
+    return g_strdup_printf("%c#%d", score > 0 ? 'W' : 'B', distance);
+  }
 
   return g_strdup_printf("%+d", score);
 }
@@ -2228,7 +2268,7 @@ static char *ggame_window_analysis_format_full_game_status(guint completed_nodes
 }
 
 static char *ggame_window_analysis_format_progress(const GGameWindowAnalysisTask *task,
-                                                       const CheckersAiSearchStats *stats) {
+                                                   const GameAiSearchStats *stats) {
   g_return_val_if_fail(task != NULL, NULL);
   g_return_val_if_fail(stats != NULL, NULL);
 
@@ -2247,7 +2287,7 @@ static char *ggame_window_analysis_format_progress(const GGameWindowAnalysisTask
   return g_string_free(text, FALSE);
 }
 
-static void ggame_window_analysis_on_progress(const CheckersAiSearchStats *stats, gpointer user_data) {
+static void ggame_window_analysis_on_progress(const GameAiSearchStats *stats, gpointer user_data) {
   GGameWindowAnalysisTask *task = user_data;
   g_return_if_fail(stats != NULL);
   g_return_if_fail(task != NULL);
@@ -2274,7 +2314,7 @@ static void ggame_window_analysis_on_progress(const CheckersAiSearchStats *stats
                                            text);
 }
 
-static void ggame_window_full_analysis_on_progress(const CheckersAiSearchStats *stats, gpointer user_data) {
+static void ggame_window_full_analysis_on_progress(const GameAiSearchStats *stats, gpointer user_data) {
   GGameWindowFullAnalysisTask *task = user_data;
   g_return_if_fail(stats != NULL);
   g_return_if_fail(task != NULL);
@@ -2308,6 +2348,8 @@ static void ggame_window_full_analysis_on_progress(const CheckersAiSearchStats *
 static gpointer ggame_window_analysis_thread(gpointer user_data) {
   GGameWindowAnalysisTask *task = user_data;
   g_return_val_if_fail(task != NULL, NULL);
+  g_return_val_if_fail(task->backend != NULL, NULL);
+  g_return_val_if_fail(task->position != NULL, NULL);
 
   for (guint depth = GGAME_WINDOW_ANALYSIS_DEPTH_MIN;
        depth <= task->target_depth && !ggame_window_should_cancel_analysis(task);
@@ -2316,9 +2358,10 @@ static gpointer ggame_window_analysis_thread(gpointer user_data) {
     task->last_progress_publish_us = 0;
     ggame_window_analysis_on_progress(&task->cumulative_stats, task);
 
-    CheckersScoredMoveList moves = {0};
-    gboolean ok = checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(
-        &task->game,
+    GameAiScoredMoveList moves = {0};
+    gboolean ok = game_ai_search_analyze_moves_cancellable_with_tt(
+        task->backend,
+        task->position,
         depth,
         &moves,
         ggame_window_should_cancel_analysis,
@@ -2339,10 +2382,9 @@ static gpointer ggame_window_analysis_thread(gpointer user_data) {
       break;
     }
 
-    g_autoptr(SgfNodeAnalysis) analysis = ggame_window_analysis_from_scored_moves(&moves,
-                                                                                       depth,
-                                                                                       &task->cumulative_stats);
-    checkers_scored_move_list_free(&moves);
+    g_autoptr(SgfNodeAnalysis) analysis =
+        ggame_window_analysis_from_scored_moves(task->backend, &moves, depth, &task->cumulative_stats);
+    game_ai_scored_move_list_free(&moves);
     if (analysis == NULL) {
       g_debug("Failed to build SGF node analysis payload");
       break;
@@ -2377,7 +2419,9 @@ static gpointer ggame_window_analysis_thread(gpointer user_data) {
                                            ggame_window_should_cancel_analysis(task) ? "Analysis stopped." : NULL);
 
   g_object_unref(task->self);
-  checkers_ai_tt_free(task->tt);
+  game_ai_tt_free(task->tt);
+  task->backend->position_clear(task->position);
+  g_free(task->position);
   sgf_node_analysis_free(task->last_completed_analysis);
   g_free(task);
   return NULL;
@@ -2426,6 +2470,12 @@ static gpointer ggame_window_full_analysis_thread(gpointer user_data) {
   GGameWindowFullAnalysisTask *task = user_data;
   g_return_val_if_fail(task != NULL, NULL);
   g_return_val_if_fail(task->jobs != NULL, NULL);
+  g_return_val_if_fail(task->backend != NULL, NULL);
+  if (!task->use_checkers_replay) {
+    g_return_val_if_fail(task->backend->position_size > 0, NULL);
+    g_return_val_if_fail(task->backend->position_init != NULL, NULL);
+    g_return_val_if_fail(task->backend->position_clear != NULL, NULL);
+  }
 
   for (guint i = 0; i < task->jobs->len; ++i) {
     if (ggame_window_should_cancel_full_analysis(task)) {
@@ -2438,13 +2488,41 @@ static gpointer ggame_window_full_analysis_thread(gpointer user_data) {
     GGameWindowFullNodeJob *job = g_ptr_array_index(task->jobs, i);
     g_return_val_if_fail(job != NULL, NULL);
 
-    Game game = {0};
-    game_init_with_rules(&game, task->rules);
     g_autoptr(GError) replay_error = NULL;
-    gboolean replay_ok = ggame_sgf_controller_replay_node_into_game(job->node, &game, &replay_error);
+    GameAiScoredMoveList moves = {0};
+    GameAiSearchStats stats = {0};
+    ggame_window_full_analysis_on_progress(&stats, task);
+    gboolean ok = FALSE;
+    gboolean replay_ok = FALSE;
+    gconstpointer analysis_position = NULL;
+    g_autofree guint8 *generic_position = NULL;
+    Game checkers_game = {0};
+
+    if (task->use_checkers_replay) {
+      g_return_val_if_fail(task->checkers_rules != NULL, NULL);
+      game_init_with_rules(&checkers_game, task->checkers_rules);
+      replay_ok = ggame_sgf_controller_replay_node_into_game(job->node, &checkers_game, &replay_error);
+      analysis_position = &checkers_game;
+    } else {
+      generic_position = g_malloc0(task->backend->position_size);
+      if (generic_position == NULL) {
+        g_debug("Failed to allocate replay position for full-game analysis");
+        continue;
+      }
+
+      task->backend->position_init(generic_position, task->variant);
+      replay_ok =
+          ggame_sgf_controller_replay_node_into_position(job->node, task->backend, generic_position, &replay_error);
+      analysis_position = generic_position;
+    }
 
     if (!replay_ok) {
-      game_destroy(&game);
+      if (!task->use_checkers_replay && generic_position != NULL) {
+        task->backend->position_clear(generic_position);
+      }
+      if (task->use_checkers_replay) {
+        game_destroy(&checkers_game);
+      }
       g_debug("Skipping full analysis for SGF node %u: %s",
               sgf_node_get_move_number(job->node),
               replay_error != NULL ? replay_error->message : "unknown error");
@@ -2461,11 +2539,9 @@ static gpointer ggame_window_full_analysis_thread(gpointer user_data) {
       continue;
     }
 
-    CheckersScoredMoveList moves = {0};
-    CheckersAiSearchStats stats = {0};
-    ggame_window_full_analysis_on_progress(&stats, task);
-    gboolean ok = checkers_ai_alpha_beta_analyze_moves_cancellable_with_tt(
-        &game,
+    ok = game_ai_search_analyze_moves_cancellable_with_tt(
+        task->backend,
+        analysis_position,
         task->depth,
         &moves,
         ggame_window_should_cancel_full_analysis,
@@ -2474,9 +2550,14 @@ static gpointer ggame_window_full_analysis_thread(gpointer user_data) {
         task,
         task->tt,
         &stats);
-    game_destroy(&game);
+    if (!task->use_checkers_replay && generic_position != NULL) {
+      task->backend->position_clear(generic_position);
+    }
+    if (task->use_checkers_replay) {
+      game_destroy(&checkers_game);
+    }
     if (!ok) {
-      checkers_scored_move_list_free(&moves);
+      game_ai_scored_move_list_free(&moves);
       task->explored_nodes += stats.nodes;
       g_autofree char *text = ggame_window_analysis_format_full_game_status(i + 1,
                                                                                 task->jobs->len,
@@ -2491,8 +2572,9 @@ static gpointer ggame_window_full_analysis_thread(gpointer user_data) {
       continue;
     }
 
-    g_autoptr(SgfNodeAnalysis) analysis = ggame_window_analysis_from_scored_moves(&moves, task->depth, &stats);
-    checkers_scored_move_list_free(&moves);
+    g_autoptr(SgfNodeAnalysis) analysis =
+        ggame_window_analysis_from_scored_moves(task->backend, &moves, task->depth, &stats);
+    game_ai_scored_move_list_free(&moves);
     task->explored_nodes += stats.nodes;
     if (analysis == NULL) {
       g_autofree char *text = ggame_window_analysis_format_full_game_status(i + 1,
@@ -2543,7 +2625,7 @@ static gpointer ggame_window_full_analysis_thread(gpointer user_data) {
                                            canceled ? "Full-game analysis canceled." : NULL);
 
   g_ptr_array_unref(task->jobs);
-  checkers_ai_tt_free(task->tt);
+  game_ai_tt_free(task->tt);
   g_object_unref(task->self);
   g_free(task);
   return NULL;
@@ -2568,14 +2650,18 @@ static void ggame_window_stop_analysis(GGameWindow *self) {
 }
 
 static void ggame_window_start_analysis(GGameWindow *self) {
+  const GameBackend *backend = NULL;
+  g_autofree guint8 *position = NULL;
+
   g_return_if_fail(GGAME_IS_WINDOW(self));
   g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self->sgf_controller));
 
-  Game game = {0};
-  if (!ggame_window_copy_checkers_game(self, &game)) {
-    g_debug("Failed to snapshot game for threaded analysis");
+  if (!ggame_window_copy_analysis_position(self, &backend, NULL, &position)) {
+    g_debug("Failed to snapshot backend position for threaded analysis");
     return;
   }
+  g_return_if_fail(backend != NULL);
+  g_return_if_fail(backend->move_size > 0);
 
   SgfTree *tree = ggame_sgf_controller_get_tree(self->sgf_controller);
   if (tree == NULL) {
@@ -2594,11 +2680,12 @@ static void ggame_window_start_analysis(GGameWindow *self) {
 
   GGameWindowAnalysisTask *task = g_new0(GGameWindowAnalysisTask, 1);
   task->self = g_object_ref(self);
-  task->game = game;
+  task->backend = backend;
+  task->position = g_steal_pointer(&position);
   task->generation = generation;
   task->target_node = target_node;
   task->target_depth = ggame_window_get_analysis_depth(self);
-  task->tt = checkers_ai_tt_new(GGAME_WINDOW_ANALYSIS_TT_SIZE_MB);
+  task->tt = game_ai_tt_new(GGAME_WINDOW_ANALYSIS_TT_SIZE_MB, backend->move_size);
   if (task->tt == NULL) {
     g_debug("Failed to allocate analysis TT, continuing without TT caching");
   }
@@ -2607,6 +2694,12 @@ static void ggame_window_start_analysis(GGameWindow *self) {
 }
 
 static void ggame_window_start_full_game_analysis(GGameWindow *self) {
+  const GGameAppProfile *profile = NULL;
+  const GameBackend *backend = NULL;
+  const GameBackendVariant *variant = NULL;
+  const Game *checkers_game = NULL;
+  const CheckersRules *checkers_rules = NULL;
+
   g_return_if_fail(GGAME_IS_WINDOW(self));
   g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self->sgf_controller));
   g_return_if_fail(self->controls_panel != NULL);
@@ -2623,15 +2716,24 @@ static void ggame_window_start_full_game_analysis(GGameWindow *self) {
     return;
   }
 
-  Game game = {0};
-  if (!ggame_window_copy_checkers_game(self, &game)) {
-    g_debug("Failed to copy model game for full analysis setup");
+  profile = ggame_window_get_profile(self);
+  backend = ggame_window_get_game_backend(self);
+  variant = ggame_window_get_variant(self);
+  g_return_if_fail(profile != NULL);
+  g_return_if_fail(backend != NULL);
+  g_return_if_fail(backend->move_size > 0);
+  if (backend->variant_count > 0 && variant == NULL) {
+    g_debug("Missing active backend variant for full-game analysis");
     return;
   }
-  const CheckersRules *rules = game.rules;
-  if (rules == NULL) {
-    g_debug("Missing rules for full-game analysis");
-    return;
+
+  if (profile->kind == GGAME_APP_KIND_CHECKERS) {
+    checkers_game = ggame_window_get_checkers_game(self);
+    if (checkers_game == NULL || checkers_game->rules == NULL) {
+      g_debug("Missing checkers rules for full-game analysis");
+      return;
+    }
+    checkers_rules = checkers_game->rules;
   }
 
   guint depth = ggame_window_get_analysis_depth(self);
@@ -2647,10 +2749,13 @@ static void ggame_window_start_full_game_analysis(GGameWindow *self) {
   GGameWindowFullAnalysisTask *task = g_new0(GGameWindowFullAnalysisTask, 1);
   task->self = g_object_ref(self);
   task->generation = generation;
-  task->rules = rules;
+  task->use_checkers_replay = profile->kind == GGAME_APP_KIND_CHECKERS;
+  task->checkers_rules = checkers_rules;
+  task->backend = backend;
+  task->variant = variant;
   task->depth = depth;
   task->jobs = g_steal_pointer(&jobs);
-  task->tt = checkers_ai_tt_new(GGAME_WINDOW_ANALYSIS_TT_SIZE_MB);
+  task->tt = game_ai_tt_new(GGAME_WINDOW_ANALYSIS_TT_SIZE_MB, backend->move_size);
   if (task->tt == NULL) {
     g_debug("Failed to allocate full analysis TT, continuing without TT caching");
   }

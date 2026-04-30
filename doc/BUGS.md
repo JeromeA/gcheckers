@@ -221,3 +221,15 @@ marker look absent.
 The fix factors boop overlay painting into a reusable helper and paints removal crosses after arrows so the removed
 square remains visible. A cairo-level regression test now checks that an off-board removal still leaves a red marker on
 top of the arrow.
+
+## Boop used square numbers instead of board coordinates
+
+Boop notation should use edge coordinates, not dense square numbers painted on every playable square.
+
+The shared square-grid board always rendered each playable square's dense index. That matched checkers well enough, but
+boop's notation names squares by board coordinates. Showing `1..36` inside the cells was misleading, and it left no
+coordinate guide around the board edge.
+
+The fix hides the shared dense square numbers through boop-local CSS and paints boop coordinates onto the board's
+existing border instead of reserving space around it. Letters run along the bottom edge, numbers run down the left
+edge, and both update when board orientation flips so the visible coordinates stay aligned with the rotated board.

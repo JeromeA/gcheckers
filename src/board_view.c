@@ -29,6 +29,8 @@ struct _BoardView {
   gpointer move_handler_data;
   BoardViewSelectionChangedHandler selection_changed_handler;
   gpointer selection_changed_handler_data;
+  BoardViewBottomSideChangedHandler bottom_side_changed_handler;
+  gpointer bottom_side_changed_handler_data;
   BoardViewSquareHandler square_handler;
   gpointer square_handler_data;
   gboolean input_enabled;
@@ -383,8 +385,8 @@ void board_view_set_move_completion_confirmation(BoardView *self,
   g_return_if_fail(BOARD_IS_VIEW(self));
 
   board_selection_controller_set_completion_confirmation(self->selection_controller,
-                                                        (BoardSelectionControllerCompletionConfirmation)confirmation,
-                                                        user_data);
+                                                         (BoardSelectionControllerCompletionConfirmation)confirmation,
+                                                         user_data);
 }
 
 void board_view_set_selection_changed_handler(BoardView *self,
@@ -475,6 +477,15 @@ void board_view_set_input_enabled(BoardView *self, gboolean enabled) {
   }
 }
 
+void board_view_set_bottom_side_changed_handler(BoardView *self,
+                                                BoardViewBottomSideChangedHandler handler,
+                                                gpointer user_data) {
+  g_return_if_fail(BOARD_IS_VIEW(self));
+
+  self->bottom_side_changed_handler = handler;
+  self->bottom_side_changed_handler_data = user_data;
+}
+
 static void board_view_dispose(GObject *object) {
   BoardView *self = BOARD_VIEW(object);
   gboolean root_removed = TRUE;
@@ -525,6 +536,8 @@ static void board_view_init(BoardView *self) {
   self->move_handler_data = NULL;
   self->square_handler = NULL;
   self->square_handler_data = NULL;
+  self->bottom_side_changed_handler = NULL;
+  self->bottom_side_changed_handler_data = NULL;
   self->input_enabled = TRUE;
   self->bottom_side = 0;
   self->model_state_changed_handler_id = 0;
@@ -547,6 +560,10 @@ void board_view_set_bottom_side(BoardView *self, guint bottom_side) {
   if (self->model != NULL) {
     board_view_build_board(self);
     board_view_update(self);
+  }
+
+  if (self->bottom_side_changed_handler != NULL) {
+    self->bottom_side_changed_handler(self->bottom_side_changed_handler_data);
   }
 }
 

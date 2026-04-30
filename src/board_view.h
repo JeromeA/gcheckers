@@ -20,6 +20,7 @@ typedef gboolean (*BoardViewMoveCompletionConfirmation)(const GameBackendMoveBui
                                                         gconstpointer move,
                                                         gpointer user_data);
 typedef void (*BoardViewSelectionChangedHandler)(gpointer user_data);
+typedef void (*BoardViewBottomSideChangedHandler)(gpointer user_data);
 
 BoardView *board_view_new(void);
 GtkWidget *board_view_get_widget(BoardView *self);
@@ -42,6 +43,9 @@ const GameBackendMoveBuilder *board_view_peek_move_builder(BoardView *self);
 gboolean board_view_move_selection_completion_pending(BoardView *self);
 gboolean board_view_confirm_move_selection(BoardView *self);
 void board_view_set_input_enabled(BoardView *self, gboolean enabled);
+void board_view_set_bottom_side_changed_handler(BoardView *self,
+                                                BoardViewBottomSideChangedHandler handler,
+                                                gpointer user_data);
 void board_view_set_bottom_side(BoardView *self, guint bottom_side);
 guint board_view_get_bottom_side(BoardView *self);
 void board_view_set_banner_text(BoardView *self, const char *text);

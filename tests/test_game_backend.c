@@ -49,7 +49,7 @@ static void test_app_profile_metadata(void) {
   assert(profile->features.supports_settings);
   assert(!profile->features.supports_save_position);
   assert(!profile->features.supports_edit_mode);
-  assert(!profile->features.supports_analysis);
+  assert(profile->features.supports_analysis);
   assert(profile->ui.create_board_host != NULL);
 #else
 #error "Add profile expectations for the selected game."

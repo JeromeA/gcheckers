@@ -46,6 +46,12 @@ static void test_analysis_score_formatting(void) {
 
   g_autofree char *black_win = ggame_window_format_analysis_score(-2994);
   g_assert_cmpstr(black_win, ==, "B#6");
+
+  g_autofree char *boop_positive_win = ggame_window_format_analysis_score(99998);
+  g_assert_cmpstr(boop_positive_win, ==, "W#2");
+
+  g_autofree char *boop_negative_win = ggame_window_format_analysis_score(-99995);
+  g_assert_cmpstr(boop_negative_win, ==, "B#5");
 }
 
 static void test_analysis_report_includes_per_move_nodes(void) {

@@ -184,7 +184,7 @@ BoardSquare *board_grid_get_square(BoardGrid *self, guint index) {
 }
 
 guint board_grid_get_board_size(BoardGrid *self) {
-g_return_val_if_fail(BOARD_IS_GRID(self), 0);
+  g_return_val_if_fail(BOARD_IS_GRID(self), 0);
 
   return self->board_size;
 }

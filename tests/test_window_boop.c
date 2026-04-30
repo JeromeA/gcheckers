@@ -113,6 +113,22 @@ static GtkButton *test_ggame_window_find_button_with_label(GtkWidget *root, cons
   return NULL;
 }
 
+static void test_ggame_window_assert_coordinate_label(GtkWidget *root,
+                                                      const char *data_key,
+                                                      guint ordinal,
+                                                      const char *expected_text) {
+  GtkWidget *label = NULL;
+
+  g_return_if_fail(GTK_IS_WIDGET(root));
+  g_return_if_fail(data_key != NULL);
+  g_return_if_fail(expected_text != NULL);
+
+  label = test_ggame_window_find_widget_with_uint_data(root, data_key, ordinal);
+  g_assert_nonnull(label);
+  g_assert_true(GTK_IS_LABEL(label));
+  g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(label)), ==, expected_text);
+}
+
 static GtkDropDown *test_ggame_window_find_mode_dropdown(GtkWidget *root) {
   g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
 
@@ -174,6 +190,48 @@ static void test_ggame_window_drain_main_context(guint max_iterations) {
   g_debug("Main context still busy after %u iterations", max_iterations);
 }
 
+static gboolean test_ggame_window_node_has_analysis(const SgfNode *node) {
+  g_return_val_if_fail(node != NULL, FALSE);
+
+  g_autoptr(SgfNodeAnalysis) analysis = sgf_node_get_analysis(node);
+  return analysis != NULL;
+}
+
+static gboolean test_ggame_window_wait_for_node_analysis(const SgfNode *node, gint64 timeout_us) {
+  g_return_val_if_fail(node != NULL, FALSE);
+  g_return_val_if_fail(timeout_us > 0, FALSE);
+
+  gint64 deadline = g_get_monotonic_time() + timeout_us;
+  while (g_get_monotonic_time() < deadline) {
+    if (test_ggame_window_node_has_analysis(node)) {
+      return TRUE;
+    }
+    test_ggame_window_drain_main_context(16);
+    g_usleep(1000);
+  }
+
+  return test_ggame_window_node_has_analysis(node);
+}
+
+static gboolean test_ggame_window_wait_for_two_node_analyses(const SgfNode *first,
+                                                             const SgfNode *second,
+                                                             gint64 timeout_us) {
+  g_return_val_if_fail(first != NULL, FALSE);
+  g_return_val_if_fail(second != NULL, FALSE);
+  g_return_val_if_fail(timeout_us > 0, FALSE);
+
+  gint64 deadline = g_get_monotonic_time() + timeout_us;
+  while (g_get_monotonic_time() < deadline) {
+    if (test_ggame_window_node_has_analysis(first) && test_ggame_window_node_has_analysis(second)) {
+      return TRUE;
+    }
+    test_ggame_window_drain_main_context(16);
+    g_usleep(1000);
+  }
+
+  return test_ggame_window_node_has_analysis(first) && test_ggame_window_node_has_analysis(second);
+}
+
 static gboolean test_ggame_window_apply_first_generic_move(GGameSgfController *controller, GGameModel *model) {
   const GameBackend *backend = NULL;
   GameBackendMoveList moves = {0};
@@ -223,8 +281,10 @@ static void test_ggame_window_boop_shared_shell_widgets_exist(void) {
   g_assert_nonnull(test_ggame_window_find_widget_for_action(GTK_WIDGET(window), "win.navigation-step-backward"));
   g_assert_nonnull(test_ggame_window_find_widget_for_action(GTK_WIDGET(window), "win.navigation-rewind"));
   g_assert_nonnull(test_ggame_window_find_widget_for_action(GTK_WIDGET(window), "win.navigation-step-forward-to-end"));
-  g_assert_false(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "analysis-current-position"));
-  g_assert_false(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "analysis-whole-game"));
+  g_assert_nonnull(test_ggame_window_find_widget_for_action(GTK_WIDGET(window), "win.analysis-current-position"));
+  g_assert_nonnull(test_ggame_window_find_widget_for_action(GTK_WIDGET(window), "win.analysis-whole-game"));
+  g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "analysis-current-position"));
+  g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "analysis-whole-game"));
 
   GtkWidget *side0_panel = test_ggame_window_find_widget_with_uint_data(GTK_WIDGET(window), "boop-side", 1);
   GtkWidget *side1_panel = test_ggame_window_find_widget_with_uint_data(GTK_WIDGET(window), "boop-side", 2);
@@ -238,6 +298,89 @@ static void test_ggame_window_boop_shared_shell_widgets_exist(void) {
   GtkDropDown *mode_dropdown = test_ggame_window_find_mode_dropdown(GTK_WIDGET(window));
   g_assert_nonnull(mode_dropdown);
   g_assert_false(gtk_widget_get_sensitive(GTK_WIDGET(mode_dropdown)));
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
+static void test_ggame_window_boop_current_position_analysis_attaches_to_current_node(void) {
+  GtkApplication *app = test_ggame_window_create_app();
+  GGameModel *model = ggame_model_new(GGAME_ACTIVE_GAME_BACKEND);
+  GGameWindow *window = test_ggame_window_new(app, model);
+  GGameSgfController *controller = ggame_window_get_sgf_controller(window);
+  SgfTree *tree = NULL;
+  const SgfNode *current = NULL;
+  GtkWidget *analysis_panel = NULL;
+
+  gtk_window_present(GTK_WINDOW(window));
+  test_ggame_window_drain_main_context(24);
+
+  g_assert_nonnull(controller);
+  tree = ggame_sgf_controller_get_tree(controller);
+  g_assert_nonnull(tree);
+  current = sgf_tree_get_current(tree);
+  g_assert_nonnull(current);
+
+  analysis_panel = g_object_get_data(G_OBJECT(window), "analysis-panel");
+  g_assert_nonnull(analysis_panel);
+
+  ggame_window_set_analysis_depth(window, 1);
+  g_action_group_change_action_state(G_ACTION_GROUP(window),
+                                     "view-show-analysis-drawer",
+                                     g_variant_new_boolean(TRUE));
+  test_ggame_window_drain_main_context(16);
+  g_assert_nonnull(gtk_widget_get_parent(analysis_panel));
+
+  g_action_group_activate_action(G_ACTION_GROUP(window), "analysis-current-position", NULL);
+  g_assert_true(test_ggame_window_wait_for_node_analysis(current, 5 * G_USEC_PER_SEC));
+
+  g_autoptr(SgfNodeAnalysis) analysis = sgf_node_get_analysis(current);
+  g_assert_nonnull(analysis);
+  g_assert_cmpuint(analysis->depth, ==, 1);
+  g_assert_nonnull(analysis->moves);
+  g_assert_cmpuint(analysis->moves->len, >, 0);
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
+static void test_ggame_window_boop_full_game_analysis_attaches_to_replayed_nodes(void) {
+  GtkApplication *app = test_ggame_window_create_app();
+  GGameModel *model = ggame_model_new(GGAME_ACTIVE_GAME_BACKEND);
+  GGameWindow *window = test_ggame_window_new(app, model);
+  GGameSgfController *controller = ggame_window_get_sgf_controller(window);
+  SgfTree *tree = NULL;
+  const SgfNode *root = NULL;
+  const SgfNode *current = NULL;
+
+  g_assert_nonnull(controller);
+  tree = ggame_sgf_controller_get_tree(controller);
+  g_assert_nonnull(tree);
+
+  g_assert_true(test_ggame_window_apply_first_generic_move(controller, model));
+  g_assert_true(test_ggame_window_apply_first_generic_move(controller, model));
+  root = sgf_tree_get_root(tree);
+  current = sgf_tree_get_current(tree);
+  g_assert_nonnull(root);
+  g_assert_nonnull(current);
+  g_assert_true(root != current);
+
+  ggame_window_set_analysis_depth(window, 1);
+  g_action_group_activate_action(G_ACTION_GROUP(window), "analysis-whole-game", NULL);
+  g_assert_true(test_ggame_window_wait_for_two_node_analyses(root, current, 5 * G_USEC_PER_SEC));
+
+  g_autoptr(SgfNodeAnalysis) root_analysis = sgf_node_get_analysis(root);
+  g_autoptr(SgfNodeAnalysis) current_analysis = sgf_node_get_analysis(current);
+  g_assert_nonnull(root_analysis);
+  g_assert_nonnull(current_analysis);
+  g_assert_cmpuint(root_analysis->depth, ==, 1);
+  g_assert_cmpuint(current_analysis->depth, ==, 1);
+  g_assert_nonnull(root_analysis->moves);
+  g_assert_nonnull(current_analysis->moves);
+  g_assert_cmpuint(root_analysis->moves->len, >, 0);
+  g_assert_cmpuint(current_analysis->moves->len, >, 0);
 
   g_clear_object(&window);
   g_clear_object(&model);
@@ -265,6 +408,50 @@ static void test_ggame_window_boop_layout_defaults_fit_board_host(void) {
       g_action_group_get_action_state(G_ACTION_GROUP(window), "view-show-analysis-drawer");
   g_assert_nonnull(analysis_drawer_state);
   g_assert_false(g_variant_get_boolean(analysis_drawer_state));
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
+static void test_ggame_window_boop_board_uses_edge_coordinates(void) {
+  GtkApplication *app = test_ggame_window_create_app();
+  GGameModel *model = ggame_model_new(GGAME_ACTIVE_GAME_BACKEND);
+  GGameWindow *window = test_ggame_window_new(app, model);
+  static const char *expected_columns[] = {"a", "b", "c", "d", "e", "f"};
+  static const char *expected_rows[] = {"6", "5", "4", "3", "2", "1"};
+  static const char *expected_flipped_columns[] = {"f", "e", "d", "c", "b", "a"};
+  static const char *expected_flipped_rows[] = {"1", "2", "3", "4", "5", "6"};
+
+  gtk_window_present(GTK_WINDOW(window));
+  test_ggame_window_drain_main_context(24);
+
+  g_assert_null(test_ggame_window_find_label_with_text(GTK_WIDGET(window), "36"));
+  for (guint i = 0; i < BOOP_BOARD_SIZE; ++i) {
+    test_ggame_window_assert_coordinate_label(GTK_WIDGET(window),
+                                              "boop-coordinate-column",
+                                              i + 1,
+                                              expected_columns[i]);
+    test_ggame_window_assert_coordinate_label(GTK_WIDGET(window),
+                                              "boop-coordinate-row",
+                                              i + 1,
+                                              expected_rows[i]);
+  }
+
+  ggame_window_set_board_orientation_mode(window, GGAME_WINDOW_BOARD_ORIENTATION_FIXED);
+  ggame_window_set_board_bottom_color(window, CHECKERS_COLOR_BLACK);
+  test_ggame_window_drain_main_context(16);
+
+  for (guint i = 0; i < BOOP_BOARD_SIZE; ++i) {
+    test_ggame_window_assert_coordinate_label(GTK_WIDGET(window),
+                                              "boop-coordinate-column",
+                                              i + 1,
+                                              expected_flipped_columns[i]);
+    test_ggame_window_assert_coordinate_label(GTK_WIDGET(window),
+                                              "boop-coordinate-row",
+                                              i + 1,
+                                              expected_flipped_rows[i]);
+  }
 
   g_clear_object(&window);
   g_clear_object(&model);
@@ -427,7 +614,10 @@ int main(int argc, char **argv) {
 
   if (!gtk_init_check()) {
     g_test_add_func("/ggame-window/boop/shared-shell-widgets", test_ggame_window_skip);
+    g_test_add_func("/ggame-window/boop/current-position-analysis", test_ggame_window_skip);
+    g_test_add_func("/ggame-window/boop/full-game-analysis", test_ggame_window_skip);
     g_test_add_func("/ggame-window/boop/layout-defaults-fit-board-host", test_ggame_window_skip);
+    g_test_add_func("/ggame-window/boop/board-edge-coordinates", test_ggame_window_skip);
     g_test_add_func("/ggame-window/boop/auto-move-next-player-computer", test_ggame_window_skip);
     g_test_add_func("/ggame-window/boop/sgf-actions-navigate", test_ggame_window_skip);
     g_test_add_func("/ggame-window/boop/supply-selection-tracks-turn", test_ggame_window_skip);
@@ -444,7 +634,10 @@ int main(int argc, char **argv) {
                    error != NULL ? error->message : "unknown error");
     g_clear_object(&test_app);
     g_test_add_func("/ggame-window/boop/shared-shell-widgets", test_ggame_window_skip);
+    g_test_add_func("/ggame-window/boop/current-position-analysis", test_ggame_window_skip);
+    g_test_add_func("/ggame-window/boop/full-game-analysis", test_ggame_window_skip);
     g_test_add_func("/ggame-window/boop/layout-defaults-fit-board-host", test_ggame_window_skip);
+    g_test_add_func("/ggame-window/boop/board-edge-coordinates", test_ggame_window_skip);
     g_test_add_func("/ggame-window/boop/auto-move-next-player-computer", test_ggame_window_skip);
     g_test_add_func("/ggame-window/boop/sgf-actions-navigate", test_ggame_window_skip);
     g_test_add_func("/ggame-window/boop/supply-selection-tracks-turn", test_ggame_window_skip);
@@ -454,8 +647,14 @@ int main(int argc, char **argv) {
   }
 
   g_test_add_func("/ggame-window/boop/shared-shell-widgets", test_ggame_window_boop_shared_shell_widgets_exist);
+  g_test_add_func("/ggame-window/boop/current-position-analysis",
+                  test_ggame_window_boop_current_position_analysis_attaches_to_current_node);
+  g_test_add_func("/ggame-window/boop/full-game-analysis",
+                  test_ggame_window_boop_full_game_analysis_attaches_to_replayed_nodes);
   g_test_add_func("/ggame-window/boop/layout-defaults-fit-board-host",
                   test_ggame_window_boop_layout_defaults_fit_board_host);
+  g_test_add_func("/ggame-window/boop/board-edge-coordinates",
+                  test_ggame_window_boop_board_uses_edge_coordinates);
   g_test_add_func("/ggame-window/boop/auto-move-next-player-computer",
                   test_ggame_window_boop_auto_moves_when_next_player_is_computer);
   g_test_add_func("/ggame-window/boop/sgf-actions-navigate",

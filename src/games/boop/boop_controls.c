@@ -12,6 +12,8 @@ typedef struct {
   GtkWidget *supply_panels[2];
   GtkWidget *promotion_buttons[2];
   GtkWidget *supply_pile_buttons[2][2];
+  GtkWidget *coordinate_row_labels[BOOP_BOARD_SIZE];
+  GtkWidget *coordinate_column_labels[BOOP_BOARD_SIZE];
   guint selected_rank[2];
   gulong model_state_changed_handler_id;
 } GBoopControlsState;
@@ -34,7 +36,13 @@ static const char *gboop_controls_css =
     ".piece-label { font-size: 28px; font-weight: 900; }"
     ".piece-side-0 { color: #74777c; }"
     ".piece-side-1 { color: #f0c64a; }"
-    ".square-index { opacity: 0.35; font-size: 9px; }";
+    ".board-square .board-square-index { opacity: 0; }"
+    ".square-index { background-color: rgba(0,0,0,0.65); color: #fff; font-size: 9px; }"
+    ".boop-coordinate { margin: 0 2px; }";
+
+static const int gboop_controls_board_border_padding = 8;
+static const int gboop_controls_coordinate_track_size = 12;
+static const int gboop_controls_board_square_spacing = 1;
 
 static guint gboop_controls_pile_index_to_rank(guint pile_index) {
   return pile_index == 1 ? BOOP_PIECE_RANK_CAT : BOOP_PIECE_RANK_KITTEN;
@@ -219,6 +227,63 @@ static void gboop_controls_update_supply(GBoopControlsState *state) {
   }
 }
 
+static char gboop_controls_column_coordinate(guint display_col, guint bottom_side) {
+  guint logical_col = 0;
+
+  g_return_val_if_fail(display_col < BOOP_BOARD_SIZE, 'a');
+
+  logical_col = display_col;
+  if (bottom_side != 0) {
+    logical_col = BOOP_BOARD_SIZE - 1 - display_col;
+  }
+
+  return (char)('a' + logical_col);
+}
+
+static guint gboop_controls_row_coordinate(guint display_row, guint bottom_side) {
+  guint logical_row = 0;
+
+  g_return_val_if_fail(display_row < BOOP_BOARD_SIZE, 1);
+
+  logical_row = BOOP_BOARD_SIZE - 1 - display_row;
+  if (bottom_side != 0) {
+    logical_row = display_row;
+  }
+
+  return logical_row + 1;
+}
+
+static void gboop_controls_update_coordinates(GBoopControlsState *state) {
+  guint bottom_side = 0;
+
+  g_return_if_fail(state != NULL);
+  g_return_if_fail(BOARD_IS_VIEW(state->board_view));
+
+  bottom_side = board_view_get_bottom_side(state->board_view);
+  for (guint i = 0; i < BOOP_BOARD_SIZE; ++i) {
+    char column_label[2] = {0};
+    char row_label[8] = {0};
+
+    if (GTK_IS_LABEL(state->coordinate_column_labels[i])) {
+      column_label[0] = gboop_controls_column_coordinate(i, bottom_side);
+      gtk_label_set_text(GTK_LABEL(state->coordinate_column_labels[i]), column_label);
+    }
+
+    if (GTK_IS_LABEL(state->coordinate_row_labels[i])) {
+      g_snprintf(row_label, sizeof(row_label), "%u", gboop_controls_row_coordinate(i, bottom_side));
+      gtk_label_set_text(GTK_LABEL(state->coordinate_row_labels[i]), row_label);
+    }
+  }
+}
+
+static void gboop_controls_on_board_view_bottom_side_changed(gpointer user_data) {
+  GBoopControlsState *state = user_data;
+
+  g_return_if_fail(state != NULL);
+
+  gboop_controls_update_coordinates(state);
+}
+
 static gboolean gboop_controls_prefer_selected_supply_candidate(gconstpointer move, gpointer user_data) {
   const BoopMove *boop_move = move;
   GBoopControlsState *state = user_data;
@@ -332,6 +397,81 @@ static GtkWidget *gboop_controls_create_supply_panel(GBoopControlsState *state, 
   return panel;
 }
 
+static GtkWidget *gboop_controls_create_coordinate_label(const char *data_key, guint ordinal) {
+  GtkWidget *label = gtk_label_new(NULL);
+
+  gtk_label_set_xalign(GTK_LABEL(label), 0.5f);
+  gtk_widget_set_hexpand(label, TRUE);
+  gtk_widget_set_vexpand(label, TRUE);
+  gtk_widget_set_halign(label, GTK_ALIGN_CENTER);
+  gtk_widget_set_valign(label, GTK_ALIGN_CENTER);
+  gtk_widget_set_can_target(label, FALSE);
+  gtk_widget_add_css_class(label, "square-index");
+  gtk_widget_add_css_class(label, "boop-coordinate");
+  g_object_set_data(G_OBJECT(label), data_key, GUINT_TO_POINTER(ordinal));
+
+  return label;
+}
+
+static GtkWidget *gboop_controls_create_board_frame(GBoopControlsState *state, BoardView *board_view) {
+  GtkWidget *board_root = NULL;
+  GtkWidget *row_box = NULL;
+  GtkWidget *column_box = NULL;
+  GtkWidget *board_aspect = NULL;
+
+  g_return_val_if_fail(state != NULL, NULL);
+  g_return_val_if_fail(BOARD_IS_VIEW(board_view), NULL);
+  board_root = board_view_get_widget(board_view);
+  g_return_val_if_fail(GTK_IS_OVERLAY(board_root), NULL);
+
+  row_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  gtk_widget_set_size_request(row_box, gboop_controls_coordinate_track_size, -1);
+  gtk_widget_set_vexpand(row_box, TRUE);
+  gtk_widget_set_halign(row_box, GTK_ALIGN_START);
+  gtk_widget_set_valign(row_box, GTK_ALIGN_FILL);
+  gtk_widget_set_margin_start(row_box, 0);
+  gtk_widget_set_margin_top(row_box, gboop_controls_board_border_padding);
+  gtk_widget_set_margin_bottom(row_box, gboop_controls_board_border_padding);
+  gtk_widget_set_can_target(row_box, FALSE);
+  gtk_box_set_spacing(GTK_BOX(row_box), gboop_controls_board_square_spacing);
+  gtk_box_set_homogeneous(GTK_BOX(row_box), TRUE);
+  for (guint i = 0; i < BOOP_BOARD_SIZE; ++i) {
+    GtkWidget *label = gboop_controls_create_coordinate_label("boop-coordinate-row", i + 1);
+    state->coordinate_row_labels[i] = label;
+    gtk_box_append(GTK_BOX(row_box), label);
+  }
+
+  board_aspect = gtk_aspect_frame_new(0.5f, 0.5f, 1.0f, FALSE);
+  gtk_widget_set_hexpand(board_aspect, TRUE);
+  gtk_widget_set_vexpand(board_aspect, TRUE);
+  gtk_aspect_frame_set_child(GTK_ASPECT_FRAME(board_aspect), board_root);
+
+  column_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  gtk_widget_set_size_request(column_box, -1, gboop_controls_coordinate_track_size);
+  gtk_widget_set_hexpand(column_box, TRUE);
+  gtk_widget_set_halign(column_box, GTK_ALIGN_FILL);
+  gtk_widget_set_valign(column_box, GTK_ALIGN_END);
+  gtk_widget_set_margin_start(column_box, gboop_controls_board_border_padding);
+  gtk_widget_set_margin_end(column_box, gboop_controls_board_border_padding);
+  gtk_widget_set_margin_bottom(column_box, 0);
+  gtk_widget_set_can_target(column_box, FALSE);
+  gtk_box_set_spacing(GTK_BOX(column_box), gboop_controls_board_square_spacing);
+  gtk_box_set_homogeneous(GTK_BOX(column_box), TRUE);
+  for (guint i = 0; i < BOOP_BOARD_SIZE; ++i) {
+    GtkWidget *label = gboop_controls_create_coordinate_label("boop-coordinate-column", i + 1);
+    state->coordinate_column_labels[i] = label;
+    gtk_box_append(GTK_BOX(column_box), label);
+  }
+  gtk_overlay_add_overlay(GTK_OVERLAY(board_root), row_box);
+  gtk_overlay_add_overlay(GTK_OVERLAY(board_root), column_box);
+  gtk_overlay_set_measure_overlay(GTK_OVERLAY(board_root), row_box, FALSE);
+  gtk_overlay_set_measure_overlay(GTK_OVERLAY(board_root), column_box, FALSE);
+  gtk_overlay_set_clip_overlay(GTK_OVERLAY(board_root), row_box, FALSE);
+  gtk_overlay_set_clip_overlay(GTK_OVERLAY(board_root), column_box, FALSE);
+
+  return board_aspect;
+}
+
 static void gboop_controls_state_free(gpointer data) {
   GBoopControlsState *state = data;
 
@@ -346,6 +486,7 @@ static void gboop_controls_state_free(gpointer data) {
     board_view_set_move_candidate_preference(state->board_view, NULL, NULL);
     board_view_set_move_completion_confirmation(state->board_view, NULL, NULL);
     board_view_set_selection_changed_handler(state->board_view, NULL, NULL);
+    board_view_set_bottom_side_changed_handler(state->board_view, NULL, NULL);
   }
 
   g_clear_object(&state->model);
@@ -381,8 +522,7 @@ static void gboop_controls_install_css(void) {
 GtkWidget *gboop_controls_create_board_host(GGameModel *model, BoardView *board_view) {
   GBoopControlsState *state = NULL;
   GtkWidget *host = NULL;
-  GtkWidget *board_aspect = NULL;
-  GtkWidget *board = NULL;
+  GtkWidget *board_frame = NULL;
 
   g_return_val_if_fail(GGAME_IS_MODEL(model), NULL);
   g_return_val_if_fail(BOARD_IS_VIEW(board_view), NULL);
@@ -411,12 +551,9 @@ GtkWidget *gboop_controls_create_board_host(GGameModel *model, BoardView *board_
   g_object_set_data(G_OBJECT(host), "boop-promotion-button-1", state->promotion_buttons[1]);
   gtk_box_append(GTK_BOX(host), side0_panel);
 
-  board_aspect = gtk_aspect_frame_new(0.5f, 0.5f, 1.0f, FALSE);
-  gtk_widget_set_hexpand(board_aspect, TRUE);
-  gtk_widget_set_vexpand(board_aspect, TRUE);
-  board = board_view_get_widget(board_view);
-  gtk_aspect_frame_set_child(GTK_ASPECT_FRAME(board_aspect), board);
-  gtk_box_append(GTK_BOX(host), board_aspect);
+  board_frame = gboop_controls_create_board_frame(state, board_view);
+  gboop_controls_update_coordinates(state);
+  gtk_box_append(GTK_BOX(host), board_frame);
 
   gtk_box_append(GTK_BOX(host), side1_panel);
 
@@ -428,6 +565,9 @@ GtkWidget *gboop_controls_create_board_host(GGameModel *model, BoardView *board_
                                                            "state-changed",
                                                            G_CALLBACK(gboop_controls_on_model_state_changed),
                                                            state);
+  board_view_set_bottom_side_changed_handler(state->board_view,
+                                             gboop_controls_on_board_view_bottom_side_changed,
+                                             state);
   gboop_controls_update_supply(state);
 
   return host;
