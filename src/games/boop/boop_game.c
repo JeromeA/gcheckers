@@ -15,6 +15,10 @@ static const gint boop_line_dirs[][2] = {
   {1, -1},
 };
 
+static GQuark boop_position_error_quark(void) {
+  return g_quark_from_static_string("boop-position-error");
+}
+
 static guint64 boop_square_mask(guint square) {
   g_return_val_if_fail(square < BOOP_SQUARE_COUNT, 0);
 
@@ -705,6 +709,102 @@ void boop_position_copy(BoopPosition *dest, const BoopPosition *src) {
   g_return_if_fail(src != NULL);
 
   *dest = *src;
+}
+
+gboolean boop_position_normalize(BoopPosition *position, GError **error) {
+  guint kittens_on_board[2] = {0};
+  guint cats_on_board[2] = {0};
+
+  g_return_val_if_fail(position != NULL, FALSE);
+
+  if (!boop_side_valid(position->turn)) {
+    g_set_error(error, boop_position_error_quark(), 1, "Invalid boop side to move: %u", position->turn);
+    return FALSE;
+  }
+
+  for (guint square = 0; square < BOOP_SQUARE_COUNT; ++square) {
+    BoopPiece piece = position->board[square];
+
+    if (boop_piece_is_empty(piece)) {
+      continue;
+    }
+    if (!boop_side_valid(piece.side)) {
+      g_set_error(error,
+                  boop_position_error_quark(),
+                  2,
+                  "Invalid boop side %u on square %u",
+                  piece.side,
+                  square);
+      return FALSE;
+    }
+    if (!boop_piece_rank_valid(piece.rank)) {
+      g_set_error(error,
+                  boop_position_error_quark(),
+                  3,
+                  "Invalid boop rank %u on square %u",
+                  piece.rank,
+                  square);
+      return FALSE;
+    }
+
+    switch ((BoopPieceRank)piece.rank) {
+      case BOOP_PIECE_RANK_KITTEN:
+        kittens_on_board[piece.side]++;
+        break;
+      case BOOP_PIECE_RANK_CAT:
+        cats_on_board[piece.side]++;
+        break;
+      case BOOP_PIECE_RANK_NONE:
+      default:
+        g_set_error(error,
+                    boop_position_error_quark(),
+                    4,
+                    "Unsupported boop rank %u on square %u",
+                    piece.rank,
+                    square);
+        return FALSE;
+    }
+  }
+
+  for (guint side = 0; side < 2; ++side) {
+    guint total_pieces = kittens_on_board[side] + cats_on_board[side] +
+                         position->kittens_in_supply[side] + position->cats_in_supply[side];
+
+    if (total_pieces != BOOP_SUPPLY_COUNT) {
+      g_set_error(error,
+                  boop_position_error_quark(),
+                  5,
+                  "Invalid boop piece total for side %u: %u",
+                  side,
+                  total_pieces);
+      return FALSE;
+    }
+
+    position->promoted_count[side] = (guint8)(cats_on_board[side] + position->cats_in_supply[side]);
+  }
+
+  gboolean side_0_wins = boop_position_has_cat_line(position, 0) ||
+                         position->promoted_count[0] >= BOOP_SUPPLY_COUNT;
+  gboolean side_1_wins = boop_position_has_cat_line(position, 1) ||
+                         position->promoted_count[1] >= BOOP_SUPPLY_COUNT;
+
+  if (side_0_wins && side_1_wins) {
+    g_set_error_literal(error,
+                        boop_position_error_quark(),
+                        6,
+                        "Invalid boop position: both sides satisfy win conditions");
+    return FALSE;
+  }
+
+  if (side_0_wins) {
+    position->outcome = GAME_BACKEND_OUTCOME_SIDE_0_WIN;
+  } else if (side_1_wins) {
+    position->outcome = GAME_BACKEND_OUTCOME_SIDE_1_WIN;
+  } else {
+    position->outcome = GAME_BACKEND_OUTCOME_ONGOING;
+  }
+
+  return TRUE;
 }
 
 GameBackendOutcome boop_position_outcome(const BoopPosition *position) {

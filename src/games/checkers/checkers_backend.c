@@ -2,6 +2,7 @@
 
 #include "ai_zobrist.h"
 #include "board.h"
+#include "checkers_sgf_position.h"
 #include "game.h"
 #include "ruleset.h"
 #include "rulesets.h"
@@ -781,6 +782,8 @@ const GameBackend checkers_game_backend = {
     .hash_position = checkers_backend_hash_position,
     .format_move = checkers_backend_format_move,
     .parse_move = checkers_backend_parse_move,
+    .sgf_apply_setup_node = checkers_sgf_position_apply_setup_node,
+    .sgf_write_position_node = checkers_sgf_position_write_position_node,
     .supports_square_grid_board = TRUE,
     .square_grid_rows = checkers_backend_square_grid_rows,
     .square_grid_cols = checkers_backend_square_grid_cols,

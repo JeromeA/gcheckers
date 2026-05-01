@@ -1,6 +1,7 @@
 #include "boop_backend.h"
 
 #include "boop_game.h"
+#include "boop_sgf_position.h"
 
 #include <string.h>
 
@@ -393,6 +394,8 @@ const GameBackend boop_game_backend = {
   .hash_position = boop_backend_hash_position,
   .format_move = boop_backend_format_move,
   .parse_move = boop_backend_parse_move,
+  .sgf_apply_setup_node = boop_sgf_position_apply_setup_node,
+  .sgf_write_position_node = boop_sgf_position_write_position_node,
   .supports_square_grid_board = TRUE,
   .square_grid_rows = boop_backend_square_grid_rows,
   .square_grid_cols = boop_backend_square_grid_cols,

@@ -752,6 +752,88 @@ static gboolean boop_moves_match(const BoopMove *left, const BoopMove *right) {
   return memcmp(left->path, right->path, left->path_length * sizeof(left->path[0])) == 0;
 }
 
+static gboolean boop_positions_match(const BoopPosition *left, const BoopPosition *right) {
+  g_return_val_if_fail(left != NULL, FALSE);
+  g_return_val_if_fail(right != NULL, FALSE);
+
+  return memcmp(left, right, sizeof(*left)) == 0;
+}
+
+static void test_ggame_sgf_controller_init_custom_boop_position(BoopPosition *position) {
+  guint side_0_kitten_square = 0;
+  guint side_0_cat_square = 0;
+  guint side_1_kitten_square = 0;
+  guint side_1_cat_square = 0;
+  g_autoptr(GError) error = NULL;
+
+  g_return_if_fail(position != NULL);
+
+  boop_position_init(position);
+  g_assert_true(boop_coord_to_square(0, 0, &side_0_kitten_square));
+  g_assert_true(boop_coord_to_square(2, 2, &side_0_cat_square));
+  g_assert_true(boop_coord_to_square(5, 5, &side_1_kitten_square));
+  g_assert_true(boop_coord_to_square(3, 1, &side_1_cat_square));
+
+  position->board[side_0_kitten_square] = (BoopPiece){.side = 0, .rank = BOOP_PIECE_RANK_KITTEN};
+  position->board[side_0_cat_square] = (BoopPiece){.side = 0, .rank = BOOP_PIECE_RANK_CAT};
+  position->board[side_1_kitten_square] = (BoopPiece){.side = 1, .rank = BOOP_PIECE_RANK_KITTEN};
+  position->board[side_1_cat_square] = (BoopPiece){.side = 1, .rank = BOOP_PIECE_RANK_CAT};
+  position->kittens_in_supply[0] = 5;
+  position->cats_in_supply[0] = 1;
+  position->kittens_in_supply[1] = 5;
+  position->cats_in_supply[1] = 1;
+  position->turn = 1;
+
+  g_assert_true(boop_position_normalize(position, &error));
+  g_assert_no_error(error);
+}
+
+static void test_ggame_sgf_controller_replay_node_into_position_roundtrips_boop_setup_root(void) {
+  const GameBackend *backend = NULL;
+  g_autoptr(SgfTree) tree = NULL;
+  SgfNode *root = NULL;
+  BoopPosition saved = {0};
+  BoopPosition restored = {0};
+  g_autoptr(GError) error = NULL;
+
+  if (!ggame_test_require_profile_kind(GGAME_APP_KIND_BOOP)) {
+    return;
+  }
+
+  backend = GGAME_ACTIVE_GAME_BACKEND;
+  g_assert_nonnull(backend);
+  g_assert_cmpstr(backend->id, ==, "boop");
+  g_assert_nonnull(backend->sgf_apply_setup_node);
+  g_assert_nonnull(backend->sgf_write_position_node);
+  g_assert_nonnull(backend->position_init);
+  g_assert_nonnull(backend->position_clear);
+
+  test_ggame_sgf_controller_init_custom_boop_position(&saved);
+
+  tree = sgf_tree_new();
+  g_assert_nonnull(tree);
+  root = (SgfNode *)sgf_tree_get_root(tree);
+  g_assert_nonnull(root);
+
+  g_assert_true(backend->sgf_write_position_node(&saved, root, &error));
+  g_assert_no_error(error);
+  g_assert_nonnull(sgf_node_get_property_values((const SgfNode *)root, "GBK"));
+  g_assert_nonnull(sgf_node_get_property_values((const SgfNode *)root, "GBC"));
+  g_assert_cmpstr(sgf_node_get_property_first((const SgfNode *)root, "GBKS"), ==, "5");
+  g_assert_cmpstr(sgf_node_get_property_first((const SgfNode *)root, "GWCS"), ==, "1");
+  g_assert_cmpstr(sgf_node_get_property_first((const SgfNode *)root, "PL"), ==, "W");
+
+  backend->position_init(&restored, NULL);
+  g_assert_true(ggame_sgf_controller_replay_node_into_position((const SgfNode *)root,
+                                                               backend,
+                                                               &restored,
+                                                               &error));
+  g_assert_no_error(error);
+  g_assert_true(boop_positions_match(&saved, &restored));
+
+  backend->position_clear(&restored);
+}
+
 static gboolean boop_apply_first_move(GGameSgfController *controller, GGameModel *model, BoopMove *out_move) {
   const GameBackend *backend = NULL;
   GameBackendMoveList moves = {0};
@@ -1093,11 +1175,71 @@ static void test_ggame_sgf_controller_boop_load_file_without_ru(void) {
   g_clear_object(&board_view);
 }
 
+static void test_ggame_sgf_controller_boop_save_position_file(void) {
+  BoardView *board_view = board_view_new();
+  GGameModel *model = ggame_model_new(GGAME_ACTIVE_GAME_BACKEND);
+  GGameSgfController *controller = ggame_sgf_controller_new(board_view);
+  BoopPosition saved_position = {0};
+
+  ggame_sgf_controller_set_game_model(controller, model);
+  test_ggame_sgf_controller_init_custom_boop_position(&saved_position);
+  g_assert_true(ggame_model_set_position(model, &saved_position));
+
+  gchar *path = g_strdup_printf("%s/test-gboop-save-position-%u.sgf", g_get_tmp_dir(), g_random_int());
+  g_assert_nonnull(path);
+
+  g_autoptr(GError) error = NULL;
+  g_assert_true(ggame_sgf_controller_save_position_file(controller, path, &error));
+  g_assert_no_error(error);
+
+  g_autofree char *saved = NULL;
+  gsize saved_len = 0;
+  g_assert_true(g_file_get_contents(path, &saved, &saved_len, &error));
+  g_assert_no_error(error);
+  g_assert_true(saved_len > 0);
+  g_assert_null(strstr(saved, "RU["));
+  g_assert_nonnull(strstr(saved, "GBK[aa]"));
+  g_assert_nonnull(strstr(saved, "GBC[cc]"));
+  g_assert_nonnull(strstr(saved, "GWK[ff]"));
+  g_assert_nonnull(strstr(saved, "GWC[bd]"));
+  g_assert_nonnull(strstr(saved, "GBKS[5]"));
+  g_assert_nonnull(strstr(saved, "GWCS[1]"));
+  g_assert_nonnull(strstr(saved, "PL[W]"));
+  g_assert_null(strstr(saved, ";B["));
+  g_assert_null(strstr(saved, ";W["));
+
+  g_autoptr(SgfTree) loaded = NULL;
+  g_assert_true(sgf_io_load_data(saved, &loaded, &error));
+  g_assert_no_error(error);
+  g_assert_nonnull(loaded);
+  const SgfNode *root = sgf_tree_get_root(loaded);
+  const GPtrArray *children = sgf_node_get_children(root);
+  g_assert_nonnull(root);
+  g_assert_nonnull(children);
+  g_assert_cmpuint(children->len, ==, 0);
+
+  ggame_model_reset(model, NULL);
+  g_assert_true(ggame_sgf_controller_load_file(controller, path, &error));
+  g_assert_no_error(error);
+
+  const BoopPosition *loaded_position = ggame_model_peek_position(model);
+  g_assert_nonnull(loaded_position);
+  g_assert_true(boop_positions_match(&saved_position, loaded_position));
+
+  g_remove(path);
+  g_free(path);
+  g_clear_object(&controller);
+  g_clear_object(&model);
+  g_clear_object(&board_view);
+}
+
 int main(int argc, char **argv) {
   ggame_test_init_profile(&argc, &argv, "checkers");
   g_test_init(&argc, &argv, NULL);
   g_test_add_func("/sgf-controller/replay-node-into-position-applies-checkers-setup-root",
                   test_ggame_sgf_controller_replay_node_into_position_applies_checkers_setup_root);
+  g_test_add_func("/sgf-controller/replay-node-into-position-roundtrips-boop-setup-root",
+                  test_ggame_sgf_controller_replay_node_into_position_roundtrips_boop_setup_root);
 
   const GGameAppProfile *profile = ggame_active_app_profile();
   g_assert_nonnull(profile);
@@ -1139,7 +1281,7 @@ int main(int argc, char **argv) {
       g_test_add_func("/sgf-controller/load-applies-setup-properties", test_ggame_sgf_controller_skip);
       g_test_add_func("/sgf-controller/load-file-requires-ru", test_ggame_sgf_controller_skip);
       g_test_add_func("/sgf-controller/replay-node-into-game-applies-setup-root", test_ggame_sgf_controller_skip);
-      g_test_add_func("/sgf-controller/save-position-file", test_ggame_sgf_controller_skip);
+      g_test_add_func("/sgf-controller/save-position-file", test_ggame_sgf_controller_boop_save_position_file);
       g_test_add_func("/sgf-controller/load-file-applies-ruleset-from-ru", test_ggame_sgf_controller_skip);
       break;
     case GGAME_APP_KIND_CHECKERS:

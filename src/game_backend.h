@@ -3,6 +3,8 @@
 
 #include <glib.h>
 
+typedef struct _SgfNode SgfNode;
+
 typedef enum {
   GAME_BACKEND_OUTCOME_ONGOING = 0,
   GAME_BACKEND_OUTCOME_SIDE_0_WIN,
@@ -85,6 +87,8 @@ typedef struct {
   guint64 (*hash_position)(gconstpointer position);
   gboolean (*format_move)(gconstpointer move, char *buffer, gsize size);
   gboolean (*parse_move)(const char *notation, gpointer out_move);
+  gboolean (*sgf_apply_setup_node)(gpointer position, const SgfNode *node, GError **error);
+  gboolean (*sgf_write_position_node)(gconstpointer position, SgfNode *node, GError **error);
   gboolean supports_square_grid_board;
   guint (*square_grid_rows)(gconstpointer position);
   guint (*square_grid_cols)(gconstpointer position);

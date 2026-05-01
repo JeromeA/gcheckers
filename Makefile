@@ -40,11 +40,11 @@ HOMEWORLDS_APP_WINDOW_SRCS := $(HOMEWORLDS_DIR)/homeworlds_app_window.c
 HOMEWORLDS_APP_WINDOW_STUB_SRCS := $(HOMEWORLDS_DIR)/homeworlds_app_window_stub.c
 HOMEWORLDS_ALL_SRCS := $(HOMEWORLDS_GAME_SRCS) $(HOMEWORLDS_BACKEND_SRCS)
 BOOP_GAME_SRCS := $(BOOP_DIR)/boop_game.c
-BOOP_BACKEND_SRCS := $(BOOP_DIR)/boop_backend.c
+BOOP_BACKEND_SRCS := $(BOOP_DIR)/boop_backend.c $(BOOP_DIR)/boop_sgf_position.c
 BOOP_STUB_SRCS := $(BOOP_DIR)/boop_controls_stub.c
 BOOP_UI_SRCS := $(BOOP_DIR)/boop_controls.c
 BOOP_RULES_SRCS := $(BOOP_GAME_SRCS) $(BOOP_BACKEND_SRCS) $(BOOP_STUB_SRCS)
-CHECKERS_BACKEND_SRCS := $(CHECKERS_DIR)/checkers_backend.c
+CHECKERS_BACKEND_SRCS := $(CHECKERS_DIR)/checkers_backend.c $(CHECKERS_DIR)/checkers_sgf_position.c
 
 CFLAGS += $(GLIB_CFLAGS) $(GOBJECT_CFLAGS) $(GIO_CFLAGS) $(GTK_CFLAGS) $(CURL_CFLAGS)
 
@@ -81,6 +81,8 @@ SGF_VIEW_SRCS := \
 WIDGET_UTILS_SRCS := src/widget_utils.c
 WIDGET_UTILS_HDRS := src/widget_utils.h
 OBJS := $(SRCS:%.c=$(OBJ_DIR)/%.o)
+BACKEND_CODEC_SRCS := $(SRCS) $(SGF_TREE_SRCS)
+BACKEND_CODEC_SRCS_NO_RULESETS := $(filter-out $(CHECKERS_DIR)/rulesets.c,$(BACKEND_CODEC_SRCS))
 COV_DIR := coverage
 COV_OBJ_DIR := $(COV_DIR)/obj
 COV_BIN_DIR := $(COV_DIR)/bin
@@ -206,31 +208,32 @@ test: $(TEST_BINS)
 		for test_bin in $(TEST_HOMEWORLDS_PROFILE_BINS); do "$$test_bin" --profile=homeworlds; done'
 
 test_game: $(TEST_GAME_BIN)
-$(TEST_GAME_BIN): tests/test_game.c $(SRCS) $(CHECKERS_DIR)/game.h
+$(TEST_GAME_BIN): tests/test_game.c $(BACKEND_CODEC_SRCS) $(CHECKERS_DIR)/game.h
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ tests/test_game.c $(SRCS) $(LDLIBS)
+	$(CC) $(CFLAGS) -o $@ tests/test_game.c $(BACKEND_CODEC_SRCS) $(LDLIBS)
 
 test_game_print: $(TEST_GAME_PRINT_BIN)
-$(TEST_GAME_PRINT_BIN): tests/test_game_print.c $(SRCS) $(CHECKERS_DIR)/game.h
+$(TEST_GAME_PRINT_BIN): tests/test_game_print.c $(BACKEND_CODEC_SRCS) $(CHECKERS_DIR)/game.h
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ tests/test_game_print.c $(SRCS) $(LDLIBS)
+	$(CC) $(CFLAGS) -o $@ tests/test_game_print.c $(BACKEND_CODEC_SRCS) $(LDLIBS)
 
 test_game_backend: $(TEST_GAME_BACKEND_BIN)
 $(TEST_GAME_BACKEND_BIN): tests/test_game_backend.c src/active_game_backend.h src/game_backend.h \
 	src/board_selection_controller.c src/board_selection_controller.h $(TEST_PROFILE_UTILS_SRCS) \
-	$(SRCS) $(CHECKERS_DIR)/rulesets.h $(CHECKERS_DIR)/ruleset.h $(CHECKERS_DIR)/game.h $(CHECKERS_DIR)/board.h \
+	$(BACKEND_CODEC_SRCS) $(CHECKERS_DIR)/rulesets.h $(CHECKERS_DIR)/ruleset.h $(CHECKERS_DIR)/game.h \
+	$(CHECKERS_DIR)/board.h \
 	$(CHECKERS_DIR)/checkers_constants.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_game_backend.c $(TEST_PROFILE_UTILS_SRCS) src/board_selection_controller.c \
-		$(SRCS) $(LDLIBS)
+		$(BACKEND_CODEC_SRCS) $(LDLIBS)
 
 test_game_model: $(TEST_GAME_MODEL_BIN)
 $(TEST_GAME_MODEL_BIN): tests/test_game_model.c src/active_game_backend.h src/game_backend.h src/game_model.h \
-	$(TEST_PROFILE_UTILS_SRCS) $(SRCS) $(CHECKERS_DIR)/rulesets.h $(CHECKERS_DIR)/ruleset.h \
+	$(TEST_PROFILE_UTILS_SRCS) $(BACKEND_CODEC_SRCS) $(CHECKERS_DIR)/rulesets.h $(CHECKERS_DIR)/ruleset.h \
 	$(CHECKERS_DIR)/game.h $(CHECKERS_DIR)/board.h \
 	$(CHECKERS_DIR)/checkers_constants.h
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ tests/test_game_model.c $(TEST_PROFILE_UTILS_SRCS) $(SRCS) $(LDLIBS)
+	$(CC) $(CFLAGS) -o $@ tests/test_game_model.c $(TEST_PROFILE_UTILS_SRCS) $(BACKEND_CODEC_SRCS) $(LDLIBS)
 
 test_homeworlds_game: $(TEST_HOMEWORLDS_GAME_BIN)
 $(TEST_HOMEWORLDS_GAME_BIN): tests/test_homeworlds_game.c $(HOMEWORLDS_GAME_SRCS) $(HOMEWORLDS_DIR)/homeworlds_game.h $(HOMEWORLDS_DIR)/homeworlds_types.h
@@ -248,9 +251,10 @@ $(TEST_BOOP_GAME_BIN): tests/test_boop_game.c $(BOOP_GAME_SRCS) $(BOOP_DIR)/boop
 	$(CC) $(CFLAGS) -o $@ tests/test_boop_game.c $(BOOP_GAME_SRCS) $(LDLIBS)
 
 test_boop_backend: $(TEST_BOOP_BACKEND_BIN)
-$(TEST_BOOP_BACKEND_BIN): tests/test_boop_backend.c $(BOOP_RULES_SRCS) $(BOOP_DIR)/boop_backend.h $(BOOP_DIR)/boop_game.h
+$(TEST_BOOP_BACKEND_BIN): tests/test_boop_backend.c $(BOOP_RULES_SRCS) $(SGF_TREE_SRCS) \
+	$(BOOP_DIR)/boop_backend.h $(BOOP_DIR)/boop_game.h
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ tests/test_boop_backend.c $(BOOP_RULES_SRCS) $(LDLIBS)
+	$(CC) $(CFLAGS) -o $@ tests/test_boop_backend.c $(BOOP_RULES_SRCS) $(SGF_TREE_SRCS) $(LDLIBS)
 
 test_board: $(TEST_BOARD_BIN)
 $(TEST_BOARD_BIN): tests/test_board.c $(BOARD_SRCS) $(CHECKERS_DIR)/board.h $(CHECKERS_DIR)/checkers_constants.h
@@ -266,9 +270,9 @@ $(TEST_BOARD_GEOMETRY_BIN): tests/test_board_geometry.c $(CHECKERS_DIR)/board_ge
 		$(LDLIBS)
 
 test_move_gen: $(TEST_MOVE_GEN_BIN)
-$(TEST_MOVE_GEN_BIN): tests/test_move_gen.c $(SRCS) $(CHECKERS_DIR)/game.h
+$(TEST_MOVE_GEN_BIN): tests/test_move_gen.c $(BACKEND_CODEC_SRCS) $(CHECKERS_DIR)/game.h
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ tests/test_move_gen.c $(SRCS) $(LDLIBS)
+	$(CC) $(CFLAGS) -o $@ tests/test_move_gen.c $(BACKEND_CODEC_SRCS) $(LDLIBS)
 
 $(CREATE_PUZZLES_BIN): src/create_puzzles.c $(CHECKERS_DIR)/create_puzzles_cli.c $(CHECKERS_DIR)/create_puzzles_cli.h \
 	$(CHECKERS_DIR)/puzzle_generation.c $(CHECKERS_DIR)/puzzle_generation.h src/sgf_io.c src/sgf_io.h src/sgf_tree.c src/sgf_tree.h \
@@ -293,23 +297,23 @@ $(TEST_CREATE_PUZZLES_CHECK_BIN): $(CREATE_PUZZLES_BIN) tests/test_create_puzzle
 		src/sgf_move_props.c $(SRCS) $(LDLIBS)
 
 test_checkers_model: $(TEST_CHECKERS_MODEL_BIN)
-$(TEST_CHECKERS_MODEL_BIN): tests/test_checkers_model.c $(SRCS) $(CHECKERS_DIR)/checkers_model.h
+$(TEST_CHECKERS_MODEL_BIN): tests/test_checkers_model.c $(BACKEND_CODEC_SRCS) $(CHECKERS_DIR)/checkers_model.h
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ tests/test_checkers_model.c $(SRCS) $(LDLIBS)
+	$(CC) $(CFLAGS) -o $@ tests/test_checkers_model.c $(BACKEND_CODEC_SRCS) $(LDLIBS)
 
 test_ai_search: $(TEST_AI_SEARCH_BIN)
 $(TEST_AI_SEARCH_BIN): tests/test_ai_search.c src/active_game_backend.h src/game_backend.h src/ai_search.h \
-	$(TEST_PROFILE_UTILS_SRCS) $(SRCS) $(CHECKERS_DIR)/rulesets.h $(CHECKERS_DIR)/ruleset.h \
+	$(TEST_PROFILE_UTILS_SRCS) $(BACKEND_CODEC_SRCS) $(CHECKERS_DIR)/rulesets.h $(CHECKERS_DIR)/ruleset.h \
 	$(CHECKERS_DIR)/game.h $(CHECKERS_DIR)/board.h \
 	$(CHECKERS_DIR)/checkers_constants.h
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ tests/test_ai_search.c $(TEST_PROFILE_UTILS_SRCS) $(SRCS) $(LDLIBS)
+	$(CC) $(CFLAGS) -o $@ tests/test_ai_search.c $(TEST_PROFILE_UTILS_SRCS) $(BACKEND_CODEC_SRCS) $(LDLIBS)
 
 test_ai_transposition_table: $(TEST_AI_TRANSPOSITION_TABLE_BIN)
-$(TEST_AI_TRANSPOSITION_TABLE_BIN): tests/test_ai_transposition_table.c $(SRCS) \
+$(TEST_AI_TRANSPOSITION_TABLE_BIN): tests/test_ai_transposition_table.c $(BACKEND_CODEC_SRCS) \
 	$(CHECKERS_DIR)/ai_transposition_table.h $(CHECKERS_DIR)/ai_zobrist.h
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ tests/test_ai_transposition_table.c $(SRCS) $(LDLIBS)
+	$(CC) $(CFLAGS) -o $@ tests/test_ai_transposition_table.c $(BACKEND_CODEC_SRCS) $(LDLIBS)
 
 test_bga_client: $(TEST_BGA_CLIENT_BIN)
 $(TEST_BGA_CLIENT_BIN): tests/test_bga_client.c src/bga_client.c src/bga_client.h
@@ -319,16 +323,17 @@ $(TEST_BGA_CLIENT_BIN): tests/test_bga_client.c src/bga_client.c src/bga_client.
 test_file_dialog_history: $(TEST_FILE_DIALOG_HISTORY_BIN)
 $(TEST_FILE_DIALOG_HISTORY_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_file_dialog_history.c \
 	src/file_dialog_history.c src/file_dialog_history.h src/app_settings.c src/app_settings.h \
-	$(TEST_PROFILE_UTILS_SRCS) $(SRCS)
+	$(TEST_PROFILE_UTILS_SRCS) $(BACKEND_CODEC_SRCS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_file_dialog_history.c $(TEST_PROFILE_UTILS_SRCS) src/file_dialog_history.c \
-		src/app_settings.c $(SRCS) $(LDLIBS)
+		src/app_settings.c $(BACKEND_CODEC_SRCS) $(LDLIBS)
 
 test_app_settings: $(TEST_APP_SETTINGS_BIN)
 $(TEST_APP_SETTINGS_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_app_settings.c src/app_settings.c \
-	src/app_settings.h $(TEST_PROFILE_UTILS_SRCS) $(SRCS)
+	src/app_settings.h $(TEST_PROFILE_UTILS_SRCS) $(BACKEND_CODEC_SRCS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ tests/test_app_settings.c $(TEST_PROFILE_UTILS_SRCS) src/app_settings.c $(SRCS) $(LDLIBS)
+	$(CC) $(CFLAGS) -o $@ tests/test_app_settings.c $(TEST_PROFILE_UTILS_SRCS) src/app_settings.c \
+		$(BACKEND_CODEC_SRCS) $(LDLIBS)
 
 test_app_paths: $(TEST_APP_PATHS_BIN)
 $(TEST_APP_PATHS_BIN): tests/test_app_paths.c $(APP_PATHS_SRCS) src/app_paths.h
@@ -340,12 +345,12 @@ $(TEST_PUZZLE_PROGRESS_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_puzzle_prog
 	src/puzzle_progress.c src/puzzle_progress.h src/file_dialog_history.c src/file_dialog_history.h \
 	$(TEST_PROFILE_UTILS_SRCS) \
 	$(CHECKERS_DIR)/rulesets.c $(CHECKERS_DIR)/rulesets.h $(CHECKERS_DIR)/game.h $(CHECKERS_DIR)/board.h \
-	$(filter-out $(CHECKERS_DIR)/rulesets.c,$(SRCS)) \
+	$(BACKEND_CODEC_SRCS_NO_RULESETS) \
 	$(CHECKERS_DIR)/checkers_constants.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_puzzle_progress.c $(TEST_PROFILE_UTILS_SRCS) $(APP_PATHS_SRCS) \
 		src/puzzle_progress.c src/file_dialog_history.c $(CHECKERS_DIR)/rulesets.c \
-		$(filter-out $(CHECKERS_DIR)/rulesets.c,$(SRCS)) $(LDLIBS)
+		$(BACKEND_CODEC_SRCS_NO_RULESETS) $(LDLIBS)
 
 test_puzzle_progress_report_server: $(TEST_PUZZLE_PROGRESS_REPORT_SERVER_BIN)
 	@set -eu; \
@@ -536,10 +541,10 @@ $(TEST_PUZZLE_GENERATION_BIN): tests/test_puzzle_generation.c $(CHECKERS_DIR)/pu
 
 test_puzzle_catalog: $(TEST_PUZZLE_CATALOG_BIN)
 $(TEST_PUZZLE_CATALOG_BIN): tests/test_puzzle_catalog.c $(APP_PATHS_SRCS) $(PUZZLE_CATALOG_SRCS) \
-	src/puzzle_catalog.h src/app_paths.h $(TEST_PROFILE_UTILS_SRCS) $(SRCS)
+	src/puzzle_catalog.h src/app_paths.h $(TEST_PROFILE_UTILS_SRCS) $(BACKEND_CODEC_SRCS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_puzzle_catalog.c $(TEST_PROFILE_UTILS_SRCS) $(APP_PATHS_SRCS) \
-		$(PUZZLE_CATALOG_SRCS) $(SRCS) $(LDLIBS)
+		$(PUZZLE_CATALOG_SRCS) $(BACKEND_CODEC_SRCS) $(LDLIBS)
 
 test_piece_palette: $(TEST_PIECE_PALETTE_BIN)
 $(TEST_PIECE_PALETTE_BIN): tests/test_piece_palette.c src/piece_palette.c src/piece_palette.h \

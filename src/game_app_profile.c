@@ -87,7 +87,7 @@ static const GGameAppProfile boop_app_profile = {
           .supports_puzzles = FALSE,
           .supports_import = FALSE,
           .supports_settings = TRUE,
-          .supports_save_position = FALSE,
+          .supports_save_position = TRUE,
           .supports_edit_mode = FALSE,
       },
   .ui =

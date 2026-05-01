@@ -48,7 +48,7 @@ static void test_app_profile_metadata(void) {
       assert(!profile->features.supports_puzzles);
       assert(!profile->features.supports_import);
       assert(profile->features.supports_settings);
-      assert(!profile->features.supports_save_position);
+      assert(profile->features.supports_save_position);
       assert(!profile->features.supports_edit_mode);
       assert(profile->features.supports_analysis);
       assert(profile->ui.create_window == NULL);
@@ -72,6 +72,8 @@ static void test_backend_metadata(void) {
       assert(backend->supports_move_builder);
       assert(backend->supports_ai_search);
       assert(backend->list_good_moves != NULL);
+      assert(backend->sgf_apply_setup_node != NULL);
+      assert(backend->sgf_write_position_node != NULL);
 
       const GameBackendVariant *american = backend->variant_at(0);
       assert(american != NULL);
@@ -90,6 +92,8 @@ static void test_backend_metadata(void) {
       assert(backend->supports_move_builder);
       assert(backend->supports_ai_search);
       assert(backend->list_good_moves != NULL);
+      assert(backend->sgf_apply_setup_node == NULL);
+      assert(backend->sgf_write_position_node == NULL);
       assert(strcmp(backend->side_label(0), "Player 1") == 0);
       assert(strcmp(backend->side_label(1), "Player 2") == 0);
       break;
@@ -102,6 +106,8 @@ static void test_backend_metadata(void) {
       assert(backend->supports_ai_search);
       assert(backend->list_good_moves != NULL);
       assert(backend->supports_square_grid_board);
+      assert(backend->sgf_apply_setup_node != NULL);
+      assert(backend->sgf_write_position_node != NULL);
       assert(strcmp(backend->side_label(0), "Player 1") == 0);
       assert(strcmp(backend->side_label(1), "Player 2") == 0);
       break;

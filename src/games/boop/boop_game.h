@@ -24,6 +24,7 @@ typedef struct {
 void boop_position_init(BoopPosition *position);
 void boop_position_clear(BoopPosition *position);
 void boop_position_copy(BoopPosition *dest, const BoopPosition *src);
+gboolean boop_position_normalize(BoopPosition *position, GError **error);
 GameBackendOutcome boop_position_outcome(const BoopPosition *position);
 guint boop_position_turn(const BoopPosition *position);
 GameBackendMoveList boop_position_list_moves(const BoopPosition *position);

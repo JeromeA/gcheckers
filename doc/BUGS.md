@@ -246,3 +246,20 @@ starting position.
 The fix keeps runtime profile selection intact but routes checkers generic-position replay back through the
 setup-aware checkers replay helper. A headless SGF controller regression now checks that replaying a root setup node
 into a generic checkers backend position produces the configured puzzle state.
+
+## Boop could not save and reload position-only SGFs
+
+Boop should be able to use the shared `Save position...` action and reopen the saved file at the same midgame board,
+supplies, and side to move.
+
+The shared action was only enabled for profiles that claimed `supports_save_position`, and boop still reported that as
+false. Underneath, the controller implementation was also still hardwired to `GCheckersModel`: it serialized checkers
+setup properties directly from `GameState`, and the generic SGF replay path only reapplied `B[]`/`W[]` moves without
+any backend-owned root setup handling. Even if boop had exposed the action, loading a saved snapshot would have
+fallen back to the opening position.
+
+The fix moves SGF position snapshots behind backend hooks. `GGameSgfController` now asks the active backend to apply
+node setup during replay and to write a root snapshot for `Save position...`. Checkers moved its existing setup codec
+behind those hooks, and boop adds its own root snapshot codec for board pieces, supply counts, and `PL`. Boop now
+enables `supports_save_position`, and regression coverage includes a headless boop SGF snapshot roundtrip plus the
+controller/save-position path when GTK is available.

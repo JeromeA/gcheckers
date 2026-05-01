@@ -141,17 +141,16 @@ Role: SGF timeline authority and synchronization point between SGF current-node 
 Move application is SGF-first: validate the move against the bound model, append or reuse the matching SGF child
 under SGF current, set SGF current, then project that transition back into the model (`single move` if parent->child,
 otherwise reset+replay from root).
-Replay applies SGF setup properties (`AB`, `AE`, `AW`) and side-to-play (`PL`) on every visited node before move
-replay, so loading/setup-only SGF nodes can drive board state and turn correctly. Custom king markers (`ABK`, `AWK`)
-are validated as subsets of `AB`/`AW` and then applied as kings. Root `RU[<ruleset-short-name>]` is now read on load
-to switch the model to the matching ruleset before replay, and SGF loads now fail if `RU` is missing or unknown
-instead of falling back to the current model rules. `RU` is stamped back onto fresh trees and saved SGFs so
-variant-specific files round-trip explicitly. The controller now also supports plain `GGameModel` consumers:
-zero-variant backends such as boop accept SGF files with no `RU`, generic AI stepping uses `ai_search.c`, and
-generic replay allocates a temporary backend position, replays SGF moves into it, then publishes that position back
-through `ggame_model_set_position()`. Checkers still routes generic position replay through the same setup-aware
-checkers path as the legacy wrapper, so root setup properties keep driving puzzle and edited-position loads even when
-the shared shell binds only the generic `GGameModel`.
+Replay now delegates node-setup handling to optional backend SGF hooks before replaying any `B[...]`/`W[...]` move on
+that node. Checkers uses that hook for `AE`/`AB`/`AW` plus `ABK`/`AWK` king markers and `PL`, while boop uses it for
+custom root snapshot properties that restore on-board kittens/cats, per-side supplies, and `PL`. Root
+`RU[<ruleset-short-name>]` is still read on load to switch the legacy checkers model to the matching ruleset before
+replay, and SGF loads now fail if `RU` is missing or unknown instead of falling back to the current model rules.
+`RU` is stamped back onto fresh trees and saved SGFs when the active backend has variants; zero-variant backends such
+as boop accept and write no `RU`. `Save position...` now uses the same backend hook layer in reverse: the shared
+controller creates a fresh one-node SGF tree, asks the active backend to write a root position snapshot, and then
+saves through `sgf_io_save_file()`. That keeps position-only SGFs shared while leaving the actual snapshot encoding
+backend-owned.
 `ggame_sgf_controller_set_model()` binds the legacy checkers wrapper plus its inner `GGameModel`;
 `ggame_sgf_controller_set_game_model()` binds generic callers directly. Timeline clearing remains explicit via
 `ggame_sgf_controller_new_game()`. Exposes SGF navigation helpers used by the shared window: rewind to root, step
@@ -464,7 +463,8 @@ back through source-ship selection for each granted action.
 Collaborates with: `homeworlds_game.c`, `homeworlds_backend.c`, and `tests/test_homeworlds_backend.c`.
 
 ## Boop engine (`src/games/boop/boop_types.h`, `src/games/boop/boop_game.c`,
-`src/games/boop/boop_game.h`, `src/games/boop/boop_backend.c`, `src/games/boop/boop_backend.h`)
+`src/games/boop/boop_game.h`, `src/games/boop/boop_backend.c`, `src/games/boop/boop_backend.h`,
+`src/games/boop/boop_sgf_position.c`, `src/games/boop/boop_sgf_position.h`)
 Module: boop position, move, rules, builder, and backend adapter.
 Role: implement the 6x6 boop rules from `src/games/boop/RULES.md`. Positions store board cells, side to move,
 per-side kitten/cat supplies, promoted-kitten counts, and terminal outcome. Moves store placement square, placed rank,
@@ -479,6 +479,10 @@ ranks for each empty square and leaves the active rank choice to the UI candidat
 selection paths contain only the promotion squares, so the just-placed piece is highlighted only when it is actually
 one of the candidate promotion squares. The boop engine also exposes last-move overlay metadata so the GTK board can
 circle the placed piece and draw arrows for every booped piece, including off-board boops that return to supply.
+`boop_position_normalize()` is the shared validator for arbitrary boop snapshots: it derives promoted-cat counts from
+board/supply state, recomputes terminal outcome, and rejects impossible totals before position-only SGF replay
+publishes a snapshot into the model. `boop_sgf_position.c` uses that helper to encode and decode root snapshot
+properties (`GBK`, `GBC`, `GWK`, `GWC`, plus per-side supply counts and `PL`) for boop `Save position...`.
 Collaborates with: `src/games/boop/boop_controls.c`, `GGameModel`, `BoardView`, `GGameWindow`, `tests/test_boop_game.c`,
 `tests/test_boop_backend.c`, and the generic backend/model/SGF tests.
 
@@ -505,13 +509,16 @@ formatting APIs into that generic table. `src/games/homeworlds/homeworlds_backen
 Homeworlds engine and staged move builder, advertises `supports_move_builder = TRUE`, `supports_move_list = FALSE`,
 `supports_ai_search = TRUE`, and implements `list_good_moves` by exploring the builder in heuristic order and stopping
 after a bounded subset. `src/games/boop/boop_backend.c` adapts the boop engine, advertises move lists, staged
-move-building, square-grid rendering, AI search, notation formatting/parsing, and hashing.
+move-building, square-grid rendering, AI search, notation formatting/parsing, hashing, and backend-owned SGF position
+snapshot hooks.
 Scope: shared application code still has some checkers-native compatibility layers, but the physical checkers source
 ownership boundary is now explicit under `src/games/checkers/`.
 Backends now advertise whether they support full move-list enumeration, incremental move-building, AI search, and
 backend-owned move parsing/formatting for SGF. Move-builder backends can also expose preview positions, builder-owned
 selection paths, and selection reset behavior for multi-stage interactions such as boop promotion choices. Backend
-outcome banner text is reserved for terminal outcomes; ongoing positions should return no banner text.
+outcome banner text is reserved for terminal outcomes; ongoing positions should return no banner text. They can also
+optionally expose SGF setup-node and root-position snapshot hooks so the shared controller can replay setup-root SGFs
+and save position-only SGFs without game-specific branches.
 Collaborates with: `Makefile` backend selection, `tests/test_game_backend.c`, and future generic model/search work.
 
 ## Generic game model (`src/game_model.c`, `src/game_model.h`)
