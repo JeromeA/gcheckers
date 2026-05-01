@@ -5,6 +5,7 @@
 
 #include "../src/active_game_backend.h"
 #include "../src/game_model.h"
+#include "test_profile_utils.h"
 
 typedef struct {
   guint calls;
@@ -242,7 +243,6 @@ static void test_game_model_state_changed_cb(GGameModel * /*model*/, gpointer us
   probe->calls++;
 }
 
-#if defined(GGAME_GAME_HOMEWORLDS)
 static gboolean test_game_model_build_first_builder_move(const GameBackend *backend,
                                                          gconstpointer position,
                                                          gpointer out_move) {
@@ -290,7 +290,6 @@ static gboolean test_game_model_build_first_builder_move(const GameBackend *back
   backend->move_builder_clear(&builder);
   return built;
 }
-#endif
 
 static void test_game_model_init_and_apply_move(void) {
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
@@ -302,43 +301,49 @@ static void test_game_model_init_and_apply_move(void) {
   assert(ggame_model_peek_backend(model) == backend);
   assert(ggame_model_peek_position(model) != NULL);
 
-#if defined(GGAME_GAME_CHECKERS)
-  const GameBackendVariant *variant = ggame_model_peek_variant(model);
-  assert(variant != NULL);
-  assert(strcmp(variant->short_name, "american") == 0);
-#else
-  assert(ggame_model_peek_variant(model) == NULL);
-#endif
+  if (ggame_active_app_profile()->kind == GGAME_APP_KIND_CHECKERS) {
+    const GameBackendVariant *variant = ggame_model_peek_variant(model);
+    assert(variant != NULL);
+    assert(strcmp(variant->short_name, "american") == 0);
+  } else {
+    assert(ggame_model_peek_variant(model) == NULL);
+  }
 
   handler_id = g_signal_connect(model, "state-changed", G_CALLBACK(test_game_model_state_changed_cb), &probe);
   assert(handler_id > 0);
 
-#if defined(GGAME_GAME_CHECKERS) || defined(GGAME_GAME_BOOP)
-  GameBackendMoveList moves = ggame_model_list_moves(model);
-  assert(moves.count > 0);
+  switch (ggame_active_app_profile()->kind) {
+    case GGAME_APP_KIND_CHECKERS:
+    case GGAME_APP_KIND_BOOP: {
+      GameBackendMoveList moves = ggame_model_list_moves(model);
+      assert(moves.count > 0);
 
-  const void *first_move = backend->move_list_get(&moves, 0);
-  assert(first_move != NULL);
+      const void *first_move = backend->move_list_get(&moves, 0);
+      assert(first_move != NULL);
 
-  gpointer move_copy = g_malloc0(backend->move_size);
-  assert(move_copy != NULL);
-  memcpy(move_copy, first_move, backend->move_size);
+      gpointer move_copy = g_malloc0(backend->move_size);
+      assert(move_copy != NULL);
+      memcpy(move_copy, first_move, backend->move_size);
 
-  assert(ggame_model_apply_move(model, move_copy));
-  assert(probe.calls == 1);
+      assert(ggame_model_apply_move(model, move_copy));
+      assert(probe.calls == 1);
 
-  backend->move_list_free(&moves);
-  g_free(move_copy);
-#elif defined(GGAME_GAME_HOMEWORLDS)
-  gpointer move = g_malloc0(backend->move_size);
-  assert(move != NULL);
-  assert(test_game_model_build_first_builder_move(backend, ggame_model_peek_position(model), move));
-  assert(ggame_model_apply_move(model, move));
-  assert(probe.calls == 1);
-  g_free(move);
-#else
-#error "Add move application expectations for the selected backend."
-#endif
+      backend->move_list_free(&moves);
+      g_free(move_copy);
+      break;
+    }
+    case GGAME_APP_KIND_HOMEWORLDS: {
+      gpointer move = g_malloc0(backend->move_size);
+      assert(move != NULL);
+      assert(test_game_model_build_first_builder_move(backend, ggame_model_peek_position(model), move));
+      assert(ggame_model_apply_move(model, move));
+      assert(probe.calls == 1);
+      g_free(move);
+      break;
+    }
+    default:
+      assert(!"Unhandled profile kind");
+  }
   g_object_unref(model);
 }
 
@@ -353,50 +358,57 @@ static void test_game_model_reset_and_status(void) {
   handler_id = g_signal_connect(model, "state-changed", G_CALLBACK(test_game_model_state_changed_cb), &probe);
   assert(handler_id > 0);
 
-#if defined(GGAME_GAME_CHECKERS)
-  const GameBackendVariant *russian = backend->variant_by_short_name("russian");
-  assert(russian != NULL);
+  switch (ggame_active_app_profile()->kind) {
+    case GGAME_APP_KIND_CHECKERS: {
+      const GameBackendVariant *russian = backend->variant_by_short_name("russian");
+      assert(russian != NULL);
 
-  ggame_model_reset(model, russian);
-  assert(probe.calls == 1);
+      ggame_model_reset(model, russian);
+      assert(probe.calls == 1);
 
-  const GameBackendVariant *variant = ggame_model_peek_variant(model);
-  assert(variant == russian);
+      const GameBackendVariant *variant = ggame_model_peek_variant(model);
+      assert(variant == russian);
 
-  char *status = ggame_model_format_status(model);
-  assert(status != NULL);
-  assert(strstr(status, "Game: Checkers") != NULL);
-  assert(strstr(status, "Variant: Russian (8x8)") != NULL);
-  g_free(status);
+      char *status = ggame_model_format_status(model);
+      assert(status != NULL);
+      assert(strstr(status, "Game: Checkers") != NULL);
+      assert(strstr(status, "Variant: Russian (8x8)") != NULL);
+      g_free(status);
 
-  GameBackendMoveList moves = ggame_model_list_moves(model);
-  assert(moves.count > 0);
-  backend->move_list_free(&moves);
-#elif defined(GGAME_GAME_HOMEWORLDS)
-  ggame_model_reset(model, NULL);
-  assert(probe.calls == 1);
-  assert(ggame_model_peek_variant(model) == NULL);
+      GameBackendMoveList moves = ggame_model_list_moves(model);
+      assert(moves.count > 0);
+      backend->move_list_free(&moves);
+      break;
+    }
+    case GGAME_APP_KIND_HOMEWORLDS: {
+      ggame_model_reset(model, NULL);
+      assert(probe.calls == 1);
+      assert(ggame_model_peek_variant(model) == NULL);
 
-  char *status = ggame_model_format_status(model);
-  assert(status != NULL);
-  assert(strstr(status, "Game: Homeworlds") != NULL);
-  assert(strstr(status, "Variant: Default") != NULL);
-  assert(strstr(status, "Moves available: unavailable") != NULL);
-  g_free(status);
-#elif defined(GGAME_GAME_BOOP)
-  ggame_model_reset(model, NULL);
-  assert(probe.calls == 1);
-  assert(ggame_model_peek_variant(model) == NULL);
+      char *status = ggame_model_format_status(model);
+      assert(status != NULL);
+      assert(strstr(status, "Game: Homeworlds") != NULL);
+      assert(strstr(status, "Variant: Default") != NULL);
+      assert(strstr(status, "Moves available: unavailable") != NULL);
+      g_free(status);
+      break;
+    }
+    case GGAME_APP_KIND_BOOP: {
+      ggame_model_reset(model, NULL);
+      assert(probe.calls == 1);
+      assert(ggame_model_peek_variant(model) == NULL);
 
-  char *status = ggame_model_format_status(model);
-  assert(status != NULL);
-  assert(strstr(status, "Game: Boop") != NULL);
-  assert(strstr(status, "Variant: Default") != NULL);
-  assert(strstr(status, "Moves available: 36") != NULL);
-  g_free(status);
-#else
-#error "Add reset/status expectations for the selected backend."
-#endif
+      char *status = ggame_model_format_status(model);
+      assert(status != NULL);
+      assert(strstr(status, "Game: Boop") != NULL);
+      assert(strstr(status, "Variant: Default") != NULL);
+      assert(strstr(status, "Moves available: 36") != NULL);
+      g_free(status);
+      break;
+    }
+    default:
+      assert(!"Unhandled reset/status profile kind");
+  }
 
   g_object_unref(model);
 }
@@ -427,7 +439,8 @@ static void test_game_model_builder_only_backend(void) {
   g_object_unref(model);
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+  ggame_test_init_profile(&argc, &argv, "checkers");
   test_game_model_init_and_apply_move();
   test_game_model_reset_and_status();
   test_game_model_builder_only_backend();

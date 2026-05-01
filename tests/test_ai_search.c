@@ -5,6 +5,7 @@
 #include "../src/ai_search.h"
 #include "../src/games/checkers/game.h"
 #include "../src/games/checkers/rulesets.h"
+#include "test_profile_utils.h"
 
 typedef struct {
   gint total;
@@ -341,7 +342,9 @@ static void test_ai_search_accepts_good_move_only_backend(void) {
   assert(selected.delta == 2);
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+  ggame_test_init_profile(&argc, &argv, "checkers");
+
   test_ai_search_analyze_and_choose_move();
   test_ai_search_evaluate_terminal_position();
   test_ai_search_tt_roundtrip_and_reuse();

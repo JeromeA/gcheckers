@@ -12,7 +12,7 @@ modules:
   - name: gboop
     buildsystem: simple
     build-commands:
-      - make GAME=boop install PREFIX=/app
+      - make install-boop install-schemas PREFIX=/app
     sources:
       - type: dir
         path: .

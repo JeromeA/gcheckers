@@ -13,7 +13,7 @@ modules:
   - name: gcheckers
     buildsystem: simple
     build-commands:
-      - make install PREFIX=/app
+      - make install-checkers install-schemas PREFIX=/app
     sources:
       - type: dir
         path: .

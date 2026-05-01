@@ -5,9 +5,7 @@
 
 #include "game_backend.h"
 #include "game_model.h"
-#if defined(GGAME_GAME_BOOP)
 #include "games/boop/boop_game.h"
-#endif
 
 G_BEGIN_DECLS
 
@@ -25,7 +23,6 @@ typedef enum {
 BoardMoveOverlay *board_move_overlay_new(void);
 GtkWidget *board_move_overlay_get_widget(BoardMoveOverlay *self);
 const char *board_move_overlay_get_winner_banner_text(const GameBackend *backend, GameBackendOutcome outcome);
-#if defined(GGAME_GAME_BOOP)
 void board_move_overlay_render_boop_overlay_info(cairo_t *cr,
                                                  const BoopMoveOverlayInfo *overlay_info,
                                                  guint rows,
@@ -33,7 +30,6 @@ void board_move_overlay_render_boop_overlay_info(cairo_t *cr,
                                                  gint width,
                                                  gint height,
                                                  guint bottom_side);
-#endif
 void board_move_overlay_set_banner(BoardMoveOverlay *self, const char *text, BoardMoveOverlayBannerColor color);
 void board_move_overlay_set_model(BoardMoveOverlay *self, GGameModel *model);
 void board_move_overlay_set_sgf_controller(BoardMoveOverlay *self, GGameSgfController *controller);

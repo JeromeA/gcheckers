@@ -1,11 +1,8 @@
 #include "board_move_overlay.h"
 
-#if defined(GGAME_GAME_BOOP)
 #include "games/boop/boop_game.h"
-#endif
-#if defined(GGAME_GAME_CHECKERS) || defined(GGAME_GAME_BOOP)
+#include "games/checkers/game.h"
 #include "sgf_controller.h"
-#endif
 #include "widget_utils.h"
 
 #include <math.h>
@@ -25,13 +22,18 @@ G_DEFINE_TYPE(BoardMoveOverlay, board_move_overlay, G_TYPE_OBJECT)
 static const double board_move_overlay_alpha = 0.5;
 static const double board_move_overlay_stroke_width = 4.0;
 static const double board_move_overlay_arrow_scale = 0.28;
-#if defined(GGAME_GAME_BOOP)
 static const double board_move_overlay_circle_radius_scale = 0.32;
 static const double board_move_overlay_cross_scale = 0.26;
-#endif
 static const double board_move_overlay_banner_padding_x = 24.0;
 static const double board_move_overlay_banner_padding_y = 14.0;
 static const double board_move_overlay_banner_radius = 18.0;
+
+static gboolean board_move_overlay_backend_matches(const GameBackend *backend, const char *backend_id) {
+  g_return_val_if_fail(backend != NULL, FALSE);
+  g_return_val_if_fail(backend_id != NULL, FALSE);
+
+  return g_strcmp0(backend->id, backend_id) == 0;
+}
 
 static void board_move_overlay_transform_point_for_bottom_side(double *row,
                                                                double *col,
@@ -122,7 +124,6 @@ static void board_move_overlay_draw_arrow(cairo_t *cr,
   cairo_fill(cr);
 }
 
-#if defined(GGAME_GAME_BOOP)
 static void board_move_overlay_draw_circle(cairo_t *cr,
                                            double center_x,
                                            double center_y,
@@ -147,9 +148,7 @@ static void board_move_overlay_draw_cross(cairo_t *cr,
   cairo_line_to(cr, center_x + half_size, center_y - half_size);
   cairo_stroke(cr);
 }
-#endif
 
-#if defined(GGAME_GAME_CHECKERS)
 static void board_move_overlay_draw_checkers_last_move(BoardMoveOverlay *self,
                                                        const GameBackend *backend,
                                                        gconstpointer position,
@@ -214,9 +213,7 @@ static void board_move_overlay_draw_checkers_last_move(BoardMoveOverlay *self,
 
   cairo_restore(cr);
 }
-#endif
 
-#if defined(GGAME_GAME_BOOP)
 static gboolean board_move_overlay_replay_position_for_node(BoardMoveOverlay *self,
                                                             const SgfNode *node,
                                                             gpointer position,
@@ -383,7 +380,6 @@ static void board_move_overlay_draw_boop_last_move(BoardMoveOverlay *self,
   backend->position_clear(before_position);
   board_move_overlay_render_boop_overlay_info(cr, &overlay_info, rows, cols, width, height, self->bottom_side);
 }
-#endif
 
 static void board_move_overlay_draw(GtkDrawingArea * /*area*/,
                                     cairo_t *cr,
@@ -422,14 +418,14 @@ static void board_move_overlay_draw(GtkDrawingArea * /*area*/,
   const char *winner_banner = self->banner_text != NULL ? self->banner_text
                                                         : board_move_overlay_get_winner_banner_text(backend, outcome);
 
-#if defined(GGAME_GAME_CHECKERS)
-  if (backend->square_grid_index_coord != NULL && backend->square_grid_move_get_path != NULL) {
+  if (board_move_overlay_backend_matches(backend, "checkers") &&
+      backend->square_grid_index_coord != NULL &&
+      backend->square_grid_move_get_path != NULL) {
     board_move_overlay_draw_checkers_last_move(self, backend, position, cr, rows, cols, width, height);
   }
-#endif
-#if defined(GGAME_GAME_BOOP)
-  board_move_overlay_draw_boop_last_move(self, backend, cr, rows, cols, width, height);
-#endif
+  if (board_move_overlay_backend_matches(backend, "boop")) {
+    board_move_overlay_draw_boop_last_move(self, backend, cr, rows, cols, width, height);
+  }
 
   if (winner_banner == NULL) {
     return;
@@ -541,11 +537,7 @@ void board_move_overlay_set_banner(BoardMoveOverlay *self,
 
 void board_move_overlay_set_sgf_controller(BoardMoveOverlay *self, GGameSgfController *controller) {
   g_return_if_fail(BOARD_IS_MOVE_OVERLAY(self));
-#if defined(GGAME_GAME_CHECKERS)
   g_return_if_fail(GGAME_IS_SGF_CONTROLLER(controller));
-#else
-  g_return_if_fail(controller != NULL);
-#endif
 
   g_set_object(&self->sgf_controller, controller);
 }

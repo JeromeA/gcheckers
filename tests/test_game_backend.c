@@ -5,9 +5,8 @@
 #include "../src/active_game_backend.h"
 #include "../src/board_selection_controller.h"
 #include "../src/game_app_profile.h"
-#if defined(GGAME_GAME_BOOP)
 #include "../src/games/boop/boop_types.h"
-#endif
+#include "test_profile_utils.h"
 
 static void test_app_profile_metadata(void) {
   const GGameAppProfile *profile = ggame_active_app_profile();
@@ -20,243 +19,260 @@ static void test_app_profile_metadata(void) {
   assert(profile->display_name != NULL);
   assert(profile->window_title_name != NULL);
 
-#if defined(GGAME_GAME_CHECKERS)
-  assert(profile->kind == GGAME_APP_KIND_CHECKERS);
-  assert(profile->features.supports_shared_shell);
-  assert(profile->features.supports_sgf_files);
-  assert(profile->features.supports_ai_players);
-  assert(profile->features.supports_puzzles);
-  assert(profile->features.supports_import);
-  assert(profile->features.supports_settings);
-  assert(profile->features.supports_save_position);
-  assert(profile->features.supports_edit_mode);
-  assert(profile->features.supports_analysis);
-  assert(profile->ui.create_board_host == NULL);
-#elif defined(GGAME_GAME_HOMEWORLDS)
-  assert(profile->kind == GGAME_APP_KIND_HOMEWORLDS);
-  assert(!profile->features.supports_shared_shell);
-  assert(!profile->features.supports_puzzles);
-  assert(!profile->features.supports_import);
-  assert(!profile->features.supports_settings);
-  assert(profile->ui.create_board_host == NULL);
-#elif defined(GGAME_GAME_BOOP)
-  assert(profile->kind == GGAME_APP_KIND_BOOP);
-  assert(profile->features.supports_shared_shell);
-  assert(profile->features.supports_sgf_files);
-  assert(profile->features.supports_ai_players);
-  assert(!profile->features.supports_puzzles);
-  assert(!profile->features.supports_import);
-  assert(profile->features.supports_settings);
-  assert(!profile->features.supports_save_position);
-  assert(!profile->features.supports_edit_mode);
-  assert(profile->features.supports_analysis);
-  assert(profile->ui.create_board_host != NULL);
-#else
-#error "Add profile expectations for the selected game."
-#endif
+  switch (profile->kind) {
+    case GGAME_APP_KIND_CHECKERS:
+      assert(profile->features.supports_shared_shell);
+      assert(profile->features.supports_sgf_files);
+      assert(profile->features.supports_ai_players);
+      assert(profile->features.supports_puzzles);
+      assert(profile->features.supports_import);
+      assert(profile->features.supports_settings);
+      assert(profile->features.supports_save_position);
+      assert(profile->features.supports_edit_mode);
+      assert(profile->features.supports_analysis);
+      assert(profile->ui.create_window == NULL);
+      assert(profile->ui.create_board_host == NULL);
+      break;
+    case GGAME_APP_KIND_HOMEWORLDS:
+      assert(!profile->features.supports_shared_shell);
+      assert(!profile->features.supports_puzzles);
+      assert(!profile->features.supports_import);
+      assert(!profile->features.supports_settings);
+      assert(profile->ui.create_window != NULL);
+      assert(profile->ui.create_board_host == NULL);
+      break;
+    case GGAME_APP_KIND_BOOP:
+      assert(profile->features.supports_shared_shell);
+      assert(profile->features.supports_sgf_files);
+      assert(profile->features.supports_ai_players);
+      assert(!profile->features.supports_puzzles);
+      assert(!profile->features.supports_import);
+      assert(profile->features.supports_settings);
+      assert(!profile->features.supports_save_position);
+      assert(!profile->features.supports_edit_mode);
+      assert(profile->features.supports_analysis);
+      assert(profile->ui.create_window == NULL);
+      assert(profile->ui.create_board_host != NULL);
+      break;
+    default:
+      assert(!"Unhandled app profile kind");
+  }
 }
 
 static void test_backend_metadata(void) {
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   assert(backend != NULL);
 
-#if defined(GGAME_GAME_CHECKERS)
-  assert(strcmp(backend->id, "checkers") == 0);
-  assert(strcmp(backend->display_name, "Checkers") == 0);
-  assert(backend->variant_count == 3);
-  assert(backend->supports_move_list);
-  assert(backend->supports_move_builder);
-  assert(backend->supports_ai_search);
-  assert(backend->list_good_moves != NULL);
+  switch (ggame_active_app_profile()->kind) {
+    case GGAME_APP_KIND_CHECKERS: {
+      assert(strcmp(backend->id, "checkers") == 0);
+      assert(strcmp(backend->display_name, "Checkers") == 0);
+      assert(backend->variant_count == 3);
+      assert(backend->supports_move_list);
+      assert(backend->supports_move_builder);
+      assert(backend->supports_ai_search);
+      assert(backend->list_good_moves != NULL);
 
-  const GameBackendVariant *american = backend->variant_at(0);
-  assert(american != NULL);
-  assert(strcmp(american->short_name, "american") == 0);
+      const GameBackendVariant *american = backend->variant_at(0);
+      assert(american != NULL);
+      assert(strcmp(american->short_name, "american") == 0);
 
-  const GameBackendVariant *russian = backend->variant_by_short_name("russian");
-  assert(russian != NULL);
-  assert(strcmp(russian->name, "Russian (8x8)") == 0);
-#elif defined(GGAME_GAME_HOMEWORLDS)
-  assert(strcmp(backend->id, "homeworlds") == 0);
-  assert(strcmp(backend->display_name, "Homeworlds") == 0);
-  assert(backend->variant_count == 0);
-  assert(!backend->supports_move_list);
-  assert(backend->supports_move_builder);
-  assert(backend->supports_ai_search);
-  assert(backend->list_good_moves != NULL);
-  assert(strcmp(backend->side_label(0), "Player 1") == 0);
-  assert(strcmp(backend->side_label(1), "Player 2") == 0);
-#elif defined(GGAME_GAME_BOOP)
-  assert(strcmp(backend->id, "boop") == 0);
-  assert(strcmp(backend->display_name, "Boop") == 0);
-  assert(backend->variant_count == 0);
-  assert(backend->supports_move_list);
-  assert(backend->supports_move_builder);
-  assert(backend->supports_ai_search);
-  assert(backend->list_good_moves != NULL);
-  assert(backend->supports_square_grid_board);
-  assert(strcmp(backend->side_label(0), "Player 1") == 0);
-  assert(strcmp(backend->side_label(1), "Player 2") == 0);
-#else
-#error "Add metadata expectations for the selected backend."
-#endif
+      const GameBackendVariant *russian = backend->variant_by_short_name("russian");
+      assert(russian != NULL);
+      assert(strcmp(russian->name, "Russian (8x8)") == 0);
+      break;
+    }
+    case GGAME_APP_KIND_HOMEWORLDS:
+      assert(strcmp(backend->id, "homeworlds") == 0);
+      assert(strcmp(backend->display_name, "Homeworlds") == 0);
+      assert(backend->variant_count == 0);
+      assert(!backend->supports_move_list);
+      assert(backend->supports_move_builder);
+      assert(backend->supports_ai_search);
+      assert(backend->list_good_moves != NULL);
+      assert(strcmp(backend->side_label(0), "Player 1") == 0);
+      assert(strcmp(backend->side_label(1), "Player 2") == 0);
+      break;
+    case GGAME_APP_KIND_BOOP:
+      assert(strcmp(backend->id, "boop") == 0);
+      assert(strcmp(backend->display_name, "Boop") == 0);
+      assert(backend->variant_count == 0);
+      assert(backend->supports_move_list);
+      assert(backend->supports_move_builder);
+      assert(backend->supports_ai_search);
+      assert(backend->list_good_moves != NULL);
+      assert(backend->supports_square_grid_board);
+      assert(strcmp(backend->side_label(0), "Player 1") == 0);
+      assert(strcmp(backend->side_label(1), "Player 2") == 0);
+      break;
+    default:
+      assert(!"Unhandled backend profile kind");
+  }
 }
 
 static void test_backend_position_and_move_flow(void) {
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   assert(backend != NULL);
 
-#if defined(GGAME_GAME_CHECKERS)
-  assert(backend->supports_move_list);
-  assert(backend->supports_move_builder);
+  switch (ggame_active_app_profile()->kind) {
+    case GGAME_APP_KIND_CHECKERS: {
+      assert(backend->supports_move_list);
+      assert(backend->supports_move_builder);
 
-  gpointer position = g_malloc0(backend->position_size);
-  assert(position != NULL);
+      gpointer position = g_malloc0(backend->position_size);
+      assert(position != NULL);
 
-  const GameBackendVariant *american = backend->variant_by_short_name("american");
-  assert(american != NULL);
-  backend->position_init(position, american);
+      const GameBackendVariant *american = backend->variant_by_short_name("american");
+      assert(american != NULL);
+      backend->position_init(position, american);
 
-  GameBackendMoveList moves = backend->list_moves(position);
-  assert(moves.count > 0);
+      GameBackendMoveList moves = backend->list_moves(position);
+      assert(moves.count > 0);
 
-  const void *first_move = backend->move_list_get(&moves, 0);
-  assert(first_move != NULL);
+      const void *first_move = backend->move_list_get(&moves, 0);
+      assert(first_move != NULL);
 
-  char notation[32] = {0};
-  assert(backend->format_move(first_move, notation, sizeof(notation)));
-  assert(notation[0] != '\0');
+      char notation[32] = {0};
+      assert(backend->format_move(first_move, notation, sizeof(notation)));
+      assert(notation[0] != '\0');
 
-  gpointer move_copy = g_malloc0(backend->move_size);
-  assert(move_copy != NULL);
-  memcpy(move_copy, first_move, backend->move_size);
-  assert(backend->moves_equal(first_move, move_copy));
-  assert(backend->apply_move(position, move_copy));
+      gpointer move_copy = g_malloc0(backend->move_size);
+      assert(move_copy != NULL);
+      memcpy(move_copy, first_move, backend->move_size);
+      assert(backend->moves_equal(first_move, move_copy));
+      assert(backend->apply_move(position, move_copy));
 
-  backend->move_list_free(&moves);
+      backend->move_list_free(&moves);
 
-  backend->position_clear(position);
-  backend->position_init(position, american);
-  GameBackendMoveBuilder builder = {0};
-  assert(backend->move_builder_init(position, &builder));
-  GameBackendMoveList candidates = backend->move_builder_list_candidates(&builder);
-  assert(candidates.count > 0);
-  const void *first_candidate = backend->move_list_get(&candidates, 0);
-  assert(first_candidate != NULL);
-  assert(backend->move_builder_step(&builder, first_candidate));
-  backend->move_list_free(&candidates);
-  while (!backend->move_builder_is_complete(&builder)) {
-    candidates = backend->move_builder_list_candidates(&builder);
-    assert(candidates.count > 0);
-    first_candidate = backend->move_list_get(&candidates, 0);
-    assert(first_candidate != NULL);
-    assert(backend->move_builder_step(&builder, first_candidate));
-    backend->move_list_free(&candidates);
+      backend->position_clear(position);
+      backend->position_init(position, american);
+      GameBackendMoveBuilder builder = {0};
+      assert(backend->move_builder_init(position, &builder));
+      GameBackendMoveList candidates = backend->move_builder_list_candidates(&builder);
+      assert(candidates.count > 0);
+      const void *first_candidate = backend->move_list_get(&candidates, 0);
+      assert(first_candidate != NULL);
+      assert(backend->move_builder_step(&builder, first_candidate));
+      backend->move_list_free(&candidates);
+      while (!backend->move_builder_is_complete(&builder)) {
+        candidates = backend->move_builder_list_candidates(&builder);
+        assert(candidates.count > 0);
+        first_candidate = backend->move_list_get(&candidates, 0);
+        assert(first_candidate != NULL);
+        assert(backend->move_builder_step(&builder, first_candidate));
+        backend->move_list_free(&candidates);
+      }
+      memset(move_copy, 0, backend->move_size);
+      assert(backend->move_builder_build_move(&builder, move_copy));
+      assert(backend->apply_move(position, move_copy));
+      backend->move_builder_clear(&builder);
+
+      backend->position_clear(position);
+      g_free(move_copy);
+      g_free(position);
+      break;
+    }
+    case GGAME_APP_KIND_HOMEWORLDS: {
+      assert(!backend->supports_move_list);
+      assert(backend->supports_move_builder);
+      assert(backend->move_builder_init != NULL);
+      assert(backend->move_builder_clear != NULL);
+      assert(backend->move_builder_list_candidates != NULL);
+      assert(backend->move_builder_step != NULL);
+      assert(backend->move_builder_is_complete != NULL);
+      assert(backend->move_builder_build_move != NULL);
+
+      gpointer position = g_malloc0(backend->position_size);
+      assert(position != NULL);
+      backend->position_init(position, NULL);
+      assert(backend->position_outcome(position) == GAME_BACKEND_OUTCOME_ONGOING);
+      assert(backend->position_turn(position) == 0);
+
+      GameBackendMoveBuilder builder = {0};
+      assert(backend->move_builder_init(position, &builder));
+      GameBackendMoveList candidates = backend->move_builder_list_candidates(&builder);
+      assert(candidates.count > 0);
+      backend->move_list_free(&candidates);
+      assert(!backend->move_builder_is_complete(&builder));
+      backend->move_builder_clear(&builder);
+
+      GameBackendMoveList good_moves = backend->list_good_moves(position, 4, 1);
+      assert(good_moves.count > 0);
+      backend->move_list_free(&good_moves);
+      backend->position_clear(position);
+      g_free(position);
+      break;
+    }
+    case GGAME_APP_KIND_BOOP: {
+      assert(backend->supports_move_list);
+      assert(backend->supports_move_builder);
+      assert(backend->move_builder_init != NULL);
+      assert(backend->move_builder_clear != NULL);
+      assert(backend->move_builder_list_candidates != NULL);
+      assert(backend->move_builder_step != NULL);
+      assert(backend->move_builder_is_complete != NULL);
+      assert(backend->move_builder_build_move != NULL);
+
+      gpointer position = g_malloc0(backend->position_size);
+      assert(position != NULL);
+      backend->position_init(position, NULL);
+      assert(backend->position_outcome(position) == GAME_BACKEND_OUTCOME_ONGOING);
+      assert(backend->position_turn(position) == 0);
+
+      GameBackendMoveList moves = backend->list_moves(position);
+      assert(moves.count == 36);
+      const void *first_move = backend->move_list_get(&moves, 0);
+      assert(first_move != NULL);
+
+      gpointer move_copy = g_malloc0(backend->move_size);
+      assert(move_copy != NULL);
+      memcpy(move_copy, first_move, backend->move_size);
+      assert(backend->moves_equal(first_move, move_copy));
+      backend->move_list_free(&moves);
+
+      GameBackendMoveBuilder builder = {0};
+      assert(backend->move_builder_init(position, &builder));
+      GameBackendMoveList candidates = backend->move_builder_list_candidates(&builder);
+      assert(candidates.count > 0);
+
+      const void *first_candidate = backend->move_list_get(&candidates, 0);
+      assert(first_candidate != NULL);
+      assert(backend->move_builder_step(&builder, first_candidate));
+      assert(backend->move_builder_is_complete(&builder));
+
+      gpointer move = g_malloc0(backend->move_size);
+      assert(move != NULL);
+      assert(backend->move_builder_build_move(&builder, move));
+
+      char notation[32] = {0};
+      assert(backend->format_move(move, notation, sizeof(notation)));
+      assert(notation[0] != '\0');
+      assert(backend->apply_move(position, move));
+      assert(backend->position_turn(position) == 1);
+
+      GameBackendMoveList good_moves = backend->list_good_moves(position, 4, 1);
+      assert(good_moves.count > 0);
+      assert(good_moves.count <= 4);
+      backend->move_list_free(&good_moves);
+
+      backend->move_list_free(&candidates);
+      backend->move_builder_clear(&builder);
+      backend->position_clear(position);
+      g_free(move);
+      g_free(move_copy);
+      g_free(position);
+      break;
+    }
+    default:
+      assert(!"Unhandled move flow profile kind");
   }
-  memset(move_copy, 0, backend->move_size);
-  assert(backend->move_builder_build_move(&builder, move_copy));
-  assert(backend->apply_move(position, move_copy));
-  backend->move_builder_clear(&builder);
-
-  backend->position_clear(position);
-  g_free(move_copy);
-  g_free(position);
-#elif defined(GGAME_GAME_HOMEWORLDS)
-  assert(!backend->supports_move_list);
-  assert(backend->supports_move_builder);
-  assert(backend->move_builder_init != NULL);
-  assert(backend->move_builder_clear != NULL);
-  assert(backend->move_builder_list_candidates != NULL);
-  assert(backend->move_builder_step != NULL);
-  assert(backend->move_builder_is_complete != NULL);
-  assert(backend->move_builder_build_move != NULL);
-
-  gpointer position = g_malloc0(backend->position_size);
-  assert(position != NULL);
-  backend->position_init(position, NULL);
-  assert(backend->position_outcome(position) == GAME_BACKEND_OUTCOME_ONGOING);
-  assert(backend->position_turn(position) == 0);
-
-  GameBackendMoveBuilder builder = {0};
-  assert(backend->move_builder_init(position, &builder));
-  GameBackendMoveList candidates = backend->move_builder_list_candidates(&builder);
-  assert(candidates.count > 0);
-  backend->move_list_free(&candidates);
-  assert(!backend->move_builder_is_complete(&builder));
-  backend->move_builder_clear(&builder);
-
-  GameBackendMoveList good_moves = backend->list_good_moves(position, 4, 1);
-  assert(good_moves.count > 0);
-  backend->move_list_free(&good_moves);
-  backend->position_clear(position);
-  g_free(position);
-#elif defined(GGAME_GAME_BOOP)
-  assert(backend->supports_move_list);
-  assert(backend->supports_move_builder);
-  assert(backend->move_builder_init != NULL);
-  assert(backend->move_builder_clear != NULL);
-  assert(backend->move_builder_list_candidates != NULL);
-  assert(backend->move_builder_step != NULL);
-  assert(backend->move_builder_is_complete != NULL);
-  assert(backend->move_builder_build_move != NULL);
-
-  gpointer position = g_malloc0(backend->position_size);
-  assert(position != NULL);
-  backend->position_init(position, NULL);
-  assert(backend->position_outcome(position) == GAME_BACKEND_OUTCOME_ONGOING);
-  assert(backend->position_turn(position) == 0);
-
-  GameBackendMoveList moves = backend->list_moves(position);
-  assert(moves.count == 36);
-  const void *first_move = backend->move_list_get(&moves, 0);
-  assert(first_move != NULL);
-
-  gpointer move_copy = g_malloc0(backend->move_size);
-  assert(move_copy != NULL);
-  memcpy(move_copy, first_move, backend->move_size);
-  assert(backend->moves_equal(first_move, move_copy));
-  backend->move_list_free(&moves);
-
-  GameBackendMoveBuilder builder = {0};
-  assert(backend->move_builder_init(position, &builder));
-  GameBackendMoveList candidates = backend->move_builder_list_candidates(&builder);
-  assert(candidates.count > 0);
-
-  const void *first_candidate = backend->move_list_get(&candidates, 0);
-  assert(first_candidate != NULL);
-  assert(backend->move_builder_step(&builder, first_candidate));
-  assert(backend->move_builder_is_complete(&builder));
-
-  gpointer move = g_malloc0(backend->move_size);
-  assert(move != NULL);
-  assert(backend->move_builder_build_move(&builder, move));
-
-  char notation[32] = {0};
-  assert(backend->format_move(move, notation, sizeof(notation)));
-  assert(notation[0] != '\0');
-  assert(backend->apply_move(position, move));
-  assert(backend->position_turn(position) == 1);
-
-  GameBackendMoveList good_moves = backend->list_good_moves(position, 4, 1);
-  assert(good_moves.count > 0);
-  assert(good_moves.count <= 4);
-  backend->move_list_free(&good_moves);
-
-  backend->move_list_free(&candidates);
-  backend->move_builder_clear(&builder);
-  backend->position_clear(position);
-  g_free(move);
-  g_free(move_copy);
-  g_free(position);
-#else
-#error "Add move-flow expectations for the selected backend."
-#endif
 }
 
 static void test_backend_move_path_length_only_query(void) {
-#if !defined(GGAME_GAME_CHECKERS)
-  return;
-#else
+  if (ggame_active_app_profile()->kind != GGAME_APP_KIND_CHECKERS) {
+    return;
+  }
+
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   assert(backend != NULL);
   assert(backend->square_grid_move_get_path != NULL);
@@ -295,10 +311,8 @@ static void test_backend_move_path_length_only_query(void) {
   backend->move_list_free(&moves);
   backend->position_clear(position);
   g_free(position);
-#endif
 }
 
-#if defined(GGAME_GAME_CHECKERS) || defined(GGAME_GAME_BOOP)
 typedef struct {
   GGameModel *model;
 } TestBackendSelectionData;
@@ -312,9 +326,7 @@ static gboolean test_backend_apply_model_move(gconstpointer move, gpointer user_
 
   return ggame_model_apply_move(data->model, move);
 }
-#endif
 
-#if defined(GGAME_GAME_CHECKERS)
 static void test_backend_collect_model_starts(GGameModel *model, gboolean *out_starts, gsize out_count) {
   const GameBackend *backend = ggame_model_peek_backend(model);
 
@@ -343,6 +355,10 @@ static gboolean test_backend_bool_arrays_equal(const gboolean *left, const gbool
 }
 
 static void test_backend_selection_controller_restarts_from_non_continuation_click(void) {
+  if (ggame_active_app_profile()->kind != GGAME_APP_KIND_CHECKERS) {
+    return;
+  }
+
   enum { TEST_BACKEND_SELECTION_SQUARE_CAPACITY = 128 };
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   assert(backend != NULL);
@@ -415,9 +431,7 @@ static void test_backend_selection_controller_restarts_from_non_continuation_cli
   g_clear_object(&controller);
   g_clear_object(&model);
 }
-#endif
 
-#if defined(GGAME_GAME_BOOP)
 static gboolean test_backend_prefer_boop_cat(gconstpointer move, gpointer /*user_data*/) {
   const BoopMove *boop_move = move;
 
@@ -438,10 +452,12 @@ static gboolean test_backend_confirm_boop_promotion(const GameBackendMoveBuilder
   const BoopMoveBuilderState *builder_state = builder->builder_state;
   return builder_state->promotion_option_count > 0 && boop_move->promotion_mask != 0;
 }
-#endif
 
 static void test_backend_selection_controller_prefers_boop_rank(void) {
-#if defined(GGAME_GAME_BOOP)
+  if (ggame_active_app_profile()->kind != GGAME_APP_KIND_BOOP) {
+    return;
+  }
+
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   assert(backend != NULL);
   assert(backend->supports_move_builder);
@@ -472,13 +488,13 @@ static void test_backend_selection_controller_prefers_boop_rank(void) {
   backend->position_clear(&position);
   g_clear_object(&controller);
   g_clear_object(&model);
-#else
-  return;
-#endif
 }
 
 static void test_backend_selection_controller_confirms_boop_promotion(void) {
-#if defined(GGAME_GAME_BOOP)
+  if (ggame_active_app_profile()->kind != GGAME_APP_KIND_BOOP) {
+    return;
+  }
+
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   assert(backend != NULL);
   assert(backend->supports_move_builder);
@@ -542,13 +558,13 @@ static void test_backend_selection_controller_confirms_boop_promotion(void) {
   backend->position_clear(&position);
   g_clear_object(&controller);
   g_clear_object(&model);
-#else
-  return;
-#endif
 }
 
 static void test_backend_selection_controller_auto_applies_single_boop_line_promotion(void) {
-#if defined(GGAME_GAME_BOOP)
+  if (ggame_active_app_profile()->kind != GGAME_APP_KIND_BOOP) {
+    return;
+  }
+
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   assert(backend != NULL);
   assert(backend->supports_move_builder);
@@ -592,13 +608,13 @@ static void test_backend_selection_controller_auto_applies_single_boop_line_prom
   backend->position_clear(&position);
   g_clear_object(&controller);
   g_clear_object(&model);
-#else
-  return;
-#endif
 }
 
 static void test_backend_selection_controller_confirms_boop_line_choice_only_from_button(void) {
-#if defined(GGAME_GAME_BOOP)
+  if (ggame_active_app_profile()->kind != GGAME_APP_KIND_BOOP) {
+    return;
+  }
+
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   assert(backend != NULL);
   assert(backend->supports_move_builder);
@@ -707,13 +723,13 @@ static void test_backend_selection_controller_confirms_boop_line_choice_only_fro
   backend->position_clear(&position);
   g_clear_object(&controller);
   g_clear_object(&model);
-#else
-  return;
-#endif
 }
 
 static void test_backend_selection_controller_resets_on_model_change(void) {
-#if defined(GGAME_GAME_CHECKERS)
+  if (ggame_active_app_profile()->kind != GGAME_APP_KIND_CHECKERS) {
+    return;
+  }
+
   enum { TEST_BACKEND_SELECTION_SQUARE_CAPACITY = 128 };
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   assert(backend != NULL);
@@ -771,19 +787,15 @@ static void test_backend_selection_controller_resets_on_model_change(void) {
 
   g_clear_object(&controller);
   g_clear_object(&model);
-#else
-  return;
-#endif
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+  ggame_test_init_profile(&argc, &argv, "checkers");
   test_app_profile_metadata();
   test_backend_metadata();
   test_backend_position_and_move_flow();
   test_backend_move_path_length_only_query();
-#if defined(GGAME_GAME_CHECKERS)
   test_backend_selection_controller_restarts_from_non_continuation_click();
-#endif
   test_backend_selection_controller_prefers_boop_rank();
   test_backend_selection_controller_confirms_boop_promotion();
   test_backend_selection_controller_auto_applies_single_boop_line_promotion();

@@ -17,8 +17,8 @@
       gboop is the boop build target of the shared ggame repository.
     </p>
     <p>
-      The first milestone wires build-time game selection and a stub backend while the gameplay-specific GTK
-      integration is still under development.
+      It reuses the shared GTK shell while switching rules, notation, and board-specific controls through the boop
+      application profile.
     </p>
   </description>
   <categories>

@@ -1,5 +1,6 @@
 #include "../src/app_paths.h"
 #include "../src/puzzle_progress.h"
+#include "test_profile_utils.h"
 
 #include <glib.h>
 
@@ -399,6 +400,7 @@ static void test_puzzle_progress_empty_history_is_safe(void) {
 }
 
 int main(int argc, char **argv) {
+  ggame_test_init_profile(&argc, &argv, "checkers");
   g_test_init(&argc, &argv, NULL);
   g_test_add_func("/puzzle-progress/user-id-persists", test_puzzle_progress_user_id_persists);
   g_test_add_func("/puzzle-progress/append-and-replace-success", test_puzzle_progress_append_and_replace_success);

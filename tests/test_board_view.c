@@ -4,6 +4,8 @@
 #include "board_move_overlay.h"
 #include "board_view.h"
 #include "game_model.h"
+#include "games/boop/boop_game.h"
+#include "test_profile_utils.h"
 
 static void test_board_view_skip(void) {
   g_test_skip("GTK display not available.");
@@ -36,7 +38,6 @@ static gboolean test_board_view_count_square_click(guint /*index*/, guint /*butt
   return TRUE;
 }
 
-#if defined(GGAME_GAME_BOOP)
 static void test_board_view_surface_read_pixel(cairo_surface_t *surface,
                                                int x,
                                                int y,
@@ -101,31 +102,47 @@ static void test_board_move_overlay_removed_markers_paint_above_off_board_arrows
 
   cairo_surface_destroy(surface);
 }
-#endif
 
 static void test_board_move_overlay_winner_banner_text(void) {
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
 
   g_assert_nonnull(backend);
-#if defined(GGAME_GAME_BOOP)
   g_assert_null(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_ONGOING));
-  g_assert_cmpstr(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_SIDE_0_WIN),
-                  ==,
-                  "Player 1 wins");
-  g_assert_cmpstr(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_SIDE_1_WIN),
-                  ==,
-                  "Player 2 wins");
-  g_assert_cmpstr(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_DRAW), ==, "Draw");
-#else
-  g_assert_null(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_ONGOING));
-  g_assert_cmpstr(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_SIDE_0_WIN),
-                  ==,
-                  "White wins!");
-  g_assert_cmpstr(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_SIDE_1_WIN),
-                  ==,
-                  "Black wins!");
-  g_assert_cmpstr(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_DRAW), ==, "Draw!");
-#endif
+
+  const GGameAppProfile *profile = ggame_active_app_profile();
+  g_assert_nonnull(profile);
+
+  switch (profile->kind) {
+    case GGAME_APP_KIND_BOOP:
+      g_assert_cmpstr(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_SIDE_0_WIN),
+                      ==,
+                      "Player 1 wins");
+      g_assert_cmpstr(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_SIDE_1_WIN),
+                      ==,
+                      "Player 2 wins");
+      g_assert_cmpstr(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_DRAW), ==, "Draw");
+      break;
+    case GGAME_APP_KIND_CHECKERS:
+      g_assert_cmpstr(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_SIDE_0_WIN),
+                      ==,
+                      "White wins!");
+      g_assert_cmpstr(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_SIDE_1_WIN),
+                      ==,
+                      "Black wins!");
+      g_assert_cmpstr(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_DRAW), ==, "Draw!");
+      break;
+    case GGAME_APP_KIND_HOMEWORLDS:
+      g_assert_cmpstr(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_SIDE_0_WIN),
+                      ==,
+                      "Player 1 wins");
+      g_assert_cmpstr(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_SIDE_1_WIN),
+                      ==,
+                      "Player 2 wins");
+      g_assert_cmpstr(board_move_overlay_get_winner_banner_text(backend, GAME_BACKEND_OUTCOME_DRAW), ==, "Draw");
+      break;
+    default:
+      g_assert_not_reached();
+  }
 }
 
 static void test_board_view_highlights_black_turn_moves(void) {
@@ -281,13 +298,18 @@ static void test_board_view_repeated_primary_clicks_are_processed(void) {
 }
 
 int main(int argc, char **argv) {
+  ggame_test_init_profile(&argc, &argv, "checkers");
   g_test_init(&argc, &argv, NULL);
+
+  const GGameAppProfile *profile = ggame_active_app_profile();
+  g_assert_nonnull(profile);
+
   if (!gtk_init_check()) {
     g_test_add_func("/board-move-overlay/winner-banner-text", test_board_move_overlay_winner_banner_text);
-#if defined(GGAME_GAME_BOOP)
-    g_test_add_func("/board-move-overlay/removed-markers-paint-above-off-board-arrows",
-                    test_board_move_overlay_removed_markers_paint_above_off_board_arrows);
-#endif
+    if (profile->kind == GGAME_APP_KIND_BOOP) {
+      g_test_add_func("/board-move-overlay/removed-markers-paint-above-off-board-arrows",
+                      test_board_move_overlay_removed_markers_paint_above_off_board_arrows);
+    }
     g_test_add_func("/board-view/highlights-black-turn-moves", test_board_view_skip);
     g_test_add_func("/board-view/updates-on-model-state-changed", test_board_view_skip);
     g_test_add_func("/board-view/repeated-primary-clicks-are-processed", test_board_view_skip);
@@ -295,10 +317,10 @@ int main(int argc, char **argv) {
   }
 
   g_test_add_func("/board-move-overlay/winner-banner-text", test_board_move_overlay_winner_banner_text);
-#if defined(GGAME_GAME_BOOP)
-  g_test_add_func("/board-move-overlay/removed-markers-paint-above-off-board-arrows",
-                  test_board_move_overlay_removed_markers_paint_above_off_board_arrows);
-#endif
+  if (profile->kind == GGAME_APP_KIND_BOOP) {
+    g_test_add_func("/board-move-overlay/removed-markers-paint-above-off-board-arrows",
+                    test_board_move_overlay_removed_markers_paint_above_off_board_arrows);
+  }
   g_test_add_func("/board-view/highlights-black-turn-moves",
                   test_board_view_highlights_black_turn_moves);
   g_test_add_func("/board-view/updates-on-model-state-changed",

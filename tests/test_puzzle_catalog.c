@@ -1,6 +1,7 @@
 #include "../src/active_game_backend.h"
 #include "../src/puzzle_catalog.h"
 #include "../src/games/checkers/rulesets.h"
+#include "test_profile_utils.h"
 
 #include <glib.h>
 #include <glib/gstdio.h>
@@ -45,6 +46,7 @@ static void test_puzzle_catalog_loads_sorted_variant_entries(void) {
 }
 
 int main(int argc, char **argv) {
+  ggame_test_init_profile(&argc, &argv, "checkers");
   g_test_init(&argc, &argv, NULL);
   g_test_add_func("/puzzle-catalog/load-sorted-variant-entries",
                   test_puzzle_catalog_loads_sorted_variant_entries);

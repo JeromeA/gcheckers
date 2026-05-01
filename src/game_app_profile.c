@@ -1,9 +1,12 @@
 #include "game_app_profile.h"
 
-#if defined(GGAME_GAME_CHECKERS)
+#include "games/boop/boop_backend.h"
+#include "games/boop/boop_controls.h"
 #include "games/checkers/checkers_backend.h"
+#include "games/homeworlds/homeworlds_app_window.h"
+#include "games/homeworlds/homeworlds_backend.h"
 
-static const GGameAppProfile active_app_profile = {
+static const GGameAppProfile checkers_app_profile = {
   .kind = GGAME_APP_KIND_CHECKERS,
   .id = "checkers",
   .app_id = "io.github.jeromea.gcheckers",
@@ -32,10 +35,8 @@ static const GGameAppProfile active_app_profile = {
           .show_analysis_drawer_by_default = TRUE,
       },
 };
-#elif defined(GGAME_GAME_HOMEWORLDS)
-#include "games/homeworlds/homeworlds_backend.h"
 
-static const GGameAppProfile active_app_profile = {
+static const GGameAppProfile homeworlds_app_profile = {
   .kind = GGAME_APP_KIND_HOMEWORLDS,
   .id = "homeworlds",
   .app_id = "io.github.jeromea.ghomeworlds",
@@ -55,6 +56,10 @@ static const GGameAppProfile active_app_profile = {
           .supports_save_position = FALSE,
           .supports_edit_mode = FALSE,
       },
+  .ui =
+      {
+          .create_window = ghomeworlds_app_window_create,
+      },
   .layout =
       {
           .default_board_panel_width = 500,
@@ -64,11 +69,8 @@ static const GGameAppProfile active_app_profile = {
           .show_analysis_drawer_by_default = FALSE,
       },
 };
-#elif defined(GGAME_GAME_BOOP)
-#include "games/boop/boop_backend.h"
-#include "games/boop/boop_controls.h"
 
-static const GGameAppProfile active_app_profile = {
+static const GGameAppProfile boop_app_profile = {
   .kind = GGAME_APP_KIND_BOOP,
   .id = "boop",
   .app_id = "io.github.jeromea.gboop",
@@ -101,12 +103,87 @@ static const GGameAppProfile active_app_profile = {
           .show_analysis_drawer_by_default = FALSE,
       },
 };
-#else
-#error "No game application profile selected. Define GGAME_GAME_CHECKERS, GGAME_GAME_HOMEWORLDS, GGAME_GAME_BOOP, or another game define."
-#endif
+
+static const GGameAppProfile *const ggame_app_profiles[] = {
+  &checkers_app_profile,
+  &homeworlds_app_profile,
+  &boop_app_profile,
+};
+
+static const GGameAppProfile *active_app_profile = &checkers_app_profile;
+
+static gboolean ggame_app_profile_is_registered(const GGameAppProfile *profile) {
+  g_return_val_if_fail(profile != NULL, FALSE);
+
+  for (guint i = 0; i < G_N_ELEMENTS(ggame_app_profiles); ++i) {
+    if (ggame_app_profiles[i] == profile) {
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
+const GGameAppProfile *ggame_app_profile_get_by_kind(GGameAppKind kind) {
+  for (guint i = 0; i < G_N_ELEMENTS(ggame_app_profiles); ++i) {
+    if (ggame_app_profiles[i]->kind == kind) {
+      return ggame_app_profiles[i];
+    }
+  }
+
+  g_debug("Unknown app profile kind %d", (gint)kind);
+  return NULL;
+}
+
+const GGameAppProfile *ggame_app_profile_lookup_by_id(const char *id) {
+  g_return_val_if_fail(id != NULL, NULL);
+
+  for (guint i = 0; i < G_N_ELEMENTS(ggame_app_profiles); ++i) {
+    if (g_strcmp0(ggame_app_profiles[i]->id, id) == 0) {
+      return ggame_app_profiles[i];
+    }
+  }
+
+  g_debug("Unknown app profile id %s", id);
+  return NULL;
+}
+
+const GGameAppProfile *ggame_app_profile_lookup_by_app_id(const char *app_id) {
+  g_return_val_if_fail(app_id != NULL, NULL);
+
+  for (guint i = 0; i < G_N_ELEMENTS(ggame_app_profiles); ++i) {
+    if (g_strcmp0(ggame_app_profiles[i]->app_id, app_id) == 0) {
+      return ggame_app_profiles[i];
+    }
+  }
+
+  g_debug("Unknown application id %s", app_id);
+  return NULL;
+}
+
+gboolean ggame_app_profile_set_active(const GGameAppProfile *profile) {
+  g_return_val_if_fail(profile != NULL, FALSE);
+
+  if (!ggame_app_profile_is_registered(profile)) {
+    g_debug("Refusing to activate an unregistered app profile");
+    return FALSE;
+  }
+
+  active_app_profile = profile;
+  return TRUE;
+}
+
+gboolean ggame_app_profile_set_active_by_id(const char *id) {
+  const GGameAppProfile *profile = ggame_app_profile_lookup_by_id(id);
+  if (profile == NULL) {
+    return FALSE;
+  }
+
+  return ggame_app_profile_set_active(profile);
+}
 
 const GGameAppProfile *ggame_active_app_profile(void) {
-  return &active_app_profile;
+  return active_app_profile;
 }
 
 gboolean ggame_app_profile_supports_puzzle_catalog(const GGameAppProfile *profile) {

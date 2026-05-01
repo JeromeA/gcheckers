@@ -1,5 +1,5 @@
-#ifndef GGAME_GAME_APP_PROFILE_H
-#define GGAME_GAME_APP_PROFILE_H
+#ifndef GGAME_APP_PROFILE_H
+#define GGAME_APP_PROFILE_H
 
 #include "game_backend.h"
 
@@ -8,6 +8,8 @@
 G_BEGIN_DECLS
 
 typedef struct _GtkWidget GtkWidget;
+typedef struct _GtkApplication GtkApplication;
+typedef struct _GtkWindow GtkWindow;
 typedef struct _BoardView BoardView;
 typedef struct _GGameModel GGameModel;
 
@@ -30,6 +32,7 @@ typedef struct {
 } GGameAppFeatures;
 
 typedef struct {
+  GtkWindow *(*create_window)(GtkApplication *app);
   GtkWidget *(*create_board_host)(GGameModel *model, BoardView *board_view);
 } GGameAppUiHooks;
 
@@ -54,6 +57,11 @@ typedef struct {
   GGameAppLayout layout;
 } GGameAppProfile;
 
+const GGameAppProfile *ggame_app_profile_get_by_kind(GGameAppKind kind);
+const GGameAppProfile *ggame_app_profile_lookup_by_id(const char *id);
+const GGameAppProfile *ggame_app_profile_lookup_by_app_id(const char *app_id);
+gboolean ggame_app_profile_set_active(const GGameAppProfile *profile);
+gboolean ggame_app_profile_set_active_by_id(const char *id);
 const GGameAppProfile *ggame_active_app_profile(void);
 gboolean ggame_app_profile_supports_puzzle_catalog(const GGameAppProfile *profile);
 

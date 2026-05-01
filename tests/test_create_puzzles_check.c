@@ -4,6 +4,7 @@
 #include "../src/sgf_io.h"
 #include "../src/sgf_move_props.h"
 #include "../src/sgf_tree.h"
+#include "test_profile_utils.h"
 
 #include <glib.h>
 #include <glib/gstdio.h>
@@ -287,6 +288,7 @@ static void test_create_puzzles_check_mode_rejects_missing_ru(void) {
 }
 
 int main(int argc, char **argv) {
+  ggame_test_init_profile(&argc, &argv, "checkers");
   g_test_init(&argc, &argv, NULL);
   g_test_add_func("/create-puzzles-check/dry-run-and-delete", test_create_puzzles_check_mode_dry_run_and_delete);
   g_test_add_func("/create-puzzles-check/rejects-missing-ru", test_create_puzzles_check_mode_rejects_missing_ru);

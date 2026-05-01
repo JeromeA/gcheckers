@@ -3,18 +3,12 @@
 #include "board_grid.h"
 #include "board_move_overlay.h"
 #include "board_selection_controller.h"
+#include "games/checkers/checkers_model.h"
 #include "piece_palette.h"
-#if defined(GGAME_GAME_CHECKERS)
 #include "sgf_controller.h"
-#endif
 #include "widget_utils.h"
 
 #include <stdbool.h>
-
-#if defined(GGAME_GAME_CHECKERS)
-typedef struct _GCheckersModel GCheckersModel;
-GGameModel *gcheckers_model_peek_game_model(GCheckersModel *self);
-#endif
 
 struct _BoardView {
   GObject parent_instance;
@@ -323,12 +317,9 @@ void board_view_set_model(BoardView *self, gpointer model) {
 
   if (GGAME_IS_MODEL(model)) {
     game_model = GGAME_MODEL(model);
-  }
-#if defined(GGAME_GAME_CHECKERS)
-  else {
+  } else if (GCHECKERS_IS_MODEL(model)) {
     game_model = gcheckers_model_peek_game_model((GCheckersModel *) model);
   }
-#endif
 
   g_return_if_fail(GGAME_IS_MODEL(game_model));
   board_view_disconnect_model(self);
@@ -350,11 +341,7 @@ void board_view_set_model(BoardView *self, gpointer model) {
 
 void board_view_set_sgf_controller(BoardView *self, GGameSgfController *controller) {
   g_return_if_fail(BOARD_IS_VIEW(self));
-#if defined(GGAME_GAME_CHECKERS)
   g_return_if_fail(GGAME_IS_SGF_CONTROLLER(controller));
-#else
-  g_return_if_fail(controller != NULL);
-#endif
 
   board_move_overlay_set_sgf_controller(self->board_overlay, controller);
 }

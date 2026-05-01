@@ -338,6 +338,7 @@ static void ggame_application_startup(GApplication *app) {
       },
   };
   g_action_map_add_action_entries(G_ACTION_MAP(app), app_actions, G_N_ELEMENTS(app_actions), app);
+  ggame_application_set_action_enabled(G_ACTION_MAP(app), "new-game", profile->features.supports_shared_shell);
   ggame_application_set_action_enabled(G_ACTION_MAP(app), "import", profile->features.supports_import);
   ggame_application_set_action_enabled(G_ACTION_MAP(app), "settings", profile->features.supports_settings);
 
@@ -417,6 +418,7 @@ static void ggame_application_startup(GApplication *app) {
 static void ggame_application_activate(GApplication *app) {
   GGameApplication *self = GGAME_APPLICATION(app);
   const GGameAppProfile *profile = ggame_active_app_profile();
+  GtkWindow *window = NULL;
   g_return_if_fail(GGAME_IS_APPLICATION(self));
   g_return_if_fail(profile != NULL);
   g_return_if_fail(profile->backend != NULL);
@@ -427,14 +429,23 @@ static void ggame_application_activate(GApplication *app) {
     return;
   }
 
-  GGameModel *model = ggame_model_new(profile->backend);
-  GtkWindow *window = GTK_WINDOW(ggame_window_new(GTK_APPLICATION(app), model));
-  g_object_unref(model);
+  if (profile->ui.create_window != NULL) {
+    window = profile->ui.create_window(GTK_APPLICATION(app));
+  } else {
+    GGameModel *model = ggame_model_new(profile->backend);
+    g_return_if_fail(GGAME_IS_MODEL(model));
+
+    window = GTK_WINDOW(ggame_window_new(GTK_APPLICATION(app), model));
+    g_object_unref(model);
+  }
+
+  g_return_if_fail(GTK_IS_WINDOW(window));
 
   gtk_window_present(window);
 
   g_autoptr(GSettings) settings = ggame_app_settings_create();
-  if (profile->features.supports_settings &&
+  if (GGAME_IS_WINDOW(window) &&
+      profile->features.supports_settings &&
       G_IS_SETTINGS(settings) &&
       !ggame_app_settings_get_privacy_settings_shown(settings)) {
     ggame_window_present_settings_dialog(GGAME_WINDOW(window));

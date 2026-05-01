@@ -1,4 +1,5 @@
 #include "../src/file_dialog_history.h"
+#include "test_profile_utils.h"
 
 #include <glib.h>
 
@@ -26,6 +27,7 @@ static void test_file_dialog_history_round_trip(void) {
 }
 
 int main(int argc, char **argv) {
+  ggame_test_init_profile(&argc, &argv, "checkers");
   g_test_init(&argc, &argv, NULL);
   g_test_add_func("/file-dialog-history/round-trip", test_file_dialog_history_round_trip);
   return g_test_run();

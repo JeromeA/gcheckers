@@ -3,6 +3,7 @@
 #include "games/checkers/create_puzzles_cli.h"
 #include "games/checkers/puzzle_generation.h"
 #include "games/checkers/rulesets.h"
+#include "game_app_profile.h"
 #include "sgf_io.h"
 #include "sgf_move_props.h"
 #include "sgf_tree.h"
@@ -1797,6 +1798,12 @@ static char *checkers_puzzle_build_ruleset_output_dir(PlayerRuleset ruleset) {
 int main(int argc, char **argv) {
   CheckersCreatePuzzlesCliOptions options = {0};
   g_autofree char *parse_error = NULL;
+
+  if (!ggame_app_profile_set_active_by_id("checkers")) {
+    g_printerr("Failed to activate checkers profile\n");
+    return 1;
+  }
+
   if (!checkers_create_puzzles_cli_parse(argc,
                                          argv,
                                          CHECKERS_PUZZLE_DEFAULT_BEST_MOVE_DEPTH,

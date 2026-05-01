@@ -4,11 +4,9 @@
 #include "app_settings.h"
 #include "application.h"
 #include "games/checkers/checkers_model.h"
-#if defined(GGAME_GAME_BOOP)
-#include "games/boop/boop_types.h"
-#endif
 #include "puzzle_progress.h"
 #include "sgf_controller.h"
+#include "test_profile_utils.h"
 #include "window.h"
 #include "player_controls_panel.h"
 #include "analysis_graph.h"
@@ -289,28 +287,6 @@ static GtkButton *test_ggame_window_find_puzzle_picker_button(GtkWidget *root, g
   return NULL;
 }
 
-#if defined(GGAME_GAME_BOOP)
-static GtkWidget *test_ggame_window_find_widget_with_uint_data(GtkWidget *root, const char *key, guint value) {
-  g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
-  g_return_val_if_fail(key != NULL, NULL);
-
-  gpointer data = g_object_get_data(G_OBJECT(root), key);
-  if (data != NULL && GPOINTER_TO_UINT(data) == value) {
-    return root;
-  }
-
-  for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
-       child = gtk_widget_get_next_sibling(child)) {
-    GtkWidget *match = test_ggame_window_find_widget_with_uint_data(child, key, value);
-    if (match != NULL) {
-      return match;
-    }
-  }
-
-  return NULL;
-}
-#endif
-
 static GtkCheckButton *test_ggame_window_find_check_button_with_label(GtkWidget *root, const char *label) {
   g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
   g_return_val_if_fail(label != NULL, NULL);
@@ -540,42 +516,6 @@ static gboolean apply_first_move(GGameSgfController *controller,
 
   return TRUE;
 }
-
-#if defined(GGAME_GAME_BOOP)
-static gboolean test_ggame_window_apply_first_generic_move(GGameSgfController *controller, GGameModel *model) {
-  const GameBackend *backend = NULL;
-  GameBackendMoveList moves = {0};
-  gconstpointer move = NULL;
-  gboolean applied = FALSE;
-
-  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(controller), FALSE);
-  g_return_val_if_fail(GGAME_IS_MODEL(model), FALSE);
-
-  backend = ggame_model_peek_backend(model);
-  g_return_val_if_fail(backend != NULL, FALSE);
-  g_return_val_if_fail(backend->move_list_get != NULL, FALSE);
-  g_return_val_if_fail(backend->move_list_free != NULL, FALSE);
-
-  moves = ggame_model_list_moves(model);
-  if (moves.count == 0) {
-    backend->move_list_free(&moves);
-    g_debug("No available moves for generic window test");
-    return FALSE;
-  }
-
-  move = backend->move_list_get(&moves, 0);
-  g_return_val_if_fail(move != NULL, FALSE);
-
-  applied = ggame_sgf_controller_apply_move(controller, move);
-  backend->move_list_free(&moves);
-  if (!applied) {
-    g_debug("Failed to apply generic test move through SGF controller");
-    return FALSE;
-  }
-
-  return TRUE;
-}
-#endif
 
 static const SgfNode *sgf_tree_get_first_child(SgfTree *tree) {
   g_return_val_if_fail(SGF_IS_TREE(tree), NULL);
@@ -2383,209 +2323,14 @@ static void test_ggame_window_new_game_dialog_ruleset_options_and_russian_apply(
   g_clear_object(&app);
 }
 
-#if defined(GGAME_GAME_BOOP)
-static void test_ggame_window_boop_shared_shell_widgets_exist(void) {
-  GtkApplication *app = test_ggame_window_create_app();
-  GGameModel *model = ggame_model_new(GGAME_ACTIVE_GAME_BACKEND);
-  GGameWindow *window = test_ggame_window_new_with_game_model(app, model);
-  gtk_window_present(GTK_WINDOW(window));
-  test_ggame_window_drain_main_context(24);
-
-  g_assert_nonnull(ggame_window_get_controls_panel(window));
-  g_assert_nonnull(ggame_window_get_sgf_controller(window));
-  g_assert_nonnull(test_ggame_window_find_widget_for_action(GTK_WIDGET(window), "app.new-game"));
-  g_assert_nonnull(test_ggame_window_find_widget_for_action(GTK_WIDGET(window), "win.game-force-move"));
-  g_assert_nonnull(test_ggame_window_find_widget_for_action(GTK_WIDGET(window), "win.navigation-step-forward"));
-  g_assert_nonnull(test_ggame_window_find_widget_for_action(GTK_WIDGET(window), "win.navigation-step-backward"));
-  g_assert_nonnull(test_ggame_window_find_widget_for_action(GTK_WIDGET(window), "win.navigation-rewind"));
-  g_assert_nonnull(test_ggame_window_find_widget_for_action(GTK_WIDGET(window), "win.navigation-step-forward-to-end"));
-  g_assert_false(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "analysis-current-position"));
-  g_assert_false(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "analysis-whole-game"));
-
-  GtkWidget *side0_panel = test_ggame_window_find_widget_with_uint_data(GTK_WIDGET(window), "boop-side", 1);
-  GtkWidget *side1_panel = test_ggame_window_find_widget_with_uint_data(GTK_WIDGET(window), "boop-side", 2);
-  g_assert_nonnull(side0_panel);
-  g_assert_nonnull(side1_panel);
-  g_assert_true(gtk_widget_has_css_class(side0_panel, "boop-supply-panel"));
-  g_assert_true(gtk_widget_has_css_class(side1_panel, "boop-supply-panel"));
-  g_assert_nonnull(test_ggame_window_find_widget_with_uint_data(side0_panel, "boop-rank", BOOP_PIECE_RANK_KITTEN));
-  g_assert_nonnull(test_ggame_window_find_widget_with_uint_data(side1_panel, "boop-rank", BOOP_PIECE_RANK_KITTEN));
-
-  GtkDropDown *mode_dropdown = test_ggame_window_find_mode_dropdown(GTK_WIDGET(window));
-  g_assert_nonnull(mode_dropdown);
-  g_assert_false(gtk_widget_get_sensitive(GTK_WIDGET(mode_dropdown)));
-
-  g_clear_object(&window);
-  g_clear_object(&model);
-  g_clear_object(&app);
-}
-
-static void test_ggame_window_boop_auto_moves_when_next_player_is_computer(void) {
-  const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
-  GtkApplication *app = test_ggame_window_create_app();
-  GGameModel *model = ggame_model_new(backend);
-  GGameWindow *window = test_ggame_window_new_with_game_model(app, model);
-  PlayerControlsPanel *panel = ggame_window_get_controls_panel(window);
-  GGameSgfController *controller = ggame_window_get_sgf_controller(window);
-  SgfTree *tree = ggame_sgf_controller_get_tree(controller);
-
-  g_assert_nonnull(panel);
-  g_assert_nonnull(controller);
-  g_assert_nonnull(tree);
-
-  player_controls_panel_set_mode(panel, 0, PLAYER_CONTROL_MODE_USER);
-  player_controls_panel_set_mode(panel, 1, PLAYER_CONTROL_MODE_COMPUTER);
-  player_controls_panel_set_computer_depth(panel, 2);
-
-  g_assert_true(test_ggame_window_apply_first_generic_move(controller, model));
-  test_ggame_window_drain_main_context(32);
-
-  g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 2);
-  g_assert_cmpuint(backend->position_turn(ggame_model_peek_position(model)), ==, 0);
-
-  g_clear_object(&window);
-  g_clear_object(&model);
-  g_clear_object(&app);
-}
-
-static void test_ggame_window_boop_sgf_actions_navigate_timeline(void) {
-  const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
-  GtkApplication *app = test_ggame_window_create_app();
-  GGameModel *model = ggame_model_new(backend);
-  GGameWindow *window = test_ggame_window_new_with_game_model(app, model);
-  GGameSgfController *controller = ggame_window_get_sgf_controller(window);
-  SgfTree *tree = ggame_sgf_controller_get_tree(controller);
-
-  g_assert_nonnull(controller);
-  g_assert_nonnull(tree);
-  g_assert_true(test_ggame_window_apply_first_generic_move(controller, model));
-  g_assert_true(test_ggame_window_apply_first_generic_move(controller, model));
-  g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 2);
-
-  g_action_group_activate_action(G_ACTION_GROUP(window), "navigation-step-backward", NULL);
-  g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 1);
-  g_assert_cmpuint(backend->position_turn(ggame_model_peek_position(model)), ==, 1);
-
-  g_action_group_activate_action(G_ACTION_GROUP(window), "navigation-step-forward", NULL);
-  g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 2);
-  g_assert_cmpuint(backend->position_turn(ggame_model_peek_position(model)), ==, 0);
-
-  g_action_group_activate_action(G_ACTION_GROUP(window), "navigation-rewind", NULL);
-  g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 0);
-  g_assert_cmpuint(backend->position_turn(ggame_model_peek_position(model)), ==, 0);
-
-  g_clear_object(&window);
-  g_clear_object(&model);
-  g_clear_object(&app);
-}
-
-static void test_ggame_window_boop_supply_selection_tracks_turn(void) {
-  GtkApplication *app = test_ggame_window_create_app();
-  GGameModel *model = ggame_model_new(GGAME_ACTIVE_GAME_BACKEND);
-  GGameWindow *window = test_ggame_window_new_with_game_model(app, model);
-  GGameSgfController *controller = ggame_window_get_sgf_controller(window);
-  GtkWidget *side0_panel = test_ggame_window_find_widget_with_uint_data(GTK_WIDGET(window), "boop-side", 1);
-  GtkWidget *side1_panel = test_ggame_window_find_widget_with_uint_data(GTK_WIDGET(window), "boop-side", 2);
-  GtkWidget *side0_kitten = test_ggame_window_find_widget_with_uint_data(side0_panel,
-                                                                          "boop-rank",
-                                                                          BOOP_PIECE_RANK_KITTEN);
-  GtkWidget *side1_kitten = test_ggame_window_find_widget_with_uint_data(side1_panel,
-                                                                          "boop-rank",
-                                                                          BOOP_PIECE_RANK_KITTEN);
-
-  g_assert_nonnull(controller);
-  g_assert_nonnull(side0_panel);
-  g_assert_nonnull(side1_panel);
-  g_assert_nonnull(side0_kitten);
-  g_assert_nonnull(side1_kitten);
-
-  g_assert_true(gtk_widget_has_css_class(side0_panel, "boop-supply-active"));
-  g_assert_false(gtk_widget_has_css_class(side1_panel, "boop-supply-active"));
-  g_assert_true(gtk_widget_has_css_class(side0_kitten, "boop-pile-selected"));
-  g_assert_false(gtk_widget_has_css_class(side1_kitten, "boop-pile-selected"));
-
-  g_assert_true(test_ggame_window_apply_first_generic_move(controller, model));
-  test_ggame_window_drain_main_context(16);
-
-  g_assert_false(gtk_widget_has_css_class(side0_panel, "boop-supply-active"));
-  g_assert_true(gtk_widget_has_css_class(side1_panel, "boop-supply-active"));
-  g_assert_false(gtk_widget_has_css_class(side0_kitten, "boop-pile-selected"));
-  g_assert_true(gtk_widget_has_css_class(side1_kitten, "boop-pile-selected"));
-
-  g_clear_object(&window);
-  g_clear_object(&model);
-  g_clear_object(&app);
-}
-
-static void test_ggame_window_boop_new_game_dialog_uses_shared_controls(void) {
-  GtkApplication *app = test_ggame_window_create_app();
-  GGameModel *model = ggame_model_new(GGAME_ACTIVE_GAME_BACKEND);
-  GGameWindow *window = test_ggame_window_new_with_game_model(app, model);
-  gtk_window_present(GTK_WINDOW(window));
-  test_ggame_window_drain_main_context(24);
-
-  g_action_group_activate_action(G_ACTION_GROUP(app), "new-game", NULL);
-  test_ggame_window_drain_main_context(24);
-
-  GtkWindow *dialog = test_ggame_window_find_toplevel_by_title("New game");
-  g_assert_nonnull(dialog);
-  g_assert_null(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "Variant"));
-  g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "Player 1"));
-  g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "Player 2"));
-  g_assert_nonnull(test_ggame_window_find_button_with_label(GTK_WIDGET(dialog), "New Game"));
-
-  g_clear_object(&dialog);
-  g_clear_object(&window);
-  g_clear_object(&model);
-  g_clear_object(&app);
-}
-#endif
-
 int main(int argc, char **argv) {
+  ggame_test_init_profile(&argc, &argv, "checkers");
   g_test_init(&argc, &argv, NULL);
   g_test_add_func("/analysis-graph/score-compression", test_analysis_graph_score_compression);
   g_test_add_func("/analysis/score-formatting", test_analysis_score_formatting);
   g_test_add_func("/analysis/report-includes-per-move-nodes", test_analysis_report_includes_per_move_nodes);
   g_test_add_func("/analysis-graph/axis-range-minimum-window", test_analysis_graph_axis_range_minimum_window);
   g_test_add_func("/analysis-graph/axis-range-expands", test_analysis_graph_axis_range_expands_for_large_scores);
-
-#if defined(GGAME_GAME_BOOP)
-  if (!gtk_init_check()) {
-    g_test_add_func("/ggame-window/boop/shared-shell-widgets", test_ggame_window_skip);
-    g_test_add_func("/ggame-window/boop/auto-move-next-player-computer", test_ggame_window_skip);
-    g_test_add_func("/ggame-window/boop/sgf-actions-navigate", test_ggame_window_skip);
-    g_test_add_func("/ggame-window/boop/supply-selection-tracks-turn", test_ggame_window_skip);
-    g_test_add_func("/ggame-window/boop/new-game-dialog-shared-controls", test_ggame_window_skip);
-    return g_test_run();
-  }
-
-  g_autoptr(GError) error = NULL;
-  test_app = GTK_APPLICATION(ggame_application_new());
-  gboolean registered = g_application_register(G_APPLICATION(test_app), NULL, &error);
-  if (!registered || error) {
-    g_test_message("Skipping gcheckers window tests: failed to register application: %s",
-                   error ? error->message : "unknown error");
-    g_clear_object(&test_app);
-    g_test_add_func("/ggame-window/boop/shared-shell-widgets", test_ggame_window_skip);
-    g_test_add_func("/ggame-window/boop/auto-move-next-player-computer", test_ggame_window_skip);
-    g_test_add_func("/ggame-window/boop/sgf-actions-navigate", test_ggame_window_skip);
-    g_test_add_func("/ggame-window/boop/supply-selection-tracks-turn", test_ggame_window_skip);
-    g_test_add_func("/ggame-window/boop/new-game-dialog-shared-controls", test_ggame_window_skip);
-    return g_test_run();
-  }
-
-  g_test_add_func("/ggame-window/boop/shared-shell-widgets",
-                  test_ggame_window_boop_shared_shell_widgets_exist);
-  g_test_add_func("/ggame-window/boop/auto-move-next-player-computer",
-                  test_ggame_window_boop_auto_moves_when_next_player_is_computer);
-  g_test_add_func("/ggame-window/boop/sgf-actions-navigate",
-                  test_ggame_window_boop_sgf_actions_navigate_timeline);
-  g_test_add_func("/ggame-window/boop/supply-selection-tracks-turn",
-                  test_ggame_window_boop_supply_selection_tracks_turn);
-  g_test_add_func("/ggame-window/boop/new-game-dialog-shared-controls",
-                  test_ggame_window_boop_new_game_dialog_uses_shared_controls);
-  return g_test_run();
-#else
   if (!gtk_init_check()) {
     g_test_add_func("/analysis-graph/progress-node-accessors", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/dispose-unparents-controls", test_ggame_window_skip);
@@ -2699,5 +2444,4 @@ int main(int argc, char **argv) {
   g_test_add_func("/gcheckers-window/new-game-ruleset-options-russian",
                   test_ggame_window_new_game_dialog_ruleset_options_and_russian_apply);
   return g_test_run();
-#endif
 }

@@ -1,8 +1,6 @@
-#include "application.h"
+#include "app_main.h"
+#include "game_app_profile.h"
 
 int main(int argc, char **argv) {
-  GGameApplication *app = ggame_application_new();
-  int status = g_application_run(G_APPLICATION(app), argc, argv);
-  g_object_unref(app);
-  return status;
+  return ggame_app_main_run(argc, argv, ggame_app_profile_get_by_kind(GGAME_APP_KIND_CHECKERS));
 }

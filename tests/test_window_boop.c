@@ -7,6 +7,7 @@
 #include "player_controls_panel.h"
 #include "sgf_controller.h"
 #include "sgf_tree.h"
+#include "test_profile_utils.h"
 #include "window.h"
 
 static void test_ggame_window_skip(void) {
@@ -610,6 +611,7 @@ static void test_ggame_window_boop_settings_dialog_hides_puzzle_progress(void) {
 }
 
 int main(int argc, char **argv) {
+  ggame_test_init_profile(&argc, &argv, "boop");
   g_test_init(&argc, &argv, NULL);
 
   if (!gtk_init_check()) {
