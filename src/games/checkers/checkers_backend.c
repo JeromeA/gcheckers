@@ -44,6 +44,18 @@ static const char *checkers_backend_side_label(guint side) {
   }
 }
 
+static SgfColor checkers_backend_sgf_color_for_side(guint side) {
+  switch (side) {
+    case CHECKERS_COLOR_WHITE:
+      return SGF_COLOR_WHITE;
+    case CHECKERS_COLOR_BLACK:
+      return SGF_COLOR_BLACK;
+    default:
+      g_debug("Unsupported checkers side index");
+      return SGF_COLOR_NONE;
+  }
+}
+
 static const char *checkers_backend_outcome_banner_text(GameBackendOutcome outcome) {
   switch (outcome) {
     case GAME_BACKEND_OUTCOME_SIDE_0_WIN:
@@ -759,6 +771,7 @@ const GameBackend checkers_game_backend = {
     .variant_at = checkers_backend_variant_at,
     .variant_by_short_name = checkers_backend_variant_by_short_name,
     .side_label = checkers_backend_side_label,
+    .sgf_color_for_side = checkers_backend_sgf_color_for_side,
     .outcome_banner_text = checkers_backend_outcome_banner_text,
     .position_init = checkers_backend_position_init,
     .position_clear = checkers_backend_position_clear,

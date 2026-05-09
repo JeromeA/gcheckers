@@ -1,4 +1,5 @@
 #include <gtk/gtk.h>
+#include <glib/gstdio.h>
 
 #include "active_game_backend.h"
 #include "application.h"
@@ -579,7 +580,7 @@ static void test_ggame_window_boop_new_game_dialog_uses_shared_controls(void) {
   g_clear_object(&app);
 }
 
-static void test_ggame_window_boop_settings_dialog_hides_puzzle_progress(void) {
+static void test_ggame_window_boop_settings_dialog_shows_puzzle_progress(void) {
   g_setenv("GSETTINGS_BACKEND", "memory", TRUE);
 
   GtkApplication *app = test_ggame_window_create_app();
@@ -601,9 +602,62 @@ static void test_ggame_window_boop_settings_dialog_hides_puzzle_progress(void) {
       test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "Send anonymized data about puzzle usage"));
   g_assert_nonnull(
       test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "Send anonymized data about application usage"));
-  g_assert_null(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "Puzzle Progress"));
-  g_assert_null(test_ggame_window_find_button_with_label(GTK_WIDGET(dialog), "Clear Progress"));
+  g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "Puzzle Progress"));
+  g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "0 of 0 puzzles solved"));
+  g_assert_nonnull(test_ggame_window_find_button_with_label(GTK_WIDGET(dialog), "Clear Progress"));
 
+  g_clear_object(&dialog);
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
+static void test_ggame_window_boop_puzzle_dialog_starts_puzzle(void) {
+  g_autoptr(GError) error = NULL;
+  g_autofree char *root = g_dir_make_tmp("gboop-window-puzzles-XXXXXX", &error);
+  g_assert_no_error(error);
+  g_assert_nonnull(root);
+
+  g_autofree char *boop_dir = g_build_filename(root, "boop", NULL);
+  g_assert_cmpint(g_mkdir_with_parents(boop_dir, 0755), ==, 0);
+  g_autofree char *puzzle_path = g_build_filename(boop_dir, "puzzle-0000.sgf", NULL);
+  g_assert_true(g_file_set_contents(puzzle_path,
+                                    "(;FF[4]CA[UTF-8]AP[gcheckers]GM[40]GBC[aa]GBC[ba]GBKS[5]GBCS[1]"
+                                    "GWKS[8]GWCS[0]PL[B];B[C@c1])",
+                                    -1,
+                                    &error));
+  g_assert_no_error(error);
+  g_setenv("GCHECKERS_PUZZLES_DIR", root, TRUE);
+
+  GtkApplication *app = test_ggame_window_create_app();
+  GGameModel *model = ggame_model_new(GGAME_ACTIVE_GAME_BACKEND);
+  GGameWindow *window = test_ggame_window_new(app, model);
+  gtk_window_present(GTK_WINDOW(window));
+  test_ggame_window_drain_main_context(24);
+
+  GAction *puzzle_action = g_action_map_lookup_action(G_ACTION_MAP(window), "puzzle-play");
+  g_assert_nonnull(puzzle_action);
+  g_assert_true(g_action_get_enabled(puzzle_action));
+
+  g_action_group_activate_action(G_ACTION_GROUP(window), "puzzle-play", NULL);
+  test_ggame_window_drain_main_context(24);
+
+  GtkWindow *dialog = test_ggame_window_find_toplevel_by_title("Play puzzles");
+  g_assert_nonnull(dialog);
+  GtkWidget *puzzle_button = test_ggame_window_find_widget_with_uint_data(GTK_WIDGET(dialog), "puzzle-number", 1);
+  g_assert_nonnull(puzzle_button);
+  g_signal_emit_by_name(puzzle_button, "clicked");
+  test_ggame_window_drain_main_context(24);
+
+  GtkWidget *puzzle_panel = g_object_get_data(G_OBJECT(window), "puzzle-panel");
+  GtkWidget *puzzle_message = g_object_get_data(G_OBJECT(window), "puzzle-message-label");
+  g_assert_nonnull(puzzle_panel);
+  g_assert_nonnull(puzzle_message);
+  g_assert_true(gtk_widget_get_visible(puzzle_panel));
+  g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(puzzle_message)), "Puzzle 0000."));
+  g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(puzzle_message)), "Player 1"));
+
+  g_unsetenv("GCHECKERS_PUZZLES_DIR");
   g_clear_object(&dialog);
   g_clear_object(&window);
   g_clear_object(&model);
@@ -624,7 +678,8 @@ int main(int argc, char **argv) {
     g_test_add_func("/ggame-window/boop/sgf-actions-navigate", test_ggame_window_skip);
     g_test_add_func("/ggame-window/boop/supply-selection-tracks-turn", test_ggame_window_skip);
     g_test_add_func("/ggame-window/boop/new-game-dialog-shared-controls", test_ggame_window_skip);
-    g_test_add_func("/ggame-window/boop/settings-dialog-no-puzzle-progress", test_ggame_window_skip);
+    g_test_add_func("/ggame-window/boop/settings-dialog-puzzle-progress", test_ggame_window_skip);
+    g_test_add_func("/ggame-window/boop/puzzle-dialog-starts-puzzle", test_ggame_window_skip);
     return g_test_run();
   }
 
@@ -644,7 +699,8 @@ int main(int argc, char **argv) {
     g_test_add_func("/ggame-window/boop/sgf-actions-navigate", test_ggame_window_skip);
     g_test_add_func("/ggame-window/boop/supply-selection-tracks-turn", test_ggame_window_skip);
     g_test_add_func("/ggame-window/boop/new-game-dialog-shared-controls", test_ggame_window_skip);
-    g_test_add_func("/ggame-window/boop/settings-dialog-no-puzzle-progress", test_ggame_window_skip);
+    g_test_add_func("/ggame-window/boop/settings-dialog-puzzle-progress", test_ggame_window_skip);
+    g_test_add_func("/ggame-window/boop/puzzle-dialog-starts-puzzle", test_ggame_window_skip);
     return g_test_run();
   }
 
@@ -665,7 +721,9 @@ int main(int argc, char **argv) {
                   test_ggame_window_boop_supply_selection_tracks_turn);
   g_test_add_func("/ggame-window/boop/new-game-dialog-shared-controls",
                   test_ggame_window_boop_new_game_dialog_uses_shared_controls);
-  g_test_add_func("/ggame-window/boop/settings-dialog-no-puzzle-progress",
-                  test_ggame_window_boop_settings_dialog_hides_puzzle_progress);
+  g_test_add_func("/ggame-window/boop/settings-dialog-puzzle-progress",
+                  test_ggame_window_boop_settings_dialog_shows_puzzle_progress);
+  g_test_add_func("/ggame-window/boop/puzzle-dialog-starts-puzzle",
+                  test_ggame_window_boop_puzzle_dialog_starts_puzzle);
   return g_test_run();
 }

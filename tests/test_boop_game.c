@@ -288,6 +288,73 @@ static void test_overlay_describes_promoted_kittens_as_removed(void) {
   assert(overlay.removed_squares[2] == square_at(0, 2));
 }
 
+static void test_static_evaluation_ignores_supply_counts(void) {
+  BoopPosition position = {0};
+
+  boop_position_init(&position);
+  position.cats_in_supply[0] = 1;
+  setup_piece(&position, 0, BOOP_PIECE_RANK_KITTEN, 2, 2);
+  setup_piece(&position, 0, BOOP_PIECE_RANK_CAT, 3, 3);
+  setup_piece(&position, 1, BOOP_PIECE_RANK_KITTEN, 0, 0);
+  position.promoted_count[0] = 2;
+  position.promoted_count[1] = 1;
+
+  gint baseline = boop_position_evaluate_static(&position);
+
+  position.kittens_in_supply[0] = 0;
+  position.cats_in_supply[0] = 8;
+  position.kittens_in_supply[1] = 8;
+  position.cats_in_supply[1] = 0;
+  assert(boop_position_evaluate_static(&position) == baseline);
+}
+
+static void test_static_evaluation_scores_cats_like_kittens(void) {
+  BoopPosition kitten_position = {0};
+  BoopPosition cat_position = {0};
+  guint square = square_at(2, 2);
+
+  boop_position_init(&kitten_position);
+  boop_position_init(&cat_position);
+  kitten_position.board[square] = (BoopPiece){
+    .side = 0,
+    .rank = BOOP_PIECE_RANK_KITTEN,
+  };
+  cat_position.board[square] = (BoopPiece){
+    .side = 0,
+    .rank = BOOP_PIECE_RANK_CAT,
+  };
+
+  assert(boop_position_evaluate_static(&cat_position) == boop_position_evaluate_static(&kitten_position));
+}
+
+static void test_static_evaluation_does_not_bonus_cat_lines(void) {
+  BoopPosition position = {0};
+
+  boop_position_init(&position);
+  position.board[square_at(0, 0)] = (BoopPiece){
+    .side = 0,
+    .rank = BOOP_PIECE_RANK_CAT,
+  };
+  position.board[square_at(0, 1)] = (BoopPiece){
+    .side = 0,
+    .rank = BOOP_PIECE_RANK_CAT,
+  };
+  position.board[square_at(0, 2)] = (BoopPiece){
+    .side = 0,
+    .rank = BOOP_PIECE_RANK_CAT,
+  };
+
+  assert(boop_position_evaluate_static(&position) == 309);
+}
+
+static void test_terminal_score_uses_win_scale(void) {
+  assert(boop_position_terminal_score(GAME_BACKEND_OUTCOME_SIDE_0_WIN, 0) == 10000);
+  assert(boop_position_terminal_score(GAME_BACKEND_OUTCOME_SIDE_0_WIN, 7) == 9993);
+  assert(boop_position_terminal_score(GAME_BACKEND_OUTCOME_SIDE_1_WIN, 7) == -9993);
+  assert(boop_position_terminal_score(GAME_BACKEND_OUTCOME_DRAW, 7) == 0);
+  assert(boop_position_terminal_score(GAME_BACKEND_OUTCOME_ONGOING, 7) == 0);
+}
+
 int main(void) {
   test_initial_move_list_and_notation();
   test_kitten_boops_kittens_not_cats();
@@ -300,6 +367,10 @@ int main(void) {
   test_overlay_describes_on_board_boop();
   test_overlay_describes_off_board_boop();
   test_overlay_describes_promoted_kittens_as_removed();
+  test_static_evaluation_ignores_supply_counts();
+  test_static_evaluation_scores_cats_like_kittens();
+  test_static_evaluation_does_not_bonus_cat_lines();
+  test_terminal_score_uses_win_scale();
 
   return 0;
 }

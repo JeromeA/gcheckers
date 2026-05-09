@@ -951,9 +951,7 @@ gint boop_position_evaluate_static(const BoopPosition *position) {
   g_return_val_if_fail(position != NULL, 0);
 
   for (guint side = 0; side < 2; ++side) {
-    gint side_score = ((gint)position->promoted_count[side] * 300) +
-                      ((gint)position->cats_in_supply[side] * 180) +
-                      ((gint)position->kittens_in_supply[side] * 20);
+    gint side_score = (gint)position->promoted_count[side] * 300;
     for (guint square = 0; square < BOOP_SQUARE_COUNT; ++square) {
       BoopPiece piece = position->board[square];
       if (boop_piece_is_empty(piece) || piece.side != side) {
@@ -964,11 +962,8 @@ gint boop_position_evaluate_static(const BoopPosition *position) {
       guint col = 0;
       (void)boop_square_to_coord(square, &row, &col);
       gint center_bonus = 6 - ABS((gint)row - 2) - ABS((gint)col - 2);
-      side_score += piece.rank == BOOP_PIECE_RANK_CAT ? 240 : 100;
+      side_score += 100;
       side_score += MAX(center_bonus, 0);
-    }
-    if (boop_position_has_cat_line(position, side)) {
-      side_score += 10000;
     }
 
     score += side == 0 ? side_score : -side_score;
@@ -978,7 +973,7 @@ gint boop_position_evaluate_static(const BoopPosition *position) {
 }
 
 gint boop_position_terminal_score(GameBackendOutcome outcome, guint ply_depth) {
-  gint win_score = 100000 - (gint)ply_depth;
+  gint win_score = 10000 - (gint)ply_depth;
 
   switch (outcome) {
     case GAME_BACKEND_OUTCOME_SIDE_0_WIN:

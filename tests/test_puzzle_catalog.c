@@ -1,4 +1,5 @@
 #include "../src/active_game_backend.h"
+#include "../src/game_app_profile.h"
 #include "../src/puzzle_catalog.h"
 #include "../src/games/checkers/rulesets.h"
 #include "test_profile_utils.h"
@@ -7,6 +8,8 @@
 #include <glib/gstdio.h>
 
 static void test_puzzle_catalog_loads_sorted_variant_entries(void) {
+  g_assert_true(ggame_app_profile_set_active_by_id("checkers"));
+
   g_autoptr(GError) error = NULL;
   g_autofree char *root = g_dir_make_tmp("gcheckers-puzzle-catalog-XXXXXX", &error);
   g_assert_no_error(error);
@@ -45,10 +48,46 @@ static void test_puzzle_catalog_loads_sorted_variant_entries(void) {
   g_unsetenv("GCHECKERS_PUZZLES_DIR");
 }
 
+static void test_puzzle_catalog_loads_zero_variant_backend_entries(void) {
+  g_assert_true(ggame_app_profile_set_active_by_id("boop"));
+
+  g_autoptr(GError) error = NULL;
+  g_autofree char *root = g_dir_make_tmp("gboop-puzzle-catalog-XXXXXX", &error);
+  g_assert_no_error(error);
+  g_assert_nonnull(root);
+
+  g_autofree char *boop_dir = g_build_filename(root, "boop", NULL);
+  g_assert_cmpint(g_mkdir_with_parents(boop_dir, 0755), ==, 0);
+
+  g_autofree char *puzzle_three = g_build_filename(boop_dir, "puzzle-0003.sgf", NULL);
+  g_autofree char *puzzle_one = g_build_filename(boop_dir, "puzzle-0001.sgf", NULL);
+  g_assert_true(g_file_set_contents(puzzle_three, "(;FF[4]GM[40])", -1, &error));
+  g_assert_no_error(error);
+  g_assert_true(g_file_set_contents(puzzle_one, "(;FF[4]GM[40])", -1, &error));
+  g_assert_no_error(error);
+
+  g_setenv("GCHECKERS_PUZZLES_DIR", root, TRUE);
+  g_autoptr(GPtrArray) entries = game_puzzle_catalog_load_variant(GGAME_ACTIVE_GAME_BACKEND, NULL, &error);
+  g_assert_no_error(error);
+  g_assert_nonnull(entries);
+  g_assert_cmpuint(entries->len, ==, 2);
+
+  GamePuzzleCatalogEntry *first = g_ptr_array_index(entries, 0);
+  GamePuzzleCatalogEntry *second = g_ptr_array_index(entries, 1);
+  g_assert_cmpuint(first->puzzle_number, ==, 1);
+  g_assert_cmpstr(first->puzzle_id, ==, "boop/puzzle-0001.sgf");
+  g_assert_cmpuint(second->puzzle_number, ==, 3);
+  g_assert_cmpstr(second->puzzle_id, ==, "boop/puzzle-0003.sgf");
+
+  g_unsetenv("GCHECKERS_PUZZLES_DIR");
+}
+
 int main(int argc, char **argv) {
   ggame_test_init_profile(&argc, &argv, "checkers");
   g_test_init(&argc, &argv, NULL);
   g_test_add_func("/puzzle-catalog/load-sorted-variant-entries",
                   test_puzzle_catalog_loads_sorted_variant_entries);
+  g_test_add_func("/puzzle-catalog/load-zero-variant-backend-entries",
+                  test_puzzle_catalog_loads_zero_variant_backend_entries);
   return g_test_run();
 }

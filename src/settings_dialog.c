@@ -44,6 +44,20 @@ static void ggame_window_settings_dialog_close(GtkWindow *dialog) {
                   NULL);
 }
 
+static guint ggame_window_settings_dialog_add_catalog_entries(GHashTable *known_puzzle_ids, GPtrArray *entries) {
+  g_return_val_if_fail(known_puzzle_ids != NULL, 0);
+  g_return_val_if_fail(entries != NULL, 0);
+
+  for (guint i = 0; i < entries->len; i++) {
+    GamePuzzleCatalogEntry *entry = g_ptr_array_index(entries, i);
+    if (entry != NULL && entry->puzzle_id != NULL) {
+      g_hash_table_add(known_puzzle_ids, g_strdup(entry->puzzle_id));
+    }
+  }
+
+  return entries->len;
+}
+
 static guint ggame_window_settings_dialog_count_known_puzzles(GHashTable *known_puzzle_ids) {
   const GGameAppProfile *profile = ggame_active_app_profile();
   const GameBackend *backend = profile != NULL ? profile->backend : NULL;
@@ -53,6 +67,18 @@ static guint ggame_window_settings_dialog_count_known_puzzles(GHashTable *known_
   g_return_val_if_fail(backend->variant_at != NULL || backend->variant_count == 0, 0);
 
   guint total = 0;
+  if (backend->variant_count == 0) {
+    g_autoptr(GError) error = NULL;
+    g_autoptr(GPtrArray) entries = game_puzzle_catalog_load_variant(backend, NULL, &error);
+    if (entries == NULL) {
+      g_debug("Failed to load puzzle catalog for settings summary: %s",
+              error != NULL ? error->message : "unknown error");
+      return 0;
+    }
+
+    return ggame_window_settings_dialog_add_catalog_entries(known_puzzle_ids, entries);
+  }
+
   for (guint i = 0; i < backend->variant_count; i++) {
     const GameBackendVariant *variant = backend->variant_at(i);
     if (variant == NULL || variant->short_name == NULL) {
@@ -68,13 +94,7 @@ static guint ggame_window_settings_dialog_count_known_puzzles(GHashTable *known_
       continue;
     }
 
-    total += entries->len;
-    for (guint j = 0; j < entries->len; j++) {
-      GamePuzzleCatalogEntry *entry = g_ptr_array_index(entries, j);
-      if (entry != NULL && entry->puzzle_id != NULL) {
-        g_hash_table_add(known_puzzle_ids, g_strdup(entry->puzzle_id));
-      }
-    }
+    total += ggame_window_settings_dialog_add_catalog_entries(known_puzzle_ids, entries);
   }
 
   return total;

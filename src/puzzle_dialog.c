@@ -95,8 +95,14 @@ static void ggame_window_puzzle_dialog_update_variant_summary(GGameWindowPuzzleD
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   g_return_if_fail(data != NULL);
   g_return_if_fail(backend != NULL);
-  g_return_if_fail(GTK_IS_DROP_DOWN(data->variant));
   g_return_if_fail(GTK_IS_LABEL(data->variant_summary));
+
+  if (backend->variant_count == 0) {
+    gtk_label_set_text(data->variant_summary, backend->display_name);
+    return;
+  }
+
+  g_return_if_fail(GTK_IS_DROP_DOWN(data->variant));
   g_return_if_fail(backend->variant_at != NULL);
 
   const GameBackendVariant *variant = backend->variant_at(gtk_drop_down_get_selected(data->variant));
@@ -142,9 +148,11 @@ static GtkWidget *ggame_window_puzzle_dialog_create_puzzle_button(const GamePuzz
                                                                   const GameBackendVariant *variant,
                                                                   GGamePuzzleStatus status,
                                                                   GGameWindowPuzzleDialogData *data) {
+  const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
+
   g_return_val_if_fail(entry != NULL, NULL);
-  g_return_val_if_fail(variant != NULL, NULL);
   g_return_val_if_fail(data != NULL, NULL);
+  g_return_val_if_fail(backend != NULL, NULL);
 
   GtkWidget *button = gtk_button_new();
   gtk_widget_set_size_request(button, 52, 52);
@@ -178,10 +186,26 @@ static GtkWidget *ggame_window_puzzle_dialog_create_puzzle_button(const GamePuzz
   g_object_set_data(G_OBJECT(button), "puzzle-number", GUINT_TO_POINTER(entry->puzzle_number + 1));
 
   g_autofree char *tooltip = g_strdup_printf("%s puzzle %u",
-                                             variant->name != NULL ? variant->name : "Puzzle",
+                                             variant != NULL && variant->name != NULL ? variant->name
+                                                                                      : backend->display_name,
                                              entry->puzzle_number);
   gtk_widget_set_tooltip_text(button, tooltip);
   return button;
+}
+
+static const GameBackendVariant *ggame_window_puzzle_dialog_current_variant(GGameWindowPuzzleDialogData *data) {
+  const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
+
+  g_return_val_if_fail(data != NULL, NULL);
+  g_return_val_if_fail(backend != NULL, NULL);
+
+  if (backend->variant_count == 0) {
+    return NULL;
+  }
+
+  g_return_val_if_fail(GTK_IS_DROP_DOWN(data->variant), NULL);
+  g_return_val_if_fail(backend->variant_at != NULL, NULL);
+  return backend->variant_at(gtk_drop_down_get_selected(data->variant));
 }
 
 static void ggame_window_on_puzzle_button_clicked(GtkButton *button, gpointer /*user_data*/) {
@@ -221,7 +245,7 @@ static void ggame_window_puzzle_dialog_rebuild_grid(GGameWindowPuzzleDialogData 
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   g_return_if_fail(data != NULL);
   g_return_if_fail(backend != NULL);
-  g_return_if_fail(backend->variant_at != NULL);
+  g_return_if_fail(backend->variant_count == 0 || backend->variant_at != NULL);
   g_return_if_fail(GTK_IS_WIDGET(data->puzzle_area));
 
   GtkWidget *old_child = gtk_widget_get_first_child(data->puzzle_area);
@@ -229,8 +253,8 @@ static void ggame_window_puzzle_dialog_rebuild_grid(GGameWindowPuzzleDialogData 
     gtk_box_remove(GTK_BOX(data->puzzle_area), old_child);
   }
 
-  const GameBackendVariant *variant = backend->variant_at(gtk_drop_down_get_selected(data->variant));
-  if (variant == NULL) {
+  const GameBackendVariant *variant = ggame_window_puzzle_dialog_current_variant(data);
+  if (variant == NULL && backend->variant_count > 0) {
     g_debug("Failed to resolve puzzle variant");
     GtkWidget *label = gtk_label_new("Failed to resolve this puzzle variant.");
     gtk_widget_set_halign(label, GTK_ALIGN_START);
@@ -251,7 +275,8 @@ static void ggame_window_puzzle_dialog_rebuild_grid(GGameWindowPuzzleDialogData 
   }
 
   if (entries->len == 0) {
-    GtkWidget *label = gtk_label_new("No puzzles found for this variant.");
+    GtkWidget *label = gtk_label_new(backend->variant_count == 0 ? "No puzzles found." :
+                                                                 "No puzzles found for this variant.");
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_margin_top(label, 8);
     gtk_box_append(GTK_BOX(data->puzzle_area), label);
@@ -330,16 +355,15 @@ static void ggame_window_on_puzzle_dialog_cancel_clicked(GtkButton *button, gpoi
 }
 
 void ggame_puzzle_dialog_present(GtkWindow *parent,
-                                     const GameBackendVariant *initial_variant,
-                                     GGamePuzzleProgressStore *store,
-                                     GGamePuzzleDialogDoneFunc done_func,
-                                     gpointer user_data,
-                                     GDestroyNotify user_data_destroy) {
+                                 const GameBackendVariant *initial_variant,
+                                 GGamePuzzleProgressStore *store,
+                                 GGamePuzzleDialogDoneFunc done_func,
+                                 gpointer user_data,
+                                 GDestroyNotify user_data_destroy) {
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   g_return_if_fail(GTK_IS_WINDOW(parent));
   g_return_if_fail(backend != NULL);
-  g_return_if_fail(backend->variant_count > 0);
-  g_return_if_fail(backend->variant_at != NULL);
+  g_return_if_fail(backend->variant_count == 0 || backend->variant_at != NULL);
 
   GtkWidget *dialog = gtk_window_new();
   gtk_window_set_title(GTK_WINDOW(dialog), "Play puzzles");
@@ -361,19 +385,20 @@ void ggame_puzzle_dialog_present(GtkWindow *parent,
   gtk_grid_set_column_spacing(GTK_GRID(grid), 12);
   gtk_box_append(GTK_BOX(content), grid);
 
-  g_auto(GStrv) variant_options = g_new0(char *, backend->variant_count + 1);
-  for (guint i = 0; i < backend->variant_count; ++i) {
-    const GameBackendVariant *variant = backend->variant_at(i);
-    if (variant == NULL || variant->name == NULL) {
-      g_debug("Missing puzzle variant name");
-      gtk_window_destroy(GTK_WINDOW(dialog));
-      return;
+  g_auto(GStrv) variant_options = NULL;
+  if (backend->variant_count > 0) {
+    variant_options = g_new0(char *, backend->variant_count + 1);
+    for (guint i = 0; i < backend->variant_count; ++i) {
+      const GameBackendVariant *variant = backend->variant_at(i);
+      if (variant == NULL || variant->name == NULL) {
+        g_debug("Missing puzzle variant name");
+        gtk_window_destroy(GTK_WINDOW(dialog));
+        return;
+      }
+      variant_options[i] = g_strdup(variant->name);
     }
-    variant_options[i] = g_strdup(variant->name);
   }
 
-  GtkWidget *variant_label = gtk_label_new("Variant");
-  gtk_widget_set_halign(variant_label, GTK_ALIGN_START);
   GtkWidget *variant_summary = gtk_label_new(NULL);
   gtk_widget_set_halign(variant_summary, GTK_ALIGN_START);
   gtk_label_set_xalign(GTK_LABEL(variant_summary), 0.0f);
@@ -381,8 +406,11 @@ void ggame_puzzle_dialog_present(GtkWindow *parent,
   gtk_label_set_ellipsize(GTK_LABEL(variant_summary), PANGO_ELLIPSIZE_END);
   gtk_widget_set_hexpand(variant_summary, TRUE);
 
-  GtkDropDown *variant = GTK_DROP_DOWN(gtk_drop_down_new_from_strings((const char *const *) variant_options));
-  if (initial_variant != NULL) {
+  GtkDropDown *variant = NULL;
+  if (backend->variant_count > 0) {
+    variant = GTK_DROP_DOWN(gtk_drop_down_new_from_strings((const char *const *) variant_options));
+  }
+  if (variant != NULL && initial_variant != NULL) {
     for (guint i = 0; i < backend->variant_count; ++i) {
       if (backend->variant_at(i) == initial_variant) {
         gtk_drop_down_set_selected(variant, i);
@@ -391,9 +419,15 @@ void ggame_puzzle_dialog_present(GtkWindow *parent,
     }
   }
 
-  gtk_grid_attach(GTK_GRID(grid), variant_label, 0, 0, 1, 1);
-  gtk_grid_attach(GTK_GRID(grid), GTK_WIDGET(variant), 1, 0, 1, 1);
-  gtk_grid_attach(GTK_GRID(grid), variant_summary, 1, 1, 1, 1);
+  if (variant != NULL) {
+    GtkWidget *variant_label = gtk_label_new("Variant");
+    gtk_widget_set_halign(variant_label, GTK_ALIGN_START);
+    gtk_grid_attach(GTK_GRID(grid), variant_label, 0, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), GTK_WIDGET(variant), 1, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), variant_summary, 1, 1, 1, 1);
+  } else {
+    gtk_grid_attach(GTK_GRID(grid), variant_summary, 0, 0, 2, 1);
+  }
 
   GtkWidget *puzzle_area = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_widget_set_vexpand(puzzle_area, TRUE);
@@ -434,9 +468,11 @@ void ggame_puzzle_dialog_present(GtkWindow *parent,
                    "destroy",
                    G_CALLBACK(ggame_window_on_puzzle_dialog_destroy),
                    data);
-  g_signal_connect(variant,
-                   "notify::selected",
-                   G_CALLBACK(ggame_window_on_puzzle_dialog_variant_selected),
-                   data);
+  if (variant != NULL) {
+    g_signal_connect(variant,
+                     "notify::selected",
+                     G_CALLBACK(ggame_window_on_puzzle_dialog_variant_selected),
+                     data);
+  }
   gtk_window_present(GTK_WINDOW(dialog));
 }

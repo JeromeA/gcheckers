@@ -45,7 +45,7 @@ static void test_app_profile_metadata(void) {
       assert(profile->features.supports_shared_shell);
       assert(profile->features.supports_sgf_files);
       assert(profile->features.supports_ai_players);
-      assert(!profile->features.supports_puzzles);
+      assert(profile->features.supports_puzzles);
       assert(!profile->features.supports_import);
       assert(profile->features.supports_settings);
       assert(profile->features.supports_save_position);
@@ -74,6 +74,9 @@ static void test_backend_metadata(void) {
       assert(backend->list_good_moves != NULL);
       assert(backend->sgf_apply_setup_node != NULL);
       assert(backend->sgf_write_position_node != NULL);
+      assert(backend->sgf_color_for_side != NULL);
+      assert(backend->sgf_color_for_side(0) == SGF_COLOR_WHITE);
+      assert(backend->sgf_color_for_side(1) == SGF_COLOR_BLACK);
 
       const GameBackendVariant *american = backend->variant_at(0);
       assert(american != NULL);
@@ -94,6 +97,7 @@ static void test_backend_metadata(void) {
       assert(backend->list_good_moves != NULL);
       assert(backend->sgf_apply_setup_node == NULL);
       assert(backend->sgf_write_position_node == NULL);
+      assert(backend->sgf_color_for_side == NULL);
       assert(strcmp(backend->side_label(0), "Player 1") == 0);
       assert(strcmp(backend->side_label(1), "Player 2") == 0);
       break;
@@ -108,6 +112,9 @@ static void test_backend_metadata(void) {
       assert(backend->supports_square_grid_board);
       assert(backend->sgf_apply_setup_node != NULL);
       assert(backend->sgf_write_position_node != NULL);
+      assert(backend->sgf_color_for_side != NULL);
+      assert(backend->sgf_color_for_side(0) == SGF_COLOR_BLACK);
+      assert(backend->sgf_color_for_side(1) == SGF_COLOR_WHITE);
       assert(strcmp(backend->side_label(0), "Player 1") == 0);
       assert(strcmp(backend->side_label(1), "Player 2") == 0);
       break;

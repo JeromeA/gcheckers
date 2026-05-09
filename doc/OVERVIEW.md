@@ -58,19 +58,23 @@ navigation does not keep rotating the board.
 Those shared board-orientation and board-input-enable decisions now come from the cached `GGameModel` through backend
 `position_turn()` and `position_outcome()` callbacks rather than directly inspecting checkers state.
 Puzzle mode starts with a modal chooser (`src/puzzle_dialog.c`) that lets the user pick one backend
-variant and then click a numbered puzzle square from a ten-column grid. The dialog only reports
+variant when the active backend has variants, then click a numbered puzzle square from a ten-column grid. Zero-variant
+backends such as boop skip the variant row and load their single catalog directly. The dialog only reports
 cancel-or-selected results back to `GGameWindow`; the window owns opening the selected puzzle and starting progress
 tracking. The grid is built from the selected variant directory only and shows local status per puzzle: untried squares
 are white, solved squares are green, and tried-without-success squares are red. Runtime loading resolves the puzzle root
 (`GCHECKERS_PUZZLES_DIR` or the installed/local application data search path), appends the active game ID plus the
-selected variant short name such as `checkers/american` or `checkers/russian`, and then loads the exact clicked
-`puzzle-*.sgf`. While active it hides both drawers, disables SGF/review actions, shows puzzle-only `Next puzzle` and
-`Analyze` buttons, and validates the player's moves against the SGF main-line solution while auto-playing defender
-replies. `Next puzzle` now advances through the sorted catalog for the active variant, wrapping to the first puzzle
-after the last one, and no longer selects a random puzzle. Puzzle `Analyze` exits puzzle mode, rewinds fully to move 0,
-and then starts the same full-game analysis path used by the Analysis menu. The current node report still follows
-normal SGF selection instead of being replaced by a generic completion message. Picker squares keep custom status colors
-and now define an explicit darker `:active` state so mouse presses remain visible even with the custom button styling.
+selected variant short name when present, such as `checkers/american` or `checkers/russian`; for boop it appends only
+`boop`. It then loads the exact clicked `puzzle-*.sgf`. While active it hides both drawers, disables SGF/review
+actions, shows puzzle-only `Next puzzle` and `Analyze` buttons, and validates the player's moves against the SGF
+main-line solution while auto-playing defender replies. Puzzle steps are stored as backend-sized move snapshots plus
+generic side numbers, so checkers and boop share the same playback code while each backend keeps its own notation and
+move type. `Next puzzle` now advances through the sorted catalog for the active variant or zero-variant backend,
+wrapping to the first puzzle after the last one, and no longer selects a random puzzle. Puzzle `Analyze` exits puzzle
+mode, rewinds fully to move 0, and then starts the same full-game analysis path used by the Analysis menu. The current
+node report still follows normal SGF selection instead of being replaced by a generic completion message. Picker
+squares keep custom status colors and now define an explicit darker `:active` state so mouse presses remain visible
+even with the custom button styling.
 Puzzle mode now also records local progress for each opened puzzle entry. Opening the puzzle creates an append-only
 attempt record with `started_unix_ms`, terminal outcomes are `success`, `failure`, or `analyze`, and the first wrong
 move is stored only when the failure happened on the very first attempted move. A started-but-unfinished puzzle entry
@@ -147,10 +151,11 @@ custom root snapshot properties that restore on-board kittens/cats, per-side sup
 `RU[<ruleset-short-name>]` is still read on load to switch the legacy checkers model to the matching ruleset before
 replay, and SGF loads now fail if `RU` is missing or unknown instead of falling back to the current model rules.
 `RU` is stamped back onto fresh trees and saved SGFs when the active backend has variants; zero-variant backends such
-as boop accept and write no `RU`. `Save position...` now uses the same backend hook layer in reverse: the shared
-controller creates a fresh one-node SGF tree, asks the active backend to write a root position snapshot, and then
-saves through `sgf_io_save_file()`. That keeps position-only SGFs shared while leaving the actual snapshot encoding
-backend-owned.
+as boop accept and write no `RU`. SGF move colors also come from the active backend through `sgf_color_for_side()` so
+checkers can keep side 0 as white while boop maps side 0 to black. `Save position...` now uses the same backend hook
+layer in reverse: the shared controller creates a fresh one-node SGF tree, asks the active backend to write a root
+position snapshot, and then saves through `sgf_io_save_file()`. That keeps position-only SGFs shared while leaving the
+actual snapshot encoding backend-owned.
 `ggame_sgf_controller_set_model()` binds the legacy checkers wrapper plus its inner `GGameModel`;
 `ggame_sgf_controller_set_game_model()` binds generic callers directly. Timeline clearing remains explicit via
 `ggame_sgf_controller_new_game()`. Exposes SGF navigation helpers used by the shared window: rewind to root, step
@@ -193,12 +198,28 @@ Collaborates with: `GGameWindow` (signal handlers and `player_controls_panel_set
 
 ## `Puzzle Catalog` (`src/puzzle_catalog.c`, `src/puzzle_catalog.h`)
 Module: backend-variant puzzle discovery helpers.
-Role: scan one variant directory under the puzzle root, keep only `puzzle-####.sgf` files, parse their numeric puzzle
-numbers, sort them ascending, and return explicit catalog entries with basename, full path, and stable `puzzle_id`.
+Role: scan one backend puzzle directory under the puzzle root, keep only `puzzle-####.sgf` files, parse their numeric
+puzzle numbers, sort them ascending, and return explicit catalog entries with basename, full path, and stable
+`puzzle_id`. For backends with variants, the catalog path is `puzzles/<backend-id>/<variant-short-name>/`; for
+zero-variant backends, `variant == NULL` is valid and the path is `puzzles/<backend-id>/`.
 Collaborates with: `puzzle_dialog.c` for the numbered chooser grid and `window.c` for next-puzzle selection inside the
-active variant.
+active variant or backend catalog.
 Storage shape: checked-in puzzles now live under `puzzles/checkers/<variant-short-name>/`, and stable puzzle IDs are
-prefixed with the active game ID, for example `checkers/international/puzzle-0007.sgf`.
+prefixed with the active game ID, for example `checkers/international/puzzle-0007.sgf` or
+`boop/puzzle-0000.sgf`.
+
+## Boop Puzzle Generator (`src/games/boop/boop_create_puzzles.c`)
+Module: `boop_create_puzzles_main()`.
+Role: profile-specific puzzle tooling for `build/tools/boop_create_puzzles`. The CLI accepts `--depth`, `--save-games`,
+`--check-existing`, and `--dry-run`; it rejects checkers-only `--ruleset` values because boop has no variants. It
+writes generated puzzles under `puzzles/boop/`, using boop backend SGF root snapshots for board pieces, supplies, and
+side to move, and writes solution moves with the shared SGF move notation helpers. Candidate validation uses the
+generic backend AI search API against `boop_game_backend` and keeps positions with a clear unique best move. The
+generator first plays complete depth-0 games, reports that shared progress through `create_puzzles_progress.c`, then
+analyzes each pre-move position in the played line. The check-existing path reloads each SGF, validates the saved line
+against current search, and deletes or dry-runs invalid puzzle/game file pairs.
+Collaborates with: `src/create_puzzles.c` for launcher dispatch, `src/ai_search.c`, `src/puzzle_catalog.c`,
+`src/create_puzzles_progress.c`, `src/sgf_io.c`, `src/sgf_move_props.c`, and boop's `boop_sgf_position.c`.
 
 ## `ggame_style_init()` (`src/style.c`)
 Module: `ggame_style_init()` (style helper, not a class).
@@ -230,8 +251,9 @@ application-usage-data` also defaults to true and is stored for future telemetry
 UI: the settings dialog is a small modal window with two checkboxes and `Cancel`/`Save` actions, following the same
 simple GTK window pattern as the new-game and import dialogs. When the active profile also exposes a puzzle catalog,
 it adds a `Puzzle Progress` section with the number of solved puzzles out of the currently available puzzle catalog and
-a `Clear Progress` button that clears local attempt history plus the chooser status cache. Boop reuses the same dialog
-but only shows the privacy controls. On first launch, `GGameApplication` presents this dialog automatically after
+a `Clear Progress` button that clears local attempt history plus the chooser status cache. Checkers counts every
+variant catalog; boop counts the zero-variant `puzzles/boop/` catalog. On first launch, `GGameApplication` presents
+this dialog automatically after
 creating the main window so the user can review the privacy controls before continuing.
 
 ## Puzzle Progress Reporting (`src/puzzle_progress.c`, `data/schemas/io.github.jeromea.gcheckers.gschema.xml`,
@@ -373,7 +395,7 @@ names.
 Collaborates with: import dialog flow for "Fetch game history" and `tests/test_bga_client.c` (token/login/history
 parsing + live login smoke test with env-provided credentials).
 
-## Puzzle generator CLI (`src/create_puzzles.c`)
+## Puzzle generator CLI (`src/create_puzzles.c`, `src/create_puzzles_launcher.c`)
 Module: CLI front end.
 Role: repeatedly self-play games at depth 0, detect mistake positions with configurable best-move-depth analysis,
 validate each candidate immediately in one pass, require the attacker to have at least four legal moves and a best
@@ -387,7 +409,7 @@ variant at a time. It also accepts `--depth N` to override the puzzle-analysis d
 into trying synthetic bad moves in addition to the played move during generation, `--save-games` to also persist the
 originating `game-####.sgf` companion files beside the puzzle files, and `--check-existing` with optional `--dry-run`
 to re-validate `puzzle-*.sgf` files in one variant directory and optionally delete stale ones. Without
-`--check-existing`, it uses the built-in default depth 8 and only evaluates the actual game line.
+`--check-existing`, it uses the launcher's built-in default depth and only evaluates the actual game line.
 Before generating anything, the CLI loads existing `puzzle-*.sgf` files from the selected variant directory and
 deduplicates by solution move sequence, so equivalent puzzles are skipped instead of being saved twice.
 The main validation path is organized as puzzle-rule predicates (`position_follows_a_serious_mistake`,
@@ -401,20 +423,29 @@ line of move, move, jump. If the attacker starts 400 or more points behind, the 
 back to at worst 300 points behind; otherwise the candidate is rejected as an uninteresting partial comeback. After the
 solution line ends, the immediate next best reply must also avoid an instant recapture, or the candidate is rejected as
 unstable.
-The built tool name is derived from `GAME`, so the checkers build emits `build/tools/checkers_create_puzzles` while the
-`make create_puzzles` target remains stable.
+The unified build emits two launcher names: `build/tools/checkers_create_puzzles` for checkers and
+`build/tools/boop_create_puzzles` for boop. The checkers launcher keeps the historical default analysis depth `8`;
+the boop launcher uses default analysis depth `4` and dispatches to boop's profile-specific generator without a
+ruleset argument. `make create_puzzles` builds both launchers.
 While replaying a generated self-play game, the CLI analyzes each pre-mistake position at the configured best-move
 depth and reuses one shared TT allocation across the whole run. When `--synthetic-candidates` is enabled, it also
 tries any synthetic mistake move that already trails the best move by at least 100 points, so puzzle generation is not
 limited to the exact self-play move that happened in the game.
-The CLI always prints self-play completion, loaded existing solution keys, each move considered as a candidate,
-indented `->` rejection or keep reasons, and a final aggregated rejection report so puzzle filtering can be followed
-from the terminal. In check-existing mode, it also reports how many puzzle files were checked and how many would be or
-were removed.
+The CLI always prints self-play start, self-play completion, loaded existing solution keys, each move considered as a
+candidate, indented `->` rejection or keep reasons, and a final aggregated rejection report so puzzle filtering can be
+followed from the terminal. In check-existing mode, it also reports how many puzzle files were checked and how many
+would be or were removed.
 By default it saves only `puzzles/checkers/<ruleset-short-name>/puzzle-####.sgf`;
 `puzzles/checkers/<ruleset-short-name>/game-####.sgf` companions are written only when `--save-games` is enabled.
 Collaborates with: `ai_alpha_beta.c`, `rulesets.c`, `sgf_tree.c`, `sgf_move_props.c`, `sgf_io.c`,
 and `puzzle_generation.c`.
+
+## Puzzle Generator Progress (`src/create_puzzles_progress.c`, `src/create_puzzles_progress.h`)
+Module: shared terminal progress formatting for puzzle generator tools.
+Role: centralize the user-visible progress messages for self-play start, self-play completion, per-move candidate
+analysis, and generic progress lines. Checkers and boop both use this helper so count-mode generation has the same
+observable phases even though their candidate validation logic is profile-specific.
+Collaborates with: `src/create_puzzles.c` and `src/games/boop/boop_create_puzzles.c`.
 
 ## Puzzle generation helpers (`src/games/checkers/puzzle_generation.c`,
 `src/games/checkers/puzzle_generation.h`)
@@ -474,11 +505,15 @@ supply, resolves mandatory line promotions, supports optional one-kitten graduat
 and awards the active player an end-of-turn win for three cats in a row or all eight kittens promoted.
 The backend exposes full move lists for validation/search, a staged square-grid builder for interactive placement plus
 promotion selection, deterministic notation such as `K@a1+a1,b1,c1`, symbol-only board pieces, static evaluation,
-terminal scores, and position hashing. When both kittens and cats are available, the placement builder exposes both
-ranks for each empty square and leaves the active rank choice to the UI candidate-preference hook. Promotion-stage
-selection paths contain only the promotion squares, so the just-placed piece is highlighted only when it is actually
-one of the candidate promotion squares. The boop engine also exposes last-move overlay metadata so the GTK board can
-circle the placed piece and draw arrows for every booped piece, including off-board boops that return to supply.
+terminal scores, and position hashing. Boop static evaluation scores promoted kittens, on-board pieces, and center
+placement; it does not score supply counts directly because they are determined by promoted cats and on-board
+material, and wins are handled by terminal scoring at 10000 minus ply depth. When both kittens and cats are available,
+the placement builder exposes both ranks for each empty square and leaves the active rank choice to the UI
+candidate-preference hook.
+Promotion-stage selection paths contain only the promotion squares, so the just-placed piece is highlighted only when
+it is actually one of the candidate promotion squares. The boop engine also exposes last-move overlay metadata so the
+GTK board can circle the placed piece and draw arrows for every booped piece, including off-board boops that return to
+supply.
 `boop_position_normalize()` is the shared validator for arbitrary boop snapshots: it derives promoted-cat counts from
 board/supply state, recomputes terminal outcome, and rejects impossible totals before position-only SGF replay
 publishes a snapshot into the model. `boop_sgf_position.c` uses that helper to encode and decode root snapshot
@@ -514,11 +549,13 @@ snapshot hooks.
 Scope: shared application code still has some checkers-native compatibility layers, but the physical checkers source
 ownership boundary is now explicit under `src/games/checkers/`.
 Backends now advertise whether they support full move-list enumeration, incremental move-building, AI search, and
-backend-owned move parsing/formatting for SGF. Move-builder backends can also expose preview positions, builder-owned
-selection paths, and selection reset behavior for multi-stage interactions such as boop promotion choices. Backend
-outcome banner text is reserved for terminal outcomes; ongoing positions should return no banner text. They can also
-optionally expose SGF setup-node and root-position snapshot hooks so the shared controller can replay setup-root SGFs
-and save position-only SGFs without game-specific branches.
+backend-owned move parsing/formatting for SGF. Each SGF-capable backend also maps its own side numbers to SGF
+`B`/`W` colors, which keeps shared controller code from assuming that side 0 means the same color in every game.
+Move-builder backends can also expose preview positions, builder-owned selection paths, and selection reset behavior
+for multi-stage interactions such as boop promotion choices. Backend outcome banner text is reserved for terminal
+outcomes; ongoing positions should return no banner text. They can also optionally expose SGF setup-node and
+root-position snapshot hooks so the shared controller can replay setup-root SGFs and save position-only SGFs without
+game-specific branches.
 Collaborates with: `Makefile` backend selection, `tests/test_game_backend.c`, and future generic model/search work.
 
 ## Generic game model (`src/game_model.c`, `src/game_model.h`)

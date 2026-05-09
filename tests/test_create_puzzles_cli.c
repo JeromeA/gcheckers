@@ -1,3 +1,4 @@
+#include "../src/create_puzzles_launcher.h"
 #include "../src/games/checkers/create_puzzles_cli.h"
 #include "../src/games/checkers/rulesets.h"
 
@@ -248,6 +249,22 @@ static void test_create_puzzles_cli_rejects_invalid_input(void) {
   g_assert_cmpstr(error, ==, "--save-games is only valid when generating puzzles");
 }
 
+static void test_create_puzzles_launcher_defaults(void) {
+  GGameCreatePuzzlesLauncherConfig config = {0};
+
+  ggame_create_puzzles_launcher_config_for_program_name("checkers_create_puzzles", &config);
+  g_assert_cmpstr(config.profile_id, ==, "checkers");
+  g_assert_cmpuint(config.default_depth, ==, 8);
+
+  ggame_create_puzzles_launcher_config_for_program_name("/tmp/build/tools/boop_create_puzzles", &config);
+  g_assert_cmpstr(config.profile_id, ==, "boop");
+  g_assert_cmpuint(config.default_depth, ==, 4);
+
+  ggame_create_puzzles_launcher_config_for_program_name("create_puzzles", &config);
+  g_assert_cmpstr(config.profile_id, ==, "checkers");
+  g_assert_cmpuint(config.default_depth, ==, 8);
+}
+
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
 
@@ -260,6 +277,7 @@ int main(int argc, char **argv) {
   g_test_add_func("/create-puzzles-cli/check-existing", test_create_puzzles_cli_check_existing_mode);
   g_test_add_func("/create-puzzles-cli/ruleset-short-names", test_create_puzzles_cli_ruleset_short_names);
   g_test_add_func("/create-puzzles-cli/rejects-invalid-input", test_create_puzzles_cli_rejects_invalid_input);
+  g_test_add_func("/create-puzzles-cli/launcher-defaults", test_create_puzzles_launcher_defaults);
 
   return g_test_run();
 }

@@ -4,11 +4,17 @@
 
 #include <glib/gstdio.h>
 
-static gboolean game_puzzle_catalog_parse_basename(const char *basename, guint *out_number) {
+gboolean game_puzzle_catalog_name_is_puzzle_sgf(const char *name) {
+  g_return_val_if_fail(name != NULL, FALSE);
+
+  return g_str_has_prefix(name, "puzzle-") && g_str_has_suffix(name, ".sgf");
+}
+
+gboolean game_puzzle_catalog_parse_basename(const char *basename, guint *out_number) {
   g_return_val_if_fail(basename != NULL, FALSE);
   g_return_val_if_fail(out_number != NULL, FALSE);
 
-  if (!g_str_has_prefix(basename, "puzzle-") || !g_str_has_suffix(basename, ".sgf")) {
+  if (!game_puzzle_catalog_name_is_puzzle_sgf(basename)) {
     return FALSE;
   }
 
@@ -37,6 +43,55 @@ static gboolean game_puzzle_catalog_parse_basename(const char *basename, guint *
 
   *out_number = (guint) parsed;
   return TRUE;
+}
+
+gboolean game_puzzle_catalog_find_next_index(const char *dir_path, guint *out_next_index, GError **error) {
+  g_return_val_if_fail(dir_path != NULL, FALSE);
+  g_return_val_if_fail(out_next_index != NULL, FALSE);
+
+  *out_next_index = 0;
+  if (!g_file_test(dir_path, G_FILE_TEST_IS_DIR)) {
+    return TRUE;
+  }
+
+  g_autoptr(GDir) dir = g_dir_open(dir_path, 0, error);
+  if (dir == NULL) {
+    return FALSE;
+  }
+
+  guint max_index = 0;
+  gboolean have_index = FALSE;
+  for (const char *name = g_dir_read_name(dir); name != NULL; name = g_dir_read_name(dir)) {
+    guint index = 0;
+    if (!game_puzzle_catalog_parse_basename(name, &index)) {
+      continue;
+    }
+
+    max_index = have_index ? MAX(max_index, index) : index;
+    have_index = TRUE;
+  }
+
+  if (!have_index) {
+    return TRUE;
+  }
+  if (max_index == G_MAXUINT) {
+    g_set_error_literal(error,
+                        g_quark_from_static_string("game-puzzle-catalog-error"),
+                        1,
+                        "Puzzle index overflow");
+    return FALSE;
+  }
+
+  *out_next_index = max_index + 1;
+  return TRUE;
+}
+
+char *game_puzzle_catalog_build_indexed_path(const char *dir_path, const char *prefix, guint index) {
+  g_return_val_if_fail(dir_path != NULL, NULL);
+  g_return_val_if_fail(prefix != NULL, NULL);
+
+  g_autofree char *filename = g_strdup_printf("%s-%04u.sgf", prefix, index);
+  return g_build_filename(dir_path, filename, NULL);
 }
 
 static gint game_puzzle_catalog_entry_compare(gconstpointer left, gconstpointer right) {
@@ -72,8 +127,8 @@ GPtrArray *game_puzzle_catalog_load_variant(const GameBackend *backend,
                                             GError **error) {
   g_return_val_if_fail(backend != NULL, NULL);
   g_return_val_if_fail(backend->id != NULL, NULL);
-  g_return_val_if_fail(variant != NULL, NULL);
-  g_return_val_if_fail(variant->short_name != NULL, NULL);
+  g_return_val_if_fail((variant == NULL) == (backend->variant_count == 0), NULL);
+  g_return_val_if_fail(variant == NULL || variant->short_name != NULL, NULL);
 
   g_autofree char *puzzles_root = ggame_app_paths_find_data_subdir("GCHECKERS_PUZZLES_DIR", "puzzles");
   if (puzzles_root == NULL) {
@@ -81,7 +136,9 @@ GPtrArray *game_puzzle_catalog_load_variant(const GameBackend *backend,
     return NULL;
   }
 
-  g_autofree char *variant_dir = g_build_filename(puzzles_root, backend->id, variant->short_name, NULL);
+  g_autofree char *variant_dir = variant != NULL
+                                      ? g_build_filename(puzzles_root, backend->id, variant->short_name, NULL)
+                                      : g_build_filename(puzzles_root, backend->id, NULL);
   GPtrArray *entries = g_ptr_array_new_with_free_func((GDestroyNotify) game_puzzle_catalog_entry_free);
   if (!g_file_test(variant_dir, G_FILE_TEST_IS_DIR)) {
     return entries;
@@ -103,7 +160,9 @@ GPtrArray *game_puzzle_catalog_load_variant(const GameBackend *backend,
     entry->puzzle_number = puzzle_number;
     entry->basename = g_strdup(name);
     entry->path = g_build_filename(variant_dir, name, NULL);
-    entry->puzzle_id = g_strdup_printf("%s/%s/%s", backend->id, variant->short_name, name);
+    entry->puzzle_id = variant != NULL
+                           ? g_strdup_printf("%s/%s/%s", backend->id, variant->short_name, name)
+                           : g_strdup_printf("%s/%s", backend->id, name);
     g_ptr_array_add(entries, entry);
   }
 

@@ -1,4 +1,7 @@
 #include "active_game_backend.h"
+#include "create_puzzles_launcher.h"
+#include "create_puzzles_progress.h"
+#include "games/boop/boop_create_puzzles.h"
 #include "games/checkers/ai_alpha_beta.h"
 #include "games/checkers/create_puzzles_cli.h"
 #include "games/checkers/puzzle_generation.h"
@@ -16,9 +19,10 @@
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(CheckersAiTranspositionTable, checkers_ai_tt_free)
 
+#define checkers_puzzle_log_progress ggame_create_puzzles_progress_log
+
 enum {
   CHECKERS_PUZZLE_SELF_PLAY_DEPTH = 0,
-  CHECKERS_PUZZLE_DEFAULT_BEST_MOVE_DEPTH = 8,
   CHECKERS_PUZZLE_ANALYSIS_TT_SIZE_MB = 256,
   CHECKERS_PUZZLE_MISTAKE_THRESHOLD = 50,
   CHECKERS_PUZZLE_FORCED_MISTAKE_THRESHOLD = 100,
@@ -87,14 +91,26 @@ typedef struct {
   guint rejections[CHECKERS_PUZZLE_REJECTION_COUNT];
 } CheckersPuzzleRunStats;
 
+static const GameBackend *checkers_puzzle_backend(void) {
+  const GGameAppProfile *profile = ggame_app_profile_lookup_by_id("checkers");
+
+  g_return_val_if_fail(profile != NULL, NULL);
+  g_return_val_if_fail(profile->backend != NULL, NULL);
+  g_return_val_if_fail(profile->backend->variant_by_short_name != NULL, NULL);
+  return profile->backend;
+}
+
 static const GameBackendVariant *checkers_puzzle_ruleset_variant(PlayerRuleset ruleset) {
   const char *short_name = checkers_ruleset_short_name(ruleset);
+  const GameBackend *backend = NULL;
 
   if (short_name == NULL) {
     return NULL;
   }
 
-  return GGAME_ACTIVE_GAME_BACKEND->variant_by_short_name(short_name);
+  backend = checkers_puzzle_backend();
+  g_return_val_if_fail(backend != NULL, NULL);
+  return backend->variant_by_short_name(short_name);
 }
 
 static gboolean checkers_puzzle_analyze_resulting_position(const Game *game,
@@ -115,7 +131,6 @@ static gboolean checkers_puzzle_try_forced_mistake_candidates(const Game *before
                                                               guint limit,
                                                               guint *out_emitted);
 
-static void checkers_puzzle_log_progress(const char *format, ...) G_GNUC_PRINTF(1, 2);
 static void checkers_puzzle_log_rejection(CheckersPuzzleRejectionReason reason,
                                           const char *format,
                                           ...) G_GNUC_PRINTF(2, 3);
@@ -179,17 +194,6 @@ static const char *checkers_puzzle_rejection_reason_label(CheckersPuzzleRejectio
     default:
       return "unknown rejection";
   }
-}
-
-static void checkers_puzzle_log_progress(const char *format, ...) {
-  g_return_if_fail(format != NULL);
-
-  va_list args;
-  va_start(args, format);
-  g_autofree char *message = g_strdup_vprintf(format, args);
-  va_end(args);
-
-  g_print("%s\n", message);
 }
 
 static void checkers_puzzle_log_rejection(CheckersPuzzleRejectionReason reason, const char *format, ...) {
@@ -1292,10 +1296,7 @@ static gboolean checkers_puzzle_emit_from_line(const CheckersRules *rules,
     char move_text[128] = {0};
     gboolean has_move_text = checkers_puzzle_format_move(&played->move, move_text);
 
-    checkers_puzzle_log_progress("Considering move #%u%s%s",
-            i + 1,
-            has_move_text ? " " : "",
-            has_move_text ? move_text : "");
+    ggame_create_puzzles_progress_consider_move(i + 1, has_move_text ? move_text : NULL);
     checkers_puzzle_run_stats.moves_analyzed++;
 
     if (try_forced_mistakes) {
@@ -1367,6 +1368,7 @@ static gboolean checkers_puzzle_generate_self_play_line(const CheckersRules *rul
 
   Game game = {0};
   game_init_with_rules(&game, rules);
+  ggame_create_puzzles_progress_start_self_play(CHECKERS_PUZZLE_SELF_PLAY_DEPTH);
   while (game.state.winner == CHECKERS_WINNER_NONE) {
     CheckersMove played = {0};
     if (!checkers_ai_alpha_beta_choose_move(&game, CHECKERS_PUZZLE_SELF_PLAY_DEPTH, &played)) {
@@ -1386,9 +1388,7 @@ static gboolean checkers_puzzle_generate_self_play_line(const CheckersRules *rul
     }
   }
 
-  checkers_puzzle_log_progress("Played game ended after %u moves (winner=%s)",
-                               out_line->len,
-                               game_winner_label(game.state.winner));
+  ggame_create_puzzles_progress_finish_self_play(out_line->len, game_winner_label(game.state.winner));
   game_destroy(&game);
   return TRUE;
 }
@@ -1797,16 +1797,23 @@ static char *checkers_puzzle_build_ruleset_output_dir(PlayerRuleset ruleset) {
 
 int main(int argc, char **argv) {
   CheckersCreatePuzzlesCliOptions options = {0};
+  GGameCreatePuzzlesLauncherConfig launcher = {0};
   g_autofree char *parse_error = NULL;
 
-  if (!ggame_app_profile_set_active_by_id("checkers")) {
-    g_printerr("Failed to activate checkers profile\n");
+  ggame_create_puzzles_launcher_config_for_program_name(argv[0], &launcher);
+
+  if (!ggame_app_profile_set_active_by_id(launcher.profile_id)) {
+    g_printerr("Failed to activate %s profile\n", launcher.profile_id);
     return 1;
+  }
+
+  if (g_strcmp0(launcher.profile_id, "boop") == 0) {
+    return boop_create_puzzles_main(argc, argv, launcher.default_depth);
   }
 
   if (!checkers_create_puzzles_cli_parse(argc,
                                          argv,
-                                         CHECKERS_PUZZLE_DEFAULT_BEST_MOVE_DEPTH,
+                                         launcher.default_depth,
                                          &options,
                                          &parse_error)) {
     g_printerr("%s\n", parse_error != NULL ? parse_error : "Invalid arguments");

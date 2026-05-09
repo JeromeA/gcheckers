@@ -84,7 +84,7 @@ static const GGameAppProfile boop_app_profile = {
           .supports_sgf_files = TRUE,
           .supports_ai_players = TRUE,
           .supports_analysis = TRUE,
-          .supports_puzzles = FALSE,
+          .supports_puzzles = TRUE,
           .supports_import = FALSE,
           .supports_settings = TRUE,
           .supports_save_position = TRUE,
@@ -192,6 +192,5 @@ gboolean ggame_app_profile_supports_puzzle_catalog(const GGameAppProfile *profil
   return profile->features.supports_puzzles &&
          profile->backend != NULL &&
          profile->backend->id != NULL &&
-         profile->backend->variant_count > 0 &&
-         profile->backend->variant_at != NULL;
+         (profile->backend->variant_count == 0 || profile->backend->variant_at != NULL);
 }

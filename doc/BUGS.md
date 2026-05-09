@@ -247,6 +247,22 @@ The fix keeps runtime profile selection intact but routes checkers generic-posit
 setup-aware checkers replay helper. A headless SGF controller regression now checks that replaying a root setup node
 into a generic checkers backend position produces the configured puzzle state.
 
+## Boop puzzle tooling exposed checkers-only ruleset assumptions
+
+The boop launcher should generate boop puzzles from the boop profile, and `gboop` should be able to open those
+puzzles without inventing a ruleset or variant.
+
+After the runtime-profile launcher split added `build/tools/boop_create_puzzles`, it still ran the checkers
+generator entrypoint all the way into checkers CLI parsing. That made the boop-named binary fail with
+`Missing --ruleset <short-name>`. A later temporary launcher avoided that specific error by reporting boop as
+unsupported, but the core problem remained: puzzle generation, catalog discovery, the picker dialog, progress IDs, and
+runtime playback all still assumed a checkers variant.
+
+The fix adds a boop generator that uses boop's backend AI and SGF snapshot hooks, stores files directly under
+`puzzles/boop/`, and rejects `--ruleset` explicitly. Shared catalog, dialog, settings, and window puzzle code now
+accept zero-variant backends, using puzzle IDs such as `boop/puzzle-0000.sgf`. Regression coverage checks generation,
+check-existing, zero-variant catalog loading, and boop puzzle opening when GTK is available.
+
 ## Boop could not save and reload position-only SGFs
 
 Boop should be able to use the shared `Save position...` action and reopen the saved file at the same midgame board,
@@ -263,3 +279,28 @@ node setup during replay and to write a root snapshot for `Save position...`. Ch
 behind those hooks, and boop adds its own root snapshot codec for board pieces, supply counts, and `PL`. Boop now
 enables `supports_save_position`, and regression coverage includes a headless boop SGF snapshot roundtrip plus the
 controller/save-position path when GTK is available.
+
+## Shared SGF color mapping treated side 0 as black for every game
+
+SGF move color should follow the active backend's side numbering, not a global convention.
+
+The shared SGF controller mapped side 0 to `B[]` and side 1 to `W[]`. That matched boop, but checkers defines side 0 as
+white and side 1 as black. Generic SGF replay therefore rejected valid checkers setup-root lines when color validation
+was enabled, and newly appended checkers moves could be stamped with the wrong SGF color.
+
+The fix adds a backend-owned `sgf_color_for_side()` callback. Checkers maps side 0 to `W[]` and side 1 to `B[]`, while
+boop maps side 0 to `B[]` and side 1 to `W[]`. Regression coverage now asserts both backend mappings and replays the
+checkers setup-root path through the shared controller.
+
+## Boop puzzle generation skipped shared self-play progress
+
+Boop puzzle count generation should show the same terminal phases as checkers: start a depth-0 self-play game, finish
+that game with its move count, then analyze each move from the played line.
+
+The boop generator tried handcrafted seed positions before self-play and analyzed self-play positions while the game
+was still being played. When the requested puzzle count was satisfied by a seed position, the command produced a
+puzzle without ever reporting the full-game progress that the checkers generator already showed.
+
+The fix adds a shared create-puzzles progress helper, routes checkers and boop through it, and changes boop count-mode
+generation to play a complete depth-0 game before analyzing the resulting move line. Seed positions remain only as a
+fallback after self-play attempts fail to produce enough puzzles.

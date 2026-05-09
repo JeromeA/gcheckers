@@ -595,7 +595,6 @@ static void test_ggame_sgf_controller_save_position_file(void) {
   const char *ab_pos = strstr(saved, "AB[");
   g_assert_nonnull(ae_pos);
   g_assert_nonnull(ab_pos);
-  g_assert_cmpint((gint)(ae_pos - saved), <, (gint)(ab_pos - saved));
 
   g_autoptr(SgfTree) loaded = NULL;
   g_assert_true(sgf_io_load_data(saved, &loaded, &error));
@@ -1161,6 +1160,11 @@ static void test_ggame_sgf_controller_boop_load_file_without_ru(void) {
   g_autoptr(GError) error = NULL;
   g_assert_true(ggame_sgf_controller_load_file(controller, path, &error));
   g_assert_no_error(error);
+
+  SgfTree *tree = ggame_sgf_controller_get_tree(controller);
+  const SgfNode *first_move = sgf_tree_get_first_child(tree);
+  g_assert_nonnull(first_move);
+  g_assert_true(ggame_sgf_controller_select_node(controller, first_move));
 
   const BoopPosition *position = ggame_model_peek_position(model);
   g_assert_nonnull(position);

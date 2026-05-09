@@ -17,6 +17,18 @@ static const char *boop_backend_side_label(guint side) {
   }
 }
 
+static SgfColor boop_backend_sgf_color_for_side(guint side) {
+  switch (side) {
+    case 0:
+      return SGF_COLOR_BLACK;
+    case 1:
+      return SGF_COLOR_WHITE;
+    default:
+      g_debug("Unsupported boop side index");
+      return SGF_COLOR_NONE;
+  }
+}
+
 static const char *boop_backend_outcome_banner_text(GameBackendOutcome outcome) {
   switch (outcome) {
     case GAME_BACKEND_OUTCOME_SIDE_0_WIN:
@@ -367,6 +379,7 @@ const GameBackend boop_game_backend = {
   .supports_move_builder = TRUE,
   .supports_ai_search = TRUE,
   .side_label = boop_backend_side_label,
+  .sgf_color_for_side = boop_backend_sgf_color_for_side,
   .outcome_banner_text = boop_backend_outcome_banner_text,
   .position_init = boop_backend_position_init,
   .position_clear = boop_backend_position_clear,

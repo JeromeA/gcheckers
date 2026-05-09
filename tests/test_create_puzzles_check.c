@@ -13,10 +13,134 @@
 #define GCHECKERS_CREATE_PUZZLES_PATH "./checkers_create_puzzles"
 #endif
 
+#ifndef GBOOP_CREATE_PUZZLES_PATH
+#define GBOOP_CREATE_PUZZLES_PATH "./boop_create_puzzles"
+#endif
+
 typedef struct {
   CheckersMove move;
   CheckersColor color;
 } TestPuzzleLineMove;
+
+static void test_create_puzzles_binaries_exist(void) {
+  g_assert_true(g_file_test(GCHECKERS_CREATE_PUZZLES_PATH, G_FILE_TEST_EXISTS));
+  g_assert_true(g_file_test(GBOOP_CREATE_PUZZLES_PATH, G_FILE_TEST_EXISTS));
+}
+
+static void test_create_puzzles_boop_generates_and_checks_puzzle(void) {
+  g_autoptr(GError) error = NULL;
+  g_autofree char *cwd = g_get_current_dir();
+  g_autofree char *boop_binary = g_build_filename(cwd, GBOOP_CREATE_PUZZLES_PATH, NULL);
+  g_autofree char *tmp_dir = g_dir_make_tmp("gboop-create-puzzles-XXXXXX", &error);
+  g_assert_no_error(error);
+  g_assert_nonnull(tmp_dir);
+  gchar *argv[] = {
+      boop_binary,
+      (gchar *)"--depth",
+      (gchar *)"1",
+      (gchar *)"1",
+      NULL,
+  };
+  gchar *stdout_text = NULL;
+  gchar *stderr_text = NULL;
+  gint wait_status = 0;
+
+  g_assert_true(g_spawn_sync(tmp_dir,
+                             argv,
+                             NULL,
+                             G_SPAWN_SEARCH_PATH,
+                             NULL,
+                             NULL,
+                             &stdout_text,
+                             &stderr_text,
+                             &wait_status,
+                             &error));
+  g_assert_no_error(error);
+  g_assert_true(g_spawn_check_wait_status(wait_status, &error));
+  g_assert_no_error(error);
+  g_assert_nonnull(stdout_text);
+  g_assert_nonnull(strstr(stdout_text, "Playing game at depth 0..."));
+  g_assert_nonnull(strstr(stdout_text, "Played game ended after"));
+  g_assert_nonnull(strstr(stdout_text, "Considering move #1"));
+  g_assert_nonnull(strstr(stdout_text, "puzzles generated: 1"));
+  g_assert_true(stderr_text == NULL || *stderr_text == '\0');
+
+  g_free(stdout_text);
+  g_free(stderr_text);
+
+  g_autofree char *boop_dir = g_build_filename(tmp_dir, "puzzles", "boop", NULL);
+  g_autofree char *puzzle_path = g_build_filename(boop_dir, "puzzle-0000.sgf", NULL);
+  g_assert_true(g_file_test(puzzle_path, G_FILE_TEST_EXISTS));
+
+  g_autofree char *puzzle_text = NULL;
+  g_assert_true(g_file_get_contents(puzzle_path, &puzzle_text, NULL, &error));
+  g_assert_no_error(error);
+  g_assert_nonnull(strstr(puzzle_text, "GB"));
+  g_assert_null(strstr(puzzle_text, "RU["));
+
+  gchar *check_argv[] = {
+      boop_binary,
+      (gchar *)"--depth",
+      (gchar *)"1",
+      (gchar *)"--check-existing",
+      boop_dir,
+      NULL,
+  };
+  stdout_text = NULL;
+  stderr_text = NULL;
+  g_assert_true(g_spawn_sync(tmp_dir,
+                             check_argv,
+                             NULL,
+                             G_SPAWN_SEARCH_PATH,
+                             NULL,
+                             NULL,
+                             &stdout_text,
+                             &stderr_text,
+                             &wait_status,
+                             &error));
+  g_assert_no_error(error);
+  g_assert_true(g_spawn_check_wait_status(wait_status, &error));
+  g_assert_no_error(error);
+  g_assert_nonnull(stdout_text);
+  g_assert_nonnull(strstr(stdout_text, "Checking"));
+  g_assert_nonnull(strstr(stdout_text, "  -> kept"));
+  g_free(stdout_text);
+  g_free(stderr_text);
+
+  gchar *ruleset_argv[] = {
+      boop_binary,
+      (gchar *)"--ruleset",
+      (gchar *)"international",
+      (gchar *)"1",
+      NULL,
+  };
+  stdout_text = NULL;
+  stderr_text = NULL;
+  g_assert_true(g_spawn_sync(tmp_dir,
+                             ruleset_argv,
+                             NULL,
+                             G_SPAWN_SEARCH_PATH,
+                             NULL,
+                             NULL,
+                             &stdout_text,
+                             &stderr_text,
+                             &wait_status,
+                             &error));
+  g_assert_no_error(error);
+  g_assert_false(g_spawn_check_wait_status(wait_status, &error));
+  g_assert_error(error, G_SPAWN_EXIT_ERROR, 1);
+  g_clear_error(&error);
+  g_assert_nonnull(stderr_text);
+  g_assert_nonnull(strstr(stderr_text, "--ruleset is not supported for boop puzzles"));
+  g_free(stdout_text);
+  g_free(stderr_text);
+
+  g_assert_cmpint(g_remove(puzzle_path), ==, 0);
+  g_assert_cmpint(g_rmdir(boop_dir), ==, 0);
+  g_autofree char *puzzles_dir = g_build_filename(tmp_dir, "puzzles", NULL);
+  g_assert_cmpint(g_rmdir(puzzles_dir), ==, 0);
+  g_assert_cmpint(g_rmdir(tmp_dir), ==, 0);
+}
 
 static gboolean test_create_puzzles_check_format_setup_point(uint8_t index, uint8_t board_size, char out_point[3]) {
   g_return_val_if_fail(out_point != NULL, FALSE);
@@ -243,10 +367,10 @@ static void test_create_puzzles_check_mode_rejects_missing_ru(void) {
   g_assert_cmpint(g_mkdir_with_parents(ruleset_dir, 0755), ==, 0);
 
   g_autofree char *puzzle_path = g_build_filename(ruleset_dir, "puzzle-0000.sgf", NULL);
-  g_assert_true(g_file_set_contents(puzzle_path,
-                                    "(;FF[4]CA[UTF-8]AP[gcheckers]GM[40]AE[1:50]AW[31]AWK[31]AB[8]ABK[8]PL[W];W[31-27])",
-                                    -1,
-                                    &error));
+  const char *puzzle_text =
+      "(;FF[4]CA[UTF-8]AP[gcheckers]GM[40]AE[1:50]AW[31]AWK[31]AB[8]ABK[8]PL[W]"
+      ";W[31-27])";
+  g_assert_true(g_file_set_contents(puzzle_path, puzzle_text, -1, &error));
   g_assert_no_error(error);
 
   g_autofree char *cwd = g_get_current_dir();
@@ -290,6 +414,9 @@ static void test_create_puzzles_check_mode_rejects_missing_ru(void) {
 int main(int argc, char **argv) {
   ggame_test_init_profile(&argc, &argv, "checkers");
   g_test_init(&argc, &argv, NULL);
+  g_test_add_func("/create-puzzles-check/binaries-exist", test_create_puzzles_binaries_exist);
+  g_test_add_func("/create-puzzles-check/boop-generates-and-checks-puzzle",
+                  test_create_puzzles_boop_generates_and_checks_puzzle);
   g_test_add_func("/create-puzzles-check/dry-run-and-delete", test_create_puzzles_check_mode_dry_run_and_delete);
   g_test_add_func("/create-puzzles-check/rejects-missing-ru", test_create_puzzles_check_mode_rejects_missing_ru);
   return g_test_run();

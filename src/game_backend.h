@@ -1,9 +1,9 @@
 #ifndef GAME_BACKEND_H
 #define GAME_BACKEND_H
 
-#include <glib.h>
+#include "sgf_tree.h"
 
-typedef struct _SgfNode SgfNode;
+#include <glib.h>
 
 typedef enum {
   GAME_BACKEND_OUTCOME_ONGOING = 0,
@@ -56,6 +56,7 @@ typedef struct {
   const GameBackendVariant *(*variant_at)(guint index);
   const GameBackendVariant *(*variant_by_short_name)(const char *short_name);
   const char *(*side_label)(guint side);
+  SgfColor (*sgf_color_for_side)(guint side);
   const char *(*outcome_banner_text)(GameBackendOutcome outcome);
 
   void (*position_init)(gpointer position, const GameBackendVariant *variant_or_null);

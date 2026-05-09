@@ -55,15 +55,11 @@ static void ggame_sgf_controller_emit_node_changed(GGameSgfController *self, con
   g_signal_emit(self, controller_signals[SIGNAL_NODE_CHANGED], 0, node);
 }
 
-static SgfColor ggame_sgf_controller_color_from_side(guint side) {
-  switch (side) {
-    case 0:
-      return SGF_COLOR_BLACK;
-    case 1:
-      return SGF_COLOR_WHITE;
-    default:
-      return SGF_COLOR_NONE;
-  }
+static SgfColor ggame_sgf_controller_color_from_side(const GameBackend *backend, guint side) {
+  g_return_val_if_fail(backend != NULL, SGF_COLOR_NONE);
+  g_return_val_if_fail(backend->sgf_color_for_side != NULL, SGF_COLOR_NONE);
+
+  return backend->sgf_color_for_side(side);
 }
 
 static void ggame_sgf_controller_disconnect_model(GGameSgfController *self) {
@@ -149,7 +145,7 @@ static gboolean ggame_sgf_controller_replay_node_path_into_position(const SgfNod
       continue;
     }
 
-    SgfColor expected_color = ggame_sgf_controller_color_from_side(backend->position_turn(position));
+    SgfColor expected_color = ggame_sgf_controller_color_from_side(backend, backend->position_turn(position));
     if (expected_color == SGF_COLOR_NONE || color != expected_color) {
       g_set_error(error,
                   g_quark_from_static_string("gcheckers-sgf-controller-error"),
@@ -315,7 +311,7 @@ static gboolean ggame_sgf_controller_sync_model_for_transition_generic(GGameSgfC
     if (!has_move) {
       return ggame_sgf_controller_replay_to_node(self, target);
     }
-    if (color != ggame_sgf_controller_color_from_side(backend->position_turn(position))) {
+    if (color != ggame_sgf_controller_color_from_side(backend, backend->position_turn(position))) {
       g_debug("Failed SGF side-to-move validation for generic transition");
       return FALSE;
     }
@@ -564,7 +560,7 @@ gboolean ggame_sgf_controller_apply_move(GGameSgfController *self, gconstpointer
     return FALSE;
   }
 
-  color = ggame_sgf_controller_color_from_side(backend->position_turn(position));
+  color = ggame_sgf_controller_color_from_side(backend, backend->position_turn(position));
   if (color == SGF_COLOR_NONE) {
     g_debug("Failed to determine SGF side for current model position");
     backend->move_list_free(&moves);
