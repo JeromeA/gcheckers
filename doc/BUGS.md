@@ -304,3 +304,14 @@ puzzle without ever reporting the full-game progress that the checkers generator
 The fix adds a shared create-puzzles progress helper, routes checkers and boop through it, and changes boop count-mode
 generation to play a complete depth-0 game before analyzing the resulting move line. Seed positions remain only as a
 fallback after self-play attempts fail to produce enough puzzles.
+
+## Checkers puzzle generation could retry source games forever
+
+`checkers_create_puzzles --ruleset international --depth 1 1` could keep playing and analyzing new source games
+indefinitely when the generated games failed every puzzle-interest filter. The terminal looked stuck on whichever
+candidate move was currently being analyzed, but the outer count-mode loop had no attempt limit and therefore had no
+way to report that it could not satisfy the requested count.
+
+The fix makes checkers use the shared create-puzzles source-game attempt limit that boop already needed. Count-mode
+generation now stops after a bounded number of source games, prints the normal rejection report, and exits with an
+explicit "Only generated..." error when it cannot produce the requested number of puzzles.

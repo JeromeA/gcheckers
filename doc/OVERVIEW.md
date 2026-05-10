@@ -210,15 +210,15 @@ prefixed with the active game ID, for example `checkers/international/puzzle-000
 
 ## Boop Puzzle Generator (`src/games/boop/boop_create_puzzles.c`)
 Module: `boop_create_puzzles_main()`.
-Role: profile-specific puzzle tooling for `build/tools/boop_create_puzzles`. The CLI accepts `--depth`, `--save-games`,
+Role: profile-specific puzzle policy for `build/tools/boop_create_puzzles`. The CLI accepts `--depth`, `--save-games`,
 `--check-existing`, and `--dry-run`; it rejects checkers-only `--ruleset` values because boop has no variants. It
 writes generated puzzles under `puzzles/boop/`, using boop backend SGF root snapshots for board pieces, supplies, and
 side to move, and writes solution moves with the shared SGF move notation helpers. Candidate validation uses the
-generic backend AI search API against `boop_game_backend` and keeps positions with a clear unique best move. The
-generator first plays complete depth-0 games, reports that shared progress through `create_puzzles_progress.c`, then
-analyzes each pre-move position in the played line. The check-existing path reloads each SGF, validates the saved line
-against current search, and deletes or dry-runs invalid puzzle/game file pairs.
-Collaborates with: `src/create_puzzles.c` for launcher dispatch, `src/ai_search.c`, `src/puzzle_catalog.c`,
+generic backend AI search API against `boop_game_backend` and keeps positions with a clear unique best move. Count-mode
+and SGF-file analysis use the shared create-puzzles runner for depth-0 source-game generation, main-line replay, and
+terminal progress. The check-existing path reloads each SGF, validates the saved line against current search, and
+deletes or dry-runs invalid puzzle/game file pairs.
+Collaborates with: `src/create_puzzles_runner.c`, `src/ai_search.c`, `src/puzzle_catalog.c`,
 `src/create_puzzles_progress.c`, `src/sgf_io.c`, `src/sgf_move_props.c`, and boop's `boop_sgf_position.c`.
 
 ## `ggame_style_init()` (`src/style.c`)
@@ -318,9 +318,8 @@ Role: central single source of truth for the checkers backend's ruleset IDs, dis
 (`american`, `international`, `russian`), UI summaries, and `CheckersRules` values in one enum-indexed table. Shared
 code now consumes backend `GameBackendVariant` metadata instead, while `window.c` and other checkers-owned code use
 this catalog to translate variants to concrete checkers rulesets.
-Collaborates with: `window.c`, `create_puzzles.c`, and `create_puzzles_cli.c` for ruleset-targeted puzzle generation,
-and all game creators for explicit
-`game_init_with_rules()` setup.
+Collaborates with: `window.c`, `checkers_create_puzzles.c`, and `create_puzzles_cli.c` for ruleset-targeted puzzle
+generation, and all game creators for explicit `game_init_with_rules()` setup.
 
 ## Game printing (`src/games/checkers/game_print.c`)
 Module: terminal formatting helpers.
@@ -366,8 +365,8 @@ Collaborates with: `game_backend.h`, `tests/test_ai_search.c`, and the checkers 
 Module: checkers-facing search compatibility.
 Role: preserve the existing checkers-facing `Game` and `CheckersAiTranspositionTable` APIs while delegating the real
 search work to `ai_search.c` through the checkers backend adapter.
-Collaborates with: `checkers_model.c`, `create_puzzles.c`, and other existing checkers-only callers that have not
-yet migrated to generic AI interfaces.
+Collaborates with: `checkers_model.c`, `checkers_create_puzzles.c`, and other existing checkers-only callers that
+have not yet migrated to generic AI interfaces.
 
 ## Transposition table (`src/games/checkers/ai_transposition_table.c`,
 `src/games/checkers/ai_transposition_table.h`)
@@ -395,57 +394,67 @@ names.
 Collaborates with: import dialog flow for "Fetch game history" and `tests/test_bga_client.c` (token/login/history
 parsing + live login smoke test with env-provided credentials).
 
-## Puzzle generator CLI (`src/create_puzzles.c`, `src/create_puzzles_launcher.c`)
-Module: CLI front end.
-Role: repeatedly self-play games at depth 0, detect mistake positions with configurable best-move-depth analysis,
-validate each candidate immediately in one pass, require the attacker to have at least four legal moves and a best
-response at least 50 points above the runner-up, then save puzzles as SGF files under
-`puzzles/checkers/<ruleset-short-name>/puzzle-####.sgf` with root setup (`AE/AB/AW/ABK/AWK/PL`), explicit
+## Puzzle generator CLI (`src/create_puzzles.c`, `src/create_puzzles_launcher.c`, `src/create_puzzles_profile.c`)
+Module: CLI front end and profile dispatch.
+Role: choose the create-puzzles profile from the executable name, activate that app profile, then call the
+profile-specific generator entry point registered in `create_puzzles_profile.c`. The top-level CLI source contains no
+game-specific puzzle policy; checkers and boop policy live under their game directories. The unified build emits two
+launcher names: `build/tools/checkers_create_puzzles` for checkers and `build/tools/boop_create_puzzles` for boop.
+The checkers launcher keeps the historical default analysis depth `8`; the boop launcher uses default analysis depth
+`4` and has no ruleset argument. `make create_puzzles` builds both launchers.
+Collaborates with: `game_app_profile.c`, `create_puzzles_launcher.c`, `create_puzzles_profile.c`, and the
+profile-specific generator modules.
+
+## Puzzle generator runner (`src/create_puzzles_runner.c`, `src/create_puzzles_runner.h`)
+Module: backend-driven source-game generation and SGF replay.
+Role: play depth-0 source games through the active profile's `GameBackend`, store them as SGF with backend-owned root
+setup and variant metadata, replay any generated or loaded SGF main line, validate move colors against side to move,
+log shared progress phases, and pass `position_before`, `played_move`, and `position_after` to game-specific puzzle
+policy callbacks. The runner is the only create-puzzles module that chooses self-play moves with
+`game_ai_search_choose_move()` or replays source-game SGF main lines for candidate consideration.
+It also owns the default count-mode source-game attempt limit used by checkers and boop so failed puzzle filters end
+with a report instead of an unbounded retry loop.
+Collaborates with: `ai_search.c`, `sgf_io.c`, `sgf_move_props.c`, `sgf_tree.c`, `create_puzzles_progress.c`, and the
+boop/checkers puzzle policy modules.
+
+## Checkers Puzzle Generator (`src/games/checkers/checkers_create_puzzles.c`)
+Module: `checkers_create_puzzles_main()`.
+Role: profile-specific puzzle policy for `build/tools/checkers_create_puzzles`. It requires `--ruleset <short-name>`
+so generation, checking, deduplication, and logging target one explicit variant at a time. It also accepts
+`--depth N`, `--synthetic-candidates`, `--save-games`, `--check-existing`, and `--dry-run`. Generated puzzles are saved
+under `puzzles/checkers/<ruleset-short-name>/puzzle-####.sgf` with root setup (`AE/AB/AW/ABK/AWK/PL`), explicit
 `RU[<ruleset-short-name>]`, and a tactical continuation line.
-Validation and emission are now split: one path computes a validated puzzle candidate from a post-mistake position,
-and separate generation/checking paths either save that candidate or compare an existing saved puzzle against it.
-The CLI requires `--ruleset <short-name>` so generation, checking, deduplication, and logging all target one explicit
-variant at a time. It also accepts `--depth N` to override the puzzle-analysis depth, `--synthetic-candidates` to opt
-into trying synthetic bad moves in addition to the played move during generation, `--save-games` to also persist the
-originating `game-####.sgf` companion files beside the puzzle files, and `--check-existing` with optional `--dry-run`
-to re-validate `puzzle-*.sgf` files in one variant directory and optionally delete stale ones. Without
-`--check-existing`, it uses the launcher's built-in default depth and only evaluates the actual game line.
-Before generating anything, the CLI loads existing `puzzle-*.sgf` files from the selected variant directory and
+Validation detects serious mistakes with configurable best-move-depth analysis, requires the attacker to have at
+least four legal moves and a best response at least 50 points above the runner-up, then validates the solution line in
+one pass. The continuation re-analyzes every ply at the configured best-move depth, requires the attacker to keep a
+single good move, allows the defender to use any best reply, and stops once static material is better than at the
+puzzle start. Candidate solutions reject a one-move line, a three-move line of move, move, jump, insufficient partial
+comebacks from heavily losing positions, and unstable lines where the immediate next best reply is a recapture.
+Before generating anything, the generator loads existing `puzzle-*.sgf` files from the selected variant directory and
 deduplicates by solution move sequence, so equivalent puzzles are skipped instead of being saved twice.
-The main validation path is organized as puzzle-rule predicates (`position_follows_a_serious_mistake`,
-`position_is_valid`, `attacker_has_enough_choice`, `attacker_has_a_single_good_move`,
-`solution_line_of_best_depth_moves_improves_static_evaluation`) so puzzle selection
-reads close to its checkers-language definition.
-The continuation re-analyzes every ply at the configured best-move depth, requires the attacker to keep a single good
-move throughout the line, allows the defender to use any best reply, and stops once static material is better than at
-the puzzle start. Candidate solutions are also filtered to reject boring shapes: a one-move line, or a three-move
-line of move, move, jump. If the attacker starts 400 or more points behind, the tactical line must bring the score
-back to at worst 300 points behind; otherwise the candidate is rejected as an uninteresting partial comeback. After the
-solution line ends, the immediate next best reply must also avoid an instant recapture, or the candidate is rejected as
-unstable.
-The unified build emits two launcher names: `build/tools/checkers_create_puzzles` for checkers and
-`build/tools/boop_create_puzzles` for boop. The checkers launcher keeps the historical default analysis depth `8`;
-the boop launcher uses default analysis depth `4` and dispatches to boop's profile-specific generator without a
-ruleset argument. `make create_puzzles` builds both launchers.
-While replaying a generated self-play game, the CLI analyzes each pre-mistake position at the configured best-move
-depth and reuses one shared TT allocation across the whole run. When `--synthetic-candidates` is enabled, it also
+While the shared runner replays a generated self-play game or loaded SGF file, the checkers policy analyzes each
+pre-mistake position at the configured best-move depth and reuses one shared TT allocation across the whole run. When
+`--synthetic-candidates` is enabled, it also
 tries any synthetic mistake move that already trails the best move by at least 100 points, so puzzle generation is not
 limited to the exact self-play move that happened in the game.
-The CLI always prints self-play start, self-play completion, loaded existing solution keys, each move considered as a
-candidate, indented `->` rejection or keep reasons, and a final aggregated rejection report so puzzle filtering can be
-followed from the terminal. In check-existing mode, it also reports how many puzzle files were checked and how many
-would be or were removed.
+The generator always prints self-play start, self-play completion, loaded existing solution keys, each move considered
+as a candidate, indented `->` rejection or keep reasons, and a final aggregated rejection report so puzzle filtering
+can be followed from the terminal. In check-existing mode, it also reports how many puzzle files were checked and how
+many would be or were removed.
 By default it saves only `puzzles/checkers/<ruleset-short-name>/puzzle-####.sgf`;
 `puzzles/checkers/<ruleset-short-name>/game-####.sgf` companions are written only when `--save-games` is enabled.
-Collaborates with: `ai_alpha_beta.c`, `rulesets.c`, `sgf_tree.c`, `sgf_move_props.c`, `sgf_io.c`,
-and `puzzle_generation.c`.
+Count-mode generation stops after the shared source-game attempt limit and exits with an explicit partial-generation
+error if the filters reject every candidate before the requested puzzle count is reached.
+Collaborates with: `create_puzzles_runner.c`, `ai_alpha_beta.c`, `rulesets.c`, `sgf_tree.c`, `sgf_move_props.c`,
+`sgf_io.c`, and `puzzle_generation.c`.
 
 ## Puzzle Generator Progress (`src/create_puzzles_progress.c`, `src/create_puzzles_progress.h`)
 Module: shared terminal progress formatting for puzzle generator tools.
 Role: centralize the user-visible progress messages for self-play start, self-play completion, per-move candidate
 analysis, and generic progress lines. Checkers and boop both use this helper so count-mode generation has the same
 observable phases even though their candidate validation logic is profile-specific.
-Collaborates with: `src/create_puzzles.c` and `src/games/boop/boop_create_puzzles.c`.
+Collaborates with: `src/create_puzzles_runner.c`, `src/games/checkers/checkers_create_puzzles.c`, and
+`src/games/boop/boop_create_puzzles.c`.
 
 ## Puzzle generation helpers (`src/games/checkers/puzzle_generation.c`,
 `src/games/checkers/puzzle_generation.h`)
@@ -456,7 +465,7 @@ plus an attacker/defender move-clarity helper, a collector for all scored moves 
 threshold, and next puzzle file index discovery from existing `puzzle-####.sgf` files, plus pure predicates for
 rejecting boring solution-line shapes, insufficient comeback swings from badly losing positions, and immediate
 recaptures after the solution.
-Collaborates with: `create_puzzles.c` and `tests/test_puzzle_generation.c`.
+Collaborates with: `checkers_create_puzzles.c` and `tests/test_puzzle_generation.c`.
 
 ## File dialog history helpers (`src/file_dialog_history.c`, `src/file_dialog_history.h`)
 Module: SGF file dialog folder persistence helpers.

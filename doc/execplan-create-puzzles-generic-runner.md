@@ -23,12 +23,17 @@ full create-puzzles program; it should require only puzzle-selection policy.
 
 - [x] (2026-05-08 14:57Z) Created this ExecPlan after confirming that the current code has separate checkers and boop
   self-play/replay loops.
-- [ ] Introduce the generic SGF runner without changing command-line behavior.
-- [ ] Move boop count-mode and SGF-file generation onto the generic runner.
-- [ ] Move checkers count-mode and SGF-file generation onto the generic runner.
-- [ ] Reduce `src/create_puzzles.c` to generic dispatch and checkers policy glue, or split checkers policy into a
-  checkers-owned module if that produces clearer ownership.
-- [ ] Remove duplicated progress/game-line code and update documentation/tests.
+- [x] (2026-05-09) Introduced `src/create_puzzles_runner.c` / `.h` for backend self-play, SGF main-line replay,
+  progress logging, and source-game saving.
+- [x] (2026-05-09) Moved boop count-mode and SGF-file generation onto the generic runner.
+- [x] (2026-05-09) Moved checkers count-mode and SGF-file generation onto the generic runner.
+- [x] (2026-05-09) Reduced `src/create_puzzles.c` to profile activation and tool profile dispatch, and moved all
+  checkers puzzle policy to
+  `src/games/checkers/checkers_create_puzzles.c`.
+- [x] (2026-05-09) Removed duplicated self-play/source-line replay functions, added a focused runner test, and updated
+  `doc/OVERVIEW.md`.
+- [x] (2026-05-09) Ran final build/focused-test/diff validation. Full `make test` still fails at the existing
+  `/sgf-view/link-angles` GTK critical after the create-puzzles tests pass.
 
 ## Surprises & Discoveries
 
@@ -48,6 +53,16 @@ full create-puzzles program; it should require only puzzle-selection policy.
   Evidence: `src/sgf_tree.h` can build a main line of `SgfNode` objects, and `src/sgf_move_props.c` can parse and
   write moves through the active backend notation.
 
+- Observation: The runner must guard that its configured backend is the active profile backend.
+  Evidence: `sgf_io_tree_get_variant()` and `sgf_move_props_try_parse_node()` intentionally use
+  `GGAME_ACTIVE_GAME_BACKEND`, so running the generic replay under the wrong active profile would parse SGF with the
+  wrong backend.
+
+- Observation: The manual checkers smoke command at depth 1 is not a reliable way to finish puzzle generation.
+  Evidence: `/home/jerome/Data/gcheckers/build/tools/checkers_create_puzzles --ruleset international --depth 1 1`
+  repeatedly produced complete source games and rejected every move as "not a serious mistake". The focused
+  `test_create_puzzles_check` fixture remains the deterministic checkers acceptance test.
+
 ## Decision Log
 
 - Decision: Use SGF trees and SGF main-line nodes as the shared source-game representation.
@@ -64,10 +79,14 @@ full create-puzzles program; it should require only puzzle-selection policy.
   game backend.
   Date/Author: 2026-05-08 / Codex.
 
-- Decision: The shared runner owns self-play, SGF replay, move-color validation, progress logging, output indexing,
-  and optional `game-####.sgf` source-game saving.
+- Decision: The shared runner owns self-play, SGF replay, move-color validation, progress logging, and source-game
+  saving through `ggame_create_puzzles_runner_save_source_game()`. Game-specific policy still owns output directory,
+  duplicate-key state, and index advancement because those decisions are coupled to puzzle catalog shape and emission
+  policy.
   Rationale: These are not checkers or boop rules. They are the common mechanics of taking one backend-supported game,
-  producing a source line, and examining each move in order.
+  producing a source line, and examining each move in order. Indexing is intentionally outside the runner's replay
+  loop so the runner can analyze user-supplied SGF trees without owning whether a callback emits zero, one, or many
+  puzzles from one source move.
   Date/Author: 2026-05-08 / Codex.
 
 - Decision: Game-specific policy owns candidate selection and puzzle-solution construction.
@@ -81,11 +100,38 @@ full create-puzzles program; it should require only puzzle-selection policy.
   synthetic-candidate behavior.
   Date/Author: 2026-05-08 / Codex.
 
+- Decision: `src/create_puzzles.c` must not contain checkers puzzle policy at the end of the refactor.
+  Rationale: The goal is profile-driven create-puzzles behavior, not a generic file that still owns one game's policy.
+  Checkers policy belongs under `src/games/checkers/` for the same reason boop policy belongs under `src/games/boop/`.
+  Date/Author: 2026-05-09 / Codex.
+
+- Decision: Keep game-specific create-puzzles entry-point registration in `src/create_puzzles_profile.c`, not in
+  `src/create_puzzles.c` or `game_app_profile.c`.
+  Rationale: `src/create_puzzles.c` stays generic, while `game_app_profile.c` remains usable by GUI binaries without
+  linking the puzzle generator modules into every app binary.
+  Date/Author: 2026-05-09 / Codex.
+
 ## Outcomes & Retrospective
 
-No implementation has been completed yet. This plan captures the intended architecture and the acceptance checks that
-will prove the create-puzzles tools are using a shared backend-driven runner instead of duplicated game-specific
-self-play loops.
+Implemented the refactor. `src/create_puzzles.c` now activates the selected profile and dispatches through the
+tool-only profile registry. `src/create_puzzles_runner.c` owns backend self-play, SGF source-game generation, SGF
+main-line replay, shared progress logging, and source-game saving. Boop and checkers puzzle modules now receive
+runner-provided positions and SGF context and keep only game-specific puzzle policy.
+
+Validation completed:
+
+    make all
+    make test_create_puzzles_cli test_create_puzzles_check test_create_puzzles_runner test_puzzle_catalog
+    build/tests/test_create_puzzles_cli
+    build/tests/test_create_puzzles_check --profile=checkers
+    build/tests/test_create_puzzles_runner --profile=boop
+    build/tests/test_create_puzzles_runner --profile=checkers
+    build/tests/test_puzzle_catalog --profile=checkers
+    build/tests/test_puzzle_catalog --profile=boop
+    git diff --check
+
+`make test` still aborts at `/sgf-view/link-angles` with `GLib-GObject-FATAL-CRITICAL: invalid (NULL) pointer
+instance`; that failure is outside create-puzzles and occurred after the create-puzzles tests passed.
 
 ## Context and Orientation
 
@@ -210,11 +256,12 @@ duplicate solution keys, and rejection report. Remove `checkers_puzzle_generate_
 checkers-specific alpha-beta helper, fix the checkers backend/search integration or document the difference in this
 plan before changing acceptance; do not add a create-puzzles-only backend bypass.
 
-After both games use the runner, shrink `src/create_puzzles.c`. Its job should be launcher dispatch, common option
-parsing, variant resolution, runner configuration, and registration of the selected game's policy. It should not
-contain a full checkers game loop. If keeping checkers policy in `src/create_puzzles.c` makes the file too large,
-split it into `src/games/checkers/checkers_create_puzzles.c` and `src/games/checkers/checkers_create_puzzles.h`, then
-leave `src/create_puzzles.c` as the generic main program.
+After both games use the runner, shrink `src/create_puzzles.c` to generic orchestration only. Its job should be
+launcher dispatch, common option parsing, variant resolution, runner configuration, and registration of the selected
+game's policy. It must not contain checkers puzzle policy, checkers candidate validation, checkers rejection
+accounting, or checkers-specific SGF/save logic. Move that code into
+`src/games/checkers/checkers_create_puzzles.c` and expose only the checkers policy entry points needed by the generic
+main program through `src/games/checkers/checkers_create_puzzles.h`.
 
 Update tests and documentation. `tests/test_create_puzzles_check.c` should assert the common progress phases for both
 tools. Add a focused runner test if practical, for example `tests/test_create_puzzles_runner.c`, that generates a small
@@ -341,7 +388,8 @@ The expected post-refactor shape is:
     src/create_puzzles_runner.c: plays backend self-play into an SGF tree
     src/create_puzzles_runner.c: replays any SGF main line and calls policy for each move
     src/games/boop/boop_create_puzzles.c: boop puzzle policy only
-    src/games/checkers/checkers_create_puzzles.c or src/create_puzzles.c: checkers puzzle policy only
+    src/games/checkers/checkers_create_puzzles.c: checkers puzzle policy only
+    src/create_puzzles.c: generic launcher and runner orchestration only
 
 Do not interpret temporary move allocation as "move blobs". The runner may allocate:
 

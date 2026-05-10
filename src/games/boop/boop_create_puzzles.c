@@ -6,6 +6,7 @@
 #include "boop_game.h"
 #include "boop_sgf_position.h"
 #include "create_puzzles_progress.h"
+#include "create_puzzles_runner.h"
 #include "puzzle_catalog.h"
 #include "sgf_io.h"
 #include "sgf_move_props.h"
@@ -22,7 +23,6 @@ enum {
   BOOP_PUZZLE_MIN_LEGAL_MOVES = 2,
   BOOP_PUZZLE_SINGLE_MOVE_MARGIN = 50,
   BOOP_PUZZLE_MAX_SELF_PLAY_PLIES = 200,
-  BOOP_PUZZLE_SEED_COUNT = BOOP_BOARD_SIZE * 2,
 };
 
 typedef enum {
@@ -77,6 +77,17 @@ typedef struct {
   guint rejected_invalid_file;
   guint rejected_saved_line_mismatch;
 } BoopPuzzleRunStats;
+
+typedef struct {
+  guint depth;
+  GameAiTranspositionTable *tt;
+  gboolean save_games;
+  const char *output_dir;
+  GHashTable *existing_solution_keys;
+  guint *inout_index;
+  guint max_total_emitted;
+  guint *out_emitted;
+} BoopPuzzleEmitContext;
 
 static BoopPuzzleRunStats boop_puzzle_run_stats = {0};
 
@@ -280,21 +291,6 @@ static SgfColor boop_puzzle_sgf_color(guint side) {
       return SGF_COLOR_WHITE;
     default:
       return SGF_COLOR_NONE;
-  }
-}
-
-static const char *boop_puzzle_outcome_label(GameBackendOutcome outcome) {
-  switch (outcome) {
-    case GAME_BACKEND_OUTCOME_ONGOING:
-      return "none";
-    case GAME_BACKEND_OUTCOME_SIDE_0_WIN:
-      return "black";
-    case GAME_BACKEND_OUTCOME_SIDE_1_WIN:
-      return "white";
-    case GAME_BACKEND_OUTCOME_DRAW:
-      return "draw";
-    default:
-      return "unknown";
   }
 }
 
@@ -541,57 +537,33 @@ static gboolean boop_puzzle_save_sgf(const char *path,
   return TRUE;
 }
 
-static gboolean boop_puzzle_save_game_sgf(const char *path,
-                                          const BoopPosition *start_position,
-                                          const GArray *game_line) {
-  g_return_val_if_fail(path != NULL, FALSE);
-  g_return_val_if_fail(start_position != NULL, FALSE);
-  g_return_val_if_fail(game_line != NULL, FALSE);
-
-  g_autoptr(SgfTree) tree = boop_puzzle_build_line_tree(start_position, game_line, "game");
-  if (tree == NULL) {
-    return FALSE;
-  }
-
-  g_autoptr(GError) save_error = NULL;
-  if (!sgf_io_save_file(path, tree, &save_error)) {
-    g_debug("Failed to save boop game file %s: %s",
-            path,
-            save_error != NULL ? save_error->message : "unknown error");
-    return FALSE;
-  }
-  return TRUE;
-}
-
 static gboolean boop_puzzle_emit_validated_candidate(const BoopPosition *start_position,
                                                      guint solution_depth,
                                                      const BoopPuzzleValidatedCandidate *candidate,
-                                                     const BoopPosition *game_start_position,
-                                                     const GArray *game_line,
-                                                     gboolean save_game_sgf,
-                                                     const char *output_dir,
-                                                     GHashTable *existing_solution_keys,
-                                                     guint *inout_index,
+                                                     const GGameCreatePuzzlesMoveContext *move_context,
+                                                     BoopPuzzleEmitContext *emit_context,
                                                      char **out_puzzle_path,
                                                      char **out_game_path) {
   g_return_val_if_fail(start_position != NULL, FALSE);
   g_return_val_if_fail(solution_depth > 0, FALSE);
   g_return_val_if_fail(candidate != NULL, FALSE);
   g_return_val_if_fail(candidate->line != NULL, FALSE);
-  g_return_val_if_fail(output_dir != NULL, FALSE);
-  g_return_val_if_fail(existing_solution_keys != NULL, FALSE);
-  g_return_val_if_fail(inout_index != NULL, FALSE);
+  g_return_val_if_fail(emit_context != NULL, FALSE);
+  g_return_val_if_fail(emit_context->output_dir != NULL, FALSE);
+  g_return_val_if_fail(emit_context->existing_solution_keys != NULL, FALSE);
+  g_return_val_if_fail(emit_context->inout_index != NULL, FALSE);
   g_return_val_if_fail(out_puzzle_path != NULL, FALSE);
   g_return_val_if_fail(out_game_path != NULL, FALSE);
 
   g_autofree char *solution_key = boop_puzzle_build_line_solution_key(candidate->line);
   g_return_val_if_fail(solution_key != NULL, FALSE);
-  if (g_hash_table_contains(existing_solution_keys, solution_key)) {
+  if (g_hash_table_contains(emit_context->existing_solution_keys, solution_key)) {
     boop_puzzle_run_stats.rejected_duplicate++;
     return FALSE;
   }
 
-  g_autofree char *puzzle_path = game_puzzle_catalog_build_indexed_path(output_dir, "puzzle", *inout_index);
+  guint index = *emit_context->inout_index;
+  g_autofree char *puzzle_path = game_puzzle_catalog_build_indexed_path(emit_context->output_dir, "puzzle", index);
   g_return_val_if_fail(puzzle_path != NULL, FALSE);
   if (!boop_puzzle_save_sgf(puzzle_path,
                             start_position,
@@ -604,66 +576,57 @@ static gboolean boop_puzzle_emit_validated_candidate(const BoopPosition *start_p
   }
 
   g_autofree char *game_path = NULL;
-  if (save_game_sgf && game_start_position != NULL && game_line != NULL) {
-    game_path = game_puzzle_catalog_build_indexed_path(output_dir, "game", *inout_index);
+  if (emit_context->save_games && move_context != NULL && move_context->source_tree != NULL) {
+    game_path = game_puzzle_catalog_build_indexed_path(emit_context->output_dir, "game", index);
     g_return_val_if_fail(game_path != NULL, FALSE);
-    if (!boop_puzzle_save_game_sgf(game_path, game_start_position, game_line)) {
+    g_autoptr(GError) save_error = NULL;
+    if (!ggame_create_puzzles_runner_save_source_game(game_path, move_context->source_tree, &save_error)) {
+      g_debug("Failed to save boop source game file %s: %s",
+              game_path,
+              save_error != NULL ? save_error->message : "unknown error");
       return FALSE;
     }
   }
 
-  g_hash_table_add(existing_solution_keys, g_steal_pointer(&solution_key));
+  g_hash_table_add(emit_context->existing_solution_keys, g_steal_pointer(&solution_key));
   *out_puzzle_path = g_steal_pointer(&puzzle_path);
   *out_game_path = g_steal_pointer(&game_path);
-  *inout_index += 1;
+  *emit_context->inout_index += 1;
   return TRUE;
 }
 
 static gboolean boop_puzzle_emit_candidate_if_valid(const BoopPosition *position,
-                                                    guint depth,
-                                                    GameAiTranspositionTable *tt,
-                                                    const BoopPosition *game_start_position,
-                                                    const GArray *game_line,
-                                                    gboolean save_game_sgf,
-                                                    const char *output_dir,
-                                                    GHashTable *existing_solution_keys,
-                                                    guint *inout_index,
-                                                    guint *out_emitted) {
+                                                    const GGameCreatePuzzlesMoveContext *move_context,
+                                                    BoopPuzzleEmitContext *emit_context) {
   g_return_val_if_fail(position != NULL, FALSE);
-  g_return_val_if_fail(depth > 0, FALSE);
-  g_return_val_if_fail(tt != NULL, FALSE);
-  g_return_val_if_fail(output_dir != NULL, FALSE);
-  g_return_val_if_fail(existing_solution_keys != NULL, FALSE);
-  g_return_val_if_fail(inout_index != NULL, FALSE);
-  g_return_val_if_fail(out_emitted != NULL, FALSE);
+  g_return_val_if_fail(emit_context != NULL, FALSE);
+  g_return_val_if_fail(emit_context->depth > 0, FALSE);
+  g_return_val_if_fail(emit_context->tt != NULL, FALSE);
+  g_return_val_if_fail(emit_context->out_emitted != NULL, FALSE);
 
   if (boop_position_outcome(position) != GAME_BACKEND_OUTCOME_ONGOING) {
     return TRUE;
   }
 
   BoopPuzzleValidatedCandidate validated = {0};
-  if (!boop_puzzle_validate_position(position, depth, tt, &validated)) {
+  if (!boop_puzzle_validate_position(position, emit_context->depth, emit_context->tt, &validated)) {
     return TRUE;
   }
 
   g_autofree char *puzzle_path = NULL;
   g_autofree char *game_path = NULL;
   if (!boop_puzzle_emit_validated_candidate(position,
-                                            depth,
+                                            emit_context->depth,
                                             &validated,
-                                            game_start_position,
-                                            game_line,
-                                            save_game_sgf,
-                                            output_dir,
-                                            existing_solution_keys,
-                                            inout_index,
+                                            move_context,
+                                            emit_context,
                                             &puzzle_path,
                                             &game_path)) {
     boop_puzzle_validated_candidate_clear(&validated);
     return TRUE;
   }
 
-  (*out_emitted)++;
+  (*emit_context->out_emitted)++;
   boop_puzzle_run_stats.puzzles_generated++;
   boop_puzzle_log_progress("  -> kept: start_static=%d final_static=%d line_plies=%u",
                            validated.start_static,
@@ -942,92 +905,39 @@ static gboolean boop_puzzle_check_existing_dir(const char *dir_path,
   return TRUE;
 }
 
-static gboolean boop_puzzle_make_seed_position(guint seed, BoopPosition *out_position) {
-  g_return_val_if_fail(out_position != NULL, FALSE);
+static gboolean boop_puzzle_consider_runner_move(const GGameCreatePuzzlesMoveContext *move_context,
+                                                 gpointer user_data,
+                                                 gboolean *out_stop,
+                                                 GError ** /*error*/) {
+  g_return_val_if_fail(move_context != NULL, FALSE);
+  g_return_val_if_fail(user_data != NULL, FALSE);
+  g_return_val_if_fail(out_stop != NULL, FALSE);
 
-  guint side = seed % 2;
-  guint row = (seed / 2) % BOOP_BOARD_SIZE;
-  guint first_square = 0;
-  guint second_square = 0;
-  if (!boop_coord_to_square(row, 0, &first_square) || !boop_coord_to_square(row, 1, &second_square)) {
+  BoopPuzzleEmitContext *emit_context = user_data;
+  if (*emit_context->out_emitted >= emit_context->max_total_emitted) {
+    *out_stop = TRUE;
+    return TRUE;
+  }
+
+  const BoopPosition *position = move_context->position_before;
+  if (!boop_puzzle_emit_candidate_if_valid(position, move_context, emit_context)) {
     return FALSE;
   }
 
-  boop_position_init(out_position);
-  memset(out_position->board, 0, sizeof(out_position->board));
-  out_position->board[first_square] = (BoopPiece){
-    .side = (guint8)side,
-    .rank = BOOP_PIECE_RANK_CAT,
-  };
-  out_position->board[second_square] = (BoopPiece){
-    .side = (guint8)side,
-    .rank = BOOP_PIECE_RANK_CAT,
-  };
-  out_position->kittens_in_supply[side] = BOOP_SUPPLY_COUNT - 3;
-  out_position->cats_in_supply[side] = 1;
-  out_position->kittens_in_supply[1 - side] = BOOP_SUPPLY_COUNT;
-  out_position->cats_in_supply[1 - side] = 0;
-  out_position->turn = (guint8)side;
-
-  g_autoptr(GError) error = NULL;
-  if (!boop_position_normalize(out_position, &error)) {
-    g_debug("Failed to create boop seed puzzle position: %s", error != NULL ? error->message : "unknown error");
-    return FALSE;
-  }
+  *out_stop = *emit_context->out_emitted >= emit_context->max_total_emitted;
   return TRUE;
 }
 
-static gboolean boop_puzzle_emit_seed_positions(guint depth,
-                                                GameAiTranspositionTable *tt,
-                                                gboolean save_game_sgf,
-                                                const char *output_dir,
-                                                GHashTable *existing_solution_keys,
-                                                guint *inout_index,
-                                                guint limit,
-                                                guint *out_emitted) {
-  g_return_val_if_fail(depth > 0, FALSE);
-  g_return_val_if_fail(tt != NULL, FALSE);
-  g_return_val_if_fail(output_dir != NULL, FALSE);
-  g_return_val_if_fail(existing_solution_keys != NULL, FALSE);
-  g_return_val_if_fail(inout_index != NULL, FALSE);
-  g_return_val_if_fail(out_emitted != NULL, FALSE);
-
-  for (guint i = 0; i < BOOP_PUZZLE_SEED_COUNT && *out_emitted < limit; ++i) {
-    BoopPosition position = {0};
-    if (!boop_puzzle_make_seed_position(i, &position)) {
-      return FALSE;
-    }
-
-    g_autoptr(GArray) game_line = g_array_new(FALSE, FALSE, sizeof(BoopPuzzleLineMove));
-    if (!boop_puzzle_emit_candidate_if_valid(&position,
-                                             depth,
-                                             tt,
-                                             &position,
-                                             game_line,
-                                             save_game_sgf,
-                                             output_dir,
-                                             existing_solution_keys,
-                                             inout_index,
-                                             out_emitted)) {
-      return FALSE;
-    }
-  }
-
-  return TRUE;
-}
-
-static gboolean boop_puzzle_emit_from_line(const BoopPosition *start_position,
-                                           const GArray *game_line,
+static gboolean boop_puzzle_emit_from_tree(SgfTree *tree,
                                            guint depth,
                                            GameAiTranspositionTable *tt,
                                            gboolean save_game_sgf,
                                            const char *output_dir,
                                            GHashTable *existing_solution_keys,
                                            guint *inout_index,
-                                           guint limit,
+                                           guint max_total_emitted,
                                            guint *out_emitted) {
-  g_return_val_if_fail(start_position != NULL, FALSE);
-  g_return_val_if_fail(game_line != NULL, FALSE);
+  g_return_val_if_fail(SGF_IS_TREE(tree), FALSE);
   g_return_val_if_fail(depth > 0, FALSE);
   g_return_val_if_fail(tt != NULL, FALSE);
   g_return_val_if_fail(output_dir != NULL, FALSE);
@@ -1035,110 +945,34 @@ static gboolean boop_puzzle_emit_from_line(const BoopPosition *start_position,
   g_return_val_if_fail(inout_index != NULL, FALSE);
   g_return_val_if_fail(out_emitted != NULL, FALSE);
 
-  BoopPosition position = {0};
-  boop_position_copy(&position, start_position);
+  GGameCreatePuzzlesRunnerConfig runner_config = {
+    .backend = &boop_game_backend,
+    .variant = NULL,
+    .self_play_depth = 0,
+    .max_self_play_plies = BOOP_PUZZLE_MAX_SELF_PLAY_PLIES,
+  };
+  BoopPuzzleEmitContext emit_context = {
+    .depth = depth,
+    .tt = tt,
+    .save_games = save_game_sgf,
+    .output_dir = output_dir,
+    .existing_solution_keys = existing_solution_keys,
+    .inout_index = inout_index,
+    .max_total_emitted = max_total_emitted,
+    .out_emitted = out_emitted,
+  };
 
-  guint emitted_before = *out_emitted;
-  for (guint i = 0; i < game_line->len && *out_emitted - emitted_before < limit; ++i) {
-    const BoopPuzzleLineMove *step = &g_array_index(game_line, BoopPuzzleLineMove, i);
-    char move_text[128] = {0};
-    gboolean has_move_text = boop_move_format(&step->move, move_text, sizeof(move_text));
-
-    ggame_create_puzzles_progress_consider_move(i + 1, has_move_text ? move_text : NULL);
-    if (!boop_puzzle_emit_candidate_if_valid(&position,
-                                             depth,
-                                             tt,
-                                             start_position,
-                                             game_line,
-                                             save_game_sgf,
-                                             output_dir,
-                                             existing_solution_keys,
-                                             inout_index,
-                                             out_emitted)) {
-      return FALSE;
-    }
-    if (*out_emitted - emitted_before >= limit) {
-      break;
-    }
-
-    if (step->side != boop_position_turn(&position) || !boop_position_apply_move(&position, &step->move)) {
-      g_debug("Failed to replay boop source game line at move %u", i + 1);
-      return FALSE;
-    }
-  }
-
-  return TRUE;
-}
-
-static gboolean boop_puzzle_generate_self_play_line(GArray *out_line) {
-  g_return_val_if_fail(out_line != NULL, FALSE);
-
-  BoopPosition position = {0};
-  boop_position_init(&position);
-
-  ggame_create_puzzles_progress_start_self_play(0);
-  for (guint ply = 0; ply < BOOP_PUZZLE_MAX_SELF_PLAY_PLIES; ++ply) {
-    if (boop_position_outcome(&position) != GAME_BACKEND_OUTCOME_ONGOING) {
-      break;
-    }
-
-    BoopMove move = {0};
-    if (!game_ai_search_choose_move(&boop_game_backend, &position, 0, &move)) {
-      g_debug("Failed to choose boop depth-0 self-play move");
-      break;
-    }
-
-    BoopPuzzleLineMove step = {
-      .move = move,
-      .side = boop_position_turn(&position),
-    };
-    g_array_append_val(out_line, step);
-
-    if (!boop_position_apply_move(&position, &move)) {
-      g_debug("Failed to apply boop self-play move");
-      return FALSE;
-    }
-  }
-
-  boop_puzzle_run_stats.games_processed++;
-  ggame_create_puzzles_progress_finish_self_play(out_line->len,
-                                                 boop_puzzle_outcome_label(boop_position_outcome(&position)));
-  return TRUE;
-}
-
-static gboolean boop_puzzle_emit_from_self_play(guint depth,
-                                                GameAiTranspositionTable *tt,
-                                                gboolean save_game_sgf,
-                                                const char *output_dir,
-                                                GHashTable *existing_solution_keys,
-                                                guint *inout_index,
-                                                guint limit,
-                                                guint *out_emitted) {
-  g_return_val_if_fail(depth > 0, FALSE);
-  g_return_val_if_fail(tt != NULL, FALSE);
-  g_return_val_if_fail(output_dir != NULL, FALSE);
-  g_return_val_if_fail(existing_solution_keys != NULL, FALSE);
-  g_return_val_if_fail(inout_index != NULL, FALSE);
-  g_return_val_if_fail(out_emitted != NULL, FALSE);
-
-  BoopPosition game_start = {0};
-  boop_position_init(&game_start);
-
-  g_autoptr(GArray) game_line = g_array_new(FALSE, FALSE, sizeof(BoopPuzzleLineMove));
-  if (!boop_puzzle_generate_self_play_line(game_line)) {
+  g_autoptr(GError) runner_error = NULL;
+  if (!ggame_create_puzzles_runner_analyze_tree(&runner_config,
+                                                tree,
+                                                boop_puzzle_consider_runner_move,
+                                                &emit_context,
+                                                &runner_error)) {
+    g_debug("Boop source game analysis failed: %s",
+            runner_error != NULL ? runner_error->message : "unknown error");
     return FALSE;
   }
-
-  return boop_puzzle_emit_from_line(&game_start,
-                                    game_line,
-                                    depth,
-                                    tt,
-                                    save_game_sgf,
-                                    output_dir,
-                                    existing_solution_keys,
-                                    inout_index,
-                                    limit,
-                                    out_emitted);
+  return TRUE;
 }
 
 static gboolean boop_puzzle_emit_from_file(const char *path,
@@ -1150,21 +984,17 @@ static gboolean boop_puzzle_emit_from_file(const char *path,
                                            guint *inout_index,
                                            guint *out_emitted) {
   g_return_val_if_fail(path != NULL, FALSE);
-  g_return_val_if_fail(depth > 0, FALSE);
-  g_return_val_if_fail(tt != NULL, FALSE);
-  g_return_val_if_fail(output_dir != NULL, FALSE);
-  g_return_val_if_fail(existing_solution_keys != NULL, FALSE);
-  g_return_val_if_fail(inout_index != NULL, FALSE);
-  g_return_val_if_fail(out_emitted != NULL, FALSE);
 
-  BoopPosition start = {0};
-  g_autoptr(GArray) game_line = g_array_new(FALSE, FALSE, sizeof(BoopPuzzleLineMove));
-  if (!boop_puzzle_load_position_and_line(path, &start, game_line)) {
+  g_autoptr(SgfTree) tree = NULL;
+  g_autoptr(GError) load_error = NULL;
+  if (!sgf_io_load_file(path, &tree, &load_error)) {
+    g_debug("Failed to load boop source game file %s: %s",
+            path,
+            load_error != NULL ? load_error->message : "unknown error");
     return FALSE;
   }
 
-  return boop_puzzle_emit_from_line(&start,
-                                    game_line,
+  return boop_puzzle_emit_from_tree(tree,
                                     depth,
                                     tt,
                                     save_game_sgf,
@@ -1260,32 +1090,37 @@ int boop_create_puzzles_main(int argc, char **argv, guint default_depth) {
   }
 
   guint attempts = 0;
-  guint max_attempts = MAX(10u, wanted * 20u);
+  guint max_attempts = ggame_create_puzzles_runner_generation_attempt_limit(wanted);
   while (emitted < wanted && attempts < max_attempts) {
-    if (!boop_puzzle_emit_from_self_play(options.depth,
-                                         tt,
-                                         options.save_games,
-                                         output_dir,
-                                         existing_solution_keys,
-                                         &next_index,
-                                         wanted - emitted,
-                                         &emitted)) {
+    GGameCreatePuzzlesRunnerConfig runner_config = {
+      .backend = &boop_game_backend,
+      .variant = NULL,
+      .self_play_depth = 0,
+      .max_self_play_plies = BOOP_PUZZLE_MAX_SELF_PLAY_PLIES,
+    };
+    g_autoptr(GError) runner_error = NULL;
+    g_autoptr(SgfTree) source_tree =
+        ggame_create_puzzles_runner_generate_self_play_tree(&runner_config, NULL, NULL, &runner_error);
+    if (source_tree == NULL) {
+      g_printerr("Boop self-play generation failed: %s\n",
+                 runner_error != NULL ? runner_error->message : "unknown error");
+      return 1;
+    }
+    boop_puzzle_run_stats.games_processed++;
+
+    if (!boop_puzzle_emit_from_tree(source_tree,
+                                    options.depth,
+                                    tt,
+                                    options.save_games,
+                                    output_dir,
+                                    existing_solution_keys,
+                                    &next_index,
+                                    wanted,
+                                    &emitted)) {
       g_printerr("Boop self-play puzzle extraction failed\n");
       return 1;
     }
     attempts++;
-  }
-
-  if (emitted < wanted && !boop_puzzle_emit_seed_positions(options.depth,
-                                                           tt,
-                                                           options.save_games,
-                                                           output_dir,
-                                                           existing_solution_keys,
-                                                           &next_index,
-                                                           wanted,
-                                                           &emitted)) {
-    g_printerr("Boop seed puzzle generation failed\n");
-    return 1;
   }
 
   boop_puzzle_print_final_report();

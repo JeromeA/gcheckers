@@ -46,6 +46,7 @@ BOOP_STUB_SRCS := $(BOOP_DIR)/boop_controls_stub.c
 BOOP_UI_SRCS := $(BOOP_DIR)/boop_controls.c
 BOOP_RULES_SRCS := $(BOOP_GAME_SRCS) $(BOOP_BACKEND_SRCS) $(BOOP_STUB_SRCS)
 CHECKERS_BACKEND_SRCS := $(CHECKERS_DIR)/checkers_backend.c $(CHECKERS_DIR)/checkers_sgf_position.c
+CHECKERS_CREATE_PUZZLES_SRCS := $(CHECKERS_DIR)/checkers_create_puzzles.c
 
 CFLAGS += $(GLIB_CFLAGS) $(GOBJECT_CFLAGS) $(GIO_CFLAGS) $(GTK_CFLAGS) $(CURL_CFLAGS)
 
@@ -58,6 +59,7 @@ OBJ_DIR := $(BUILD_DIR)/obj
 CALLGRIND_DIR := $(BUILD_DIR)/callgrind
 
 APP_PATHS_SRCS := src/app_paths.c
+CREATE_PUZZLES_RUNNER_SRCS := src/create_puzzles_runner.c
 CREATE_PUZZLES_PROGRESS_SRCS := src/create_puzzles_progress.c
 PUZZLE_PROGRESS_SRCS := src/puzzle_progress.c
 PUZZLE_CATALOG_SRCS := src/puzzle_catalog.c
@@ -129,6 +131,7 @@ TEST_BOARD_GEOMETRY_BIN := $(TESTS_DIR)/test_board_geometry
 TEST_MOVE_GEN_BIN := $(TESTS_DIR)/test_move_gen
 TEST_CREATE_PUZZLES_CLI_BIN := $(TESTS_DIR)/test_create_puzzles_cli
 TEST_CREATE_PUZZLES_CHECK_BIN := $(TESTS_DIR)/test_create_puzzles_check
+TEST_CREATE_PUZZLES_RUNNER_BIN := $(TESTS_DIR)/test_create_puzzles_runner
 TEST_CHECKERS_MODEL_BIN := $(TESTS_DIR)/test_checkers_model
 TEST_AI_SEARCH_BIN := $(TESTS_DIR)/test_ai_search
 TEST_AI_TRANSPOSITION_TABLE_BIN := $(TESTS_DIR)/test_ai_transposition_table
@@ -154,12 +157,12 @@ TEST_PUZZLE_PROGRESS_REPORT_SERVER_BIN := $(TESTS_DIR)/test_puzzle_progress_repo
 CALLGRIND_OUT := $(CALLGRIND_DIR)/callgrind.out
 CALLGRIND_ANNOTATION := $(CALLGRIND_DIR)/callgrind.annotated
 PROFILE_BIN ?= $(BOOP_CREATE_PUZZLES_BIN)
-PROFILE_ARGS ?= 1
-PROFILE_CMD = $(PROFILE_BIN) $(PROFILE_ARGS)
+PROFILE_CMD = $(PROFILE_BIN) 1 --depth 2
 TEST_BINS := $(TEST_GAME_BIN) $(TEST_GAME_PRINT_BIN) $(TEST_GAME_BACKEND_BIN) $(TEST_GAME_MODEL_BIN) \
 	$(TEST_HOMEWORLDS_GAME_BIN) $(TEST_HOMEWORLDS_BACKEND_BIN) $(TEST_BOOP_GAME_BIN) $(TEST_BOOP_BACKEND_BIN) \
 	$(TEST_BOARD_BIN) $(TEST_BOARD_GEOMETRY_BIN) $(TEST_MOVE_GEN_BIN) $(TEST_CREATE_PUZZLES_CLI_BIN) \
-	$(TEST_CREATE_PUZZLES_CHECK_BIN) $(TEST_CHECKERS_MODEL_BIN) $(TEST_AI_SEARCH_BIN) \
+	$(TEST_CREATE_PUZZLES_CHECK_BIN) $(TEST_CREATE_PUZZLES_RUNNER_BIN) $(TEST_CHECKERS_MODEL_BIN) \
+	$(TEST_AI_SEARCH_BIN) \
 	$(TEST_AI_TRANSPOSITION_TABLE_BIN) $(TEST_BGA_CLIENT_BIN) $(TEST_FILE_DIALOG_HISTORY_BIN) \
 	$(TEST_APP_SETTINGS_BIN) $(TEST_APP_PATHS_BIN) $(TEST_DESKTOP_METADATA_BIN) $(TEST_FLATPAK_MANIFEST_BIN) \
 	$(TEST_SGF_TREE_BIN) $(TEST_SGF_IO_BIN) $(TEST_SGF_VIEW_BIN) $(TEST_BOARD_VIEW_BIN) \
@@ -167,12 +170,12 @@ TEST_BINS := $(TEST_GAME_BIN) $(TEST_GAME_PRINT_BIN) $(TEST_GAME_BACKEND_BIN) $(
 	$(TEST_PUZZLE_GENERATION_BIN) $(TEST_PUZZLE_CATALOG_BIN) $(TEST_PIECE_PALETTE_BIN) \
 	$(TEST_PUZZLE_PROGRESS_BIN)
 TEST_CHECKERS_PROFILE_BINS := $(TEST_AI_SEARCH_BIN) $(TEST_APP_SETTINGS_BIN) $(TEST_FILE_DIALOG_HISTORY_BIN) \
-	$(TEST_CREATE_PUZZLES_CHECK_BIN) $(TEST_PUZZLE_CATALOG_BIN) $(TEST_PUZZLE_PROGRESS_BIN) \
-	$(TEST_GAME_BACKEND_BIN) $(TEST_GAME_MODEL_BIN) $(TEST_SGF_IO_BIN) $(TEST_BOARD_VIEW_BIN) \
-	$(TEST_SGF_CONTROLLER_BIN) $(TEST_WINDOW_BIN)
+	$(TEST_CREATE_PUZZLES_CHECK_BIN) $(TEST_CREATE_PUZZLES_RUNNER_BIN) $(TEST_PUZZLE_CATALOG_BIN) \
+	$(TEST_PUZZLE_PROGRESS_BIN) $(TEST_GAME_BACKEND_BIN) $(TEST_GAME_MODEL_BIN) $(TEST_SGF_IO_BIN) \
+	$(TEST_BOARD_VIEW_BIN) $(TEST_SGF_CONTROLLER_BIN) $(TEST_WINDOW_BIN)
 TEST_BOOP_PROFILE_BINS := $(TEST_APP_SETTINGS_BIN) $(TEST_FILE_DIALOG_HISTORY_BIN) $(TEST_GAME_BACKEND_BIN) \
 	$(TEST_GAME_MODEL_BIN) $(TEST_SGF_IO_BIN) $(TEST_BOARD_VIEW_BIN) $(TEST_SGF_CONTROLLER_BIN) \
-	$(TEST_PUZZLE_CATALOG_BIN) $(TEST_WINDOW_BOOP_BIN)
+	$(TEST_CREATE_PUZZLES_RUNNER_BIN) $(TEST_PUZZLE_CATALOG_BIN) $(TEST_WINDOW_BOOP_BIN)
 TEST_HOMEWORLDS_PROFILE_BINS := $(TEST_GAME_BACKEND_BIN) $(TEST_GAME_MODEL_BIN) $(TEST_SGF_IO_BIN)
 TEST_PROFILE_BINS := $(sort $(TEST_CHECKERS_PROFILE_BINS) $(TEST_BOOP_PROFILE_BINS) $(TEST_HOMEWORLDS_PROFILE_BINS))
 TEST_NO_PROFILE_BINS := $(filter-out $(TEST_PROFILE_BINS),$(TEST_BINS))
@@ -182,7 +185,7 @@ TEST_NO_PROFILE_BINS := $(filter-out $(TEST_PROFILE_BINS),$(TEST_BINS))
 	gcheckers gboop ghomeworlds all-checkers all-boop all-homeworlds create_puzzles libgame.a \
 	test_game test_game_print test_game_backend test_game_model test_homeworlds_game test_homeworlds_backend \
 	test_boop_game test_boop_backend test_board test_board_geometry test_move_gen test_create_puzzles_cli \
-	test_create_puzzles_check \
+	test_create_puzzles_check test_create_puzzles_runner \
 	test_checkers_model test_ai_search test_ai_transposition_table test_bga_client \
 	test_file_dialog_history test_app_settings test_app_paths test_desktop_metadata test_flatpak_manifest \
 	test_sgf_tree test_sgf_io \
@@ -287,16 +290,20 @@ $(TEST_MOVE_GEN_BIN): tests/test_move_gen.c $(BACKEND_CODEC_SRCS) $(CHECKERS_DIR
 
 $(CREATE_PUZZLES_BIN) $(BOOP_CREATE_PUZZLES_BIN): src/create_puzzles.c src/create_puzzles_launcher.c \
 	src/create_puzzles_launcher.h $(CHECKERS_DIR)/create_puzzles_cli.c $(CHECKERS_DIR)/create_puzzles_cli.h \
+	src/create_puzzles_profile.c src/create_puzzles_profile.h \
+	$(CHECKERS_CREATE_PUZZLES_SRCS) $(CHECKERS_DIR)/checkers_create_puzzles.h \
+	src/create_puzzles_runner.h $(CREATE_PUZZLES_RUNNER_SRCS) \
 	src/create_puzzles_progress.h $(CREATE_PUZZLES_PROGRESS_SRCS) \
 	$(CHECKERS_DIR)/puzzle_generation.c $(CHECKERS_DIR)/puzzle_generation.h $(BOOP_CREATE_PUZZLES_SRCS) \
 	$(BOOP_DIR)/boop_create_puzzles.h src/sgf_io.c src/sgf_io.h src/sgf_tree.c src/sgf_tree.h \
 	src/sgf_move_props.c src/sgf_move_props.h $(PUZZLE_CATALOG_SRCS) src/puzzle_catalog.h $(APP_PATHS_SRCS) \
 	$(SRCS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ src/create_puzzles.c src/create_puzzles_launcher.c $(CHECKERS_DIR)/create_puzzles_cli.c \
+	$(CC) $(CFLAGS) -o $@ src/create_puzzles.c src/create_puzzles_launcher.c src/create_puzzles_profile.c \
+		$(CHECKERS_DIR)/create_puzzles_cli.c $(CHECKERS_CREATE_PUZZLES_SRCS) $(CREATE_PUZZLES_RUNNER_SRCS) \
 		$(CREATE_PUZZLES_PROGRESS_SRCS) $(CHECKERS_DIR)/puzzle_generation.c $(BOOP_CREATE_PUZZLES_SRCS) \
-		src/sgf_io.c src/sgf_tree.c src/sgf_move_props.c $(PUZZLE_CATALOG_SRCS) $(APP_PATHS_SRCS) $(SRCS) \
-		$(LDLIBS)
+		src/sgf_io.c src/sgf_tree.c src/sgf_move_props.c $(PUZZLE_CATALOG_SRCS) $(APP_PATHS_SRCS) \
+		$(SRCS) $(LDLIBS)
 
 test_create_puzzles_cli: $(TEST_CREATE_PUZZLES_CLI_BIN)
 $(TEST_CREATE_PUZZLES_CLI_BIN): tests/test_create_puzzles_cli.c src/create_puzzles_launcher.c \
@@ -316,6 +323,16 @@ $(TEST_CREATE_PUZZLES_CHECK_BIN): $(CREATE_PUZZLES_BINS) tests/test_create_puzzl
 		-DGBOOP_CREATE_PUZZLES_PATH=\"$(BOOP_CREATE_PUZZLES_BIN)\" -o $@ \
 		tests/test_create_puzzles_check.c $(TEST_PROFILE_UTILS_SRCS) src/sgf_io.c src/sgf_tree.c \
 		src/sgf_move_props.c $(PUZZLE_CATALOG_SRCS) $(APP_PATHS_SRCS) $(SRCS) $(LDLIBS)
+
+test_create_puzzles_runner: $(TEST_CREATE_PUZZLES_RUNNER_BIN)
+$(TEST_CREATE_PUZZLES_RUNNER_BIN): tests/test_create_puzzles_runner.c src/create_puzzles_runner.c \
+	src/create_puzzles_runner.h src/create_puzzles_progress.c src/create_puzzles_progress.h src/sgf_io.c \
+	src/sgf_io.h src/sgf_tree.c src/sgf_tree.h src/sgf_move_props.c src/sgf_move_props.h \
+	$(TEST_PROFILE_UTILS_SRCS) $(SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -o $@ tests/test_create_puzzles_runner.c $(TEST_PROFILE_UTILS_SRCS) \
+		src/create_puzzles_runner.c src/create_puzzles_progress.c src/sgf_io.c src/sgf_tree.c \
+		src/sgf_move_props.c $(SRCS) $(LDLIBS)
 
 test_checkers_model: $(TEST_CHECKERS_MODEL_BIN)
 $(TEST_CHECKERS_MODEL_BIN): tests/test_checkers_model.c $(BACKEND_CODEC_SRCS) $(CHECKERS_DIR)/checkers_model.h
