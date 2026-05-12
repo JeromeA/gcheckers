@@ -16,7 +16,7 @@ typedef struct {
 enum {
   BOOP_LINE_COUNT = 26,
   BOOP_RAY_COUNT = 8,
-  BOOP_LINE_WINDOW_LENGTH = 3,
+  BOOP_LINE_LENGTH = 3,
   BOOP_SQUARE_INVALID = BOOP_INVALID_SQUARE,
 };
 
@@ -279,12 +279,12 @@ static gboolean boop_position_collect_line_promotion_choices(const BoopPosition 
 
   for (guint line_index = 0; line_index < G_N_ELEMENTS(boop_lines); ++line_index) {
     const BoopLine *line = &boop_lines[line_index];
-    for (guint start = 0; start + BOOP_LINE_WINDOW_LENGTH <= line->length; ++start) {
+    for (guint start = 0; start + BOOP_LINE_LENGTH <= line->length; ++start) {
       guint64 mask = 0;
       gboolean all_side = TRUE;
       gboolean has_kitten = FALSE;
 
-      for (guint offset = 0; offset < BOOP_LINE_WINDOW_LENGTH; ++offset) {
+      for (guint offset = 0; offset < BOOP_LINE_LENGTH; ++offset) {
         guint square = line->squares[start + offset];
         BoopPiece piece = position->board[square];
         if (boop_piece_is_empty(piece) || piece.side != side) {
@@ -313,19 +313,23 @@ static gboolean boop_position_has_cat_line(const BoopPosition *position, guint s
 
   for (guint line_index = 0; line_index < G_N_ELEMENTS(boop_lines); ++line_index) {
     const BoopLine *line = &boop_lines[line_index];
-    for (guint start = 0; start + BOOP_LINE_WINDOW_LENGTH <= line->length; ++start) {
-      gboolean all_cats = TRUE;
+    guint consecutive_cats = 0;
 
-      for (guint offset = 0; offset < BOOP_LINE_WINDOW_LENGTH; ++offset) {
-        guint square = line->squares[start + offset];
-        BoopPiece piece = position->board[square];
-        if (boop_piece_is_empty(piece) || piece.side != side || piece.rank != BOOP_PIECE_RANK_CAT) {
-          all_cats = FALSE;
-          break;
-        }
+    for (guint offset = 0; offset < line->length; ++offset) {
+      guint remaining = line->length - offset;
+      if (consecutive_cats + remaining < BOOP_LINE_LENGTH) {
+        break;
       }
 
-      if (all_cats) {
+      guint square = line->squares[offset];
+      BoopPiece piece = position->board[square];
+      if (boop_piece_is_empty(piece) || piece.side != side || piece.rank != BOOP_PIECE_RANK_CAT) {
+        consecutive_cats = 0;
+        continue;
+      }
+
+      consecutive_cats++;
+      if (consecutive_cats >= BOOP_LINE_LENGTH) {
         return TRUE;
       }
     }
