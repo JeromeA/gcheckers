@@ -33,6 +33,8 @@ If you form a line of 3 of your kittens, those kittens are removed from the boar
 If there are more than 3 kittens in a line, choose any alignment of 3 kittens to promote.
 If all your 8 pieces are on the board, you may graduate any one kitten to a cat into your supply.
 If a line of 3 is formed by both kittens and cats, kittens are promoted to cats and all three go to the supply.
+If both a line of 3 is formed and all 8 pieces are on the board, you may choose to promote either the line of 3 or any
+single kitten.
 
 Cats are then placed on future turns like normal pieces.
 
