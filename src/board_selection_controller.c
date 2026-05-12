@@ -307,6 +307,7 @@ static BoardSelectionClickResult board_selection_controller_try_step_click(Board
     return BOARD_SELECTION_CLICK_FAILED;
   }
 
+  self->completion_pending = FALSE;
   if (backend->move_builder_is_complete(&self->builder)) {
     gpointer move = NULL;
     if (!board_selection_controller_build_current_move(self, backend, &move)) {
@@ -557,6 +558,11 @@ gboolean board_selection_controller_handle_click(BoardSelectionController *self,
   }
 
   if (self->completion_pending) {
+    result = board_selection_controller_try_step_click(self, backend, index);
+    if (result == BOARD_SELECTION_CLICK_HANDLED) {
+      return TRUE;
+    }
+
     if (!board_selection_controller_reset_builder_selection(self, backend)) {
       return TRUE;
     }

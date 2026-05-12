@@ -10,7 +10,7 @@
 #define BOOP_SUPPLY_COUNT 8
 #define BOOP_INVALID_SQUARE 255
 #define BOOP_MOVE_PATH_MAX 8
-#define BOOP_PROMOTION_OPTION_MAX 64
+#define BOOP_PROMOTION_OPTION_MAX 14
 
 typedef enum {
   BOOP_PIECE_RANK_NONE = 0,
@@ -22,6 +22,10 @@ typedef struct {
   guint8 side;
   guint8 rank;
 } BoopPiece;
+
+static inline gboolean boop_piece_is_empty(BoopPiece piece) {
+  return piece.rank == BOOP_PIECE_RANK_NONE;
+}
 
 typedef struct {
   BoopPiece board[BOOP_SQUARE_COUNT];

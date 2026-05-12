@@ -171,10 +171,6 @@ static guint boop_mask_popcount(guint64 mask) {
   return count;
 }
 
-static gboolean boop_piece_is_empty(BoopPiece piece) {
-  return piece.rank == BOOP_PIECE_RANK_NONE;
-}
-
 static BoopPiece boop_piece_empty(void) {
   return (BoopPiece){0};
 }
@@ -338,15 +334,13 @@ static gboolean boop_position_has_cat_line(const BoopPosition *position, guint s
   return FALSE;
 }
 
-static gboolean boop_position_collect_graduation_choices(const BoopPosition *position,
-                                                         guint side,
-                                                         BoopPromotionChoices *choices) {
+static gboolean boop_position_append_graduation_choices(const BoopPosition *position,
+                                                        guint side,
+                                                        BoopPromotionChoices *choices) {
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(boop_side_valid(side), FALSE);
   g_return_val_if_fail(choices != NULL, FALSE);
 
-  memset(choices, 0, sizeof(*choices));
-  choices->mandatory = FALSE;
   if (boop_position_count_on_board(position, side) != BOOP_SUPPLY_COUNT) {
     return TRUE;
   }
@@ -360,6 +354,16 @@ static gboolean boop_position_collect_graduation_choices(const BoopPosition *pos
   }
 
   return TRUE;
+}
+
+static gboolean boop_position_collect_optional_graduation_choices(const BoopPosition *position,
+                                                                  guint side,
+                                                                  BoopPromotionChoices *choices) {
+  g_return_val_if_fail(choices != NULL, FALSE);
+
+  memset(choices, 0, sizeof(*choices));
+  choices->mandatory = FALSE;
+  return boop_position_append_graduation_choices(position, side, choices);
 }
 
 static gboolean boop_position_collect_turn_choices(const BoopPosition *position,
@@ -378,10 +382,10 @@ static gboolean boop_position_collect_turn_choices(const BoopPosition *position,
     return FALSE;
   }
   if (choices->count > 0) {
-    return TRUE;
+    return boop_position_append_graduation_choices(position, side, choices);
   }
 
-  return boop_position_collect_graduation_choices(position, side, choices);
+  return boop_position_collect_optional_graduation_choices(position, side, choices);
 }
 
 static gboolean boop_position_mask_is_choice(const BoopPromotionChoices *choices, guint64 mask) {
@@ -726,6 +730,18 @@ static gboolean boop_builder_selected_mask_is_complete(const BoopMoveBuilderStat
 
   for (guint i = 0; i < state->promotion_option_count; ++i) {
     if (state->promotion_options[i] == mask) {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+static gboolean boop_builder_selected_mask_can_extend(const BoopMoveBuilderState *state, guint64 mask) {
+  g_return_val_if_fail(state != NULL, FALSE);
+
+  for (guint i = 0; i < state->promotion_option_count; ++i) {
+    guint64 option = state->promotion_options[i];
+    if (option != mask && (option & mask) == mask) {
       return TRUE;
     }
   }
@@ -1362,10 +1378,13 @@ GameBackendMoveList boop_move_builder_list_candidates(const GameBackendMoveBuild
   g_return_val_if_fail(state != NULL, (GameBackendMoveList){0});
 
   if (state->stage == BOOP_MOVE_BUILDER_STAGE_COMPLETE) {
-    return (GameBackendMoveList){0};
+    if (state->promotion_option_count == 0 ||
+        !boop_builder_selected_mask_can_extend(state, state->selected_mask)) {
+      return (GameBackendMoveList){0};
+    }
   }
 
-  if (state->stage == BOOP_MOVE_BUILDER_STAGE_PROMOTION) {
+  if (state->stage == BOOP_MOVE_BUILDER_STAGE_PROMOTION || state->stage == BOOP_MOVE_BUILDER_STAGE_COMPLETE) {
     if (!boop_builder_list_promotion_candidates(state, &candidates, &count, &capacity)) {
       g_free(candidates);
       return (GameBackendMoveList){0};
@@ -1416,11 +1435,7 @@ gboolean boop_move_builder_step(GameBackendMoveBuilder *builder, const BoopMove 
   state = builder->builder_state;
   g_return_val_if_fail(state != NULL, FALSE);
 
-  if (state->stage == BOOP_MOVE_BUILDER_STAGE_COMPLETE) {
-    return FALSE;
-  }
-
-  if (state->stage == BOOP_MOVE_BUILDER_STAGE_PROMOTION) {
+  if (state->stage == BOOP_MOVE_BUILDER_STAGE_PROMOTION || state->stage == BOOP_MOVE_BUILDER_STAGE_COMPLETE) {
     if (!boop_builder_selected_mask_can_continue(state, candidate->promotion_mask)) {
       return FALSE;
     }
@@ -1436,6 +1451,7 @@ gboolean boop_move_builder_step(GameBackendMoveBuilder *builder, const BoopMove 
       return FALSE;
     }
 
+    state->stage = BOOP_MOVE_BUILDER_STAGE_PROMOTION;
     if (boop_builder_selected_mask_is_complete(state, state->selected_mask)) {
       state->stage = BOOP_MOVE_BUILDER_STAGE_COMPLETE;
     }

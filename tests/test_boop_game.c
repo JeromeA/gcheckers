@@ -289,6 +289,171 @@ static void test_graduation_can_promote_one_kitten(void) {
   assert(position.promoted_count[0] == 1);
 }
 
+static void setup_line_and_full_board_position(BoopPosition *position) {
+  g_return_if_fail(position != NULL);
+
+  boop_position_init(position);
+  setup_piece(position, 0, BOOP_PIECE_RANK_KITTEN, 0, 1);
+  setup_piece(position, 0, BOOP_PIECE_RANK_KITTEN, 0, 2);
+  setup_piece(position, 0, BOOP_PIECE_RANK_KITTEN, 1, 4);
+  setup_piece(position, 0, BOOP_PIECE_RANK_KITTEN, 2, 0);
+  setup_piece(position, 0, BOOP_PIECE_RANK_KITTEN, 2, 5);
+  setup_piece(position, 0, BOOP_PIECE_RANK_KITTEN, 4, 1);
+  setup_piece(position, 0, BOOP_PIECE_RANK_KITTEN, 4, 4);
+}
+
+static void test_line_and_full_board_can_choose_line_or_single_kitten(void) {
+  guint64 line_mask = square_mask(0, 0) | square_mask(0, 1) | square_mask(0, 2);
+  guint64 single_mask = square_mask(4, 4);
+  guint matching_moves = 0;
+  gboolean found_line = FALSE;
+  gboolean found_single = FALSE;
+  gboolean found_skip = FALSE;
+  BoopPosition position = {0};
+  BoopMove line_move = {
+    .square = (guint8)square_at(0, 0),
+    .rank = BOOP_PIECE_RANK_KITTEN,
+    .promotion_mask = line_mask,
+  };
+  BoopMove single_move = {
+    .square = (guint8)square_at(0, 0),
+    .rank = BOOP_PIECE_RANK_KITTEN,
+    .promotion_mask = single_mask,
+  };
+  BoopMove skipped_move = {
+    .square = (guint8)square_at(0, 0),
+    .rank = BOOP_PIECE_RANK_KITTEN,
+  };
+
+  setup_line_and_full_board_position(&position);
+  GameBackendMoveList moves = boop_position_list_moves(&position);
+  for (gsize i = 0; i < moves.count; ++i) {
+    const BoopMove *move = boop_move_list_get(&moves, i);
+    assert(move != NULL);
+    if (move->square != square_at(0, 0)) {
+      continue;
+    }
+
+    matching_moves++;
+    found_line = found_line || move->promotion_mask == line_mask;
+    found_single = found_single || move->promotion_mask == single_mask;
+    found_skip = found_skip || move->promotion_mask == 0;
+  }
+
+  assert(matching_moves == 9);
+  assert(found_line);
+  assert(found_single);
+  assert(!found_skip);
+  boop_move_list_free(&moves);
+
+  setup_line_and_full_board_position(&position);
+  assert(boop_position_apply_move(&position, &line_move));
+  assert(position.promoted_count[0] == 3);
+  assert(position.board[square_at(0, 0)].rank == BOOP_PIECE_RANK_NONE);
+  assert(position.board[square_at(0, 1)].rank == BOOP_PIECE_RANK_NONE);
+  assert(position.board[square_at(0, 2)].rank == BOOP_PIECE_RANK_NONE);
+
+  setup_line_and_full_board_position(&position);
+  assert(boop_position_apply_move(&position, &single_move));
+  assert(position.promoted_count[0] == 1);
+  assert(position.board[square_at(0, 0)].rank == BOOP_PIECE_RANK_KITTEN);
+  assert(position.board[square_at(0, 1)].rank == BOOP_PIECE_RANK_KITTEN);
+  assert(position.board[square_at(0, 2)].rank == BOOP_PIECE_RANK_KITTEN);
+  assert(position.board[square_at(4, 4)].rank == BOOP_PIECE_RANK_NONE);
+
+  setup_line_and_full_board_position(&position);
+  assert(!boop_position_apply_move(&position, &skipped_move));
+}
+
+static const BoopMove *test_find_builder_candidate_with_mask(const GameBackendMoveList *moves, guint64 mask) {
+  g_return_val_if_fail(moves != NULL, NULL);
+
+  for (gsize i = 0; i < moves->count; ++i) {
+    const BoopMove *move = boop_move_list_get(moves, i);
+    assert(move != NULL);
+    if (move->promotion_mask == mask) {
+      return move;
+    }
+  }
+  return NULL;
+}
+
+static void test_builder_can_continue_single_graduation_into_line_choice(void) {
+  guint64 first_square = square_mask(0, 0);
+  guint64 first_two_squares = first_square | square_mask(0, 1);
+  guint64 line_mask = first_two_squares | square_mask(0, 2);
+  guint64 single_mask = square_mask(4, 4);
+  BoopPosition position = {0};
+  GameBackendMoveBuilder builder = {0};
+  BoopMove move = {0};
+  const BoopMove *candidate = NULL;
+
+  setup_line_and_full_board_position(&position);
+  assert(boop_move_builder_init(&position, &builder));
+  GameBackendMoveList candidates = boop_move_builder_list_candidates(&builder);
+  for (gsize i = 0; i < candidates.count; ++i) {
+    const BoopMove *current = boop_move_list_get(&candidates, i);
+    assert(current != NULL);
+    if (current->square == square_at(0, 0)) {
+      candidate = current;
+      break;
+    }
+  }
+  assert(candidate != NULL);
+  assert(boop_move_builder_step(&builder, candidate));
+  boop_move_list_free(&candidates);
+
+  candidates = boop_move_builder_list_candidates(&builder);
+  candidate = test_find_builder_candidate_with_mask(&candidates, first_square);
+  assert(candidate != NULL);
+  assert(boop_move_builder_step(&builder, candidate));
+  assert(boop_move_builder_is_complete(&builder));
+  boop_move_list_free(&candidates);
+
+  candidates = boop_move_builder_list_candidates(&builder);
+  candidate = test_find_builder_candidate_with_mask(&candidates, first_two_squares);
+  assert(candidate != NULL);
+  assert(boop_move_builder_step(&builder, candidate));
+  assert(!boop_move_builder_is_complete(&builder));
+  boop_move_list_free(&candidates);
+
+  candidates = boop_move_builder_list_candidates(&builder);
+  candidate = test_find_builder_candidate_with_mask(&candidates, line_mask);
+  assert(candidate != NULL);
+  assert(boop_move_builder_step(&builder, candidate));
+  assert(boop_move_builder_is_complete(&builder));
+  boop_move_list_free(&candidates);
+
+  assert(boop_move_builder_build_move(&builder, &move));
+  assert(move.promotion_mask == line_mask);
+  boop_move_builder_clear(&builder);
+
+  setup_line_and_full_board_position(&position);
+  assert(boop_move_builder_init(&position, &builder));
+  candidates = boop_move_builder_list_candidates(&builder);
+  for (gsize i = 0; i < candidates.count; ++i) {
+    const BoopMove *current = boop_move_list_get(&candidates, i);
+    assert(current != NULL);
+    if (current->square == square_at(0, 0)) {
+      candidate = current;
+      break;
+    }
+  }
+  assert(candidate != NULL);
+  assert(boop_move_builder_step(&builder, candidate));
+  boop_move_list_free(&candidates);
+
+  candidates = boop_move_builder_list_candidates(&builder);
+  candidate = test_find_builder_candidate_with_mask(&candidates, single_mask);
+  assert(candidate != NULL);
+  assert(boop_move_builder_step(&builder, candidate));
+  assert(boop_move_builder_is_complete(&builder));
+  assert(boop_move_builder_build_move(&builder, &move));
+  assert(move.promotion_mask == single_mask);
+  boop_move_list_free(&candidates);
+  boop_move_builder_clear(&builder);
+}
+
 static void test_three_cats_win(void) {
   BoopPosition position = {0};
   BoopMove move = {
@@ -559,6 +724,8 @@ int main(void) {
   test_overlong_line_has_multiple_promotion_moves();
   test_all_line_windows_are_detected();
   test_graduation_can_promote_one_kitten();
+  test_line_and_full_board_can_choose_line_or_single_kitten();
+  test_builder_can_continue_single_graduation_into_line_choice();
   test_three_cats_win();
   test_builder_selects_promotion_squares();
   test_overlay_describes_on_board_boop();

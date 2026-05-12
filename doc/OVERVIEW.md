@@ -172,6 +172,8 @@ validation/application, `BoardView` to clear selection on replay/reset, and `GGa
 signal for SGF navigation/edit flows. Starting a fresh game resets the SGF tree and emits `node-changed`, but does
 not force player controls back to user mode. Also exposes the current node's move so board overlays can use the same
 path for step-by-step and replay-based navigation.
+Pending move confirmations can still accept further backend builder steps before falling back to selection reset, which
+lets boop disambiguate between confirming a single-kitten graduation and continuing to select a line promotion.
 
 ## `AnalysisGraph` (`src/analysis_graph.c`, `src/analysis_graph.h`)
 Class: `AnalysisGraph` (`GObject`).
@@ -508,10 +510,12 @@ Collaborates with: `homeworlds_game.c`, `homeworlds_backend.c`, and `tests/test_
 Module: boop position, move, rules, builder, and backend adapter.
 Role: implement the 6x6 boop rules from `src/games/boop/RULES.md`. Positions store board cells, side to move,
 per-side kitten/cat supplies, promoted-kitten counts, and terminal outcome. Moves store placement square, placed rank,
-and an optional promotion/graduation mask so fully resolved turns can be serialized and replayed.
+and an optional promotion/graduation mask so fully resolved turns can be serialized and replayed. Small value-type
+helpers such as empty-piece detection live with `BoopPiece` in `boop_types.h`.
 The engine applies simultaneous one-square boops from the newly placed piece, returns booped-off pieces to the owner
 supply, resolves mandatory line promotions, supports optional one-kitten graduation when all eight pieces are on board,
-and awards the active player an end-of-turn win for three cats in a row or all eight kittens promoted.
+offers both line-promotion and single-kitten graduation choices when both rules apply, and awards the active player an
+end-of-turn win for three cats in a row or all eight kittens promoted.
 The hot rules paths use fixed 6x6 square-index geometry tables: 26 maximal lines for three-in-a-row windows, eight
 precomputed boop rays per square, and a square-indexed center-bonus table. Row/column conversion remains at UI,
 notation, and SGF boundaries, but move generation, line detection, boop effects, and static scoring do not probe
