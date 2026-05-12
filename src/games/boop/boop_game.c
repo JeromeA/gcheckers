@@ -8,12 +8,148 @@ typedef struct {
   gboolean mandatory;
 } BoopPromotionChoices;
 
-static const gint boop_line_dirs[][2] = {
-  {0, 1},
-  {1, 0},
-  {1, 1},
-  {1, -1},
+typedef struct {
+  guint8 length;
+  guint8 squares[BOOP_BOARD_SIZE];
+} BoopLine;
+
+enum {
+  BOOP_LINE_COUNT = 26,
+  BOOP_RAY_COUNT = 8,
+  BOOP_LINE_WINDOW_LENGTH = 3,
+  BOOP_SQUARE_INVALID = BOOP_INVALID_SQUARE,
 };
+
+static const BoopLine boop_lines[BOOP_LINE_COUNT] = {
+  { 6, {  0,  1,  2,  3,  4,  5 } },
+  { 6, {  6,  7,  8,  9, 10, 11 } },
+  { 6, { 12, 13, 14, 15, 16, 17 } },
+  { 6, { 18, 19, 20, 21, 22, 23 } },
+  { 6, { 24, 25, 26, 27, 28, 29 } },
+  { 6, { 30, 31, 32, 33, 34, 35 } },
+  { 6, {  0,  6, 12, 18, 24, 30 } },
+  { 6, {  1,  7, 13, 19, 25, 31 } },
+  { 6, {  2,  8, 14, 20, 26, 32 } },
+  { 6, {  3,  9, 15, 21, 27, 33 } },
+  { 6, {  4, 10, 16, 22, 28, 34 } },
+  { 6, {  5, 11, 17, 23, 29, 35 } },
+  { 3, { 18, 25, 32, BOOP_SQUARE_INVALID, BOOP_SQUARE_INVALID, BOOP_SQUARE_INVALID } },
+  { 4, { 12, 19, 26, 33, BOOP_SQUARE_INVALID, BOOP_SQUARE_INVALID } },
+  { 5, {  6, 13, 20, 27, 34, BOOP_SQUARE_INVALID } },
+  { 6, {  0,  7, 14, 21, 28, 35 } },
+  { 5, {  1,  8, 15, 22, 29, BOOP_SQUARE_INVALID } },
+  { 4, {  2,  9, 16, 23, BOOP_SQUARE_INVALID, BOOP_SQUARE_INVALID } },
+  { 3, {  3, 10, 17, BOOP_SQUARE_INVALID, BOOP_SQUARE_INVALID, BOOP_SQUARE_INVALID } },
+  { 3, {  2,  7, 12, BOOP_SQUARE_INVALID, BOOP_SQUARE_INVALID, BOOP_SQUARE_INVALID } },
+  { 4, {  3,  8, 13, 18, BOOP_SQUARE_INVALID, BOOP_SQUARE_INVALID } },
+  { 5, {  4,  9, 14, 19, 24, BOOP_SQUARE_INVALID } },
+  { 6, {  5, 10, 15, 20, 25, 30 } },
+  { 5, { 11, 16, 21, 26, 31, BOOP_SQUARE_INVALID } },
+  { 4, { 17, 22, 27, 32, BOOP_SQUARE_INVALID, BOOP_SQUARE_INVALID } },
+  { 3, { 23, 28, 33, BOOP_SQUARE_INVALID, BOOP_SQUARE_INVALID, BOOP_SQUARE_INVALID } },
+};
+
+static const gint boop_center_bonus[BOOP_SQUARE_COUNT] = {
+  2, 3, 4, 3, 2, 1,
+  3, 4, 5, 4, 3, 2,
+  4, 5, 6, 5, 4, 3,
+  3, 4, 5, 4, 3, 2,
+  2, 3, 4, 3, 2, 1,
+  1, 2, 3, 2, 1, 0,
+};
+
+#define BI BOOP_SQUARE_INVALID
+
+static const gint8 boop_ray_deltas[BOOP_RAY_COUNT][2] = {
+  { -1, -1 },
+  { -1,  0 },
+  { -1,  1 },
+  {  0, -1 },
+  {  0,  1 },
+  {  1, -1 },
+  {  1,  0 },
+  {  1,  1 },
+};
+
+static const guint8 boop_ray_adjacent[BOOP_SQUARE_COUNT][BOOP_RAY_COUNT] = {
+  { BI, BI, BI, BI,  1, BI,  6,  7 },
+  { BI, BI, BI,  0,  2,  6,  7,  8 },
+  { BI, BI, BI,  1,  3,  7,  8,  9 },
+  { BI, BI, BI,  2,  4,  8,  9, 10 },
+  { BI, BI, BI,  3,  5,  9, 10, 11 },
+  { BI, BI, BI,  4, BI, 10, 11, BI },
+  { BI,  0,  1, BI,  7, BI, 12, 13 },
+  {  0,  1,  2,  6,  8, 12, 13, 14 },
+  {  1,  2,  3,  7,  9, 13, 14, 15 },
+  {  2,  3,  4,  8, 10, 14, 15, 16 },
+  {  3,  4,  5,  9, 11, 15, 16, 17 },
+  {  4,  5, BI, 10, BI, 16, 17, BI },
+  { BI,  6,  7, BI, 13, BI, 18, 19 },
+  {  6,  7,  8, 12, 14, 18, 19, 20 },
+  {  7,  8,  9, 13, 15, 19, 20, 21 },
+  {  8,  9, 10, 14, 16, 20, 21, 22 },
+  {  9, 10, 11, 15, 17, 21, 22, 23 },
+  { 10, 11, BI, 16, BI, 22, 23, BI },
+  { BI, 12, 13, BI, 19, BI, 24, 25 },
+  { 12, 13, 14, 18, 20, 24, 25, 26 },
+  { 13, 14, 15, 19, 21, 25, 26, 27 },
+  { 14, 15, 16, 20, 22, 26, 27, 28 },
+  { 15, 16, 17, 21, 23, 27, 28, 29 },
+  { 16, 17, BI, 22, BI, 28, 29, BI },
+  { BI, 18, 19, BI, 25, BI, 30, 31 },
+  { 18, 19, 20, 24, 26, 30, 31, 32 },
+  { 19, 20, 21, 25, 27, 31, 32, 33 },
+  { 20, 21, 22, 26, 28, 32, 33, 34 },
+  { 21, 22, 23, 27, 29, 33, 34, 35 },
+  { 22, 23, BI, 28, BI, 34, 35, BI },
+  { BI, 24, 25, BI, 31, BI, BI, BI },
+  { 24, 25, 26, 30, 32, BI, BI, BI },
+  { 25, 26, 27, 31, 33, BI, BI, BI },
+  { 26, 27, 28, 32, 34, BI, BI, BI },
+  { 27, 28, 29, 33, 35, BI, BI, BI },
+  { 28, 29, BI, 34, BI, BI, BI, BI },
+};
+
+static const guint8 boop_ray_destination[BOOP_SQUARE_COUNT][BOOP_RAY_COUNT] = {
+  { BI, BI, BI, BI,  2, BI, 12, 14 },
+  { BI, BI, BI, BI,  3, BI, 13, 15 },
+  { BI, BI, BI,  0,  4, 12, 14, 16 },
+  { BI, BI, BI,  1,  5, 13, 15, 17 },
+  { BI, BI, BI,  2, BI, 14, 16, BI },
+  { BI, BI, BI,  3, BI, 15, 17, BI },
+  { BI, BI, BI, BI,  8, BI, 18, 20 },
+  { BI, BI, BI, BI,  9, BI, 19, 21 },
+  { BI, BI, BI,  6, 10, 18, 20, 22 },
+  { BI, BI, BI,  7, 11, 19, 21, 23 },
+  { BI, BI, BI,  8, BI, 20, 22, BI },
+  { BI, BI, BI,  9, BI, 21, 23, BI },
+  { BI,  0,  2, BI, 14, BI, 24, 26 },
+  { BI,  1,  3, BI, 15, BI, 25, 27 },
+  {  0,  2,  4, 12, 16, 24, 26, 28 },
+  {  1,  3,  5, 13, 17, 25, 27, 29 },
+  {  2,  4, BI, 14, BI, 26, 28, BI },
+  {  3,  5, BI, 15, BI, 27, 29, BI },
+  { BI,  6,  8, BI, 20, BI, 30, 32 },
+  { BI,  7,  9, BI, 21, BI, 31, 33 },
+  {  6,  8, 10, 18, 22, 30, 32, 34 },
+  {  7,  9, 11, 19, 23, 31, 33, 35 },
+  {  8, 10, BI, 20, BI, 32, 34, BI },
+  {  9, 11, BI, 21, BI, 33, 35, BI },
+  { BI, 12, 14, BI, 26, BI, BI, BI },
+  { BI, 13, 15, BI, 27, BI, BI, BI },
+  { 12, 14, 16, 24, 28, BI, BI, BI },
+  { 13, 15, 17, 25, 29, BI, BI, BI },
+  { 14, 16, BI, 26, BI, BI, BI, BI },
+  { 15, 17, BI, 27, BI, BI, BI, BI },
+  { BI, 18, 20, BI, 32, BI, BI, BI },
+  { BI, 19, 21, BI, 33, BI, BI, BI },
+  { 18, 20, 22, 30, 34, BI, BI, BI },
+  { 19, 21, 23, 31, 35, BI, BI, BI },
+  { 20, 22, BI, 32, BI, BI, BI, BI },
+  { 21, 23, BI, 33, BI, BI, BI, BI },
+};
+
+#undef BI
 
 static GQuark boop_position_error_quark(void) {
   return g_quark_from_static_string("boop-position-error");
@@ -53,21 +189,6 @@ static gboolean boop_side_valid(guint side) {
 
 static gboolean boop_square_valid(guint square) {
   return square < BOOP_SQUARE_COUNT;
-}
-
-static gboolean boop_coord_valid(gint row, gint col) {
-  return row >= 0 && row < BOOP_BOARD_SIZE && col >= 0 && col < BOOP_BOARD_SIZE;
-}
-
-static gboolean boop_coord_to_square_signed(gint row, gint col, guint *out_square) {
-  g_return_val_if_fail(out_square != NULL, FALSE);
-
-  if (!boop_coord_valid(row, col)) {
-    return FALSE;
-  }
-
-  *out_square = (guint)(row * BOOP_BOARD_SIZE + col);
-  return TRUE;
 }
 
 static void boop_return_piece_to_supply(BoopPosition *position, BoopPiece piece) {
@@ -156,38 +277,29 @@ static gboolean boop_position_collect_line_promotion_choices(const BoopPosition 
   memset(choices, 0, sizeof(*choices));
   choices->mandatory = TRUE;
 
-  for (guint dir = 0; dir < G_N_ELEMENTS(boop_line_dirs); ++dir) {
-    gint row_step = boop_line_dirs[dir][0];
-    gint col_step = boop_line_dirs[dir][1];
+  for (guint line_index = 0; line_index < G_N_ELEMENTS(boop_lines); ++line_index) {
+    const BoopLine *line = &boop_lines[line_index];
+    for (guint start = 0; start + BOOP_LINE_WINDOW_LENGTH <= line->length; ++start) {
+      guint64 mask = 0;
+      gboolean all_side = TRUE;
+      gboolean has_kitten = FALSE;
 
-    for (gint row = 0; row < BOOP_BOARD_SIZE; ++row) {
-      for (gint col = 0; col < BOOP_BOARD_SIZE; ++col) {
-        guint64 mask = 0;
-        gboolean all_side = TRUE;
-        gboolean has_kitten = FALSE;
-
-        for (gint offset = 0; offset < 3; ++offset) {
-          guint square = 0;
-          if (!boop_coord_to_square_signed(row + (row_step * offset), col + (col_step * offset), &square)) {
-            all_side = FALSE;
-            break;
-          }
-
-          BoopPiece piece = position->board[square];
-          if (boop_piece_is_empty(piece) || piece.side != side) {
-            all_side = FALSE;
-            break;
-          }
-
-          if (piece.rank == BOOP_PIECE_RANK_KITTEN) {
-            has_kitten = TRUE;
-          }
-          mask |= boop_square_mask(square);
+      for (guint offset = 0; offset < BOOP_LINE_WINDOW_LENGTH; ++offset) {
+        guint square = line->squares[start + offset];
+        BoopPiece piece = position->board[square];
+        if (boop_piece_is_empty(piece) || piece.side != side) {
+          all_side = FALSE;
+          break;
         }
 
-        if (all_side && has_kitten && !boop_position_add_mask(choices->masks, &choices->count, mask)) {
-          return FALSE;
+        if (piece.rank == BOOP_PIECE_RANK_KITTEN) {
+          has_kitten = TRUE;
         }
+        mask |= boop_square_mask(square);
+      }
+
+      if (all_side && has_kitten && !boop_position_add_mask(choices->masks, &choices->count, mask)) {
+        return FALSE;
       }
     }
   }
@@ -199,31 +311,22 @@ static gboolean boop_position_has_cat_line(const BoopPosition *position, guint s
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(boop_side_valid(side), FALSE);
 
-  for (guint dir = 0; dir < G_N_ELEMENTS(boop_line_dirs); ++dir) {
-    gint row_step = boop_line_dirs[dir][0];
-    gint col_step = boop_line_dirs[dir][1];
+  for (guint line_index = 0; line_index < G_N_ELEMENTS(boop_lines); ++line_index) {
+    const BoopLine *line = &boop_lines[line_index];
+    for (guint start = 0; start + BOOP_LINE_WINDOW_LENGTH <= line->length; ++start) {
+      gboolean all_cats = TRUE;
 
-    for (gint row = 0; row < BOOP_BOARD_SIZE; ++row) {
-      for (gint col = 0; col < BOOP_BOARD_SIZE; ++col) {
-        gboolean all_cats = TRUE;
-
-        for (gint offset = 0; offset < 3; ++offset) {
-          guint square = 0;
-          if (!boop_coord_to_square_signed(row + (row_step * offset), col + (col_step * offset), &square)) {
-            all_cats = FALSE;
-            break;
-          }
-
-          BoopPiece piece = position->board[square];
-          if (boop_piece_is_empty(piece) || piece.side != side || piece.rank != BOOP_PIECE_RANK_CAT) {
-            all_cats = FALSE;
-            break;
-          }
+      for (guint offset = 0; offset < BOOP_LINE_WINDOW_LENGTH; ++offset) {
+        guint square = line->squares[start + offset];
+        BoopPiece piece = position->board[square];
+        if (boop_piece_is_empty(piece) || piece.side != side || piece.rank != BOOP_PIECE_RANK_CAT) {
+          all_cats = FALSE;
+          break;
         }
+      }
 
-        if (all_cats) {
-          return TRUE;
-        }
+      if (all_cats) {
+        return TRUE;
       }
     }
   }
@@ -348,69 +451,53 @@ static gboolean boop_position_apply_boop_effects(BoopPosition *position,
 
   memcpy(before, position->board, sizeof(before));
 
-  guint placed_row = 0;
-  guint placed_col = 0;
-  if (!boop_square_to_coord(placed_square, &placed_row, &placed_col)) {
-    return FALSE;
-  }
+  for (guint ray_index = 0; ray_index < BOOP_RAY_COUNT; ++ray_index) {
+    guint adjacent_square = boop_ray_adjacent[placed_square][ray_index];
+    guint destination_square = boop_ray_destination[placed_square][ray_index];
+    if (adjacent_square == BOOP_SQUARE_INVALID) {
+      continue;
+    }
 
-  for (gint row_delta = -1; row_delta <= 1; ++row_delta) {
-    for (gint col_delta = -1; col_delta <= 1; ++col_delta) {
-      if (row_delta == 0 && col_delta == 0) {
-        continue;
-      }
+    BoopPiece target = before[adjacent_square];
+    if (boop_piece_is_empty(target)) {
+      continue;
+    }
+    if (target.rank == BOOP_PIECE_RANK_CAT && rank != BOOP_PIECE_RANK_CAT) {
+      continue;
+    }
 
-      gint adjacent_row = (gint)placed_row + row_delta;
-      gint adjacent_col = (gint)placed_col + col_delta;
-      guint adjacent_square = 0;
-      if (!boop_coord_to_square_signed(adjacent_row, adjacent_col, &adjacent_square)) {
-        continue;
-      }
-
-      BoopPiece target = before[adjacent_square];
-      if (boop_piece_is_empty(target)) {
-        continue;
-      }
-      if (target.rank == BOOP_PIECE_RANK_CAT && rank != BOOP_PIECE_RANK_CAT) {
-        continue;
-      }
-
-      guint destination_square = 0;
-      gint destination_row = adjacent_row + row_delta;
-      gint destination_col = adjacent_col + col_delta;
-      if (!boop_coord_to_square_signed(destination_row, destination_col, &destination_square)) {
-        position->board[adjacent_square] = boop_piece_empty();
-        boop_return_piece_to_supply(position, target);
-        if (overlay_info != NULL && !boop_move_overlay_append_removed_square(overlay_info, adjacent_square)) {
-          return FALSE;
-        }
-        if (overlay_info != NULL &&
-            !boop_move_overlay_append_arrow(overlay_info,
-                                            adjacent_square,
-                                            BOOP_INVALID_SQUARE,
-                                            row_delta,
-                                            col_delta,
-                                            TRUE)) {
-          return FALSE;
-        }
-        continue;
-      }
-
-      if (!boop_piece_is_empty(before[destination_square])) {
-        continue;
-      }
-
+    if (destination_square == BOOP_SQUARE_INVALID) {
       position->board[adjacent_square] = boop_piece_empty();
-      position->board[destination_square] = target;
+      boop_return_piece_to_supply(position, target);
+      if (overlay_info != NULL && !boop_move_overlay_append_removed_square(overlay_info, adjacent_square)) {
+        return FALSE;
+      }
       if (overlay_info != NULL &&
           !boop_move_overlay_append_arrow(overlay_info,
                                           adjacent_square,
-                                          destination_square,
-                                          row_delta,
-                                          col_delta,
-                                          FALSE)) {
+                                          BOOP_INVALID_SQUARE,
+                                          boop_ray_deltas[ray_index][0],
+                                          boop_ray_deltas[ray_index][1],
+                                          TRUE)) {
         return FALSE;
       }
+      continue;
+    }
+
+    if (!boop_piece_is_empty(before[destination_square])) {
+      continue;
+    }
+
+    position->board[adjacent_square] = boop_piece_empty();
+    position->board[destination_square] = target;
+    if (overlay_info != NULL &&
+        !boop_move_overlay_append_arrow(overlay_info,
+                                        adjacent_square,
+                                        destination_square,
+                                        boop_ray_deltas[ray_index][0],
+                                        boop_ray_deltas[ray_index][1],
+                                        FALSE)) {
+      return FALSE;
     }
   }
 
@@ -958,12 +1045,8 @@ gint boop_position_evaluate_static(const BoopPosition *position) {
         continue;
       }
 
-      guint row = 0;
-      guint col = 0;
-      (void)boop_square_to_coord(square, &row, &col);
-      gint center_bonus = 6 - ABS((gint)row - 2) - ABS((gint)col - 2);
       side_score += 100;
-      side_score += MAX(center_bonus, 0);
+      side_score += boop_center_bonus[square];
     }
 
     score += side == 0 ? side_score : -side_score;
@@ -1062,7 +1145,12 @@ static gboolean boop_square_parse(const char *text, guint *out_square) {
 
   gint col = g_ascii_tolower(text[0]) - 'a';
   gint row = text[1] - '1';
-  return boop_coord_to_square_signed(row, col, out_square);
+  if (row < 0 || col < 0 || row >= BOOP_BOARD_SIZE || col >= BOOP_BOARD_SIZE) {
+    return FALSE;
+  }
+
+  *out_square = (guint)(row * BOOP_BOARD_SIZE + col);
+  return TRUE;
 }
 
 gboolean boop_move_format(const BoopMove *move, char *buffer, gsize size) {

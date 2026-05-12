@@ -512,6 +512,10 @@ and an optional promotion/graduation mask so fully resolved turns can be seriali
 The engine applies simultaneous one-square boops from the newly placed piece, returns booped-off pieces to the owner
 supply, resolves mandatory line promotions, supports optional one-kitten graduation when all eight pieces are on board,
 and awards the active player an end-of-turn win for three cats in a row or all eight kittens promoted.
+The hot rules paths use fixed 6x6 square-index geometry tables: 26 maximal lines for three-in-a-row windows, eight
+precomputed boop rays per square, and a square-indexed center-bonus table. Row/column conversion remains at UI,
+notation, and SGF boundaries, but move generation, line detection, boop effects, and static scoring do not probe
+signed coordinates during search.
 The backend exposes full move lists for validation/search, a staged square-grid builder for interactive placement plus
 promotion selection, deterministic notation such as `K@a1+a1,b1,c1`, symbol-only board pieces, static evaluation,
 terminal scores, and position hashing. Boop static evaluation scores promoted kittens, on-board pieces, and center

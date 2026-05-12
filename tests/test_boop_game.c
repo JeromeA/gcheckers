@@ -14,6 +14,17 @@ static guint64 square_mask(guint row, guint col) {
   return G_GUINT64_CONSTANT(1) << square_at(row, col);
 }
 
+static gboolean square_at_signed(gint row, gint col, guint *out_square) {
+  assert(out_square != NULL);
+
+  if (row < 0 || col < 0 || row >= BOOP_BOARD_SIZE || col >= BOOP_BOARD_SIZE) {
+    return FALSE;
+  }
+
+  *out_square = (guint)(row * BOOP_BOARD_SIZE + col);
+  return TRUE;
+}
+
 static void setup_piece(BoopPosition *position, guint side, guint rank, guint row, guint col) {
   guint square = square_at(row, col);
 
@@ -35,6 +46,109 @@ static void setup_piece(BoopPosition *position, guint side, guint rank, guint ro
   }
 }
 
+typedef struct {
+  guint64 masks[80];
+  guint count;
+} TestLineWindows;
+
+static void test_line_windows_foreach(void (*callback)(guint a, guint b, guint c, void *user_data),
+                                      void *user_data) {
+  static const gint dirs[][2] = {
+    {0, 1},
+    {1, 0},
+    {1, 1},
+    {1, -1},
+  };
+
+  assert(callback != NULL);
+
+  for (guint dir = 0; dir < G_N_ELEMENTS(dirs); ++dir) {
+    gint row_step = dirs[dir][0];
+    gint col_step = dirs[dir][1];
+    for (gint row = 0; row < BOOP_BOARD_SIZE; ++row) {
+      for (gint col = 0; col < BOOP_BOARD_SIZE; ++col) {
+        guint a = 0;
+        guint b = 0;
+        guint c = 0;
+        if (!square_at_signed(row, col, &a) ||
+            !square_at_signed(row + row_step, col + col_step, &b) ||
+            !square_at_signed(row + (2 * row_step), col + (2 * col_step), &c)) {
+          continue;
+        }
+
+        callback(a, b, c, user_data);
+      }
+    }
+  }
+}
+
+static void test_record_unique_line_window(guint a, guint b, guint c, void *user_data) {
+  TestLineWindows *windows = user_data;
+  guint64 mask = (G_GUINT64_CONSTANT(1) << a) | (G_GUINT64_CONSTANT(1) << b) | (G_GUINT64_CONSTANT(1) << c);
+
+  assert(windows != NULL);
+  assert(windows->count < G_N_ELEMENTS(windows->masks));
+  for (guint i = 0; i < windows->count; ++i) {
+    assert(windows->masks[i] != mask);
+  }
+
+  windows->masks[windows->count++] = mask;
+}
+
+static void test_assert_cat_line_window_detected(guint a, guint b, guint c, void *user_data) {
+  guint *count = user_data;
+  BoopPosition position = {0};
+  GError *error = NULL;
+
+  assert(count != NULL);
+  boop_position_init(&position);
+  position.kittens_in_supply[0] = BOOP_SUPPLY_COUNT - 3;
+  position.board[a] = (BoopPiece){
+    .side = 0,
+    .rank = BOOP_PIECE_RANK_CAT,
+  };
+  position.board[b] = (BoopPiece){
+    .side = 0,
+    .rank = BOOP_PIECE_RANK_CAT,
+  };
+  position.board[c] = (BoopPiece){
+    .side = 0,
+    .rank = BOOP_PIECE_RANK_CAT,
+  };
+
+  assert(boop_position_normalize(&position, &error));
+  assert(error == NULL);
+  assert(boop_position_outcome(&position) == GAME_BACKEND_OUTCOME_SIDE_0_WIN);
+  (*count)++;
+}
+
+static void test_assert_line_window_promotion_accepted(guint a, guint b, guint c, void *user_data) {
+  guint *count = user_data;
+  BoopPosition position = {0};
+  BoopMove move = {
+    .square = (guint8)a,
+    .rank = BOOP_PIECE_RANK_KITTEN,
+    .promotion_mask = (G_GUINT64_CONSTANT(1) << a) | (G_GUINT64_CONSTANT(1) << b) |
+                      (G_GUINT64_CONSTANT(1) << c),
+  };
+
+  assert(count != NULL);
+  boop_position_init(&position);
+  position.board[b] = (BoopPiece){
+    .side = 0,
+    .rank = BOOP_PIECE_RANK_KITTEN,
+  };
+  position.board[c] = (BoopPiece){
+    .side = 0,
+    .rank = BOOP_PIECE_RANK_KITTEN,
+  };
+  position.kittens_in_supply[0] -= 2;
+
+  assert(boop_position_apply_move(&position, &move));
+  assert(position.promoted_count[0] == 3);
+  (*count)++;
+}
+
 static void test_initial_move_list_and_notation(void) {
   BoopPosition position = {0};
   BoopMove parsed = {0};
@@ -54,6 +168,19 @@ static void test_initial_move_list_and_notation(void) {
   assert(boop_move_parse(notation, &parsed));
   assert(boop_moves_equal(move, &parsed));
   boop_move_list_free(&moves);
+}
+
+static void test_all_line_windows_are_detected(void) {
+  TestLineWindows windows = {0};
+  guint detected_count = 0;
+  guint promoted_count = 0;
+
+  test_line_windows_foreach(test_record_unique_line_window, &windows);
+  assert(windows.count == 80);
+  test_line_windows_foreach(test_assert_cat_line_window_detected, &detected_count);
+  test_line_windows_foreach(test_assert_line_window_promotion_accepted, &promoted_count);
+  assert(detected_count == windows.count);
+  assert(promoted_count == windows.count);
 }
 
 static void test_kitten_boops_kittens_not_cats(void) {
@@ -268,6 +395,75 @@ static void test_overlay_describes_off_board_boop(void) {
   assert(overlay.removed_squares[0] == square_at(0, 0));
 }
 
+static void test_all_boop_rays_match_square_geometry(void) {
+  static const gint dirs[][2] = {
+    {-1, -1},
+    {-1,  0},
+    {-1,  1},
+    { 0, -1},
+    { 0,  1},
+    { 1, -1},
+    { 1,  0},
+    { 1,  1},
+  };
+
+  for (guint placed_square = 0; placed_square < BOOP_SQUARE_COUNT; ++placed_square) {
+    gint placed_row = (gint)(placed_square / BOOP_BOARD_SIZE);
+    gint placed_col = (gint)(placed_square % BOOP_BOARD_SIZE);
+
+    for (guint dir = 0; dir < G_N_ELEMENTS(dirs); ++dir) {
+      gint row_delta = dirs[dir][0];
+      gint col_delta = dirs[dir][1];
+      guint adjacent_square = 0;
+      guint destination_square = 0;
+      gboolean has_adjacent =
+          square_at_signed(placed_row + row_delta, placed_col + col_delta, &adjacent_square);
+      gboolean has_destination =
+          square_at_signed(placed_row + (2 * row_delta), placed_col + (2 * col_delta), &destination_square);
+      BoopPosition position = {0};
+      BoopMove move = {
+        .square = (guint8)placed_square,
+        .rank = BOOP_PIECE_RANK_CAT,
+      };
+      BoopMoveOverlayInfo overlay = {0};
+
+      boop_position_init(&position);
+      position.kittens_in_supply[0] = BOOP_SUPPLY_COUNT - 1;
+      position.cats_in_supply[0] = 1;
+      position.promoted_count[0] = 1;
+      if (has_adjacent) {
+        position.board[adjacent_square] = (BoopPiece){
+          .side = 1,
+          .rank = BOOP_PIECE_RANK_KITTEN,
+        };
+        position.kittens_in_supply[1]--;
+      }
+
+      assert(boop_move_describe_overlay(&position, &move, &overlay));
+      if (!has_adjacent) {
+        assert(overlay.arrow_count == 0);
+        assert(overlay.removed_square_count == 0);
+        continue;
+      }
+
+      assert(overlay.arrow_count == 1);
+      assert(overlay.arrows[0].from_square == adjacent_square);
+      assert(overlay.arrows[0].row_delta == row_delta);
+      assert(overlay.arrows[0].col_delta == col_delta);
+      if (has_destination) {
+        assert(overlay.arrows[0].to_square == destination_square);
+        assert(!overlay.arrows[0].leaves_board);
+        assert(overlay.removed_square_count == 0);
+      } else {
+        assert(overlay.arrows[0].to_square == BOOP_INVALID_SQUARE);
+        assert(overlay.arrows[0].leaves_board);
+        assert(overlay.removed_square_count == 1);
+        assert(overlay.removed_squares[0] == adjacent_square);
+      }
+    }
+  }
+}
+
 static void test_overlay_describes_promoted_kittens_as_removed(void) {
   BoopPosition position = {0};
   BoopMove move = {
@@ -361,11 +557,13 @@ int main(void) {
   test_booped_off_piece_returns_to_supply();
   test_kitten_line_promotes_to_cats();
   test_overlong_line_has_multiple_promotion_moves();
+  test_all_line_windows_are_detected();
   test_graduation_can_promote_one_kitten();
   test_three_cats_win();
   test_builder_selects_promotion_squares();
   test_overlay_describes_on_board_boop();
   test_overlay_describes_off_board_boop();
+  test_all_boop_rays_match_square_geometry();
   test_overlay_describes_promoted_kittens_as_removed();
   test_static_evaluation_ignores_supply_counts();
   test_static_evaluation_scores_cats_like_kittens();
