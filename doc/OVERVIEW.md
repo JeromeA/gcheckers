@@ -522,8 +522,8 @@ collection, so promotion collection can treat every same-side three-in-a-row as 
 The hot rules paths use fixed 6x6 square-index geometry tables: 26 maximal lines for three-in-a-row windows, eight
 precomputed boop rays per square, and a square-indexed center-bonus table. Row/column conversion remains at UI,
 notation, and SGF boundaries, but move generation, line detection, boop effects, and static scoring do not probe
-signed coordinates during search. Cat-line win detection also skips most maximal lines by first checking the shared
-third square, falling back to a consecutive-cat scan only when that square is a cat.
+signed coordinates during search. Cat-line win detection and line-promotion collection also skip most maximal lines by
+first checking the shared third square before falling back to full scans.
 The backend exposes full move lists for validation/search, a staged square-grid builder for interactive placement plus
 promotion selection, deterministic notation such as `K@a1+a1,b1,c1`, symbol-only board pieces, static evaluation,
 terminal scores, and position hashing. Boop static evaluation scores promoted kittens, on-board pieces, and center

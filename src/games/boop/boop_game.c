@@ -272,7 +272,18 @@ static gboolean boop_position_collect_line_promotion_choices(const BoopPosition 
 
   for (guint line_index = 0; line_index < G_N_ELEMENTS(boop_lines); ++line_index) {
     const BoopLine *line = &boop_lines[line_index];
-    for (guint start = 0; start + BOOP_LINE_LENGTH <= line->length; ++start) {
+    guint start = 0;
+    guint past_start = line->length + 1 - BOOP_LINE_LENGTH;
+
+    if (boop_piece_side(position->board[line->squares[BOOP_LINE_LENGTH - 1]]) != side) {
+      if (line->length != BOOP_BOARD_SIZE) {
+        continue;
+      }
+
+      start = BOOP_LINE_LENGTH;
+    }
+
+    for (; start < past_start; ++start) {
       guint64 mask = 0;
       gboolean all_side = TRUE;
 
