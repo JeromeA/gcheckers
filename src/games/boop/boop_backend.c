@@ -198,8 +198,12 @@ static gint boop_backend_evaluate_static(gconstpointer position) {
   return boop_position_evaluate_static(boop_position);
 }
 
-static gint boop_backend_terminal_score(GameBackendOutcome outcome, guint ply_depth) {
-  return boop_position_terminal_score(outcome, ply_depth);
+static gint boop_backend_terminal_score(gconstpointer position, GameBackendOutcome outcome, guint /*ply_depth*/) {
+  const BoopPosition *boop_position = position;
+
+  g_return_val_if_fail(boop_position != NULL, 0);
+
+  return boop_position_terminal_score(boop_position, outcome);
 }
 
 static guint64 boop_backend_hash_position(gconstpointer position) {

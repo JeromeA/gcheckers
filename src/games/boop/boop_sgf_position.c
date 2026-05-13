@@ -95,6 +95,29 @@ static gboolean boop_sgf_position_parse_uint_prop(const SgfNode *node,
   return TRUE;
 }
 
+static gboolean boop_sgf_position_parse_optional_ply_count(const SgfNode *node, guint *out_value, GError **error) {
+  const char *text = NULL;
+  char *end_ptr = NULL;
+  guint64 value = 0;
+
+  g_return_val_if_fail(node != NULL, FALSE);
+  g_return_val_if_fail(out_value != NULL, FALSE);
+
+  text = sgf_node_get_property_first(node, "GPLY");
+  if (text == NULL) {
+    return TRUE;
+  }
+
+  value = g_ascii_strtoull(text, &end_ptr, 10);
+  if (end_ptr == text || (end_ptr != NULL && *end_ptr != '\0') || value > G_MAXUINT) {
+    g_set_error(error, boop_sgf_position_error_quark(), 12, "Invalid boop SGF integer for GPLY: %s", text);
+    return FALSE;
+  }
+
+  *out_value = (guint)value;
+  return TRUE;
+}
+
 static gboolean boop_sgf_position_add_property_value(SgfNode *node,
                                                      const char *ident,
                                                      const char *value,
@@ -199,7 +222,8 @@ gboolean boop_sgf_position_apply_setup_node(gpointer position, const SgfNode *no
   if (sgf_node_get_property_first(node, "GBKS") != NULL ||
       sgf_node_get_property_first(node, "GBCS") != NULL ||
       sgf_node_get_property_first(node, "GWKS") != NULL ||
-      sgf_node_get_property_first(node, "GWCS") != NULL) {
+      sgf_node_get_property_first(node, "GWCS") != NULL ||
+      sgf_node_get_property_first(node, "GPLY") != NULL) {
     any_snapshot_prop = TRUE;
   }
 
@@ -219,6 +243,9 @@ gboolean boop_sgf_position_apply_setup_node(gpointer position, const SgfNode *no
         !boop_sgf_position_parse_uint_prop(node, "GBCS", &boop_position->cats_in_supply[0], error) ||
         !boop_sgf_position_parse_uint_prop(node, "GWKS", &boop_position->kittens_in_supply[1], error) ||
         !boop_sgf_position_parse_uint_prop(node, "GWCS", &boop_position->cats_in_supply[1], error)) {
+      return FALSE;
+    }
+    if (!boop_sgf_position_parse_optional_ply_count(node, &boop_position->ply_count, error)) {
       return FALSE;
     }
   }
@@ -248,6 +275,7 @@ gboolean boop_sgf_position_write_position_node(gconstpointer position, SgfNode *
   sgf_node_clear_property(node, "GBCS");
   sgf_node_clear_property(node, "GWKS");
   sgf_node_clear_property(node, "GWCS");
+  sgf_node_clear_property(node, "GPLY");
   sgf_node_clear_property(node, "PL");
 
   for (guint square = 0; square < BOOP_SQUARE_COUNT; ++square) {
@@ -313,6 +341,12 @@ gboolean boop_sgf_position_write_position_node(gconstpointer position, SgfNode *
   }
   g_snprintf(supply_value, sizeof(supply_value), "%u", boop_position->cats_in_supply[1]);
   if (!boop_sgf_position_add_property_value(node, "GWCS", supply_value, error)) {
+    return FALSE;
+  }
+
+  char ply_value[16] = {0};
+  g_snprintf(ply_value, sizeof(ply_value), "%u", boop_position->ply_count);
+  if (!boop_sgf_position_add_property_value(node, "GPLY", ply_value, error)) {
     return FALSE;
   }
 

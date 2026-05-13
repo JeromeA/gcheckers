@@ -36,7 +36,7 @@ const BoopMove *boop_move_list_get(const GameBackendMoveList *moves, gsize index
 gboolean boop_moves_equal(const BoopMove *left, const BoopMove *right);
 gboolean boop_position_apply_move(BoopPosition *position, const BoopMove *move);
 gint boop_position_evaluate_static(const BoopPosition *position);
-gint boop_position_terminal_score(GameBackendOutcome outcome, guint ply_depth);
+gint boop_position_terminal_score(const BoopPosition *position, GameBackendOutcome outcome);
 guint64 boop_position_hash(const BoopPosition *position);
 gboolean boop_move_format(const BoopMove *move, char *buffer, gsize size);
 gboolean boop_move_parse(const char *notation, BoopMove *out_move);

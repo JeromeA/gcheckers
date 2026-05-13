@@ -51,6 +51,7 @@ static void test_backend_move_flow(void) {
   assert(strcmp(notation, "K@a1") == 0);
   assert(backend->apply_move(position, &move));
   assert(backend->position_turn(position) == 1);
+  assert(((const BoopPosition *)position)->ply_count == 1);
 
   backend->move_list_free(&candidates);
   backend->move_builder_clear(&builder);

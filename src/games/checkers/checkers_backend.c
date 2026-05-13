@@ -481,7 +481,9 @@ static gint checkers_backend_evaluate_static(gconstpointer position) {
   return score;
 }
 
-static gint checkers_backend_terminal_score(GameBackendOutcome outcome, guint ply_depth) {
+static gint checkers_backend_terminal_score(gconstpointer position, GameBackendOutcome outcome, guint ply_depth) {
+  g_return_val_if_fail(position != NULL, 0);
+
   gint win_score = 3000 - (gint) ply_depth;
 
   switch (outcome) {

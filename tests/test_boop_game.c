@@ -160,6 +160,7 @@ static void test_initial_move_list_and_notation(void) {
   char notation[32] = {0};
 
   boop_position_init(&position);
+  assert(position.ply_count == 0);
   assert(boop_position_turn(&position) == 0);
   assert(boop_position_outcome(&position) == GAME_BACKEND_OUTCOME_ONGOING);
 
@@ -172,6 +173,8 @@ static void test_initial_move_list_and_notation(void) {
   assert(strcmp(notation, "K@a1") == 0);
   assert(boop_move_parse(notation, &parsed));
   assert(boop_moves_equal(move, &parsed));
+  assert(boop_position_apply_move(&position, move));
+  assert(position.ply_count == 1);
   boop_move_list_free(&moves);
 }
 
@@ -734,11 +737,27 @@ static void test_static_evaluation_does_not_bonus_cat_lines(void) {
 }
 
 static void test_terminal_score_uses_win_scale(void) {
-  assert(boop_position_terminal_score(GAME_BACKEND_OUTCOME_SIDE_0_WIN, 0) == 10000);
-  assert(boop_position_terminal_score(GAME_BACKEND_OUTCOME_SIDE_0_WIN, 7) == 9993);
-  assert(boop_position_terminal_score(GAME_BACKEND_OUTCOME_SIDE_1_WIN, 7) == -9993);
-  assert(boop_position_terminal_score(GAME_BACKEND_OUTCOME_DRAW, 7) == 0);
-  assert(boop_position_terminal_score(GAME_BACKEND_OUTCOME_ONGOING, 7) == 0);
+  BoopPosition position = {0};
+
+  boop_position_init(&position);
+  assert(boop_position_terminal_score(&position, GAME_BACKEND_OUTCOME_SIDE_0_WIN) == 10000);
+
+  position.ply_count = 7;
+  assert(boop_position_terminal_score(&position, GAME_BACKEND_OUTCOME_SIDE_0_WIN) == 9993);
+  assert(boop_position_terminal_score(&position, GAME_BACKEND_OUTCOME_SIDE_1_WIN) == -9993);
+  assert(boop_position_terminal_score(&position, GAME_BACKEND_OUTCOME_DRAW) == 0);
+  assert(boop_position_terminal_score(&position, GAME_BACKEND_OUTCOME_ONGOING) == 0);
+}
+
+static void test_hash_includes_ply_count(void) {
+  BoopPosition first = {0};
+  BoopPosition second = {0};
+
+  boop_position_init(&first);
+  boop_position_init(&second);
+  second.ply_count = 1;
+
+  assert(boop_position_hash(&first) != boop_position_hash(&second));
 }
 
 int main(void) {
@@ -764,6 +783,7 @@ int main(void) {
   test_static_evaluation_penalizes_last_player();
   test_static_evaluation_does_not_bonus_cat_lines();
   test_terminal_score_uses_win_scale();
+  test_hash_includes_ply_count();
 
   return 0;
 }

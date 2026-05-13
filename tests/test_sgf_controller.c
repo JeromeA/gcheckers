@@ -786,6 +786,7 @@ static void test_ggame_sgf_controller_init_custom_boop_position(BoopPosition *po
   position->kittens_in_supply[1] = 5;
   position->cats_in_supply[1] = 1;
   position->turn = 1;
+  position->ply_count = 12;
 
   g_assert_true(boop_position_normalize(position, &error));
   g_assert_no_error(error);
@@ -824,6 +825,7 @@ static void test_ggame_sgf_controller_replay_node_into_position_roundtrips_boop_
   g_assert_nonnull(sgf_node_get_property_values((const SgfNode *)root, "GBC"));
   g_assert_cmpstr(sgf_node_get_property_first((const SgfNode *)root, "GBKS"), ==, "5");
   g_assert_cmpstr(sgf_node_get_property_first((const SgfNode *)root, "GWCS"), ==, "1");
+  g_assert_cmpstr(sgf_node_get_property_first((const SgfNode *)root, "GPLY"), ==, "12");
   g_assert_cmpstr(sgf_node_get_property_first((const SgfNode *)root, "PL"), ==, "W");
 
   backend->position_init(&restored, NULL);
@@ -1213,6 +1215,7 @@ static void test_ggame_sgf_controller_boop_save_position_file(void) {
   g_assert_nonnull(strstr(saved, "GWC[bd]"));
   g_assert_nonnull(strstr(saved, "GBKS[5]"));
   g_assert_nonnull(strstr(saved, "GWCS[1]"));
+  g_assert_nonnull(strstr(saved, "GPLY[12]"));
   g_assert_nonnull(strstr(saved, "PL[W]"));
   g_assert_null(strstr(saved, ";B["));
   g_assert_null(strstr(saved, ";W["));

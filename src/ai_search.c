@@ -343,14 +343,14 @@ static gint game_ai_search_recursive(gpointer position,
   guint64 key = backend->hash_position(position);
   GameBackendOutcome outcome = backend->position_outcome(position);
   if (outcome != GAME_BACKEND_OUTCOME_ONGOING) {
-    gint score = backend->terminal_score(outcome, ply_depth);
+    gint score = backend->terminal_score(position, outcome, ply_depth);
     game_ai_search_store_result(ctx, key, depth_remaining, score, GAME_AI_TT_BOUND_EXACT, NULL);
     return score;
   }
 
   GameBackendMoveList moves = game_ai_search_list_candidate_moves(backend, position, 0, depth_remaining);
   if (moves.count == 0) {
-    gint score = backend->terminal_score(game_ai_search_derived_outcome(backend, position), ply_depth);
+    gint score = backend->terminal_score(position, game_ai_search_derived_outcome(backend, position), ply_depth);
     backend->move_list_free(&moves);
     game_ai_search_store_result(ctx, key, depth_remaining, score, GAME_AI_TT_BOUND_EXACT, NULL);
     return score;

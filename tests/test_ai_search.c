@@ -292,7 +292,9 @@ static gint test_good_move_only_evaluate_static(gconstpointer position) {
   return good_position->total * 10;
 }
 
-static gint test_good_move_only_terminal_score(GameBackendOutcome outcome, guint ply_depth) {
+static gint test_good_move_only_terminal_score(gconstpointer position, GameBackendOutcome outcome, guint ply_depth) {
+  g_return_val_if_fail(position != NULL, 0);
+
   return outcome == GAME_BACKEND_OUTCOME_SIDE_0_WIN ? 3000 - (gint) ply_depth : 0;
 }
 

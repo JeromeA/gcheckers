@@ -1031,6 +1031,7 @@ gboolean boop_position_apply_move(BoopPosition *position, const BoopMove *move) 
   if (!boop_position_apply_promotion_mask(&after_placement, side, move->promotion_mask, NULL)) {
     return FALSE;
   }
+  after_placement.ply_count = position->ply_count + 1;
   if (boop_position_has_cat_line(&after_placement, side) || after_placement.promoted_count[side] >= BOOP_SUPPLY_COUNT) {
     after_placement.outcome = side == 0 ? GAME_BACKEND_OUTCOME_SIDE_0_WIN : GAME_BACKEND_OUTCOME_SIDE_1_WIN;
   } else {
@@ -1076,8 +1077,10 @@ gint boop_position_evaluate_static(const BoopPosition *position) {
   return score;
 }
 
-gint boop_position_terminal_score(GameBackendOutcome outcome, guint ply_depth) {
-  gint win_score = 10000 - (gint)ply_depth;
+gint boop_position_terminal_score(const BoopPosition *position, GameBackendOutcome outcome) {
+  g_return_val_if_fail(position != NULL, 0);
+
+  gint win_score = 10000 - (gint)position->ply_count;
 
   switch (outcome) {
     case GAME_BACKEND_OUTCOME_SIDE_0_WIN:
@@ -1116,6 +1119,8 @@ guint64 boop_position_hash(const BoopPosition *position) {
   hash ^= position->turn + 61u;
   hash *= G_GUINT64_CONSTANT(1099511628211);
   hash ^= position->outcome + 67u;
+  hash *= G_GUINT64_CONSTANT(1099511628211);
+  hash ^= position->ply_count + 71u;
   return hash;
 }
 

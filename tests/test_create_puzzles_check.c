@@ -1,4 +1,4 @@
-#include "../src/active_game_backend.h"
+#include "../src/games/checkers/checkers_backend.h"
 #include "../src/games/checkers/game.h"
 #include "../src/games/checkers/rulesets.h"
 #include "../src/sgf_io.h"
@@ -253,7 +253,7 @@ static gboolean test_create_puzzles_check_write_invalid_single_move_puzzle(const
   g_autoptr(SgfTree) puzzle_tree = sgf_tree_new();
   SgfNode *root = (SgfNode *)sgf_tree_get_root(puzzle_tree);
   g_assert_nonnull(root);
-  const GameBackendVariant *variant = GGAME_ACTIVE_GAME_BACKEND->variant_by_short_name("international");
+  const GameBackendVariant *variant = checkers_game_backend.variant_by_short_name("international");
   g_assert_nonnull(variant);
   g_assert_true(sgf_io_tree_set_variant(puzzle_tree, variant));
   g_assert_true(test_create_puzzles_check_add_setup_properties(root, &state));
@@ -274,6 +274,10 @@ static gboolean test_create_puzzles_check_write_invalid_single_move_puzzle(const
 }
 
 static void test_create_puzzles_check_mode_dry_run_and_delete(void) {
+  if (!ggame_test_require_profile_kind(GGAME_APP_KIND_CHECKERS)) {
+    return;
+  }
+
   g_autoptr(GError) error = NULL;
   g_autofree char *dir_path = g_dir_make_tmp("gcheckers-check-puzzles-XXXXXX", &error);
   g_assert_no_error(error);
@@ -359,6 +363,10 @@ static void test_create_puzzles_check_mode_dry_run_and_delete(void) {
 }
 
 static void test_create_puzzles_check_mode_rejects_missing_ru(void) {
+  if (!ggame_test_require_profile_kind(GGAME_APP_KIND_CHECKERS)) {
+    return;
+  }
+
   g_autoptr(GError) error = NULL;
   g_autofree char *dir_path = g_dir_make_tmp("gcheckers-check-puzzles-missing-ru-XXXXXX", &error);
   g_assert_no_error(error);

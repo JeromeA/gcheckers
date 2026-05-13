@@ -147,7 +147,9 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(const Homeworlds
   return TRUE;
 }
 
-static GameBackendMoveList homeworlds_backend_list_good_moves(gconstpointer position, guint max_count, guint /*depth_hint*/) {
+static GameBackendMoveList homeworlds_backend_list_good_moves(gconstpointer position,
+                                                              guint max_count,
+                                                              guint /*depth_hint*/) {
   GameBackendMoveBuilder builder = {0};
   HomeworldsMove *moves = NULL;
   gsize count = 0;
@@ -192,7 +194,9 @@ static gint homeworlds_backend_evaluate_static(gconstpointer position) {
   return homeworlds_position_evaluate_static(homeworlds_position);
 }
 
-static gint homeworlds_backend_terminal_score(GameBackendOutcome outcome, guint ply_depth) {
+static gint homeworlds_backend_terminal_score(gconstpointer position, GameBackendOutcome outcome, guint ply_depth) {
+  g_return_val_if_fail(position != NULL, 0);
+
   return homeworlds_position_terminal_score(outcome, ply_depth);
 }
 
@@ -238,7 +242,8 @@ const GameBackend homeworlds_game_backend = {
       homeworlds_move_builder_list_candidates,
   .move_builder_step = (gboolean (*)(GameBackendMoveBuilder *, gconstpointer)) homeworlds_move_builder_step,
   .move_builder_is_complete = (gboolean (*)(const GameBackendMoveBuilder *)) homeworlds_move_builder_is_complete,
-  .move_builder_build_move = (gboolean (*)(const GameBackendMoveBuilder *, gpointer)) homeworlds_move_builder_build_move,
+  .move_builder_build_move = (gboolean (*)(const GameBackendMoveBuilder *, gpointer))
+      homeworlds_move_builder_build_move,
   .apply_move = homeworlds_backend_apply_move,
   .evaluate_static = homeworlds_backend_evaluate_static,
   .terminal_score = homeworlds_backend_terminal_score,

@@ -420,7 +420,7 @@ static gboolean boop_puzzle_validate_position(const BoopPosition *position,
   gint final_static = boop_position_evaluate_static(&final_position);
   GameBackendOutcome outcome = boop_position_outcome(&final_position);
   if (outcome != GAME_BACKEND_OUTCOME_ONGOING) {
-    final_static = boop_position_terminal_score(outcome, 1);
+    final_static = boop_position_terminal_score(&final_position, outcome);
   }
 
   out_candidate->line = line;

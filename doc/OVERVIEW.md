@@ -147,7 +147,7 @@ under SGF current, set SGF current, then project that transition back into the m
 otherwise reset+replay from root).
 Replay now delegates node-setup handling to optional backend SGF hooks before replaying any `B[...]`/`W[...]` move on
 that node. Checkers uses that hook for `AE`/`AB`/`AW` plus `ABK`/`AWK` king markers and `PL`, while boop uses it for
-custom root snapshot properties that restore on-board kittens/cats, per-side supplies, and `PL`. Root
+custom root snapshot properties that restore on-board kittens/cats, per-side supplies, total ply count, and `PL`. Root
 `RU[<ruleset-short-name>]` is still read on load to switch the legacy checkers model to the matching ruleset before
 replay, and SGF loads now fail if `RU` is missing or unknown instead of falling back to the current model rules.
 `RU` is stamped back onto fresh trees and saved SGFs when the active backend has variants; zero-variant backends such
@@ -214,12 +214,12 @@ prefixed with the active game ID, for example `checkers/international/puzzle-000
 Module: `boop_create_puzzles_main()`.
 Role: profile-specific puzzle policy for `build/tools/boop_create_puzzles`. The CLI accepts `--depth`, `--save-games`,
 `--check-existing`, and `--dry-run`; it rejects checkers-only `--ruleset` values because boop has no variants. It
-writes generated puzzles under `puzzles/boop/`, using boop backend SGF root snapshots for board pieces, supplies, and
-side to move, and writes solution moves with the shared SGF move notation helpers. Candidate validation uses the
-generic backend AI search API against `boop_game_backend` and keeps positions with a clear unique best move. Count-mode
-and SGF-file analysis use the shared create-puzzles runner for depth-0 source-game generation, main-line replay, and
-terminal progress. The check-existing path reloads each SGF, validates the saved line against current search, and
-deletes or dry-runs invalid puzzle/game file pairs.
+writes generated puzzles under `puzzles/boop/`, using boop backend SGF root snapshots for board pieces, supplies, total
+ply count, and side to move, and writes solution moves with the shared SGF move notation helpers. Candidate validation
+uses the generic backend AI search API against `boop_game_backend` and keeps positions with a clear unique best move.
+Count-mode and SGF-file analysis use the shared create-puzzles runner for depth-0 source-game generation, main-line
+replay, and terminal progress. The check-existing path reloads each SGF and validates the saved line against current
+search, then deletes or dry-runs invalid puzzle/game file pairs.
 Collaborates with: `src/create_puzzles_runner.c`, `src/ai_search.c`, `src/puzzle_catalog.c`,
 `src/create_puzzles_progress.c`, `src/sgf_io.c`, `src/sgf_move_props.c`, and boop's `boop_sgf_position.c`.
 
@@ -531,10 +531,10 @@ The backend exposes full move lists for validation/search, a staged square-grid 
 promotion selection, deterministic notation such as `K@a1+a1,b1,c1`, symbol-only board pieces, static evaluation,
 terminal scores, and position hashing. Boop static evaluation scores promoted kittens plus on-board material derived
 from remaining kitten/cat supplies, then applies a small malus to the side that just moved to smooth turn-to-turn
-material spikes. Wins are handled by terminal scoring at 10000 minus ply depth. When both kittens and cats are
-available, the placement builder exposes both ranks for each empty square and leaves the active rank choice to the UI
-candidate-preference hook. The all-pieces-on-board graduation rule uses empty kitten and cat supplies instead of
-rescanning board occupancy.
+material spikes. The position tracks total plies played so Boop terminal scoring is a stable property of the position:
+wins score 10000 minus that total ply count. When both kittens and cats are available, the placement builder exposes
+both ranks for each empty square and leaves the active rank choice to the UI candidate-preference hook. The
+all-pieces-on-board graduation rule uses empty kitten and cat supplies instead of rescanning board occupancy.
 Promotion-stage selection paths contain only the promotion squares, so the just-placed piece is highlighted only when
 it is actually one of the candidate promotion squares. The boop engine also exposes last-move overlay metadata so the
 GTK board can circle the placed piece and draw arrows for every booped piece, including off-board boops that return to
@@ -542,8 +542,8 @@ supply.
 `boop_position_normalize()` is the shared validator for arbitrary boop snapshots: it derives promoted-cat counts from
 mask/supply state, restores the cached occupied mask, recomputes terminal outcome, and rejects impossible totals before
 position-only SGF replay publishes a snapshot into the model. `boop_sgf_position.c` uses that helper to encode and
-decode root snapshot
-properties (`GBK`, `GBC`, `GWK`, `GWC`, plus per-side supply counts and `PL`) for boop `Save position...`.
+decode root snapshot properties (`GBK`, `GBC`, `GWK`, `GWC`, plus per-side supply counts, `GPLY`, and `PL`) for boop
+`Save position...`.
 Collaborates with: `src/games/boop/boop_controls.c`, `GGameModel`, `BoardView`, `GGameWindow`, `tests/test_boop_game.c`,
 `tests/test_boop_backend.c`, and the generic backend/model/SGF tests.
 

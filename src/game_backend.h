@@ -84,7 +84,7 @@ typedef struct {
   gboolean (*move_builder_reset_selection)(GameBackendMoveBuilder *builder);
   gboolean (*apply_move)(gpointer position, gconstpointer move);
   gint (*evaluate_static)(gconstpointer position);
-  gint (*terminal_score)(GameBackendOutcome outcome, guint ply_depth);
+  gint (*terminal_score)(gconstpointer position, GameBackendOutcome outcome, guint ply_depth);
   guint64 (*hash_position)(gconstpointer position);
   gboolean (*format_move)(gconstpointer move, char *buffer, gsize size);
   gboolean (*parse_move)(const char *notation, gpointer out_move);

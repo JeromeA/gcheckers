@@ -69,6 +69,7 @@ typedef struct {
   guint8 promoted_count[2];
   guint8 turn;
   guint8 outcome;
+  guint ply_count;
 } BoopPosition;
 
 typedef struct {

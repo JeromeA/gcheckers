@@ -328,3 +328,16 @@ appear in analysis output as a different ranked square.
 The fix makes the square-grid backend contract side-0 bottom-origin, updates the generic grid and overlay transforms to
 display row 0 at the bottom for side 0, and adapts checkers at its backend boundary to keep its existing internal
 top-origin board storage.
+
+## Boop terminal scores depended on search path depth instead of game state
+
+Winning Boop positions should evaluate from the actual game history, so the same terminal position has the same score
+whenever it appears in search or replay.
+
+Boop reused the generic `terminal_score(outcome, ply_depth)` callback and returned `10000 - ply_depth`. That `ply_depth`
+was the recursive search distance from the current root, not a value stored in the position. The same terminal position
+could therefore score differently depending on how the search reached it, and a transposition-table entry could carry a
+path-specific distance adjustment.
+
+The fix stores a total ply count in `BoopPosition`, increments it on each applied move, serializes it in Boop SGF
+snapshots, includes it in the position hash, and makes Boop terminal scores use `10000 - position->ply_count`.
