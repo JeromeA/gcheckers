@@ -461,7 +461,6 @@ static gboolean boop_position_apply_boop_effects(BoopPosition *position,
 
   for (guint ray_index = 0; ray_index < BOOP_RAY_COUNT; ++ray_index) {
     guint adjacent_square = boop_ray_adjacent[placed_square][ray_index];
-    guint destination_square = boop_ray_destination[placed_square][ray_index];
     if (adjacent_square == BOOP_SQUARE_INVALID) {
       continue;
     }
@@ -474,6 +473,7 @@ static gboolean boop_position_apply_boop_effects(BoopPosition *position,
       continue;
     }
 
+    guint destination_square = boop_ray_destination[placed_square][ray_index];
     if (destination_square == BOOP_SQUARE_INVALID) {
       position->board[adjacent_square] = BOOP_PIECE_EMPTY;
       boop_return_piece_to_supply(position, target);
