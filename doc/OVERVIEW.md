@@ -516,7 +516,8 @@ and side/rank extraction live with it in `boop_types.h`.
 The engine applies simultaneous one-square boops from the newly placed piece, returns booped-off pieces to the owner
 supply, resolves mandatory line promotions, supports optional one-kitten graduation when all eight pieces are on board,
 offers both line-promotion and single-kitten graduation choices when both rules apply, and awards the active player an
-end-of-turn win for three cats in a row or all eight kittens promoted.
+end-of-turn win for three cats in a row or all eight kittens promoted. Cat-line wins are checked before line-promotion
+collection, so promotion collection can treat every same-side three-in-a-row as promotable.
 The hot rules paths use fixed 6x6 square-index geometry tables: 26 maximal lines for three-in-a-row windows, eight
 precomputed boop rays per square, and a square-indexed center-bonus table. Row/column conversion remains at UI,
 notation, and SGF boundaries, but move generation, line detection, boop effects, and static scoring do not probe

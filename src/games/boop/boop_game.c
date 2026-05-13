@@ -275,7 +275,6 @@ static gboolean boop_position_collect_line_promotion_choices(const BoopPosition 
     for (guint start = 0; start + BOOP_LINE_LENGTH <= line->length; ++start) {
       guint64 mask = 0;
       gboolean all_side = TRUE;
-      gboolean has_kitten = FALSE;
 
       for (guint offset = 0; offset < BOOP_LINE_LENGTH; ++offset) {
         guint square = line->squares[start + offset];
@@ -285,13 +284,10 @@ static gboolean boop_position_collect_line_promotion_choices(const BoopPosition 
           break;
         }
 
-        if (boop_piece_rank(piece) == BOOP_PIECE_RANK_KITTEN) {
-          has_kitten = TRUE;
-        }
         mask |= boop_square_mask(square);
       }
 
-      if (all_side && has_kitten && !boop_position_add_mask(choices->masks, &choices->count, mask)) {
+      if (all_side && !boop_position_add_mask(choices->masks, &choices->count, mask)) {
         return FALSE;
       }
     }
