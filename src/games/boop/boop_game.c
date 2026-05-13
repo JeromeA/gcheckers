@@ -309,6 +309,17 @@ static gboolean boop_position_has_cat_line(const BoopPosition *position, guint s
     const BoopLine *line = &boop_lines[line_index];
     guint consecutive_cats = 0;
 
+    if (position->board[line->squares[BOOP_LINE_LENGTH - 1]] != cat) {
+      if (line->length == BOOP_BOARD_SIZE &&
+          position->board[line->squares[3]] == cat &&
+          position->board[line->squares[4]] == cat &&
+          position->board[line->squares[5]] == cat) {
+        return TRUE;
+      }
+
+      continue;
+    }
+
     for (guint offset = 0; offset < line->length; ++offset) {
       guint remaining = line->length - offset;
       if (consecutive_cats + remaining < BOOP_LINE_LENGTH) {
