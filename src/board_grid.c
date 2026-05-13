@@ -19,10 +19,10 @@ static void board_grid_transform_for_bottom_side(guint *row, guint *col, guint r
   g_return_if_fail(col != NULL);
 
   if (bottom_side == 0) {
+    *row = rows - 1 - *row;
     return;
   }
 
-  *row = rows - 1 - *row;
   *col = cols - 1 - *col;
 }
 

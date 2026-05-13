@@ -91,6 +91,7 @@ typedef struct {
   gboolean (*sgf_apply_setup_node)(gpointer position, const SgfNode *node, GError **error);
   gboolean (*sgf_write_position_node)(gconstpointer position, SgfNode *node, GError **error);
   gboolean supports_square_grid_board;
+  /* Square-grid rows are from side 0's perspective: row 0 is the bottom row when side 0 is at the bottom. */
   guint (*square_grid_rows)(gconstpointer position);
   guint (*square_grid_cols)(gconstpointer position);
   gboolean (*square_grid_square_playable)(gconstpointer position, guint row, guint col);

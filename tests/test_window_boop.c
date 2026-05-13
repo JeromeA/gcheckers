@@ -131,6 +131,30 @@ static void test_ggame_window_assert_coordinate_label(GtkWidget *root,
   g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(label)), ==, expected_text);
 }
 
+static void test_ggame_window_assert_board_index_position(GtkWidget *root,
+                                                          guint index,
+                                                          int expected_column,
+                                                          int expected_row) {
+  GtkWidget *button = NULL;
+  GtkWidget *parent = NULL;
+  int column = 0;
+  int row = 0;
+  int width = 0;
+  int height = 0;
+
+  g_return_if_fail(GTK_IS_WIDGET(root));
+
+  button = test_ggame_window_find_widget_with_uint_data(root, "board-index", index + 1);
+  g_assert_nonnull(button);
+  parent = gtk_widget_get_parent(button);
+  g_assert_true(GTK_IS_GRID(parent));
+  gtk_grid_query_child(GTK_GRID(parent), button, &column, &row, &width, &height);
+  g_assert_cmpint(column, ==, expected_column);
+  g_assert_cmpint(row, ==, expected_row);
+  g_assert_cmpint(width, ==, 1);
+  g_assert_cmpint(height, ==, 1);
+}
+
 static GtkDropDown *test_ggame_window_find_mode_dropdown(GtkWidget *root) {
   g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
 
@@ -429,6 +453,8 @@ static void test_ggame_window_boop_board_uses_edge_coordinates(void) {
   test_ggame_window_drain_main_context(24);
 
   g_assert_null(test_ggame_window_find_label_with_text(GTK_WIDGET(window), "36"));
+  test_ggame_window_assert_board_index_position(GTK_WIDGET(window), 0, 0, 5);
+  test_ggame_window_assert_board_index_position(GTK_WIDGET(window), 15, 3, 3);
   for (guint i = 0; i < BOOP_BOARD_SIZE; ++i) {
     test_ggame_window_assert_coordinate_label(GTK_WIDGET(window),
                                               "boop-coordinate-column",
@@ -444,6 +470,8 @@ static void test_ggame_window_boop_board_uses_edge_coordinates(void) {
   ggame_window_set_board_bottom_color(window, CHECKERS_COLOR_BLACK);
   test_ggame_window_drain_main_context(16);
 
+  test_ggame_window_assert_board_index_position(GTK_WIDGET(window), 0, 5, 0);
+  test_ggame_window_assert_board_index_position(GTK_WIDGET(window), 15, 2, 2);
   for (guint i = 0; i < BOOP_BOARD_SIZE; ++i) {
     test_ggame_window_assert_coordinate_label(GTK_WIDGET(window),
                                               "boop-coordinate-column",

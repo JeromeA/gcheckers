@@ -513,16 +513,36 @@ static guint checkers_backend_square_grid_cols(gconstpointer position) {
   return checkers_backend_square_grid_rows(position);
 }
 
-static gboolean checkers_backend_square_grid_square_playable(gconstpointer position, guint row, guint col) {
-  g_return_val_if_fail(position != NULL, FALSE);
+static gboolean checkers_backend_square_grid_to_board_coord(const Game *game,
+                                                            guint row,
+                                                            guint col,
+                                                            int *out_row,
+                                                            int *out_col) {
+  g_return_val_if_fail(game != NULL, FALSE);
+  g_return_val_if_fail(out_row != NULL, FALSE);
+  g_return_val_if_fail(out_col != NULL, FALSE);
 
-  const Game *game = position;
   guint board_size = game->state.board.board_size;
   if (row >= board_size || col >= board_size) {
     return FALSE;
   }
 
-  return ((row + col) % 2) != 0;
+  *out_row = (int)board_size - 1 - (int)row;
+  *out_col = (int)col;
+  return TRUE;
+}
+
+static gboolean checkers_backend_square_grid_square_playable(gconstpointer position, guint row, guint col) {
+  g_return_val_if_fail(position != NULL, FALSE);
+
+  const Game *game = position;
+  int board_row = 0;
+  int board_col = 0;
+  if (!checkers_backend_square_grid_to_board_coord(game, row, col, &board_row, &board_col)) {
+    return FALSE;
+  }
+
+  return ((board_row + board_col) % 2) != 0;
 }
 
 static gboolean checkers_backend_square_grid_square_index(gconstpointer position,
@@ -533,7 +553,13 @@ static gboolean checkers_backend_square_grid_square_index(gconstpointer position
   g_return_val_if_fail(out_index != NULL, FALSE);
 
   const Game *game = position;
-  int8_t index = board_index_from_coord((int) row, (int) col, game->state.board.board_size);
+  int board_row = 0;
+  int board_col = 0;
+  if (!checkers_backend_square_grid_to_board_coord(game, row, col, &board_row, &board_col)) {
+    return FALSE;
+  }
+
+  int8_t index = board_index_from_coord(board_row, board_col, game->state.board.board_size);
   if (index < 0) {
     return FALSE;
   }
@@ -559,7 +585,7 @@ static gboolean checkers_backend_square_grid_index_coord(gconstpointer position,
   int row = 0;
   int col = 0;
   board_coord_from_index((guint8) index, &row, &col, game->state.board.board_size);
-  *out_row = (guint) row;
+  *out_row = game->state.board.board_size - 1 - (guint)row;
   *out_col = (guint) col;
   return TRUE;
 }

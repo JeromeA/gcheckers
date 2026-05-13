@@ -336,6 +336,58 @@ static void test_backend_move_path_length_only_query(void) {
   g_free(position);
 }
 
+static void test_backend_square_grid_row_zero_is_side_zero_bottom(void) {
+  const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
+  guint index = 0;
+  guint row = 0;
+  guint col = 0;
+
+  assert(backend != NULL);
+  if (!backend->supports_square_grid_board) {
+    return;
+  }
+
+  gpointer position = g_malloc0(backend->position_size);
+  assert(position != NULL);
+
+  const GameBackendVariant *variant = NULL;
+  if (ggame_active_app_profile()->kind == GGAME_APP_KIND_CHECKERS) {
+    variant = backend->variant_by_short_name("american");
+    assert(variant != NULL);
+  }
+
+  backend->position_init(position, variant);
+
+  switch (ggame_active_app_profile()->kind) {
+    case GGAME_APP_KIND_CHECKERS:
+      assert(backend->square_grid_square_index(position, 0, 0, &index));
+      assert(index == 28);
+      assert(backend->square_grid_index_coord(position, index, &row, &col));
+      assert(row == 0);
+      assert(col == 0);
+
+      assert(backend->square_grid_square_index(position, 7, 1, &index));
+      assert(index == 0);
+      assert(backend->square_grid_index_coord(position, index, &row, &col));
+      assert(row == 7);
+      assert(col == 1);
+      break;
+    case GGAME_APP_KIND_BOOP:
+      assert(backend->square_grid_square_index(position, 0, 0, &index));
+      assert(index == 0);
+      assert(backend->square_grid_index_coord(position, index, &row, &col));
+      assert(row == 0);
+      assert(col == 0);
+      break;
+    case GGAME_APP_KIND_HOMEWORLDS:
+    default:
+      break;
+  }
+
+  backend->position_clear(position);
+  g_free(position);
+}
+
 typedef struct {
   GGameModel *model;
 } TestBackendSelectionData;
@@ -797,6 +849,7 @@ int main(int argc, char **argv) {
   test_backend_metadata();
   test_backend_position_and_move_flow();
   test_backend_move_path_length_only_query();
+  test_backend_square_grid_row_zero_is_side_zero_bottom();
   test_backend_selection_controller_restarts_from_non_continuation_click();
   test_backend_selection_controller_prefers_boop_rank();
   test_backend_selection_controller_confirms_boop_promotion();

@@ -44,10 +44,10 @@ static void board_move_overlay_transform_point_for_bottom_side(double *row,
   g_return_if_fail(col != NULL);
 
   if (bottom_side == 0) {
+    *row = ((double)rows - 1.0) - *row;
     return;
   }
 
-  *row = ((double)rows - 1.0) - *row;
   *col = ((double)cols - 1.0) - *col;
 }
 

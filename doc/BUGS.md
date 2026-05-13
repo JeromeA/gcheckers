@@ -315,3 +315,16 @@ way to report that it could not satisfy the requested count.
 The fix makes checkers use the shared create-puzzles source-game attempt limit that boop already needed. Count-mode
 generation now stops after a bounded number of source games, prints the normal rejection report, and exits with an
 explicit "Only generated..." error when it cannot produce the requested number of puzzles.
+
+## Boop analysis notation used top-origin ranks while the board showed bottom-origin ranks
+
+Boop coordinates should use `a1` at the bottom-left corner, and every user-facing move formatter should agree with the
+board labels.
+
+The shared square-grid display treated backend row 0 as the top row for side 0, while Boop notation formatted internal
+row 0 as rank 1. The Boop coordinate labels were already bottom-origin, so a user move shown on the board as `d3` could
+appear in analysis output as a different ranked square.
+
+The fix makes the square-grid backend contract side-0 bottom-origin, updates the generic grid and overlay transforms to
+display row 0 at the bottom for side 0, and adapts checkers at its backend boundary to keep its existing internal
+top-origin board storage.

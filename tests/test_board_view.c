@@ -95,7 +95,7 @@ static void test_board_move_overlay_removed_markers_paint_above_off_board_arrows
   guint8 green = 0;
   guint8 blue = 0;
   guint8 alpha = 0;
-  test_board_view_surface_read_pixel(surface, 10, 10, &red, &green, &blue, &alpha);
+  test_board_view_surface_read_pixel(surface, 10, 110, &red, &green, &blue, &alpha);
   g_assert_cmpuint(alpha, >, 0);
   g_assert_cmpuint(red, >, green);
   g_assert_cmpuint(red, >, blue);

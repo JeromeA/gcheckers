@@ -625,8 +625,9 @@ committed model position; boop uses this to show the post-boop board state durin
 Primary-click input is routed through each square button's `clicked` signal, and right-click input uses a dedicated
 secondary-button `GtkGestureClick`. A button-aware square callback allows window-level edit-mode logic to intercept
 square actions (left/right) before play-mode move-selection handling.
-Board orientation is driven by a generic two-side bottom-index property; the grid and last-move overlay both mirror
-rows/columns when the bottom side is side 1 so rotated boards keep pieces and arrows aligned. Hosts can also register a
+Board orientation is driven by a generic two-side bottom-index property. Square-grid backend coordinates are defined
+from side 0's perspective with row 0 at the bottom; the grid and last-move overlay flip rows for side 0 at the bottom
+and flip columns for side 1 at the bottom so rotated boards keep pieces and arrows aligned. Hosts can also register a
 small bottom-side-changed callback when they need orientation-aware chrome such as boop's border-mounted coordinates.
 Collaborates with: selection, overlays, and square/grid helpers.
 
