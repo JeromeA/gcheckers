@@ -511,8 +511,9 @@ Module: boop position, move, rules, builder, and backend adapter.
 Role: implement the 6x6 boop rules from `src/games/boop/RULES.md`. Positions store board cells, side to move,
 per-side kitten/cat supplies, promoted-kitten counts, and terminal outcome. Moves store placement square, placed rank,
 and an optional promotion/graduation mask so fully resolved turns can be serialized and replayed. `BoopPiece` is a
-single-byte encoded value for empty, side-0 kitten/cat, and side-1 kitten/cat; helpers for construction, validation,
-and side/rank extraction live with it in `boop_types.h`.
+single-byte encoded value with side-0 kitten/cat and side-1 kitten/cat packed before the empty value; helpers for
+construction, validation, and rank extraction live with it in `boop_types.h`. The unchecked `boop_piece_side()` macro
+maps empty to extracted side `2`, so side comparisons can ignore emptiness.
 The engine applies simultaneous one-square boops from the newly placed piece, returns booped-off pieces to the owner
 supply, resolves mandatory line promotions, supports optional one-kitten graduation when all eight pieces are on board,
 offers both line-promotion and single-kitten graduation choices when both rules apply, and awards the active player an

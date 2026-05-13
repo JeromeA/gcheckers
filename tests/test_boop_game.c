@@ -55,12 +55,16 @@ static void setup_piece(BoopPosition *position, guint side, guint rank, guint ro
 
 static void test_piece_encoding_is_byte_sized(void) {
   assert(sizeof(BoopPiece) == 1);
+  assert(BOOP_PIECE_EMPTY == 4);
   assert(boop_piece_make(0, BOOP_PIECE_RANK_KITTEN) == BOOP_PIECE_SIDE_0_KITTEN);
   assert(boop_piece_make(0, BOOP_PIECE_RANK_CAT) == BOOP_PIECE_SIDE_0_CAT);
   assert(boop_piece_make(1, BOOP_PIECE_RANK_KITTEN) == BOOP_PIECE_SIDE_1_KITTEN);
   assert(boop_piece_make(1, BOOP_PIECE_RANK_CAT) == BOOP_PIECE_SIDE_1_CAT);
+  assert(boop_piece_make(0, BOOP_PIECE_RANK_NONE) == BOOP_PIECE_EMPTY);
   assert(boop_piece_side(BOOP_PIECE_SIDE_1_CAT) == 1);
+  assert(boop_piece_side(BOOP_PIECE_EMPTY) == 2);
   assert(boop_piece_rank(BOOP_PIECE_SIDE_1_CAT) == BOOP_PIECE_RANK_CAT);
+  assert(boop_piece_rank(BOOP_PIECE_EMPTY) == BOOP_PIECE_RANK_NONE);
 }
 
 typedef struct {

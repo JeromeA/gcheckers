@@ -198,7 +198,7 @@ gboolean boop_sgf_position_apply_setup_node(gpointer position, const SgfNode *no
 
   if (any_snapshot_prop) {
     boop_position_init(boop_position);
-    memset(boop_position->board, 0, sizeof(boop_position->board));
+    memset(boop_position->board, BOOP_PIECE_EMPTY, sizeof(boop_position->board));
 
     for (guint i = 0; i < G_N_ELEMENTS(boop_sgf_board_props); ++i) {
       if (!boop_sgf_position_apply_board_values(boop_position,

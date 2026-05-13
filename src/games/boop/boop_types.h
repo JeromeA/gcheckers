@@ -21,16 +21,18 @@ typedef enum {
 typedef guint8 BoopPiece;
 
 typedef enum {
-  BOOP_PIECE_EMPTY = 0,
-  BOOP_PIECE_SIDE_0_KITTEN = 1,
-  BOOP_PIECE_SIDE_0_CAT = 2,
-  BOOP_PIECE_SIDE_1_KITTEN = 3,
-  BOOP_PIECE_SIDE_1_CAT = 4,
+  BOOP_PIECE_SIDE_0_KITTEN = 0,
+  BOOP_PIECE_SIDE_0_CAT = 1,
+  BOOP_PIECE_SIDE_1_KITTEN = 2,
+  BOOP_PIECE_SIDE_1_CAT = 3,
+  BOOP_PIECE_EMPTY = 4,
 } BoopPieceValue;
 
 static inline gboolean boop_piece_valid(BoopPiece piece) {
-  return piece <= BOOP_PIECE_SIDE_1_CAT;
+  return piece <= BOOP_PIECE_EMPTY;
 }
+
+#define boop_piece_side(piece) ((guint)(piece) / 2u)
 
 static inline BoopPiece boop_piece_make(guint side, guint rank) {
   if (rank == BOOP_PIECE_RANK_NONE) {
@@ -40,7 +42,7 @@ static inline BoopPiece boop_piece_make(guint side, guint rank) {
   g_return_val_if_fail(side < 2, BOOP_PIECE_EMPTY);
   g_return_val_if_fail(rank == BOOP_PIECE_RANK_KITTEN || rank == BOOP_PIECE_RANK_CAT, BOOP_PIECE_EMPTY);
 
-  return (BoopPiece)(1 + (side * 2) + (rank - 1));
+  return (BoopPiece)((side * 2) + (rank - 1));
 }
 
 static inline guint boop_piece_rank(BoopPiece piece) {
@@ -50,14 +52,7 @@ static inline guint boop_piece_rank(BoopPiece piece) {
     return BOOP_PIECE_RANK_NONE;
   }
 
-  return ((piece - 1) % 2) + 1;
-}
-
-static inline guint boop_piece_side(BoopPiece piece) {
-  g_return_val_if_fail(boop_piece_valid(piece), 0);
-  g_return_val_if_fail(piece != BOOP_PIECE_EMPTY, 0);
-
-  return (piece - 1) / 2;
+  return (piece % 2) + 1;
 }
 
 typedef struct {

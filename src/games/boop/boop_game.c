@@ -229,7 +229,7 @@ static guint boop_position_count_on_board(const BoopPosition *position, guint si
 
   for (guint square = 0; square < BOOP_SQUARE_COUNT; ++square) {
     BoopPiece piece = position->board[square];
-    if (piece != BOOP_PIECE_EMPTY && boop_piece_side(piece) == side) {
+    if (boop_piece_side(piece) == side) {
       count++;
     }
   }
@@ -279,7 +279,7 @@ static gboolean boop_position_collect_line_promotion_choices(const BoopPosition 
       for (guint offset = 0; offset < BOOP_LINE_LENGTH; ++offset) {
         guint square = line->squares[start + offset];
         BoopPiece piece = position->board[square];
-        if (piece == BOOP_PIECE_EMPTY || boop_piece_side(piece) != side) {
+        if (boop_piece_side(piece) != side) {
           all_side = FALSE;
           break;
         }
@@ -559,7 +559,7 @@ static gboolean boop_position_apply_promotion_mask(BoopPosition *position,
     }
 
     BoopPiece piece = position->board[square];
-    if (piece == BOOP_PIECE_EMPTY || boop_piece_side(piece) != side) {
+    if (boop_piece_side(piece) != side) {
       g_debug("Ignoring invalid boop promotion square %u", square);
       continue;
     }
@@ -800,6 +800,7 @@ void boop_position_init(BoopPosition *position) {
   g_return_if_fail(position != NULL);
 
   memset(position, 0, sizeof(*position));
+  memset(position->board, BOOP_PIECE_EMPTY, sizeof(position->board));
   position->kittens_in_supply[0] = BOOP_SUPPLY_COUNT;
   position->kittens_in_supply[1] = BOOP_SUPPLY_COUNT;
   position->turn = 0;
@@ -810,6 +811,7 @@ void boop_position_clear(BoopPosition *position) {
   g_return_if_fail(position != NULL);
 
   memset(position, 0, sizeof(*position));
+  memset(position->board, BOOP_PIECE_EMPTY, sizeof(position->board));
 }
 
 void boop_position_copy(BoopPosition *dest, const BoopPosition *src) {
@@ -1057,7 +1059,7 @@ gint boop_position_evaluate_static(const BoopPosition *position) {
     gint side_score = (gint)position->promoted_count[side] * 300;
     for (guint square = 0; square < BOOP_SQUARE_COUNT; ++square) {
       BoopPiece piece = position->board[square];
-      if (piece == BOOP_PIECE_EMPTY || boop_piece_side(piece) != side) {
+      if (boop_piece_side(piece) != side) {
         continue;
       }
 
