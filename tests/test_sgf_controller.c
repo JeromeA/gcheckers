@@ -773,10 +773,14 @@ static void test_ggame_sgf_controller_init_custom_boop_position(BoopPosition *po
   g_assert_true(boop_coord_to_square(5, 5, &side_1_kitten_square));
   g_assert_true(boop_coord_to_square(3, 1, &side_1_cat_square));
 
-  position->board[side_0_kitten_square] = boop_piece_make(0, BOOP_PIECE_RANK_KITTEN);
-  position->board[side_0_cat_square] = boop_piece_make(0, BOOP_PIECE_RANK_CAT);
-  position->board[side_1_kitten_square] = boop_piece_make(1, BOOP_PIECE_RANK_KITTEN);
-  position->board[side_1_cat_square] = boop_piece_make(1, BOOP_PIECE_RANK_CAT);
+  g_assert_true(boop_position_set_piece(position,
+                                        side_0_kitten_square,
+                                        boop_piece_make(0, BOOP_PIECE_RANK_KITTEN)));
+  g_assert_true(boop_position_set_piece(position, side_0_cat_square, boop_piece_make(0, BOOP_PIECE_RANK_CAT)));
+  g_assert_true(boop_position_set_piece(position,
+                                        side_1_kitten_square,
+                                        boop_piece_make(1, BOOP_PIECE_RANK_KITTEN)));
+  g_assert_true(boop_position_set_piece(position, side_1_cat_square, boop_piece_make(1, BOOP_PIECE_RANK_CAT)));
   position->kittens_in_supply[0] = 5;
   position->cats_in_supply[0] = 1;
   position->kittens_in_supply[1] = 5;
@@ -1169,8 +1173,9 @@ static void test_ggame_sgf_controller_boop_load_file_without_ru(void) {
   const BoopPosition *position = ggame_model_peek_position(model);
   g_assert_nonnull(position);
   g_assert_cmpuint(position->turn, ==, 1);
-  g_assert_cmpuint(boop_piece_rank(position->board[0]), ==, BOOP_PIECE_RANK_KITTEN);
-  g_assert_cmpuint(boop_piece_side(position->board[0]), ==, 0);
+  BoopPiece piece = boop_position_get_piece(position, 0);
+  g_assert_cmpuint(boop_piece_rank(piece), ==, BOOP_PIECE_RANK_KITTEN);
+  g_assert_cmpuint(boop_piece_side(piece), ==, 0);
 
   g_remove(path);
   g_free(path);

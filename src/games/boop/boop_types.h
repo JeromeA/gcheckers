@@ -7,6 +7,11 @@
 
 #define BOOP_BOARD_SIZE 6
 #define BOOP_SQUARE_COUNT (BOOP_BOARD_SIZE * BOOP_BOARD_SIZE)
+#define BOOP_MASK_ROW_STRIDE 8u
+#define BOOP_BOARD_MASK G_GUINT64_CONSTANT(0x00003f3f3f3f3f3f)
+#define BOOP_SQUARE_BIT(square) ((((guint)(square) / BOOP_BOARD_SIZE) * BOOP_MASK_ROW_STRIDE) + \
+                                 ((guint)(square) % BOOP_BOARD_SIZE))
+#define BOOP_SQUARE_MASK(square) (G_GUINT64_CONSTANT(1) << BOOP_SQUARE_BIT(square))
 #define BOOP_SUPPLY_COUNT 8
 #define BOOP_INVALID_SQUARE 255
 #define BOOP_MOVE_PATH_MAX 8
@@ -56,7 +61,9 @@ static inline guint boop_piece_rank(BoopPiece piece) {
 }
 
 typedef struct {
-  BoopPiece board[BOOP_SQUARE_COUNT];
+  guint64 side_mask[2];
+  guint64 cat_mask[2];
+  guint64 occupied_mask;
   guint8 kittens_in_supply[2];
   guint8 cats_in_supply[2];
   guint8 promoted_count[2];

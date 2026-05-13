@@ -11,17 +11,17 @@ static guint square_at(guint row, guint col) {
 }
 
 static guint64 square_mask(guint row, guint col) {
-  return G_GUINT64_CONSTANT(1) << square_at(row, col);
+  return BOOP_SQUARE_MASK(square_at(row, col));
 }
 
 static void assert_square_empty(const BoopPosition *position, guint row, guint col) {
   assert(position != NULL);
-  assert(position->board[square_at(row, col)] == BOOP_PIECE_EMPTY);
+  assert(boop_position_get_piece(position, square_at(row, col)) == BOOP_PIECE_EMPTY);
 }
 
 static void assert_square_rank(const BoopPosition *position, guint row, guint col, guint rank) {
   assert(position != NULL);
-  assert(boop_piece_rank(position->board[square_at(row, col)]) == rank);
+  assert(boop_piece_rank(boop_position_get_piece(position, square_at(row, col))) == rank);
 }
 
 static gboolean square_at_signed(gint row, gint col, guint *out_square) {
@@ -41,9 +41,9 @@ static void setup_piece(BoopPosition *position, guint side, guint rank, guint ro
   assert(position != NULL);
   assert(side < 2);
   assert(rank == BOOP_PIECE_RANK_KITTEN || rank == BOOP_PIECE_RANK_CAT);
-  assert(position->board[square] == BOOP_PIECE_EMPTY);
+  assert(boop_position_get_piece(position, square) == BOOP_PIECE_EMPTY);
 
-  position->board[square] = boop_piece_make(side, rank);
+  assert(boop_position_set_piece(position, square, boop_piece_make(side, rank)));
   if (rank == BOOP_PIECE_RANK_KITTEN) {
     assert(position->kittens_in_supply[side] > 0);
     position->kittens_in_supply[side]--;
@@ -105,7 +105,7 @@ static void test_line_windows_foreach(void (*callback)(guint a, guint b, guint c
 
 static void test_record_unique_line_window(guint a, guint b, guint c, void *user_data) {
   TestLineWindows *windows = user_data;
-  guint64 mask = (G_GUINT64_CONSTANT(1) << a) | (G_GUINT64_CONSTANT(1) << b) | (G_GUINT64_CONSTANT(1) << c);
+  guint64 mask = BOOP_SQUARE_MASK(a) | BOOP_SQUARE_MASK(b) | BOOP_SQUARE_MASK(c);
 
   assert(windows != NULL);
   assert(windows->count < G_N_ELEMENTS(windows->masks));
@@ -124,9 +124,9 @@ static void test_assert_cat_line_window_detected(guint a, guint b, guint c, void
   assert(count != NULL);
   boop_position_init(&position);
   position.kittens_in_supply[0] = BOOP_SUPPLY_COUNT - 3;
-  position.board[a] = boop_piece_make(0, BOOP_PIECE_RANK_CAT);
-  position.board[b] = boop_piece_make(0, BOOP_PIECE_RANK_CAT);
-  position.board[c] = boop_piece_make(0, BOOP_PIECE_RANK_CAT);
+  assert(boop_position_set_piece(&position, a, boop_piece_make(0, BOOP_PIECE_RANK_CAT)));
+  assert(boop_position_set_piece(&position, b, boop_piece_make(0, BOOP_PIECE_RANK_CAT)));
+  assert(boop_position_set_piece(&position, c, boop_piece_make(0, BOOP_PIECE_RANK_CAT)));
 
   assert(boop_position_normalize(&position, &error));
   assert(error == NULL);
@@ -140,14 +140,13 @@ static void test_assert_line_window_promotion_accepted(guint a, guint b, guint c
   BoopMove move = {
     .square = (guint8)a,
     .rank = BOOP_PIECE_RANK_KITTEN,
-    .promotion_mask = (G_GUINT64_CONSTANT(1) << a) | (G_GUINT64_CONSTANT(1) << b) |
-                      (G_GUINT64_CONSTANT(1) << c),
+    .promotion_mask = BOOP_SQUARE_MASK(a) | BOOP_SQUARE_MASK(b) | BOOP_SQUARE_MASK(c),
   };
 
   assert(count != NULL);
   boop_position_init(&position);
-  position.board[b] = boop_piece_make(0, BOOP_PIECE_RANK_KITTEN);
-  position.board[c] = boop_piece_make(0, BOOP_PIECE_RANK_KITTEN);
+  assert(boop_position_set_piece(&position, b, boop_piece_make(0, BOOP_PIECE_RANK_KITTEN)));
+  assert(boop_position_set_piece(&position, c, boop_piece_make(0, BOOP_PIECE_RANK_KITTEN)));
   position.kittens_in_supply[0] -= 2;
 
   assert(boop_position_apply_move(&position, &move));
@@ -603,7 +602,7 @@ static void test_all_boop_rays_match_square_geometry(void) {
       position.cats_in_supply[0] = 1;
       position.promoted_count[0] = 1;
       if (has_adjacent) {
-        position.board[adjacent_square] = boop_piece_make(1, BOOP_PIECE_RANK_KITTEN);
+        assert(boop_position_set_piece(&position, adjacent_square, boop_piece_make(1, BOOP_PIECE_RANK_KITTEN)));
         position.kittens_in_supply[1]--;
       }
 
@@ -679,8 +678,8 @@ static void test_static_evaluation_scores_cats_like_kittens(void) {
 
   boop_position_init(&kitten_position);
   boop_position_init(&cat_position);
-  kitten_position.board[square] = boop_piece_make(0, BOOP_PIECE_RANK_KITTEN);
-  cat_position.board[square] = boop_piece_make(0, BOOP_PIECE_RANK_CAT);
+  assert(boop_position_set_piece(&kitten_position, square, boop_piece_make(0, BOOP_PIECE_RANK_KITTEN)));
+  assert(boop_position_set_piece(&cat_position, square, boop_piece_make(0, BOOP_PIECE_RANK_CAT)));
 
   assert(boop_position_evaluate_static(&cat_position) == boop_position_evaluate_static(&kitten_position));
 }
@@ -689,9 +688,9 @@ static void test_static_evaluation_does_not_bonus_cat_lines(void) {
   BoopPosition position = {0};
 
   boop_position_init(&position);
-  position.board[square_at(0, 0)] = boop_piece_make(0, BOOP_PIECE_RANK_CAT);
-  position.board[square_at(0, 1)] = boop_piece_make(0, BOOP_PIECE_RANK_CAT);
-  position.board[square_at(0, 2)] = boop_piece_make(0, BOOP_PIECE_RANK_CAT);
+  assert(boop_position_set_piece(&position, square_at(0, 0), boop_piece_make(0, BOOP_PIECE_RANK_CAT)));
+  assert(boop_position_set_piece(&position, square_at(0, 1), boop_piece_make(0, BOOP_PIECE_RANK_CAT)));
+  assert(boop_position_set_piece(&position, square_at(0, 2), boop_piece_make(0, BOOP_PIECE_RANK_CAT)));
 
   assert(boop_position_evaluate_static(&position) == 309);
 }

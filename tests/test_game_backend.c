@@ -5,17 +5,17 @@
 #include "../src/active_game_backend.h"
 #include "../src/board_selection_controller.h"
 #include "../src/game_app_profile.h"
-#include "../src/games/boop/boop_types.h"
+#include "../src/games/boop/boop_game.h"
 #include "test_profile_utils.h"
 
 static void test_assert_boop_square_empty(const BoopPosition *position, guint square) {
   assert(position != NULL);
-  assert(position->board[square] == BOOP_PIECE_EMPTY);
+  assert(boop_position_get_piece(position, square) == BOOP_PIECE_EMPTY);
 }
 
 static void test_assert_boop_square_rank(const BoopPosition *position, guint square, guint rank) {
   assert(position != NULL);
-  assert(boop_piece_rank(position->board[square]) == rank);
+  assert(boop_piece_rank(boop_position_get_piece(position, square)) == rank);
 }
 
 static void test_app_profile_metadata(void) {
@@ -530,7 +530,7 @@ static void test_backend_selection_controller_confirms_boop_promotion(void) {
   position.kittens_in_supply[0] = 1;
   const guint kitten_squares[] = {0, 2, 4, 13, 15, 17, 24};
   for (guint i = 0; i < G_N_ELEMENTS(kitten_squares); ++i) {
-    position.board[kitten_squares[i]] = boop_piece_make(0, BOOP_PIECE_RANK_KITTEN);
+    assert(boop_position_set_piece(&position, kitten_squares[i], boop_piece_make(0, BOOP_PIECE_RANK_KITTEN)));
   }
   assert(ggame_model_set_position(model, &position));
 
@@ -595,8 +595,8 @@ static void test_backend_selection_controller_auto_applies_single_boop_line_prom
   BoopPosition position = {0};
   backend->position_init(&position, NULL);
   position.kittens_in_supply[0] = 6;
-  position.board[0] = boop_piece_make(0, BOOP_PIECE_RANK_KITTEN);
-  position.board[1] = boop_piece_make(0, BOOP_PIECE_RANK_KITTEN);
+  assert(boop_position_set_piece(&position, 0, boop_piece_make(0, BOOP_PIECE_RANK_KITTEN)));
+  assert(boop_position_set_piece(&position, 1, boop_piece_make(0, BOOP_PIECE_RANK_KITTEN)));
   assert(ggame_model_set_position(model, &position));
 
   BoardSelectionController *controller = board_selection_controller_new();
@@ -638,10 +638,10 @@ static void test_backend_selection_controller_confirms_boop_line_choice_only_fro
 
   BoopPosition position = {0};
   backend->position_init(&position, NULL);
-  position.board[1] = boop_piece_make(0, BOOP_PIECE_RANK_CAT);
-  position.board[6] = boop_piece_make(0, BOOP_PIECE_RANK_CAT);
-  position.board[8] = boop_piece_make(0, BOOP_PIECE_RANK_CAT);
-  position.board[13] = boop_piece_make(0, BOOP_PIECE_RANK_CAT);
+  assert(boop_position_set_piece(&position, 1, boop_piece_make(0, BOOP_PIECE_RANK_CAT)));
+  assert(boop_position_set_piece(&position, 6, boop_piece_make(0, BOOP_PIECE_RANK_CAT)));
+  assert(boop_position_set_piece(&position, 8, boop_piece_make(0, BOOP_PIECE_RANK_CAT)));
+  assert(boop_position_set_piece(&position, 13, boop_piece_make(0, BOOP_PIECE_RANK_CAT)));
   assert(ggame_model_set_position(model, &position));
 
   BoardSelectionController *controller = board_selection_controller_new();

@@ -273,7 +273,7 @@ static gboolean boop_backend_square_grid_piece_view(gconstpointer position,
 
   memset(out_view, 0, sizeof(*out_view));
 
-  BoopPiece piece = boop_position->board[index];
+  BoopPiece piece = boop_position_get_piece(boop_position, index);
   if (piece == BOOP_PIECE_EMPTY) {
     out_view->is_empty = TRUE;
     out_view->kind = GAME_BACKEND_SQUARE_PIECE_KIND_NONE;

@@ -507,7 +507,7 @@ static void test_sgf_io_boop_roundtrip_promotion_move(void) {
   BoopMove move = {
     .square = 0,
     .rank = BOOP_PIECE_RANK_KITTEN,
-    .promotion_mask = G_GUINT64_CONSTANT(0x7),
+    .promotion_mask = BOOP_SQUARE_MASK(0) | BOOP_SQUARE_MASK(1) | BOOP_SQUARE_MASK(2),
   };
   const SgfNode *node = test_sgf_io_append_boop_move(source, SGF_COLOR_BLACK, &move);
   g_assert_nonnull(node);
@@ -519,6 +519,17 @@ static void test_sgf_io_boop_roundtrip_promotion_move(void) {
   g_assert_nonnull(strstr(serialized, "B[K@a1+a1,b1,c1]"));
 
   test_sgf_io_assert_roundtrip(source);
+}
+
+static void test_sgf_io_boop_promotion_masks_use_padded_rows(void) {
+  BoopMove move = {0};
+  char notation[128] = {0};
+  guint64 expected_mask = BOOP_SQUARE_MASK(6) | BOOP_SQUARE_MASK(7) | BOOP_SQUARE_MASK(8);
+
+  g_assert_true(boop_move_parse("K@a2+a2,b2,c2", &move));
+  g_assert_cmpuint(move.promotion_mask, ==, expected_mask);
+  g_assert_true(boop_move_format(&move, notation, sizeof(notation)));
+  g_assert_cmpstr(notation, ==, "K@a2+a2,b2,c2");
 }
 
 static void test_sgf_io_boop_preserves_repeated_property_values(void) {
@@ -597,6 +608,7 @@ int main(int argc, char **argv) {
     case GGAME_APP_KIND_BOOP:
       g_test_add_func("/sgf-io/roundtrip-single-move", test_sgf_io_boop_roundtrip_single_move);
       g_test_add_func("/sgf-io/roundtrip-promotion-move", test_sgf_io_boop_roundtrip_promotion_move);
+      g_test_add_func("/sgf-io/boop-padded-promotion-mask", test_sgf_io_boop_promotion_masks_use_padded_rows);
       g_test_add_func("/sgf-io/load-invalid-header", test_sgf_io_load_rejects_invalid_header);
       g_test_add_func("/sgf-io/repeated-property-values", test_sgf_io_boop_preserves_repeated_property_values);
       g_test_add_func("/sgf-io/ruleset-missing", test_sgf_io_boop_accepts_missing_ruleset_property);

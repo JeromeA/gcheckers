@@ -508,10 +508,12 @@ Collaborates with: `homeworlds_game.c`, `homeworlds_backend.c`, and `tests/test_
 `src/games/boop/boop_game.h`, `src/games/boop/boop_backend.c`, `src/games/boop/boop_backend.h`,
 `src/games/boop/boop_sgf_position.c`, `src/games/boop/boop_sgf_position.h`)
 Module: boop position, move, rules, builder, and backend adapter.
-Role: implement the 6x6 boop rules from `src/games/boop/RULES.md`. Positions store board cells, side to move,
-per-side kitten/cat supplies, promoted-kitten counts, and terminal outcome. Moves store placement square, placed rank,
-and an optional promotion/graduation mask so fully resolved turns can be serialized and replayed. `BoopPiece` is a
-single-byte encoded value with side-0 kitten/cat and side-1 kitten/cat packed before the empty value; helpers for
+Role: implement the 6x6 boop rules from `src/games/boop/RULES.md`. Positions store padded bitboards for each side's
+pieces, each side's cats, and occupied squares, plus side to move, per-side kitten/cat supplies, promoted-kitten counts,
+and terminal outcome. Each mask row uses the low six bits of an eight-bit lane, so bit shifts can test horizontal,
+vertical, and diagonal threes without wraparound. Moves store placement square, placed rank, and an optional
+promotion/graduation mask in the same padded format so fully resolved turns can be serialized and replayed. `BoopPiece`
+is a single-byte encoded value with side-0 kitten/cat and side-1 kitten/cat packed before the empty value; helpers for
 construction, validation, and rank extraction live with it in `boop_types.h`. The unchecked `boop_piece_side()` macro
 maps empty to extracted side `2`, so side comparisons can ignore emptiness.
 The engine applies simultaneous one-square boops from the newly placed piece, returns booped-off pieces to the owner
@@ -519,11 +521,11 @@ supply, resolves mandatory line promotions, supports optional one-kitten graduat
 offers both line-promotion and single-kitten graduation choices when both rules apply, and awards the active player an
 end-of-turn win for three cats in a row or all eight kittens promoted. Cat-line wins are checked before line-promotion
 collection, so promotion collection can treat every same-side three-in-a-row as promotable.
-The hot rules paths use fixed 6x6 square-index geometry tables: 26 maximal lines for three-in-a-row windows, eight
-precomputed boop rays per square, and a square-indexed center-bonus table. Row/column conversion remains at UI,
-notation, and SGF boundaries, but move generation, line detection, boop effects, and static scoring do not probe
-signed coordinates during search. Cat-line win detection and line-promotion collection also skip most maximal lines by
-first checking the shared third square before falling back to full scans.
+The hot rules paths are bitboard-based. Cat-line win detection tests the active cat mask with four shift-and-intersect
+expressions, and line-promotion collection uses the same start masks to emit exact three-square promotion masks. Boop
+rays are precomputed as adjacent and destination masks for each square, so boop effects move ownership bits directly.
+Row/column conversion remains at UI, notation, and SGF boundaries, and `BoopMove.square`/`path[]` still use stable
+0..35 square indices for those APIs.
 The backend exposes full move lists for validation/search, a staged square-grid builder for interactive placement plus
 promotion selection, deterministic notation such as `K@a1+a1,b1,c1`, symbol-only board pieces, static evaluation,
 terminal scores, and position hashing. Boop static evaluation scores promoted kittens, on-board pieces, and center
@@ -537,8 +539,9 @@ it is actually one of the candidate promotion squares. The boop engine also expo
 GTK board can circle the placed piece and draw arrows for every booped piece, including off-board boops that return to
 supply.
 `boop_position_normalize()` is the shared validator for arbitrary boop snapshots: it derives promoted-cat counts from
-board/supply state, recomputes terminal outcome, and rejects impossible totals before position-only SGF replay
-publishes a snapshot into the model. `boop_sgf_position.c` uses that helper to encode and decode root snapshot
+mask/supply state, restores the cached occupied mask, recomputes terminal outcome, and rejects impossible totals before
+position-only SGF replay publishes a snapshot into the model. `boop_sgf_position.c` uses that helper to encode and
+decode root snapshot
 properties (`GBK`, `GBC`, `GWK`, `GWC`, plus per-side supply counts and `PL`) for boop `Save position...`.
 Collaborates with: `src/games/boop/boop_controls.c`, `GGameModel`, `BoardView`, `GGameWindow`, `tests/test_boop_game.c`,
 `tests/test_boop_backend.c`, and the generic backend/model/SGF tests.

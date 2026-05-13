@@ -138,7 +138,7 @@ static gboolean boop_sgf_position_apply_board_values(BoopPosition *position,
     if (!boop_sgf_position_parse_point(value, &square, error)) {
       return FALSE;
     }
-    if (position->board[square] != BOOP_PIECE_EMPTY) {
+    if (boop_position_get_piece(position, square) != BOOP_PIECE_EMPTY) {
       g_set_error(error,
                   boop_sgf_position_error_quark(),
                   7,
@@ -147,7 +147,14 @@ static gboolean boop_sgf_position_apply_board_values(BoopPosition *position,
       return FALSE;
     }
 
-    position->board[square] = boop_piece_make(prop->side, prop->rank);
+    if (!boop_position_set_piece(position, square, boop_piece_make(prop->side, prop->rank))) {
+      g_set_error(error,
+                  boop_sgf_position_error_quark(),
+                  11,
+                  "Failed to assign boop SGF square %s",
+                  value);
+      return FALSE;
+    }
   }
 
   return TRUE;
@@ -198,7 +205,6 @@ gboolean boop_sgf_position_apply_setup_node(gpointer position, const SgfNode *no
 
   if (any_snapshot_prop) {
     boop_position_init(boop_position);
-    memset(boop_position->board, BOOP_PIECE_EMPTY, sizeof(boop_position->board));
 
     for (guint i = 0; i < G_N_ELEMENTS(boop_sgf_board_props); ++i) {
       if (!boop_sgf_position_apply_board_values(boop_position,
@@ -245,7 +251,7 @@ gboolean boop_sgf_position_write_position_node(gconstpointer position, SgfNode *
   sgf_node_clear_property(node, "PL");
 
   for (guint square = 0; square < BOOP_SQUARE_COUNT; ++square) {
-    BoopPiece piece = boop_position->board[square];
+    BoopPiece piece = boop_position_get_piece(boop_position, square);
     char point[3] = {0};
     const char *ident = NULL;
 

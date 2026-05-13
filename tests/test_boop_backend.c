@@ -96,7 +96,7 @@ static void test_backend_builder_preview_position_after_booping(void) {
 
   boop_position_init(&position);
   position.kittens_in_supply[0] = 7;
-  position.board[1] = boop_piece_make(0, BOOP_PIECE_RANK_KITTEN);
+  assert(boop_position_set_piece(&position, 1, boop_piece_make(0, BOOP_PIECE_RANK_KITTEN)));
 
   assert(backend->move_builder_init(&position, &builder));
   BoopMove candidate = {
@@ -109,9 +109,9 @@ static void test_backend_builder_preview_position_after_booping(void) {
 
   const BoopPosition *preview = backend->move_builder_preview_position(&builder);
   assert(preview != NULL);
-  assert(boop_piece_rank(preview->board[0]) == BOOP_PIECE_RANK_KITTEN);
-  assert(preview->board[1] == BOOP_PIECE_EMPTY);
-  assert(boop_piece_rank(preview->board[2]) == BOOP_PIECE_RANK_KITTEN);
+  assert(boop_piece_rank(boop_position_get_piece(preview, 0)) == BOOP_PIECE_RANK_KITTEN);
+  assert(boop_position_get_piece(preview, 1) == BOOP_PIECE_EMPTY);
+  assert(boop_piece_rank(boop_position_get_piece(preview, 2)) == BOOP_PIECE_RANK_KITTEN);
 
   backend->move_builder_clear(&builder);
 }
