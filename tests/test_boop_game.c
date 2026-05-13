@@ -651,33 +651,42 @@ static void test_overlay_describes_promoted_kittens_as_removed(void) {
   assert(overlay.removed_squares[2] == square_at(0, 2));
 }
 
-static void test_static_evaluation_ignores_supply_counts(void) {
+static void test_static_evaluation_scores_promotions_and_supply_piece_counts(void) {
   BoopPosition position = {0};
 
   boop_position_init(&position);
-  position.cats_in_supply[0] = 1;
-  setup_piece(&position, 0, BOOP_PIECE_RANK_KITTEN, 2, 2);
-  setup_piece(&position, 0, BOOP_PIECE_RANK_CAT, 3, 3);
-  setup_piece(&position, 1, BOOP_PIECE_RANK_KITTEN, 0, 0);
-  position.promoted_count[0] = 2;
-  position.promoted_count[1] = 1;
-
-  gint baseline = boop_position_evaluate_static(&position);
-
-  position.kittens_in_supply[0] = 0;
-  position.cats_in_supply[0] = 8;
-  position.kittens_in_supply[1] = 8;
+  position.kittens_in_supply[0] = 6;
+  position.cats_in_supply[0] = 0;
+  position.promoted_count[0] = 1;
+  position.kittens_in_supply[1] = 7;
   position.cats_in_supply[1] = 0;
-  assert(boop_position_evaluate_static(&position) == baseline);
+  position.promoted_count[1] = 0;
+
+  assert(boop_position_evaluate_static(&position) == 400);
 }
 
-static void test_static_evaluation_scores_cats_like_kittens(void) {
+static void test_static_evaluation_ignores_piece_locations(void) {
+  BoopPosition center_position = {0};
+  BoopPosition corner_position = {0};
+
+  boop_position_init(&center_position);
+  boop_position_init(&corner_position);
+  setup_piece(&center_position, 0, BOOP_PIECE_RANK_KITTEN, 2, 2);
+  setup_piece(&corner_position, 0, BOOP_PIECE_RANK_KITTEN, 5, 5);
+
+  assert(boop_position_evaluate_static(&center_position) == 100);
+  assert(boop_position_evaluate_static(&corner_position) == 100);
+}
+
+static void test_static_evaluation_scores_piece_masks_by_supply_only(void) {
   BoopPosition kitten_position = {0};
   BoopPosition cat_position = {0};
   guint square = square_at(2, 2);
 
   boop_position_init(&kitten_position);
   boop_position_init(&cat_position);
+  kitten_position.kittens_in_supply[0] = 7;
+  cat_position.kittens_in_supply[0] = 7;
   assert(boop_position_set_piece(&kitten_position, square, boop_piece_make(0, BOOP_PIECE_RANK_KITTEN)));
   assert(boop_position_set_piece(&cat_position, square, boop_piece_make(0, BOOP_PIECE_RANK_CAT)));
 
@@ -688,11 +697,12 @@ static void test_static_evaluation_does_not_bonus_cat_lines(void) {
   BoopPosition position = {0};
 
   boop_position_init(&position);
+  position.kittens_in_supply[0] = 5;
   assert(boop_position_set_piece(&position, square_at(0, 0), boop_piece_make(0, BOOP_PIECE_RANK_CAT)));
   assert(boop_position_set_piece(&position, square_at(0, 1), boop_piece_make(0, BOOP_PIECE_RANK_CAT)));
   assert(boop_position_set_piece(&position, square_at(0, 2), boop_piece_make(0, BOOP_PIECE_RANK_CAT)));
 
-  assert(boop_position_evaluate_static(&position) == 309);
+  assert(boop_position_evaluate_static(&position) == 300);
 }
 
 static void test_terminal_score_uses_win_scale(void) {
@@ -720,8 +730,9 @@ int main(void) {
   test_overlay_describes_off_board_boop();
   test_all_boop_rays_match_square_geometry();
   test_overlay_describes_promoted_kittens_as_removed();
-  test_static_evaluation_ignores_supply_counts();
-  test_static_evaluation_scores_cats_like_kittens();
+  test_static_evaluation_scores_promotions_and_supply_piece_counts();
+  test_static_evaluation_ignores_piece_locations();
+  test_static_evaluation_scores_piece_masks_by_supply_only();
   test_static_evaluation_does_not_bonus_cat_lines();
   test_terminal_score_uses_win_scale();
 

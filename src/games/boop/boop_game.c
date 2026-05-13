@@ -12,15 +12,6 @@ enum {
   BOOP_RAY_COUNT = 8,
 };
 
-static const gint boop_center_bonus[BOOP_SQUARE_COUNT] = {
-  2, 3, 4, 3, 2, 1,
-  3, 4, 5, 4, 3, 2,
-  4, 5, 6, 5, 4, 3,
-  3, 4, 5, 4, 3, 2,
-  2, 3, 4, 3, 2, 1,
-  1, 2, 3, 2, 1, 0,
-};
-
 #define BM(square) BOOP_SQUARE_MASK(square)
 #define BX G_GUINT64_CONSTANT(0)
 
@@ -1054,15 +1045,10 @@ gint boop_position_evaluate_static(const BoopPosition *position) {
   g_return_val_if_fail(position != NULL, 0);
 
   for (guint side = 0; side < 2; ++side) {
-    gint side_score = (gint)position->promoted_count[side] * 300;
-    for (guint square = 0; square < BOOP_SQUARE_COUNT; ++square) {
-      if ((position->side_mask[side] & boop_square_mask(square)) == 0) {
-        continue;
-      }
-
-      side_score += 100;
-      side_score += boop_center_bonus[square];
-    }
+    gint pieces_on_board = BOOP_SUPPLY_COUNT -
+                           (gint)position->kittens_in_supply[side] -
+                           (gint)position->cats_in_supply[side];
+    gint side_score = ((gint)position->promoted_count[side] * 300) + (pieces_on_board * 100);
 
     score += side == 0 ? side_score : -side_score;
   }
