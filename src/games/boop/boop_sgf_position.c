@@ -138,7 +138,7 @@ static gboolean boop_sgf_position_apply_board_values(BoopPosition *position,
     if (!boop_sgf_position_parse_point(value, &square, error)) {
       return FALSE;
     }
-    if (position->board[square].rank != BOOP_PIECE_RANK_NONE) {
+    if (position->board[square] != BOOP_PIECE_EMPTY) {
       g_set_error(error,
                   boop_sgf_position_error_quark(),
                   7,
@@ -147,10 +147,7 @@ static gboolean boop_sgf_position_apply_board_values(BoopPosition *position,
       return FALSE;
     }
 
-    position->board[square] = (BoopPiece){
-      .side = (guint8)prop->side,
-      .rank = (guint8)prop->rank,
-    };
+    position->board[square] = boop_piece_make(prop->side, prop->rank);
   }
 
   return TRUE;
@@ -252,8 +249,16 @@ gboolean boop_sgf_position_write_position_node(gconstpointer position, SgfNode *
     char point[3] = {0};
     const char *ident = NULL;
 
-    if (piece.rank == BOOP_PIECE_RANK_NONE) {
+    if (piece == BOOP_PIECE_EMPTY) {
       continue;
+    }
+    if (!boop_piece_valid(piece)) {
+      g_set_error(error,
+                  boop_sgf_position_error_quark(),
+                  10,
+                  "Unable to encode boop piece %u",
+                  piece);
+      return FALSE;
     }
     if (!boop_sgf_position_square_to_point(square, point)) {
       g_set_error(error,
@@ -264,22 +269,22 @@ gboolean boop_sgf_position_write_position_node(gconstpointer position, SgfNode *
       return FALSE;
     }
 
-    if (piece.side == 0 && piece.rank == BOOP_PIECE_RANK_KITTEN) {
-      ident = "GBK";
-    } else if (piece.side == 0 && piece.rank == BOOP_PIECE_RANK_CAT) {
-      ident = "GBC";
-    } else if (piece.side == 1 && piece.rank == BOOP_PIECE_RANK_KITTEN) {
-      ident = "GWK";
-    } else if (piece.side == 1 && piece.rank == BOOP_PIECE_RANK_CAT) {
-      ident = "GWC";
-    } else {
-      g_set_error(error,
-                  boop_sgf_position_error_quark(),
-                  10,
-                  "Unable to encode boop piece rank %u for side %u",
-                  piece.rank,
-                  piece.side);
-      return FALSE;
+    switch ((BoopPieceValue)piece) {
+      case BOOP_PIECE_SIDE_0_KITTEN:
+        ident = "GBK";
+        break;
+      case BOOP_PIECE_SIDE_0_CAT:
+        ident = "GBC";
+        break;
+      case BOOP_PIECE_SIDE_1_KITTEN:
+        ident = "GWK";
+        break;
+      case BOOP_PIECE_SIDE_1_CAT:
+        ident = "GWC";
+        break;
+      case BOOP_PIECE_EMPTY:
+      default:
+        g_return_val_if_reached(FALSE);
     }
 
     if (!boop_sgf_position_add_property_value(node, ident, point, error)) {

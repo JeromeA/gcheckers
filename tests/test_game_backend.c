@@ -8,6 +8,16 @@
 #include "../src/games/boop/boop_types.h"
 #include "test_profile_utils.h"
 
+static void test_assert_boop_square_empty(const BoopPosition *position, guint square) {
+  assert(position != NULL);
+  assert(position->board[square] == BOOP_PIECE_EMPTY);
+}
+
+static void test_assert_boop_square_rank(const BoopPosition *position, guint square, guint rank) {
+  assert(position != NULL);
+  assert(boop_piece_rank(position->board[square]) == rank);
+}
+
 static void test_app_profile_metadata(void) {
   const GGameAppProfile *profile = ggame_active_app_profile();
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
@@ -495,7 +505,7 @@ static void test_backend_selection_controller_prefers_boop_rank(void) {
 
   const BoopPosition *applied = ggame_model_peek_position(model);
   assert(applied != NULL);
-  assert(applied->board[0].rank == BOOP_PIECE_RANK_CAT);
+  test_assert_boop_square_rank(applied, 0, BOOP_PIECE_RANK_CAT);
   assert(applied->cats_in_supply[0] == 0);
 
   backend->position_clear(&position);
@@ -520,10 +530,7 @@ static void test_backend_selection_controller_confirms_boop_promotion(void) {
   position.kittens_in_supply[0] = 1;
   const guint kitten_squares[] = {0, 2, 4, 13, 15, 17, 24};
   for (guint i = 0; i < G_N_ELEMENTS(kitten_squares); ++i) {
-    position.board[kitten_squares[i]] = (BoopPiece){
-      .side = 0,
-      .rank = BOOP_PIECE_RANK_KITTEN,
-    };
+    position.board[kitten_squares[i]] = boop_piece_make(0, BOOP_PIECE_RANK_KITTEN);
   }
   assert(ggame_model_set_position(model, &position));
 
@@ -548,7 +555,7 @@ static void test_backend_selection_controller_confirms_boop_promotion(void) {
   const BoopPosition *current = ggame_model_peek_position(model);
   assert(current != NULL);
   assert(current->turn == 0);
-  assert(current->board[35].rank == BOOP_PIECE_RANK_NONE);
+  test_assert_boop_square_empty(current, 35);
 
   assert(board_selection_controller_handle_click(controller, 0));
   assert(board_selection_controller_completion_pending(controller));
@@ -556,14 +563,14 @@ static void test_backend_selection_controller_confirms_boop_promotion(void) {
   current = ggame_model_peek_position(model);
   assert(current != NULL);
   assert(current->turn == 0);
-  assert(current->board[35].rank == BOOP_PIECE_RANK_NONE);
+  test_assert_boop_square_empty(current, 35);
 
   assert(board_selection_controller_confirm(controller));
   current = ggame_model_peek_position(model);
   assert(current != NULL);
   assert(current->turn == 1);
-  assert(current->board[0].rank == BOOP_PIECE_RANK_NONE);
-  assert(current->board[35].rank == BOOP_PIECE_RANK_KITTEN);
+  test_assert_boop_square_empty(current, 0);
+  test_assert_boop_square_rank(current, 35, BOOP_PIECE_RANK_KITTEN);
   assert(current->cats_in_supply[0] == 1);
   assert(current->promoted_count[0] == 1);
   assert(!board_selection_controller_completion_pending(controller));
@@ -588,14 +595,8 @@ static void test_backend_selection_controller_auto_applies_single_boop_line_prom
   BoopPosition position = {0};
   backend->position_init(&position, NULL);
   position.kittens_in_supply[0] = 6;
-  position.board[0] = (BoopPiece){
-    .side = 0,
-    .rank = BOOP_PIECE_RANK_KITTEN,
-  };
-  position.board[1] = (BoopPiece){
-    .side = 0,
-    .rank = BOOP_PIECE_RANK_KITTEN,
-  };
+  position.board[0] = boop_piece_make(0, BOOP_PIECE_RANK_KITTEN);
+  position.board[1] = boop_piece_make(0, BOOP_PIECE_RANK_KITTEN);
   assert(ggame_model_set_position(model, &position));
 
   BoardSelectionController *controller = board_selection_controller_new();
@@ -612,9 +613,9 @@ static void test_backend_selection_controller_auto_applies_single_boop_line_prom
   const BoopPosition *current = ggame_model_peek_position(model);
   assert(current != NULL);
   assert(current->turn == 1);
-  assert(current->board[0].rank == BOOP_PIECE_RANK_NONE);
-  assert(current->board[1].rank == BOOP_PIECE_RANK_NONE);
-  assert(current->board[2].rank == BOOP_PIECE_RANK_NONE);
+  test_assert_boop_square_empty(current, 0);
+  test_assert_boop_square_empty(current, 1);
+  test_assert_boop_square_empty(current, 2);
   assert(current->cats_in_supply[0] == 3);
   assert(current->promoted_count[0] == 3);
 
@@ -637,22 +638,10 @@ static void test_backend_selection_controller_confirms_boop_line_choice_only_fro
 
   BoopPosition position = {0};
   backend->position_init(&position, NULL);
-  position.board[1] = (BoopPiece){
-    .side = 0,
-    .rank = BOOP_PIECE_RANK_CAT,
-  };
-  position.board[6] = (BoopPiece){
-    .side = 0,
-    .rank = BOOP_PIECE_RANK_CAT,
-  };
-  position.board[8] = (BoopPiece){
-    .side = 0,
-    .rank = BOOP_PIECE_RANK_CAT,
-  };
-  position.board[13] = (BoopPiece){
-    .side = 0,
-    .rank = BOOP_PIECE_RANK_CAT,
-  };
+  position.board[1] = boop_piece_make(0, BOOP_PIECE_RANK_CAT);
+  position.board[6] = boop_piece_make(0, BOOP_PIECE_RANK_CAT);
+  position.board[8] = boop_piece_make(0, BOOP_PIECE_RANK_CAT);
+  position.board[13] = boop_piece_make(0, BOOP_PIECE_RANK_CAT);
   assert(ggame_model_set_position(model, &position));
 
   BoardSelectionController *controller = board_selection_controller_new();
@@ -709,14 +698,14 @@ static void test_backend_selection_controller_confirms_boop_line_choice_only_fro
   const BoopPosition *current = ggame_model_peek_position(model);
   assert(current != NULL);
   assert(current->turn == 0);
-  assert(current->board[7].rank == BOOP_PIECE_RANK_NONE);
+  test_assert_boop_square_empty(current, 7);
 
   assert(board_selection_controller_handle_click(controller, 35));
   assert(!board_selection_controller_completion_pending(controller));
   current = ggame_model_peek_position(model);
   assert(current != NULL);
   assert(current->turn == 0);
-  assert(current->board[7].rank == BOOP_PIECE_RANK_NONE);
+  test_assert_boop_square_empty(current, 7);
 
   assert(board_selection_controller_handle_click(controller, 7));
   assert(board_selection_controller_handle_click(controller, 6));
@@ -727,9 +716,9 @@ static void test_backend_selection_controller_confirms_boop_line_choice_only_fro
   current = ggame_model_peek_position(model);
   assert(current != NULL);
   assert(current->turn == 1);
-  assert(current->board[6].rank == BOOP_PIECE_RANK_NONE);
-  assert(current->board[7].rank == BOOP_PIECE_RANK_NONE);
-  assert(current->board[8].rank == BOOP_PIECE_RANK_NONE);
+  test_assert_boop_square_empty(current, 6);
+  test_assert_boop_square_empty(current, 7);
+  test_assert_boop_square_empty(current, 8);
   assert(current->cats_in_supply[0] == 3);
   assert(current->promoted_count[0] == 1);
 

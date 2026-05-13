@@ -274,19 +274,22 @@ static gboolean boop_backend_square_grid_piece_view(gconstpointer position,
   memset(out_view, 0, sizeof(*out_view));
 
   BoopPiece piece = boop_position->board[index];
-  if (piece.rank == BOOP_PIECE_RANK_NONE) {
+  if (piece == BOOP_PIECE_EMPTY) {
     out_view->is_empty = TRUE;
     out_view->kind = GAME_BACKEND_SQUARE_PIECE_KIND_NONE;
     out_view->symbol = ".";
     return TRUE;
   }
+  g_return_val_if_fail(boop_piece_valid(piece), FALSE);
 
-  out_view->side = piece.side;
+  guint side = boop_piece_side(piece);
+  guint rank = boop_piece_rank(piece);
+  out_view->side = (guint8)side;
   out_view->kind = GAME_BACKEND_SQUARE_PIECE_KIND_SYMBOL_ONLY;
-  if (piece.side == 0) {
-    out_view->symbol = piece.rank == BOOP_PIECE_RANK_CAT ? "c" : "k";
+  if (side == 0) {
+    out_view->symbol = rank == BOOP_PIECE_RANK_CAT ? "c" : "k";
   } else {
-    out_view->symbol = piece.rank == BOOP_PIECE_RANK_CAT ? "C" : "K";
+    out_view->symbol = rank == BOOP_PIECE_RANK_CAT ? "C" : "K";
   }
   return TRUE;
 }

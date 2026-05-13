@@ -171,10 +171,6 @@ static guint boop_mask_popcount(guint64 mask) {
   return count;
 }
 
-static BoopPiece boop_piece_empty(void) {
-  return (BoopPiece){0};
-}
-
 static gboolean boop_piece_rank_valid(guint rank) {
   return rank == BOOP_PIECE_RANK_KITTEN || rank == BOOP_PIECE_RANK_CAT;
 }
@@ -190,17 +186,18 @@ static gboolean boop_square_valid(guint square) {
 static void boop_return_piece_to_supply(BoopPosition *position, BoopPiece piece) {
   g_return_if_fail(position != NULL);
 
-  if (boop_piece_is_empty(piece)) {
+  if (piece == BOOP_PIECE_EMPTY) {
     return;
   }
 
-  g_return_if_fail(boop_side_valid(piece.side));
-  switch ((BoopPieceRank)piece.rank) {
+  guint side = boop_piece_side(piece);
+  g_return_if_fail(boop_side_valid(side));
+  switch ((BoopPieceRank)boop_piece_rank(piece)) {
     case BOOP_PIECE_RANK_KITTEN:
-      position->kittens_in_supply[piece.side]++;
+      position->kittens_in_supply[side]++;
       break;
     case BOOP_PIECE_RANK_CAT:
-      position->cats_in_supply[piece.side]++;
+      position->cats_in_supply[side]++;
       break;
     case BOOP_PIECE_RANK_NONE:
     default:
@@ -232,7 +229,7 @@ static guint boop_position_count_on_board(const BoopPosition *position, guint si
 
   for (guint square = 0; square < BOOP_SQUARE_COUNT; ++square) {
     BoopPiece piece = position->board[square];
-    if (!boop_piece_is_empty(piece) && piece.side == side) {
+    if (piece != BOOP_PIECE_EMPTY && boop_piece_side(piece) == side) {
       count++;
     }
   }
@@ -283,12 +280,12 @@ static gboolean boop_position_collect_line_promotion_choices(const BoopPosition 
       for (guint offset = 0; offset < BOOP_LINE_LENGTH; ++offset) {
         guint square = line->squares[start + offset];
         BoopPiece piece = position->board[square];
-        if (boop_piece_is_empty(piece) || piece.side != side) {
+        if (piece == BOOP_PIECE_EMPTY || boop_piece_side(piece) != side) {
           all_side = FALSE;
           break;
         }
 
-        if (piece.rank == BOOP_PIECE_RANK_KITTEN) {
+        if (boop_piece_rank(piece) == BOOP_PIECE_RANK_KITTEN) {
           has_kitten = TRUE;
         }
         mask |= boop_square_mask(square);
@@ -307,6 +304,7 @@ static gboolean boop_position_has_cat_line(const BoopPosition *position, guint s
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(boop_side_valid(side), FALSE);
 
+  BoopPiece cat = boop_piece_make(side, BOOP_PIECE_RANK_CAT);
   for (guint line_index = 0; line_index < G_N_ELEMENTS(boop_lines); ++line_index) {
     const BoopLine *line = &boop_lines[line_index];
     guint consecutive_cats = 0;
@@ -318,8 +316,7 @@ static gboolean boop_position_has_cat_line(const BoopPosition *position, guint s
       }
 
       guint square = line->squares[offset];
-      BoopPiece piece = position->board[square];
-      if (boop_piece_is_empty(piece) || piece.side != side || piece.rank != BOOP_PIECE_RANK_CAT) {
+      if (position->board[square] != cat) {
         consecutive_cats = 0;
         continue;
       }
@@ -345,9 +342,9 @@ static gboolean boop_position_append_graduation_choices(const BoopPosition *posi
     return TRUE;
   }
 
+  BoopPiece kitten = boop_piece_make(side, BOOP_PIECE_RANK_KITTEN);
   for (guint square = 0; square < BOOP_SQUARE_COUNT; ++square) {
-    BoopPiece piece = position->board[square];
-    if (!boop_piece_is_empty(piece) && piece.side == side && piece.rank == BOOP_PIECE_RANK_KITTEN &&
+    if (position->board[square] == kitten &&
         !boop_position_add_mask(choices->masks, &choices->count, boop_square_mask(square))) {
       return FALSE;
     }
@@ -467,15 +464,15 @@ static gboolean boop_position_apply_boop_effects(BoopPosition *position,
     }
 
     BoopPiece target = before[adjacent_square];
-    if (boop_piece_is_empty(target)) {
+    if (target == BOOP_PIECE_EMPTY) {
       continue;
     }
-    if (target.rank == BOOP_PIECE_RANK_CAT && rank != BOOP_PIECE_RANK_CAT) {
+    if (boop_piece_rank(target) == BOOP_PIECE_RANK_CAT && rank != BOOP_PIECE_RANK_CAT) {
       continue;
     }
 
     if (destination_square == BOOP_SQUARE_INVALID) {
-      position->board[adjacent_square] = boop_piece_empty();
+      position->board[adjacent_square] = BOOP_PIECE_EMPTY;
       boop_return_piece_to_supply(position, target);
       if (overlay_info != NULL && !boop_move_overlay_append_removed_square(overlay_info, adjacent_square)) {
         return FALSE;
@@ -492,11 +489,11 @@ static gboolean boop_position_apply_boop_effects(BoopPosition *position,
       continue;
     }
 
-    if (!boop_piece_is_empty(before[destination_square])) {
+    if (before[destination_square] != BOOP_PIECE_EMPTY) {
       continue;
     }
 
-    position->board[adjacent_square] = boop_piece_empty();
+    position->board[adjacent_square] = BOOP_PIECE_EMPTY;
     position->board[destination_square] = target;
     if (overlay_info != NULL &&
         !boop_move_overlay_append_arrow(overlay_info,
@@ -523,7 +520,7 @@ static gboolean boop_position_resolve_placement(const BoopPosition *position,
   g_return_val_if_fail(boop_side_valid(side), FALSE);
   g_return_val_if_fail(boop_piece_rank_valid(rank), FALSE);
   g_return_val_if_fail(boop_square_valid(square), FALSE);
-  g_return_val_if_fail(boop_piece_is_empty(position->board[square]), FALSE);
+  g_return_val_if_fail(position->board[square] == BOOP_PIECE_EMPTY, FALSE);
   g_return_val_if_fail(boop_position_has_supply_for_rank(position, side, rank), FALSE);
 
   *out_position = *position;
@@ -538,10 +535,7 @@ static gboolean boop_position_resolve_placement(const BoopPosition *position,
     default:
       return FALSE;
   }
-  out_position->board[square] = (BoopPiece){
-    .side = (guint8)side,
-    .rank = (guint8)rank,
-  };
+  out_position->board[square] = boop_piece_make(side, rank);
   return boop_position_apply_boop_effects(out_position, square, rank, overlay_info);
 }
 
@@ -558,16 +552,16 @@ static gboolean boop_position_apply_promotion_mask(BoopPosition *position,
     }
 
     BoopPiece piece = position->board[square];
-    if (boop_piece_is_empty(piece) || piece.side != side) {
+    if (piece == BOOP_PIECE_EMPTY || boop_piece_side(piece) != side) {
       g_debug("Ignoring invalid boop promotion square %u", square);
       continue;
     }
 
-    if (piece.rank == BOOP_PIECE_RANK_KITTEN) {
+    if (boop_piece_rank(piece) == BOOP_PIECE_RANK_KITTEN) {
       position->promoted_count[side]++;
     }
     position->cats_in_supply[side]++;
-    position->board[square] = boop_piece_empty();
+    position->board[square] = BOOP_PIECE_EMPTY;
     if (overlay_info != NULL && !boop_move_overlay_append_removed_square(overlay_info, square)) {
       return FALSE;
     }
@@ -831,35 +825,30 @@ gboolean boop_position_normalize(BoopPosition *position, GError **error) {
 
   for (guint square = 0; square < BOOP_SQUARE_COUNT; ++square) {
     BoopPiece piece = position->board[square];
+    guint side = 0;
+    guint rank = BOOP_PIECE_RANK_NONE;
 
-    if (boop_piece_is_empty(piece)) {
+    if (piece == BOOP_PIECE_EMPTY) {
       continue;
     }
-    if (!boop_side_valid(piece.side)) {
+    if (!boop_piece_valid(piece)) {
       g_set_error(error,
                   boop_position_error_quark(),
                   2,
-                  "Invalid boop side %u on square %u",
-                  piece.side,
-                  square);
-      return FALSE;
-    }
-    if (!boop_piece_rank_valid(piece.rank)) {
-      g_set_error(error,
-                  boop_position_error_quark(),
-                  3,
-                  "Invalid boop rank %u on square %u",
-                  piece.rank,
+                  "Invalid boop piece %u on square %u",
+                  piece,
                   square);
       return FALSE;
     }
 
-    switch ((BoopPieceRank)piece.rank) {
+    side = boop_piece_side(piece);
+    rank = boop_piece_rank(piece);
+    switch ((BoopPieceRank)rank) {
       case BOOP_PIECE_RANK_KITTEN:
-        kittens_on_board[piece.side]++;
+        kittens_on_board[side]++;
         break;
       case BOOP_PIECE_RANK_CAT:
-        cats_on_board[piece.side]++;
+        cats_on_board[side]++;
         break;
       case BOOP_PIECE_RANK_NONE:
       default:
@@ -867,7 +856,7 @@ gboolean boop_position_normalize(BoopPosition *position, GError **error) {
                     boop_position_error_quark(),
                     4,
                     "Unsupported boop rank %u on square %u",
-                    piece.rank,
+                    rank,
                     square);
         return FALSE;
     }
@@ -938,7 +927,7 @@ GameBackendMoveList boop_position_list_moves(const BoopPosition *position) {
   g_return_val_if_fail(moves != NULL, (GameBackendMoveList){0});
 
   for (guint square = 0; square < BOOP_SQUARE_COUNT; ++square) {
-    if (!boop_piece_is_empty(position->board[square])) {
+    if (position->board[square] != BOOP_PIECE_EMPTY) {
       continue;
     }
 
@@ -1061,7 +1050,7 @@ gint boop_position_evaluate_static(const BoopPosition *position) {
     gint side_score = (gint)position->promoted_count[side] * 300;
     for (guint square = 0; square < BOOP_SQUARE_COUNT; ++square) {
       BoopPiece piece = position->board[square];
-      if (boop_piece_is_empty(piece) || piece.side != side) {
+      if (piece == BOOP_PIECE_EMPTY || boop_piece_side(piece) != side) {
         continue;
       }
 
@@ -1096,7 +1085,7 @@ guint64 boop_position_hash(const BoopPosition *position) {
   g_return_val_if_fail(position != NULL, 0);
 
   for (guint square = 0; square < BOOP_SQUARE_COUNT; ++square) {
-    guint8 token = (guint8)(position->board[square].rank | (position->board[square].side << 2));
+    guint8 token = position->board[square];
     hash ^= token + 1;
     hash *= G_GUINT64_CONSTANT(1099511628211);
   }
@@ -1397,7 +1386,7 @@ GameBackendMoveList boop_move_builder_list_candidates(const GameBackendMoveBuild
 
   guint side = state->position.turn;
   for (guint square = 0; square < BOOP_SQUARE_COUNT; ++square) {
-    if (!boop_piece_is_empty(state->position.board[square])) {
+    if (state->position.board[square] != BOOP_PIECE_EMPTY) {
       continue;
     }
 
