@@ -523,7 +523,8 @@ end-of-turn win for three cats in a row or all eight kittens promoted. Cat-line 
 collection, so promotion collection can treat every same-side three-in-a-row as promotable.
 The hot rules paths are bitboard-based. Cat-line win detection tests the active cat mask with four shift-and-intersect
 expressions, and line-promotion collection uses the same start masks to emit exact three-square promotion masks. Boop
-rays are precomputed as adjacent and destination masks for each square, so boop effects move ownership bits directly.
+effects read ownership and rank directly from masks and move ownership bits directly. Boop rays are precomputed as
+adjacent and destination masks for each square.
 Row/column conversion remains at UI, notation, and SGF boundaries, and `BoopMove.square`/`path[]` still use stable
 0..35 square indices for those APIs.
 The backend exposes full move lists for validation/search, a staged square-grid builder for interactive placement plus

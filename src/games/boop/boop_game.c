@@ -213,29 +213,6 @@ static BoopPiece boop_position_get_piece_for_mask(const BoopPosition *position, 
   return boop_piece_make(side, rank);
 }
 
-static void boop_return_piece_to_supply(BoopPosition *position, BoopPiece piece) {
-  g_return_if_fail(position != NULL);
-
-  if (piece == BOOP_PIECE_EMPTY) {
-    return;
-  }
-
-  guint side = boop_piece_side(piece);
-  g_return_if_fail(boop_side_valid(side));
-  switch ((BoopPieceRank)boop_piece_rank(piece)) {
-    case BOOP_PIECE_RANK_KITTEN:
-      position->kittens_in_supply[side]++;
-      break;
-    case BOOP_PIECE_RANK_CAT:
-      position->cats_in_supply[side]++;
-      break;
-    case BOOP_PIECE_RANK_NONE:
-    default:
-      g_debug("Unsupported boop piece rank while returning to supply");
-      break;
-  }
-}
-
 static gboolean boop_position_has_supply_for_rank(const BoopPosition *position, guint side, guint rank) {
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(boop_side_valid(side), FALSE);
@@ -456,11 +433,13 @@ static gboolean boop_position_apply_boop_effects(BoopPosition *position,
       continue;
     }
 
-    BoopPiece target = boop_position_get_piece_for_mask(&before, adjacent_mask);
-    if (target == BOOP_PIECE_EMPTY) {
+    if ((before.occupied_mask & adjacent_mask) == 0) {
       continue;
     }
-    if (boop_piece_rank(target) == BOOP_PIECE_RANK_CAT && rank != BOOP_PIECE_RANK_CAT) {
+
+    guint target_side = (before.side_mask[1] & adjacent_mask) != 0 ? 1 : 0;
+    gboolean target_is_cat = (before.cat_mask[target_side] & adjacent_mask) != 0;
+    if (target_is_cat && rank != BOOP_PIECE_RANK_CAT) {
       continue;
     }
 
@@ -468,8 +447,16 @@ static gboolean boop_position_apply_boop_effects(BoopPosition *position,
     if (destination_mask == 0) {
       guint adjacent_square = 0;
 
-      boop_position_clear_mask(position, adjacent_mask);
-      boop_return_piece_to_supply(position, target);
+      position->side_mask[target_side] &= ~adjacent_mask;
+      if (target_is_cat) {
+        position->cat_mask[target_side] &= ~adjacent_mask;
+      }
+      position->occupied_mask &= ~adjacent_mask;
+      if (target_is_cat) {
+        position->cats_in_supply[target_side]++;
+      } else {
+        position->kittens_in_supply[target_side]++;
+      }
       if (overlay_info != NULL && !boop_mask_to_square(adjacent_mask, &adjacent_square)) {
         return FALSE;
       }
@@ -492,8 +479,11 @@ static gboolean boop_position_apply_boop_effects(BoopPosition *position,
       continue;
     }
 
-    boop_position_clear_mask(position, adjacent_mask);
-    boop_position_set_mask_piece(position, destination_mask, boop_piece_side(target), boop_piece_rank(target));
+    position->side_mask[target_side] = (position->side_mask[target_side] & ~adjacent_mask) | destination_mask;
+    if (target_is_cat) {
+      position->cat_mask[target_side] = (position->cat_mask[target_side] & ~adjacent_mask) | destination_mask;
+    }
+    position->occupied_mask = (position->occupied_mask & ~adjacent_mask) | destination_mask;
     if (overlay_info != NULL) {
       guint adjacent_square = 0;
       guint destination_square = 0;
