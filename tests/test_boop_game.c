@@ -662,7 +662,11 @@ static void test_static_evaluation_scores_promotions_and_supply_piece_counts(voi
   position.cats_in_supply[1] = 0;
   position.promoted_count[1] = 0;
 
-  assert(boop_position_evaluate_static(&position) == 400);
+  position.turn = 0;
+  assert(boop_position_evaluate_static(&position) == 450);
+
+  position.turn = 1;
+  assert(boop_position_evaluate_static(&position) == 350);
 }
 
 static void test_static_evaluation_ignores_piece_locations(void) {
@@ -673,9 +677,11 @@ static void test_static_evaluation_ignores_piece_locations(void) {
   boop_position_init(&corner_position);
   setup_piece(&center_position, 0, BOOP_PIECE_RANK_KITTEN, 2, 2);
   setup_piece(&corner_position, 0, BOOP_PIECE_RANK_KITTEN, 5, 5);
+  center_position.turn = 1;
+  corner_position.turn = 1;
 
-  assert(boop_position_evaluate_static(&center_position) == 100);
-  assert(boop_position_evaluate_static(&corner_position) == 100);
+  assert(boop_position_evaluate_static(&center_position) == 50);
+  assert(boop_position_evaluate_static(&corner_position) == 50);
 }
 
 static void test_static_evaluation_scores_piece_masks_by_supply_only(void) {
@@ -689,8 +695,29 @@ static void test_static_evaluation_scores_piece_masks_by_supply_only(void) {
   cat_position.kittens_in_supply[0] = 7;
   assert(boop_position_set_piece(&kitten_position, square, boop_piece_make(0, BOOP_PIECE_RANK_KITTEN)));
   assert(boop_position_set_piece(&cat_position, square, boop_piece_make(0, BOOP_PIECE_RANK_CAT)));
+  kitten_position.turn = 1;
+  cat_position.turn = 1;
 
   assert(boop_position_evaluate_static(&cat_position) == boop_position_evaluate_static(&kitten_position));
+}
+
+static void test_static_evaluation_penalizes_last_player(void) {
+  BoopPosition start_position = {0};
+  BoopPosition side_0_position = {0};
+  BoopPosition side_1_position = {0};
+
+  boop_position_init(&start_position);
+  assert(boop_position_evaluate_static(&start_position) == 0);
+
+  boop_position_init(&side_0_position);
+  setup_piece(&side_0_position, 0, BOOP_PIECE_RANK_KITTEN, 2, 2);
+  side_0_position.turn = 1;
+  assert(boop_position_evaluate_static(&side_0_position) == 50);
+
+  boop_position_init(&side_1_position);
+  setup_piece(&side_1_position, 1, BOOP_PIECE_RANK_KITTEN, 2, 2);
+  side_1_position.turn = 0;
+  assert(boop_position_evaluate_static(&side_1_position) == -50);
 }
 
 static void test_static_evaluation_does_not_bonus_cat_lines(void) {
@@ -701,8 +728,9 @@ static void test_static_evaluation_does_not_bonus_cat_lines(void) {
   assert(boop_position_set_piece(&position, square_at(0, 0), boop_piece_make(0, BOOP_PIECE_RANK_CAT)));
   assert(boop_position_set_piece(&position, square_at(0, 1), boop_piece_make(0, BOOP_PIECE_RANK_CAT)));
   assert(boop_position_set_piece(&position, square_at(0, 2), boop_piece_make(0, BOOP_PIECE_RANK_CAT)));
+  position.turn = 1;
 
-  assert(boop_position_evaluate_static(&position) == 300);
+  assert(boop_position_evaluate_static(&position) == 250);
 }
 
 static void test_terminal_score_uses_win_scale(void) {
@@ -733,6 +761,7 @@ int main(void) {
   test_static_evaluation_scores_promotions_and_supply_piece_counts();
   test_static_evaluation_ignores_piece_locations();
   test_static_evaluation_scores_piece_masks_by_supply_only();
+  test_static_evaluation_penalizes_last_player();
   test_static_evaluation_does_not_bonus_cat_lines();
   test_terminal_score_uses_win_scale();
 

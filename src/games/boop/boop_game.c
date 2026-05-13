@@ -10,6 +10,9 @@ typedef struct {
 
 enum {
   BOOP_RAY_COUNT = 8,
+  BOOP_STATIC_PIECE_SCORE = 100,
+  BOOP_STATIC_PROMOTION_SCORE = 300,
+  BOOP_STATIC_LAST_PLAYER_MALUS = 50,
 };
 
 #define BM(square) BOOP_SQUARE_MASK(square)
@@ -1041,14 +1044,31 @@ gboolean boop_position_apply_move(BoopPosition *position, const BoopMove *move) 
 
 gint boop_position_evaluate_static(const BoopPosition *position) {
   gint score = 0;
+  gboolean has_played_move = FALSE;
+  guint last_side = 0;
 
   g_return_val_if_fail(position != NULL, 0);
+  g_return_val_if_fail(boop_side_valid(position->turn), 0);
+
+  has_played_move = position->occupied_mask != 0 ||
+                    position->kittens_in_supply[0] != BOOP_SUPPLY_COUNT ||
+                    position->kittens_in_supply[1] != BOOP_SUPPLY_COUNT ||
+                    position->cats_in_supply[0] != 0 ||
+                    position->cats_in_supply[1] != 0 ||
+                    position->promoted_count[0] != 0 ||
+                    position->promoted_count[1] != 0;
+  last_side = position->turn == 0 ? 1 : 0;
 
   for (guint side = 0; side < 2; ++side) {
     gint pieces_on_board = BOOP_SUPPLY_COUNT -
                            (gint)position->kittens_in_supply[side] -
                            (gint)position->cats_in_supply[side];
-    gint side_score = ((gint)position->promoted_count[side] * 300) + (pieces_on_board * 100);
+    gint side_score = ((gint)position->promoted_count[side] * BOOP_STATIC_PROMOTION_SCORE) +
+                      (pieces_on_board * BOOP_STATIC_PIECE_SCORE);
+
+    if (has_played_move && side == last_side) {
+      side_score -= BOOP_STATIC_LAST_PLAYER_MALUS;
+    }
 
     score += side == 0 ? side_score : -side_score;
   }

@@ -530,9 +530,9 @@ Row/column conversion remains at UI, notation, and SGF boundaries, and `BoopMove
 The backend exposes full move lists for validation/search, a staged square-grid builder for interactive placement plus
 promotion selection, deterministic notation such as `K@a1+a1,b1,c1`, symbol-only board pieces, static evaluation,
 terminal scores, and position hashing. Boop static evaluation scores promoted kittens plus on-board material derived
-from remaining kitten/cat supplies, and wins are handled by terminal scoring at 10000 minus ply depth. When both kittens
-and cats are available,
-the placement builder exposes both ranks for each empty square and leaves the active rank choice to the UI
+from remaining kitten/cat supplies, then applies a small malus to the side that just moved to smooth turn-to-turn
+material spikes. Wins are handled by terminal scoring at 10000 minus ply depth. When both kittens and cats are
+available, the placement builder exposes both ranks for each empty square and leaves the active rank choice to the UI
 candidate-preference hook. The all-pieces-on-board graduation rule uses empty kitten and cat supplies instead of
 rescanning board occupancy.
 Promotion-stage selection paths contain only the promotion squares, so the just-placed piece is highlighted only when
