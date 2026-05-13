@@ -530,7 +530,8 @@ terminal scores, and position hashing. Boop static evaluation scores promoted ki
 placement; it does not score supply counts directly because they are determined by promoted cats and on-board
 material, and wins are handled by terminal scoring at 10000 minus ply depth. When both kittens and cats are available,
 the placement builder exposes both ranks for each empty square and leaves the active rank choice to the UI
-candidate-preference hook.
+candidate-preference hook. The all-pieces-on-board graduation rule uses empty kitten and cat supplies instead of
+rescanning board occupancy.
 Promotion-stage selection paths contain only the promotion squares, so the just-placed piece is highlighted only when
 it is actually one of the candidate promotion squares. The boop engine also exposes last-move overlay metadata so the
 GTK board can circle the placed piece and draw arrows for every booped piece, including off-board boops that return to

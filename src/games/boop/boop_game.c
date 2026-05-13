@@ -221,21 +221,6 @@ static gboolean boop_position_has_supply_for_rank(const BoopPosition *position, 
   }
 }
 
-static guint boop_position_count_on_board(const BoopPosition *position, guint side) {
-  guint count = 0;
-
-  g_return_val_if_fail(position != NULL, 0);
-  g_return_val_if_fail(boop_side_valid(side), 0);
-
-  for (guint square = 0; square < BOOP_SQUARE_COUNT; ++square) {
-    BoopPiece piece = position->board[square];
-    if (boop_piece_side(piece) == side) {
-      count++;
-    }
-  }
-  return count;
-}
-
 static gboolean boop_position_add_mask(guint64 *masks, guint *count, guint64 mask) {
   g_return_val_if_fail(masks != NULL, FALSE);
   g_return_val_if_fail(count != NULL, FALSE);
@@ -356,7 +341,7 @@ static gboolean boop_position_append_graduation_choices(const BoopPosition *posi
   g_return_val_if_fail(boop_side_valid(side), FALSE);
   g_return_val_if_fail(choices != NULL, FALSE);
 
-  if (boop_position_count_on_board(position, side) != BOOP_SUPPLY_COUNT) {
+  if (position->kittens_in_supply[side] != 0 || position->cats_in_supply[side] != 0) {
     return TRUE;
   }
 
