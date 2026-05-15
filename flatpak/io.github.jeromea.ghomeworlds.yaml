@@ -1,0 +1,18 @@
+id: io.github.jeromea.ghomeworlds
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+command: ghomeworlds
+finish-args:
+  - --device=dri
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+modules:
+  - name: ghomeworlds
+    buildsystem: simple
+    build-commands:
+      - make install-homeworlds install-schemas PREFIX=/app
+    sources:
+      - type: dir
+        path: .

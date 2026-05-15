@@ -30,13 +30,18 @@ BOOP_DESKTOP_FILE := data/$(BOOP_APP_ID).desktop
 BOOP_METAINFO_FILE := data/$(BOOP_APP_ID).metainfo.xml
 BOOP_ICON_FILE := data/icons/hicolor/scalable/apps/$(BOOP_APP_ID).svg
 BOOP_FLATPAK_MANIFEST := flatpak/$(BOOP_APP_ID).yaml
-DESKTOP_FILES := $(CHECKERS_DESKTOP_FILE) $(BOOP_DESKTOP_FILE)
-METAINFO_FILES := $(CHECKERS_METAINFO_FILE) $(BOOP_METAINFO_FILE)
-ICON_FILES := $(CHECKERS_ICON_FILE) $(BOOP_ICON_FILE)
-FLATPAK_MANIFESTS := $(CHECKERS_FLATPAK_MANIFEST) $(BOOP_FLATPAK_MANIFEST)
-HOMEWORLDS_GAME_SRCS := $(HOMEWORLDS_DIR)/homeworlds_game.c $(HOMEWORLDS_DIR)/homeworlds_move_builder.c
+HOMEWORLDS_DESKTOP_FILE := data/$(HOMEWORLDS_APP_ID).desktop
+HOMEWORLDS_METAINFO_FILE := data/$(HOMEWORLDS_APP_ID).metainfo.xml
+HOMEWORLDS_ICON_FILE := data/icons/hicolor/scalable/apps/$(HOMEWORLDS_APP_ID).svg
+HOMEWORLDS_FLATPAK_MANIFEST := flatpak/$(HOMEWORLDS_APP_ID).yaml
+DESKTOP_FILES := $(CHECKERS_DESKTOP_FILE) $(BOOP_DESKTOP_FILE) $(HOMEWORLDS_DESKTOP_FILE)
+METAINFO_FILES := $(CHECKERS_METAINFO_FILE) $(BOOP_METAINFO_FILE) $(HOMEWORLDS_METAINFO_FILE)
+ICON_FILES := $(CHECKERS_ICON_FILE) $(BOOP_ICON_FILE) $(HOMEWORLDS_ICON_FILE)
+FLATPAK_MANIFESTS := $(CHECKERS_FLATPAK_MANIFEST) $(BOOP_FLATPAK_MANIFEST) $(HOMEWORLDS_FLATPAK_MANIFEST)
+HOMEWORLDS_GAME_SRCS := $(HOMEWORLDS_DIR)/homeworlds_game.c $(HOMEWORLDS_DIR)/homeworlds_move_builder.c \
+	$(HOMEWORLDS_DIR)/homeworlds_random_ai.c
 HOMEWORLDS_BACKEND_SRCS := $(HOMEWORLDS_DIR)/homeworlds_backend.c
-HOMEWORLDS_APP_WINDOW_SRCS := $(HOMEWORLDS_DIR)/homeworlds_app_window.c
+HOMEWORLDS_APP_WINDOW_SRCS := $(HOMEWORLDS_DIR)/homeworlds_app_window.c $(HOMEWORLDS_DIR)/homeworlds_view.c
 HOMEWORLDS_APP_WINDOW_STUB_SRCS := $(HOMEWORLDS_DIR)/homeworlds_app_window_stub.c
 HOMEWORLDS_ALL_SRCS := $(HOMEWORLDS_GAME_SRCS) $(HOMEWORLDS_BACKEND_SRCS)
 BOOP_GAME_SRCS := $(BOOP_DIR)/boop_game.c
@@ -124,6 +129,7 @@ TEST_GAME_BACKEND_BIN := $(TESTS_DIR)/test_game_backend
 TEST_GAME_MODEL_BIN := $(TESTS_DIR)/test_game_model
 TEST_HOMEWORLDS_GAME_BIN := $(TESTS_DIR)/test_homeworlds_game
 TEST_HOMEWORLDS_BACKEND_BIN := $(TESTS_DIR)/test_homeworlds_backend
+TEST_HOMEWORLDS_WINDOW_BIN := $(TESTS_DIR)/test_homeworlds_window
 TEST_BOOP_GAME_BIN := $(TESTS_DIR)/test_boop_game
 TEST_BOOP_BACKEND_BIN := $(TESTS_DIR)/test_boop_backend
 TEST_BOARD_BIN := $(TESTS_DIR)/test_board
@@ -159,10 +165,10 @@ CALLGRIND_ANNOTATION := $(CALLGRIND_DIR)/callgrind.annotated
 PROFILE_BIN ?= $(BOOP_CREATE_PUZZLES_BIN)
 PROFILE_CMD = $(PROFILE_BIN) puzzles/boop/game-0003.sgf --depth 2
 TEST_BINS := $(TEST_GAME_BIN) $(TEST_GAME_PRINT_BIN) $(TEST_GAME_BACKEND_BIN) $(TEST_GAME_MODEL_BIN) \
-	$(TEST_HOMEWORLDS_GAME_BIN) $(TEST_HOMEWORLDS_BACKEND_BIN) $(TEST_BOOP_GAME_BIN) $(TEST_BOOP_BACKEND_BIN) \
-	$(TEST_BOARD_BIN) $(TEST_BOARD_GEOMETRY_BIN) $(TEST_MOVE_GEN_BIN) $(TEST_CREATE_PUZZLES_CLI_BIN) \
-	$(TEST_CREATE_PUZZLES_CHECK_BIN) $(TEST_CREATE_PUZZLES_RUNNER_BIN) $(TEST_CHECKERS_MODEL_BIN) \
-	$(TEST_AI_SEARCH_BIN) \
+	$(TEST_HOMEWORLDS_GAME_BIN) $(TEST_HOMEWORLDS_BACKEND_BIN) $(TEST_HOMEWORLDS_WINDOW_BIN) \
+	$(TEST_BOOP_GAME_BIN) $(TEST_BOOP_BACKEND_BIN) $(TEST_BOARD_BIN) $(TEST_BOARD_GEOMETRY_BIN) \
+	$(TEST_MOVE_GEN_BIN) $(TEST_CREATE_PUZZLES_CLI_BIN) $(TEST_CREATE_PUZZLES_CHECK_BIN) \
+	$(TEST_CREATE_PUZZLES_RUNNER_BIN) $(TEST_CHECKERS_MODEL_BIN) $(TEST_AI_SEARCH_BIN) \
 	$(TEST_AI_TRANSPOSITION_TABLE_BIN) $(TEST_BGA_CLIENT_BIN) $(TEST_FILE_DIALOG_HISTORY_BIN) \
 	$(TEST_APP_SETTINGS_BIN) $(TEST_APP_PATHS_BIN) $(TEST_DESKTOP_METADATA_BIN) $(TEST_FLATPAK_MANIFEST_BIN) \
 	$(TEST_SGF_TREE_BIN) $(TEST_SGF_IO_BIN) $(TEST_SGF_VIEW_BIN) $(TEST_BOARD_VIEW_BIN) \
@@ -183,8 +189,9 @@ TEST_NO_PROFILE_BINS := $(filter-out $(TEST_PROFILE_BINS),$(TEST_BINS))
 .PHONY: all clean test coverage install install-checkers install-boop install-homeworlds install-schemas \
 	validate-desktop-metadata \
 	gcheckers gboop ghomeworlds all-checkers all-boop all-homeworlds create_puzzles libgame.a \
-	test_game test_game_print test_game_backend test_game_model test_homeworlds_game test_homeworlds_backend \
-	test_boop_game test_boop_backend test_board test_board_geometry test_move_gen test_create_puzzles_cli \
+test_game test_game_print test_game_backend test_game_model test_homeworlds_game test_homeworlds_backend \
+	test_homeworlds_window test_boop_game test_boop_backend test_board test_board_geometry test_move_gen \
+	test_create_puzzles_cli \
 	test_create_puzzles_check test_create_puzzles_runner \
 	test_checkers_model test_ai_search test_ai_transposition_table test_bga_client \
 	test_file_dialog_history test_app_settings test_app_paths test_desktop_metadata test_flatpak_manifest \
@@ -255,9 +262,17 @@ $(TEST_HOMEWORLDS_GAME_BIN): tests/test_homeworlds_game.c $(HOMEWORLDS_GAME_SRCS
 test_homeworlds_backend: $(TEST_HOMEWORLDS_BACKEND_BIN)
 $(TEST_HOMEWORLDS_BACKEND_BIN): tests/test_homeworlds_backend.c $(HOMEWORLDS_ALL_SRCS) \
 	$(HOMEWORLDS_DIR)/homeworlds_backend.h $(HOMEWORLDS_DIR)/homeworlds_game.h \
-	$(HOMEWORLDS_DIR)/homeworlds_move_builder.h
+	$(HOMEWORLDS_DIR)/homeworlds_move_builder.h $(HOMEWORLDS_DIR)/homeworlds_random_ai.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_homeworlds_backend.c $(HOMEWORLDS_ALL_SRCS) $(LDLIBS)
+
+test_homeworlds_window: $(TEST_HOMEWORLDS_WINDOW_BIN)
+$(TEST_HOMEWORLDS_WINDOW_BIN): tests/test_homeworlds_window.c $(HOMEWORLDS_APP_WINDOW_SRCS) \
+	$(HOMEWORLDS_ALL_SRCS) src/game_model.c $(HOMEWORLDS_DIR)/homeworlds_app_window.h \
+	$(HOMEWORLDS_DIR)/homeworlds_view.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_homeworlds_window.c $(HOMEWORLDS_APP_WINDOW_SRCS) \
+		$(HOMEWORLDS_ALL_SRCS) src/game_model.c $(LDLIBS) $(GTK_LIBS)
 
 test_boop_game: $(TEST_BOOP_GAME_BIN)
 $(TEST_BOOP_GAME_BIN): tests/test_boop_game.c $(BOOP_GAME_SRCS) $(BOOP_DIR)/boop_game.h
@@ -719,9 +734,15 @@ install-boop: all $(BOOP_DESKTOP_FILE) $(BOOP_METAINFO_FILE) $(BOOP_ICON_FILE)
 	$(INSTALL) -d $(DESTDIR)$(ICONS_DIR)
 	$(INSTALL) -m 644 $(BOOP_ICON_FILE) $(DESTDIR)$(ICONS_DIR)/$(BOOP_APP_ID).svg
 
-install-homeworlds: all
+install-homeworlds: all $(HOMEWORLDS_DESKTOP_FILE) $(HOMEWORLDS_METAINFO_FILE) $(HOMEWORLDS_ICON_FILE)
 	$(INSTALL) -d $(DESTDIR)$(BINDIR)
 	$(INSTALL) -m 755 $(HOMEWORLDS_APP_BIN) $(DESTDIR)$(BINDIR)/$(HOMEWORLDS_APP_BIN_NAME)
+	$(INSTALL) -d $(DESTDIR)$(APPLICATIONS_DIR)
+	$(INSTALL) -m 644 $(HOMEWORLDS_DESKTOP_FILE) $(DESTDIR)$(APPLICATIONS_DIR)/$(HOMEWORLDS_APP_ID).desktop
+	$(INSTALL) -d $(DESTDIR)$(METAINFO_DIR)
+	$(INSTALL) -m 644 $(HOMEWORLDS_METAINFO_FILE) $(DESTDIR)$(METAINFO_DIR)/$(HOMEWORLDS_APP_ID).metainfo.xml
+	$(INSTALL) -d $(DESTDIR)$(ICONS_DIR)
+	$(INSTALL) -m 644 $(HOMEWORLDS_ICON_FILE) $(DESTDIR)$(ICONS_DIR)/$(HOMEWORLDS_APP_ID).svg
 
 install-schemas: $(GSETTINGS_SCHEMA_XMLS)
 	$(INSTALL) -d $(DESTDIR)$(SCHEMAS_INSTALL_DIR)
@@ -733,12 +754,12 @@ install-schemas: $(GSETTINGS_SCHEMA_XMLS)
 
 validate-desktop-metadata: $(DESKTOP_FILES) $(METAINFO_FILES)
 	@if command -v desktop-file-validate >/dev/null 2>&1; then \
-		desktop-file-validate $(CHECKERS_DESKTOP_FILE) $(BOOP_DESKTOP_FILE); \
+		desktop-file-validate $(DESKTOP_FILES); \
 	else \
 		echo "desktop-file-validate not found; skipping"; \
 	fi
 	@if command -v appstreamcli >/dev/null 2>&1; then \
-		appstreamcli validate --no-net $(CHECKERS_METAINFO_FILE) $(BOOP_METAINFO_FILE); \
+		appstreamcli validate --no-net $(METAINFO_FILES); \
 	else \
 		echo "appstreamcli not found; skipping"; \
 	fi
@@ -750,7 +771,7 @@ clean:
 	rm -f test_bga_client test_file_dialog_history test_app_paths
 	rm -f test_desktop_metadata test_flatpak_manifest test_create_puzzles_cli test_create_puzzles_check
 	rm -f test_puzzle_generation test_board_view test_player_controls_panel test_sgf_controller test_sgf_io
-	rm -f test_sgf_tree test_sgf_view test_window
+	rm -f test_sgf_tree test_sgf_view test_window test_homeworlds_window
 	rm -f src/*.o
 	rm -f $(GSETTINGS_SCHEMA_COMPILED)
 	rm -rf $(COV_DIR)

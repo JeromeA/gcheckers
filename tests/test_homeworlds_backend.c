@@ -4,6 +4,7 @@
 #include "../src/games/homeworlds/homeworlds_backend.h"
 #include "../src/games/homeworlds/homeworlds_game.h"
 #include "../src/games/homeworlds/homeworlds_move_builder.h"
+#include "../src/games/homeworlds/homeworlds_random_ai.h"
 
 static HomeworldsMove test_setup_move(guint side,
                                       HomeworldsPyramid first_star,
@@ -32,6 +33,25 @@ static void test_prepare_position(HomeworldsPosition *position) {
   homeworlds_position_init(position);
   assert(homeworlds_position_apply_move(position, &p0));
   assert(homeworlds_position_apply_move(position, &p1));
+}
+
+static const HomeworldsMoveCandidate *test_find_setup_candidate(const GameBackend *backend,
+                                                                const GameBackendMoveList *candidates,
+                                                                HomeworldsCandidateKind kind,
+                                                                HomeworldsPyramid pyramid) {
+  g_return_val_if_fail(backend != NULL, NULL);
+  g_return_val_if_fail(candidates != NULL, NULL);
+  g_return_val_if_fail(homeworlds_pyramid_is_valid(pyramid), NULL);
+
+  for (gsize i = 0; i < candidates->count; ++i) {
+    const HomeworldsMoveCandidate *candidate = backend->move_list_get(candidates, i);
+
+    if (candidate->data.kind == kind && candidate->data.pyramid == pyramid) {
+      return candidate;
+    }
+  }
+
+  return NULL;
 }
 
 static void test_backend_metadata(void) {
@@ -74,6 +94,54 @@ static void test_backend_move_builder_completes_setup(void) {
   assert(backend->move_builder_is_complete(&builder));
   assert(backend->move_builder_build_move(&builder, &move));
   assert(move.kind == HOMEWORLDS_MOVE_KIND_SETUP);
+  backend->move_builder_clear(&builder);
+}
+
+static void test_backend_move_builder_setup_accepts_all_pyramid_sizes(void) {
+  const GameBackend *backend = &homeworlds_game_backend;
+  HomeworldsPosition position = {0};
+  HomeworldsPyramid repeated_large_star = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE);
+  HomeworldsPyramid small_ship = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL);
+  GameBackendMoveBuilder builder = {0};
+  GameBackendMoveList candidates = {0};
+  HomeworldsMove move = {0};
+  const HomeworldsMoveCandidate *candidate = NULL;
+
+  homeworlds_position_init(&position);
+  assert(backend->move_builder_init(&position, &builder));
+
+  candidates = backend->move_builder_list_candidates(&builder);
+  assert(candidates.count == 12);
+  candidate = test_find_setup_candidate(backend,
+                                        &candidates,
+                                        HOMEWORLDS_CANDIDATE_SETUP_STAR,
+                                        repeated_large_star);
+  assert(candidate != NULL);
+  assert(backend->move_builder_step(&builder, candidate));
+  backend->move_list_free(&candidates);
+
+  candidates = backend->move_builder_list_candidates(&builder);
+  assert(candidates.count == 12);
+  candidate = test_find_setup_candidate(backend,
+                                        &candidates,
+                                        HOMEWORLDS_CANDIDATE_SETUP_STAR,
+                                        repeated_large_star);
+  assert(candidate != NULL);
+  assert(backend->move_builder_step(&builder, candidate));
+  backend->move_list_free(&candidates);
+
+  candidates = backend->move_builder_list_candidates(&builder);
+  assert(candidates.count == 12);
+  candidate = test_find_setup_candidate(backend, &candidates, HOMEWORLDS_CANDIDATE_SETUP_SHIP, small_ship);
+  assert(candidate != NULL);
+  assert(backend->move_builder_step(&builder, candidate));
+  backend->move_list_free(&candidates);
+
+  assert(backend->move_builder_is_complete(&builder));
+  assert(backend->move_builder_build_move(&builder, &move));
+  assert(move.setup_stars[0] == repeated_large_star);
+  assert(move.setup_stars[1] == repeated_large_star);
+  assert(move.setup_ship == small_ship);
   backend->move_builder_clear(&builder);
 }
 
@@ -147,10 +215,45 @@ static void test_backend_good_moves_are_subset_and_ordered(void) {
   backend->move_list_free(&good_moves);
 }
 
+static void test_backend_random_ai_builds_setup_move(void) {
+  HomeworldsPosition position = {0};
+  HomeworldsMove move = {0};
+  GRand *rand = g_rand_new_with_seed(11);
+
+  homeworlds_position_init(&position);
+  assert(homeworlds_random_ai_build_move(&position, rand, &move));
+  assert(move.kind == HOMEWORLDS_MOVE_KIND_SETUP);
+  assert(homeworlds_position_apply_move(&position, &move));
+  assert(position.turn == 1);
+
+  g_rand_free(rand);
+}
+
+static void test_backend_random_ai_skips_attack_without_targets(void) {
+  HomeworldsPosition position = {0};
+
+  test_prepare_position(&position);
+  for (guint seed = 0; seed < 64; ++seed) {
+    HomeworldsPosition copy = position;
+    HomeworldsMove move = {0};
+    GRand *rand = g_rand_new_with_seed(seed);
+
+    assert(homeworlds_random_ai_build_move(&copy, rand, &move));
+    for (guint step = 0; step < move.step_count; ++step) {
+      assert(move.steps[step].kind != HOMEWORLDS_STEP_ATTACK);
+    }
+    assert(homeworlds_position_apply_move(&copy, &move));
+    g_rand_free(rand);
+  }
+}
+
 int main(void) {
   test_backend_metadata();
   test_backend_move_builder_completes_setup();
+  test_backend_move_builder_setup_accepts_all_pyramid_sizes();
   test_backend_move_builder_completes_turn();
   test_backend_good_moves_are_subset_and_ordered();
+  test_backend_random_ai_builds_setup_move();
+  test_backend_random_ai_skips_attack_without_targets();
   return 0;
 }

@@ -1,4 +1,4 @@
-# Add Homeworlds as a second compiled game
+# Finish Homeworlds as a profile-owned game
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
@@ -7,494 +7,575 @@ This document must be maintained in accordance with `doc/PLANS.md`.
 
 ## Purpose / Big Picture
 
-After this change, a developer will be able to build a second branded application from the same repository:
-`ghomeworlds`, compiled with `GAME=homeworlds`. A user will be able to start a local two-player Homeworlds game,
-interact with a Homeworlds-specific board/system view, take legal turns through the GTK UI, and win or lose according
-to the rules in `src/games/homeworlds/RULES.md`.
+Homeworlds already has a rules engine, backend adapter, branded launcher, and profile entry, but `build/bin/ghomeworlds`
+still opens only a skeleton window. After this plan is complete, a user will be able to run `build/bin/ghomeworlds`,
+complete Homeworlds setup, take legal local turns through a Homeworlds-specific GTK view, optionally let a simple
+random AI choose legal moves through the staged builder, and see the game end when a player starts their turn with no
+ships at their homeworld.
 
-The first shipped Homeworlds version in this plan is deliberately narrower than the current checkers build. It must
-support local play, new-game setup, turn progression, victory detection, and a game-specific visual presentation. It
-must also support a deliberately limited AI path, where the backend exposes only a heuristic subset of promising moves
-instead of the full legal move space. It does not need puzzles or SGF-based puzzle playback. The visible proof is
-that `GAME=homeworlds make` builds a dedicated binary and
-`GAME=homeworlds build/bin/ghomeworlds` starts a playable local game where a player can create Homeworlds, take
-turns, optionally let the limited AI choose from backend-provided good moves, and see the game end when a player
-starts their turn with no ships at their Homeworld.
+The purpose of this revision is also protective: since the original plan was written, the repository moved in the
+right direction for multiple games. Boop is now a fully supported second shared-shell game, the Makefile builds all
+application binaries generically, and runtime `GGameAppProfile` selection replaced compile-time `GAME` selection.
+Future Homeworlds work must build on those improvements, not reintroduce stale compile-time branches or Checkers-only
+assumptions.
 
 ## Progress
 
-- [x] (2026-04-25 16:05Z) Read `doc/PLANS.md`, `doc/OVERVIEW.md`, `doc/execplan-game-backend-interface.md`, and
-      `src/games/homeworlds/RULES.md`, then write this initial ExecPlan.
-- [x] (2026-04-25 17:15Z) Complete Milestone 1 by adding `GAME=homeworlds` selection, a branded `ghomeworlds`
-      skeleton binary, the stub Homeworlds backend, and backend-selection coverage for the second game.
-- [x] (2026-04-26 10:55Z) Complete Milestone 2 by adding the slot-based Homeworlds engine, staged move builder,
-      backend-owned `list_good_moves`, shared AI support for good-move-only backends, and focused engine/backend
-      tests.
-- [ ] Add the missing backend-owned board widget path to shared UI so non-square games can render and accept input.
-- [ ] Integrate Homeworlds into the window and new-game flows as a playable local game with limited AI and with
-      unsupported features disabled.
-- [ ] Add tests and validation commands for both the Homeworlds engine/backend and the full `GAME=homeworlds` build.
-- [ ] Update `doc/OVERVIEW.md` as each `src/` milestone lands.
+- [x] (2026-04-25 16:05Z) Read `doc/PLANS.md`, `doc/OVERVIEW.md`,
+      `doc/execplan-game-backend-interface.md`, and `src/games/homeworlds/RULES.md`, then write the initial
+      Homeworlds ExecPlan.
+- [x] (2026-04-25 17:15Z) Add the first Homeworlds build/backend skeleton, branded `ghomeworlds` launcher, and
+      backend-selection tests.
+- [x] (2026-04-26 10:55Z) Add the slot-based Homeworlds engine, staged move builder, backend-owned `list_good_moves`,
+      shared AI support for good-move-only backends, and focused Homeworlds engine/backend tests.
+- [x] (2026-05-13 21:28Z) Review the plan against the current repository and rewrite it so it preserves the generic
+      Makefile, runtime profiles, and Boop shared-shell support instead of instructing future work to revert them.
+- [x] (2026-05-13 23:05Z) Replace the Homeworlds skeleton window in
+      `src/games/homeworlds/homeworlds_app_window.c` with a real profile-owned playable window.
+- [x] (2026-05-13 23:05Z) Add a Homeworlds-specific view/controller for systems, bank pieces, setup, ordinary actions,
+      sacrifices, and catastrophes.
+- [x] (2026-05-13 23:05Z) Connect the Homeworlds view to `GGameModel`, `homeworlds_move_builder`, and
+      `homeworlds_game_backend` without using full move enumeration.
+- [x] (2026-05-13 23:18Z) Add tests for the Homeworlds profile window, staged interaction paths, and profile-gated
+      application behavior.
+- [x] (2026-05-13 23:20Z) Add Homeworlds packaging metadata and update `doc/OVERVIEW.md` when `src/` or packaging
+      changes land.
+- [x] (2026-05-15 09:30Z) Move setup selection from the long side-panel candidate list to clickable bank piles
+      overlaid directly on the Homeworlds board, with setup accepting any bank pyramid size.
+- [x] (2026-05-15 10:10Z) Fix homeworld display geometry so player 1 is rendered at the bottom, player 2 at the top,
+      and each homeworld's own ships sit beside the stars from that player's perspective.
+- [x] (2026-05-15 10:30Z) Make ship and bank pyramids tall isosceles pieces, increase geometric size contrast, double
+      vertical-pyramid scale, and render black base pips on stars and vertical pyramids.
 
 ## Surprises & Discoveries
 
-- Observation: the rules folder currently contains only prose rules, not an engine skeleton or test data.
-  Evidence: `find src/games/homeworlds -maxdepth 2 -type f` returns only `src/games/homeworlds/RULES.md`.
+- Observation: the repository is no longer selected by a compile-time `GAME` variable.
+  Evidence: `src/active_game_backend.h` now expands to `ggame_active_app_profile()->backend`, and `src/gcheckers.c`,
+  `src/gboop.c`, and `src/ghomeworlds.c` each call `ggame_app_main_run()` with a different `GGameAppProfile`.
 
-- Observation: the shared AI layer can now search a backend that exposes only `list_good_moves`, but the shared GTK
-  board input path still assumes square-grid rendering and full move-list support for human interaction.
-  Evidence: `src/ai_search.c` now falls back to `list_good_moves`, while `src/board_view.c` still guards on
-  `backend->supports_square_grid_board`, and `src/board_selection_controller.c` still logs that it “requires
-  list-move backends”.
+- Observation: `make` now builds all branded binaries and puzzle tools together.
+  Evidence: `Makefile` has `APP_BINS := build/bin/gcheckers build/bin/gboop build/bin/ghomeworlds`, `all` depends on
+  `$(APP_BINS)`, and specific targets are named `all-checkers`, `all-boop`, and `all-homeworlds`.
 
-- Observation: the product naming is still checkers-branded in several shared build/package variables.
-  Evidence: `Makefile` still sets `APP_ID := io.github.jeromea.gcheckers`, `GCHECKERS_BIN := $(BIN_DIR)/gcheckers`,
-  and `PUZZLES_INSTALL_DIR := $(DATADIR)/gcheckers/puzzles`.
+- Observation: Boop proves that the shared shell is now a real multi-game path, not a Checkers-only shell.
+  Evidence: the Boop profile sets `supports_shared_shell = TRUE`, provides `gboop_controls_create_board_host()` as a
+  profile UI hook, supports SGF files, puzzles, analysis, save-position, and has profile-aware window tests.
 
-- Observation: the current main window and SGF controller are still architecturally centered around one board view,
-  one SGF timeline, and checkers-derived replay flows.
-  Evidence: `src/window.c` owns `BoardView *board_view` and `GGameSgfController *sgf_controller`, and
-  `src/sgf_controller.c` requires `BoardView` in its constructor.
+- Observation: Homeworlds already has the engine/backend half of the original plan, but not the GUI half.
+  Evidence: `src/games/homeworlds/homeworlds_game.c`, `homeworlds_move_builder.c`, and `homeworlds_backend.c` exist;
+  `homeworlds_game_backend` advertises `supports_move_builder = TRUE`, `supports_move_list = FALSE`, and
+  `supports_ai_search = TRUE`; `src/games/homeworlds/homeworlds_app_window.c` still displays the text
+  "Homeworlds skeleton build".
 
-- Observation: the existing shared application shell cannot simply be recompiled against a second backend yet.
-  Evidence: Milestone 1 needed a separate `src/ghomeworlds.c` GTK skeleton because the current `src/application.c` and
-  `src/window.c` still pull in checkers-specific modules and flows.
+- Observation: Homeworlds currently opts out of the shared shell through profile flags and a custom toplevel window
+  hook.
+  Evidence: `src/game_app_profile.c` sets Homeworlds `supports_shared_shell = FALSE` and
+  `.ui.create_window = ghomeworlds_app_window_create`.
+
+- Observation: the old plan's instruction to add a generic board-surface abstraction is no longer the only reasonable
+  path. Boop integrated by wrapping the existing square-grid `BoardView` with a profile-owned board host, while
+  Homeworlds can use its existing profile-owned toplevel window hook for a non-square game.
+  Evidence: `GGameAppUiHooks` has both `create_window` and `create_board_host`.
+
+- Observation: a staged Homeworlds view must distinguish external model refresh from internal partial-selection
+  refresh.
+  Evidence: rebuilding the builder after every candidate selection lost setup selections; the view now updates buttons
+  and drawing from the current builder until the move completes.
+
+- Observation: the random AI must reject source ships whose apparent actions cannot be completed.
+  Evidence: a red-only starting homeworld exposes an attack action with no target and a sacrifice that leaves no ship
+  for the granted actions; the stochastic policy now checks continuations recursively and falls back to pass when that
+  is the only legal complete move.
+
+- Observation: setup candidates are too numerous for a practical side-panel button list.
+  Evidence: the initial setup stage can expose many near-duplicate bank choices. The view now renders the bank over the
+  board and turns each pile of identical pyramids into one real `GtkButton`, while the side panel shows only an
+  instruction during setup.
 
 ## Decision Log
 
-- Decision: Homeworlds will ship with a deliberately limited AI based on a new backend callback named
-  `list_good_moves`, whose contract is to return a heuristic subset of legal moves ordered best-first.
-  Rationale: `src/games/homeworlds/RULES.md` implies a move space that can reach millions of legal moves, and the user
-  explicitly stated that the current alpha-beta and full move-list assumptions are not adequate. The shared AI should
-  therefore search only backend-curated candidates, while human interaction continues to use exact legality through the
-  move builder.
-  Date/Author: 2026-04-25 / Codex
+- Decision: do not reintroduce compile-time `GAME=...` selection.
+  Rationale: the current runtime profile registry is a better general solution. It allows one object graph and one
+  shared application entry path to support `gcheckers`, `gboop`, and `ghomeworlds`, and it avoids wrong-object builds
+  caused by preprocessor-selected sources.
+  Date/Author: 2026-05-13 / Codex
 
-- Decision: Homeworlds will use a backend-owned board/system widget instead of trying to squeeze the game into the
-  existing square-grid board API.
-  Rationale: Homeworlds is played over a dynamic graph of star systems and ships, not a rectangular board of playable
-  squares. The earlier backend split intended to support non-square games, but the concrete widget path does not exist
-  yet, so this plan must add it as part of Homeworlds.
-  Date/Author: 2026-04-25 / Codex
+- Decision: the Makefile should remain all-games-by-default.
+  Rationale: `make` and `make all` now build every binary, while `make all-homeworlds`, `make all-checkers`, and
+  `make all-boop` build individual application binaries. Homeworlds work should add sources to those generic lists
+  rather than adding recursive Makefile calls or profile-specific object directories.
+  Date/Author: 2026-05-13 / Codex
 
-- Decision: SGF remains the single source of truth for move history and replay state, even for Homeworlds.
-  Rationale: the window and replay stack are already organized around SGF in-memory state, so adding a second
-  backend-owned move log would create divergence for little benefit. If Homeworlds moves do not fit the existing text
-  property conventions cleanly, the backend may still store move payloads as opaque binary blobs inside the SGF tree
-  and postpone user-facing serialization details until later.
-  Date/Author: 2026-04-25 / Codex
+- Decision: finish Homeworlds first through its profile-owned window hook, not by replacing the working Checkers/Boop
+  shared shell.
+  Rationale: Homeworlds is not a square-grid game. The existing `create_window` hook lets Homeworlds own a custom GTK
+  window while still using the same application/profile/backend infrastructure. That is lower risk than refactoring
+  the mature shared shell before Homeworlds has one playable UI.
+  Date/Author: 2026-05-13 / Codex
 
-- Decision: Milestone 1 uses a branded Homeworlds GTK skeleton binary instead of trying to reuse the full shared
-  `GGameApplication` and `GGameWindow` stack immediately.
-  Rationale: the current shared application shell is still too checkers-specific to compile cleanly under
-  `GAME=homeworlds`. A tiny `src/ghomeworlds.c` binary satisfies the milestone’s build/package-selection goal without
-  pretending the later UI milestones are already complete.
-  Date/Author: 2026-04-25 / Codex
+- Decision: keep Checkers and Boop shared-shell behavior as the compatibility baseline.
+  Rationale: Boop's support for puzzles, SGF, analysis, save-position, and profile-owned board controls is evidence
+  that the shared shell can support multiple games. Homeworlds changes must not remove or simplify those paths just to
+  satisfy stale Homeworlds instructions.
+  Date/Author: 2026-05-13 / Codex
+
+- Decision: Homeworlds human interaction must continue to use the staged move builder, and backend search candidates
+  must continue to use `list_good_moves`.
+  Rationale: Homeworlds can have a very large legal move space, so full move enumeration is deliberately unsupported.
+  The existing backend contract already encodes this with `supports_move_list = FALSE`, `supports_move_builder = TRUE`,
+  and `supports_ai_search = TRUE`.
+  Date/Author: 2026-05-13 / Codex
+
+- Decision: the first playable Homeworlds window AI should be a simple stochastic policy, not a full search player.
+  Rationale: the first UI milestone needs a legal automated opponent for testing and local play, not strong strategy.
+  A builder-driven random policy exercises the same staged legality path as human input and avoids materializing the
+  full move space.
+  Date/Author: 2026-05-13 / Codex
 
 ## Outcomes & Retrospective
 
-Milestones 1 and 2 are complete. The repository now has a second compile-time backend selection path, a real
-Homeworlds rules engine in `src/games/homeworlds/homeworlds_game.c`, a staged Homeworlds move builder in
-`src/games/homeworlds/homeworlds_move_builder.c`, a backend adapter with heuristic `list_good_moves`, and focused
-engine/backend tests. The next hard gap is no longer the rules layer; it is the missing backend-owned board/widget
-path in shared GTK code, because Homeworlds still cannot plug into `src/window.c` and the square-grid interaction
-stack.
+The playable Homeworlds milestone is complete in the profile-owned window path. The repository now has three profiles,
+three launchers, one generic all-game Makefile, two fully supported shared-shell games, and a custom Homeworlds GTK
+window for its non-square system graph. Homeworlds remains outside the shared SGF/puzzle/analysis shell, but it can be
+set up and played locally through staged legal choices, direct catastrophe buttons, and a builder-driven random AI.
+
+The important lesson is still that Homeworlds should not roll the repository back to a `GAME=homeworlds make` world.
+The profile system, all-game Makefile, and Boop shared-shell support stayed intact; Homeworlds filled in its missing UI
+behind the profile-owned window hook instead.
 
 ## Context and Orientation
 
-This repository is now a multi-game C/GTK codebase with one currently shipped game: checkers. Shared application code
-is in top-level `src/`. Game-specific code lives in `src/games/<game>/`. The active game is selected at compile time
-through the `GAME` variable in `Makefile`, which defines a preprocessor symbol such as `GGAME_GAME_CHECKERS`. The
-selected backend is exposed through `src/active_game_backend.h` and described by the callback table in
-`src/game_backend.h`.
+The repository is a C/GTK application framework with three branded application binaries:
 
-The rules for the new game are in `src/games/homeworlds/RULES.md`. In plain terms, Homeworlds is a game of ships and
-star systems built from colored pyramids. Each player starts by building a two-star “homeworld” and placing a large
-ship beside it. Players lose if they begin their turn with no ships at their homeworld. A turn is either one basic
-action in a system where the player has a ship, or a sacrifice of one ship to gain one to three actions of that
-ship’s color across any systems where the player has ships. The four action types are construct (green), trade
-(blue), attack/steal (red), and move/discover (yellow). Overpopulation by four or more pieces of one color causes a
-catastrophe that removes all pieces of that color from the system; if a star is removed, the whole system collapses.
+- `build/bin/gcheckers` for Checkers.
+- `build/bin/gboop` for Boop.
+- `build/bin/ghomeworlds` for Homeworlds.
 
-The current backend contract in `src/game_backend.h` already supports three capability flags that matter here:
-`supports_move_list`, `supports_move_builder`, and `supports_ai_search`. Checkers currently opts into move lists and
-AI. Homeworlds should also opt into AI, but through a new callback named `list_good_moves`. Its contract is different
-from `list_moves`: it returns only a heuristic subset of legal moves, ordered best-first for search. Human input still
-needs exact legality, so Homeworlds should use move building for interactive play. A “move builder” means a
-backend-controlled state machine for interactive move construction, where the backend offers the next legal choices
-without materializing all legal moves at once.
+The default command `make` or `make all` builds all three binaries plus shared libraries and puzzle tools. A developer
+can build one application binary with `make all-checkers`, `make all-boop`, or `make all-homeworlds`. Do not use
+`GAME=homeworlds make`; that was an older design and should not be restored.
 
-The current shared UI is not yet ready for Homeworlds. `src/board_view.c`, `src/board_grid.c`, and related files only
-implement the square-grid presentation. `src/window.c` assumes one `BoardView` plus one `GGameSgfController`.
-`src/new_game_dialog.c` assumes computer-player configuration is relevant to the active game. `src/puzzle_dialog.c`,
-`src/settings_dialog.c`, and parts of the analysis/puzzle flows are still checkers-oriented even though the replay
-stack itself is SGF-centered and should remain the history source of truth for Homeworlds too.
+The runtime game selection mechanism is `GGameAppProfile`, defined in `src/game_app_profile.h` and implemented in
+`src/game_app_profile.c`. A profile is a descriptor containing the app ID, display name, settings schema ID, the
+profile-owned `GameBackend`, feature flags, layout defaults, and optional UI hooks. The launcher files
+`src/gcheckers.c`, `src/gboop.c`, and `src/ghomeworlds.c` select their profile and call the shared
+`ggame_app_main_run()` function. Shared code gets the active backend through `GGAME_ACTIVE_GAME_BACKEND`, which now
+means `ggame_active_app_profile()->backend`.
 
-The build is also still checkers-branded in important places. `Makefile` names the binary `gcheckers`, the app ID
-`io.github.jeromea.gcheckers`, the Flatpak manifest `flatpak/io.github.jeromea.gcheckers.yaml`, and the installed
-data path `share/gcheckers`. Homeworlds needs the same shape but with its own names, for example `ghomeworlds`,
-`io.github.jeromea.ghomeworlds`, and `flatpak/io.github.jeromea.ghomeworlds.yaml`.
+The backend interface is `src/game_backend.h`. A backend owns game-specific position and move types behind opaque
+storage sizes, initializes/copies/clears positions, applies moves, evaluates positions, formats/parses moves when
+supported, and advertises capabilities. The capability flags matter for Homeworlds:
 
-When this plan says “board widget,” it means the main GTK widget that shows the current position and accepts move
-input. When this plan says “system view,” it means a Homeworlds-specific board widget that renders star systems,
-ships, layered system placement, selections, and pending move-builder state. When this plan says “timeline,” it means
-the user-visible move history and replay model stored in the in-memory SGF tree, even if some Homeworlds move payloads
-are represented as opaque binary blobs rather than text-like SGF moves.
+- `supports_move_list` means the backend can enumerate every legal move in a position.
+- `supports_move_builder` means the backend can guide a UI through legal move construction one choice at a time.
+- `supports_ai_search` means the generic AI layer can evaluate backend moves.
+- `list_good_moves` is a backend callback that returns a bounded, heuristic subset of legal moves for search.
+
+Checkers supports the historical square-grid move-list path. Boop supports the shared shell, square-grid rendering,
+SGF, puzzles, analysis, and a profile board-host hook in `src/games/boop/boop_controls.c`. Homeworlds currently
+supports engine/backend/search but not a playable GUI. Its important files are:
+
+- `src/games/homeworlds/RULES.md`: prose game rules.
+- `src/games/homeworlds/homeworlds_types.h`: engine data types.
+- `src/games/homeworlds/homeworlds_game.c` and `.h`: position logic, rule application, evaluation, hashing, and move
+  formatting.
+- `src/games/homeworlds/homeworlds_move_builder.c` and `.h`: staged legal-choice generation for setup and turns.
+- `src/games/homeworlds/homeworlds_backend.c` and `.h`: `GameBackend` adapter.
+- `src/games/homeworlds/homeworlds_app_window.c` and `.h`: current skeleton profile-owned GTK window.
+- `src/games/homeworlds/homeworlds_app_window_stub.c`: weak stub used by headless test targets.
+- `src/games/homeworlds/homeworlds.png`: visual mockup for the Homeworlds UI. It shows the intended visual direction,
+  including a starfield background, rounded system boxes, labeled homeworlds, pieces drawn as colored pyramids/stars,
+  and a right-side action/bank panel. Treat this image as a reference for layout and atmosphere, while the prose in
+  this ExecPlan remains authoritative if the two conflict.
+
+The shared `GGameWindow` in `src/window.c` is mature for Checkers and Boop. It owns the shared shell, `BoardView`,
+SGF controller, puzzle mode, analysis drawer, and board-host hook. Homeworlds does not need to enter this shell before
+it is playable. The Homeworlds profile already has `.ui.create_window = ghomeworlds_app_window_create`, so the next
+implementation can replace the skeleton window with a custom Homeworlds window while still using the shared
+application/profile/backend infrastructure.
 
 ## Plan of Work
 
-The work begins in the build and backend selection layer. In `Makefile`, introduce a `homeworlds` branch alongside
-the existing `checkers` branch. That branch must define the active backend symbol, source directory
-`src/games/homeworlds`, game-specific binary name `ghomeworlds`, game-specific app ID, and any game-specific tool
-names or packaging filenames. The result must be that `GAME=homeworlds make` builds a separate branded application
-without changing the default checkers build. Because Homeworlds does not ship puzzle generation or AI tools in the
-first milestone, the Makefile must allow those targets to be absent or no-op for that game instead of forcing
-checkers-only tools into every build.
+Start by preserving the current architecture. Leave `src/active_game_backend.h` profile-driven. Leave the Makefile
+all-games-by-default. Leave Checkers and Boop shared-shell code intact. Any new Homeworlds source files should be added
+to the existing Homeworlds source variables in `Makefile` rather than adding a new compile-time game selector.
 
-Next, create the Homeworlds engine under `src/games/homeworlds/`. Start with explicit data structures that match the
-rules prose: pyramid colors, pyramid sizes, bank counts, star systems, homeworld ownership, ships, and turn state.
-Implement a position type that can express a dynamic graph of systems rather than a fixed board. Implement rule
-helpers for setup legality, access to action colors in a system, movement connectivity (“systems are connected if they
-do not share a star size”), sacrificing for one-to-three same-color actions, capture legality by size, catastrophe
-resolution, empty-system cleanup, and the start-of-turn loss check. Keep the implementation engine-first and UI-agnostic.
+Replace the skeleton in `src/games/homeworlds/homeworlds_app_window.c` with a real profile-owned GTK window. The
+window should create a `GGameModel` using `homeworlds_game_backend`, show turn/outcome status, show a Homeworlds view,
+and expose simple controls for new game, reset selection, pass/cancel when legal, and optional AI move. The window can
+be smaller and less feature-rich than `GGameWindow`; the acceptance bar is playable local Homeworlds, not parity with
+Checkers and Boop puzzle/analysis/SGF workflows.
 
-Then add a Homeworlds backend adapter in `src/games/homeworlds/homeworlds_backend.c` and
-`src/games/homeworlds/homeworlds_backend.h`. The backend must set `supports_move_list = FALSE`,
-`supports_move_builder = TRUE`, and `supports_ai_search = TRUE`, and it must implement a new AI callback named
-`list_good_moves`. The contract for `list_good_moves` is that it returns a heuristic subset of legal moves, ordered
-best-first, and it is allowed to omit many legal moves in order to keep the branching factor tractable. Its move
-builder must represent the staged nature of Homeworlds turns: setup choices, choosing basic action versus sacrifice,
-choosing systems, choosing ships, choosing targets, and optionally triggering catastrophes. The backend must expose
-enough information for a custom widget to ask “what can the player do next?” and to build a final move object without
-ever enumerating the full legal move space.
+Add a Homeworlds-specific view/controller, likely in new files such as
+`src/games/homeworlds/homeworlds_view.c` and `src/games/homeworlds/homeworlds_view.h`. The exact widget structure may
+change during implementation, but it must render systems, stars, ships, the bank, selected pieces, legal next choices,
+and pending sacrifice/action state. It must drive `homeworlds_move_builder` instead of asking the backend for a full
+move list. When the builder completes a `HomeworldsMove`, apply it through `GGameModel` or directly through the
+profile backend and then refresh the view from the resulting position.
 
-After the engine exists, add the missing shared board-widget abstraction. Replace the hard dependency on `BoardView`
-inside `src/window.c` and `src/sgf_controller.c` with a thin generic board-surface interface in shared `src/`, for
-example a controller object or interface that can either wrap the existing square-grid `BoardView` or a new
-Homeworlds-specific `HomeworldsView`. The important result is not the exact type name; it is that the window can own
-“the active game’s board widget” without assuming square-grid internals. The checkers path must continue to use the
-existing square-grid widgets through an adapter, while Homeworlds must provide its own GTK widget in
-`src/games/homeworlds/homeworlds_view.c` and `src/games/homeworlds/homeworlds_view.h`.
+Render the board using the traditional layered Homeworlds presentation rather than square-grid widgets. A "system" is
+one star or two stars plus ships at that location. A "homeworld" is the special system owned by a player. The view
+should place player homeworlds near opposite sides, put systems one connection hop from each homeworld in nearby
+layers when that is helpful, and put remaining systems in a central layer. Stars can be squares in three sizes, ships
+can be triangles in three sizes pointing away from their owner, and the bank can be a side panel grouped by color and
+size. Do not try to fit Homeworlds into `BoardView`.
 
-The Homeworlds view must visualize systems, stars, ships, and the current move-builder state. It does not need to be
-beautiful in the first milestone, but it must be functionally clear. Do not draw explicit connection lines between
-systems. Instead, use the traditional layered Homeworlds presentation guided by the two players’ homeworld star sizes.
-For example, if player 0’s homeworld uses star sizes 1 and 3, and player 1’s homeworld uses star sizes 2 and 3, then
-the layer nearest player 0 contains the systems one hop from player 0, which therefore use only size-2 stars; the
-layer nearest player 1 contains the systems one hop from player 1, which therefore use only size-1 stars; and a
-central layer contains everything else. If the two players are more directly connected, collapse the middle into one
-central layer containing all remaining systems. On each system, the stars are shown as squares (of 3 different sizes),
-and ships (triangles of 3 different sizes) should be
-pointing away from their owner, and be aligned at the right of the star from the owner's perspective. The bank is
-is shown on the right, with all the triangles available, in 4 parts under each other. Each part has all the triangles
-available from smallest to biggest.
-The user must be able to click systems, ships, and available action targets to drive the move builder. The widget
-must also make pending sacrifice counts and chosen action types visible, because those are essential parts of
-Homeworlds turns. To create a homeworld, the user selects two stars and a ship from the bank. When playing, the
-user selects a ship to activate, then selects one of its legal actions (capture, move, build, trade, sacrifice),
-then select a extra target when relevant (for a move, the target can either be a system or a new star from the bank).
-For sacrifices, we already know the action, so the user just needs to select the ship to activate and extra relevant
-target n times. A button pass can also be selected.
+Use `src/games/homeworlds/homeworlds.png` as the visual reference for the first pass: a dark starfield board, rounded
+white outlines around systems, explicit "Homeworld" labels on player homeworld systems, colored pyramids with size
+marks, square stars, and a right-side vertical panel for action/bank choices. The text requirements in this plan take
+precedence over the mockup when details differ, so do not copy visual details that would contradict the move-builder
+or rules requirements.
 
-Once the custom widget path exists, integrate Homeworlds into the window and new-game flows. `src/new_game_dialog.c`
-must stop assuming that every backend’s AI is based on exhaustive move generation. For Homeworlds, the dialog should
-offer human-vs-human and human-vs-computer start flows plus any game-specific setup assistance needed to create legal
-initial homeworlds. `src/window.c` must gate actions and menus by backend capabilities: keep limited AI controls
-available for Homeworlds, keep SGF-backed history/navigation as the internal source of truth, but still disable or
-hide puzzle actions and any external SGF serialization actions that are not implemented yet. The main window must
-still be usable and coherent when those features are absent.
+Use the move builder as the user interaction source of truth. During setup, the user should select two bank stars and
+one bank ship to create a legal homeworld. During ordinary turns, the user should select a source ship, choose a legal
+action or sacrifice, then select any required target. For sacrifices, the chosen sacrificed ship fixes the action
+color and action count, after which the view repeats the relevant source/target selection until the granted actions are
+spent or a legal pass/end option is selected. The view should visibly distinguish selected items, legal candidates, and
+disabled/non-candidate items.
 
-The initial Homeworlds replay/history handling should stay minimal, but it must still use SGF as the in-memory source
-of truth. Reuse the shared SGF tree and controller path so the window can show turn progress, navigation, and the last
-move from one canonical history model. Do not require polished Homeworlds SGF import/export in the first
-implementation; if needed, represent Homeworlds move payloads in the SGF tree as opaque binary blobs or backend-owned
-properties. The shared code should tolerate a backend that participates in SGF-based in-memory history without yet
-supporting external SGF serialization or puzzles.
+Keep AI integration narrow. The default AI in the Homeworlds window should be builder-driven and stochastic: choose a
+random owned ship to activate, choose a random currently available action, avoid choosing capture when there is nothing
+to capture, and then execute that staged action through the same move-builder legality path as human input. For a
+move/discover action, if there are `N` existing destination systems, choose a random number in `[0, N]`; values below
+`N` move to that indexed existing destination, while value `N` means discover by choosing a random valid new
+destination from the bank. The UI must not require `list_moves`, and it must not enumerate all legal moves to find
+either a human move or this default AI move. The Homeworlds backend should keep `list_good_moves` available for the
+generic AI/search layer, but the first playable window AI does not need to call search.
 
-Finally, add targeted tests. At the engine level, add pure rule tests under `tests/` for setup legality, construct,
-trade, attack, move/discover, sacrifice, catastrophe resolution, system collapse, and start-of-turn loss detection.
-At the backend level, add tests proving the capability flags for Homeworlds, proving that the move builder can advance
-through at least one full legal turn without using `list_moves`, and proving that `list_good_moves` returns a
-best-first subset rather than attempting exhaustive enumeration. At the UI level, add at least one focused window test
-that builds with `GAME=homeworlds`, starts a Homeworlds game, and verifies that AI remains available while puzzle
-actions and any not-yet-implemented external serialization actions are absent or not sensitive.
+Keep external SGF, puzzles, analysis, settings, and save-position disabled for Homeworlds until they are implemented
+intentionally. The Homeworlds profile currently advertises those features as unsupported. Do not turn them on merely to
+reuse Checkers/Boop UI. A later plan can decide whether Homeworlds should enter the shared shell, add SGF parsing, or
+use another history model; this plan's playable milestone should not block on that.
+
+Add tests as each piece lands. Pure engine and backend tests already exist and should remain focused on rules and
+capabilities. New tests should cover the Homeworlds profile window enough to prove it is not the skeleton anymore, the
+view can advance at least one setup path and one ordinary turn path through the move builder, and profile flags still
+keep unsupported shared-shell actions unavailable. When adding `src/` files, update `doc/OVERVIEW.md` in the same
+change.
+
+After the game is playable, add Homeworlds packaging metadata beside the Checkers and Boop files. The Makefile already
+has `HOMEWORLDS_APP_ID` and `HOMEWORLDS_APP_BIN_NAME`, but the installed desktop/metainfo/icon/Flatpak lists currently
+cover Checkers and Boop. Add Homeworlds files and wire them into the existing generic metadata targets without
+changing the all-games build model.
 
 ## Milestones
 
-### Milestone 1: build and backend selection skeleton
+### Milestone 1: current architecture baseline
 
-At the end of this milestone, the repository can compile a Homeworlds-flavored application skeleton. The engine is not
-playable yet, but `GAME=homeworlds make` produces a branded binary and links a stub backend that explicitly reports
-“move builder plus heuristic AI candidates”.
+At the end of this milestone, the plan and tests describe the current profile-based architecture accurately. No source
+architecture should be reverted. The developer should be able to prove that all three launchers build and that the
+Homeworlds backend tests still pass.
 
-Edit `Makefile` so the `ifeq ($(GAME),...)` block has a `homeworlds` branch with its own source directory, binary
-name, application ID, and manifest path. Add `src/games/homeworlds/homeworlds_backend.c` and `.h` with a stub backend
-object, and wire `src/active_game_backend.h` to select it under a new `GGAME_GAME_HOMEWORLDS` define. Where the build
-still assumes checkers-only tools, either make the target conditional on the active game or add a generic wrapper that
-skips unsupported tools for Homeworlds with a clear debug message.
+Run from `/home/jerome/Data/gcheckers`:
 
-Run:
-
-    cd /home/jerome/Data/gcheckers
-    GAME=homeworlds make
-
-Expected proof:
-
-    build/bin/ghomeworlds
-    build/lib/libgame.a
-
-Acceptance for this milestone is that the Homeworlds build compiles cleanly and the backend-selection tests can name a
-second backend without regressing the default checkers build.
-
-### Milestone 2: Homeworlds engine and move-builder backend
-
-At the end of this milestone, the repository contains a pure Homeworlds rules engine plus a backend adapter that can
-represent legal turn construction without full move enumeration and can also expose heuristic AI candidates through
-`list_good_moves`.
-
-Create engine files under `src/games/homeworlds/`, at minimum:
-
-    src/games/homeworlds/homeworlds_types.h
-    src/games/homeworlds/homeworlds_game.c
-    src/games/homeworlds/homeworlds_game.h
-    src/games/homeworlds/homeworlds_move_builder.c
-    src/games/homeworlds/homeworlds_move_builder.h
-
-The engine must represent bank inventory, systems, star sizes, ships, player ownership, and action state. The move
-builder must support both setup and ordinary turns. Do not flatten the rules into one giant parser; keep helpers small
-and named after game concepts so the rule tests stay readable.
-
-Run:
-
-    cd /home/jerome/Data/gcheckers
+    make all
     make test_homeworlds_game test_homeworlds_backend
     build/tests/test_homeworlds_game
     build/tests/test_homeworlds_backend
+    build/tests/test_game_backend --profile=homeworlds
+    build/tests/test_game_model --profile=homeworlds
 
-Acceptance is that the rule tests pass for the core action types and catastrophes, and the backend tests prove
-Homeworlds uses `supports_move_builder = TRUE`, `supports_move_list = FALSE`, `supports_ai_search = TRUE`, and a
-working `list_good_moves` implementation.
+Acceptance is that `build/bin/gcheckers`, `build/bin/gboop`, and `build/bin/ghomeworlds` exist, the Homeworlds
+engine/backend tests pass, and profile tests report Homeworlds as move-builder/AI capable but not shared-shell or
+puzzle capable.
 
-### Milestone 3: backend-owned board widget path
+### Milestone 2: Homeworlds view/controller
 
-At the end of this milestone, the window can host either the existing square-grid checkers board or a backend-owned
-custom widget. This is the enabling milestone for Homeworlds to be visible and interactive.
+At the end of this milestone, there is a Homeworlds-specific GTK widget or controller that can render a position and
+advance a `HomeworldsMoveBuilderState` through visible legal choices. It does not need to be beautiful, but it must be
+clear enough for manual play and testable enough for automated coverage.
 
-Introduce a generic board-surface layer in shared `src/` that the window and the SGF-centered replay/timeline
-controller can talk to without naming `BoardView` directly. Adapt the current checkers path to that layer first so
-behavior does not change for checkers. Then add `src/games/homeworlds/homeworlds_view.c` and `.h` implementing the
-Homeworlds system view. The widget must render enough state to let a user choose systems, ships, and action targets in
-a staged way.
+Add files such as:
 
-Run:
+    src/games/homeworlds/homeworlds_view.c
+    src/games/homeworlds/homeworlds_view.h
 
-    cd /home/jerome/Data/gcheckers
-    make test_board_view test_window
-    build/tests/test_window -p /gcheckers-window/drawer-visibility-actions
+The view should expose a small API for binding a model or position, starting/resetting a builder, notifying when a
+complete move is ready, and refreshing after a move. The API names can evolve, but they should stay local to the
+Homeworlds directory until there is a proven need for shared abstractions.
 
-Acceptance is that the checkers board tests still pass and the codebase no longer assumes that every backend uses
-`BoardView`.
+Use `src/games/homeworlds/homeworlds.png` to guide the first visual implementation, but keep the implementation
+rule-driven. It is acceptable for the first GTK version to approximate the mockup if all legal choices remain clear
+and the text requirements in this plan are satisfied.
 
-### Milestone 4: playable Homeworlds window integration
+Run from `/home/jerome/Data/gcheckers`:
 
-At the end of this milestone, `GAME=homeworlds build/bin/ghomeworlds` starts a real local game. Players can complete
-setup, take legal turns, trigger catastrophes, and win or lose.
+    make all-homeworlds
+    make test_homeworlds_game test_homeworlds_backend
 
-Update `src/window.c`, `src/new_game_dialog.c`, and any action/menu setup so backend capabilities control what the UI
-offers. For Homeworlds, disable or hide:
+Acceptance is that the Homeworlds binary still builds, rule/backend tests still pass, and any new view tests prove at
+least setup candidate rendering plus one ordinary action candidate path.
 
-    - computer-player controls
-    - analysis actions
-    - puzzle actions
-    - external SGF load/save/import actions unless a serializer exists by then
+### Milestone 3: playable Homeworlds profile window
 
-Add enough status text to show turn ownership, whether the player is in setup, and any pending sacrifice/action state.
-Homeworlds must still use the in-memory SGF timeline internally, even if external SGF serialization is not implemented
-yet.
+At the end of this milestone, `build/bin/ghomeworlds` no longer displays a skeleton message. It starts a local
+Homeworlds game, lets two humans complete setup, take turns, resolve catastrophes, and reach a terminal outcome.
 
-Run:
-
-    cd /home/jerome/Data/gcheckers
-    GAME=homeworlds make
-    GAME=homeworlds build/bin/ghomeworlds
+Edit `src/games/homeworlds/homeworlds_app_window.c` to own the Homeworlds model, the Homeworlds view, status labels,
+and simple actions. Keep this path profile-owned through `.ui.create_window`; do not move it into `GGameWindow` unless
+there is a separate decision and tests for that migration.
 
 Manual acceptance scenario:
 
-    1. Start a new Homeworlds game.
-    2. Complete legal homeworld setup for both players.
-    3. Take at least one construct, trade, attack, and move/discover turn across the session.
-    4. Trigger a catastrophe and observe the correct pieces removed.
-    5. Let the limited AI choose a move in at least one position and observe that the game continues normally.
-    6. Reach a position where one player begins their turn with no ships at their homeworld and observe the game end.
+    cd /home/jerome/Data/gcheckers
+    make all-homeworlds
+    build/bin/ghomeworlds
 
-Acceptance is that each of those steps is possible in the GUI and that unsupported actions stay absent or disabled.
+Then verify:
 
-### Milestone 5: packaging, docs, and cross-game validation
+    1. The window shows an actual Homeworlds board/system view, not "Homeworlds skeleton build".
+    2. Player 1 and player 2 can create legal homeworlds.
+    3. A player can perform at least one construct action.
+    4. A player can perform at least one trade action.
+    5. A player can perform at least one attack action.
+    6. A player can perform at least one move/discover action.
+    7. A sacrifice grants the expected repeated same-color actions.
+    8. A catastrophe removes all overpopulated pieces of that color.
+    9. A player with no ships at their homeworld loses at the start of their turn.
 
-At the end of this milestone, Homeworlds is a first-class compiled game in the repository, with its own branding,
-docs, and build validation.
+Automated acceptance should include at least one profile/window test that can instantiate the Homeworlds window and
+prove the skeleton label is gone or that the primary Homeworlds view is present.
 
-Add the Homeworlds packaging metadata beside the checkers files:
+### Milestone 4: default random AI in the Homeworlds window
 
-    flatpak/io.github.jeromea.ghomeworlds.yaml
+At the end of this milestone, the Homeworlds window can apply one legal automated move using a simple random policy.
+The AI does not need to be strong; it must be legal, bounded, connected to the same model state as human moves, and
+implemented through staged move-builder choices rather than full move enumeration.
+
+Add a simple AI control to the Homeworlds window. It should be disabled while a human move is partially selected and
+enabled only when the current position is ongoing. The default policy should choose a random owned ship to activate,
+choose a random available action for that ship, skip capture as an action choice when there are no legal capture
+targets, and then complete the selected action through the builder. For move/discover, first collect the `N` existing
+systems the ship can legally move to. Pick a random integer from `0` through `N` inclusive. If the value is lower than
+`N`, move to that existing destination. If the value is exactly `N`, choose a random valid discovery destination from
+the bank and move there. If no discovery destination is valid, retry among the existing destinations or choose another
+legal action rather than producing an invalid move.
+
+Run from `/home/jerome/Data/gcheckers`:
+
+    make all-homeworlds
+    build/tests/test_homeworlds_backend
+
+Manual acceptance is that after setup, clicking the AI control applies one legal Homeworlds move selected by this
+random policy and the game remains playable.
+
+### Milestone 5: packaging, documentation, and cross-game validation
+
+At the end of this milestone, Homeworlds is a first-class branded target in build, docs, and packaging metadata.
+
+Add Homeworlds metadata beside the existing app metadata, for example:
+
     data/io.github.jeromea.ghomeworlds.desktop
     data/io.github.jeromea.ghomeworlds.metainfo.xml
     data/icons/hicolor/scalable/apps/io.github.jeromea.ghomeworlds.svg
+    flatpak/io.github.jeromea.ghomeworlds.yaml
 
-Update `doc/OVERVIEW.md` so the new shared board-widget abstraction and the Homeworlds modules are documented. Update
-any README/build instructions that currently mention only checkers.
+Wire these into the existing generic Makefile metadata variables instead of creating a parallel Homeworlds-only build
+path. Update `doc/OVERVIEW.md` to describe the Homeworlds window/view modules and the finalized profile behavior.
 
-Run:
+Run from `/home/jerome/Data/gcheckers`:
 
-    cd /home/jerome/Data/gcheckers
-    make
-    GAME=homeworlds make
-    make test_game_backend test_game_model
-    GAME=homeworlds make test_homeworlds_game test_homeworlds_backend
+    make all
+    make test_desktop_metadata test_flatpak_manifest
+    build/tests/test_game_backend --profile=checkers
+    build/tests/test_game_backend --profile=boop
+    build/tests/test_game_backend --profile=homeworlds
 
-Acceptance is that both games build from the same repository, each with its own branded binary, and the Homeworlds
-documentation is accurate enough for a novice contributor to find the engine, backend, widget, and packaging files.
+Acceptance is that all three app binaries build from the same default Makefile target, metadata validation covers
+Homeworlds, and Checkers/Boop profile behavior is unchanged.
 
 ## Concrete Steps
 
-The commands in this section are the exact commands to run from the repository root as work proceeds. Update this
-section with new commands and observed outputs at every milestone.
+Use these commands from the repository root as work proceeds. Update this section with short observed transcripts at
+each milestone.
 
-For the initial research pass used to write this plan:
+Baseline commands for this revision:
 
     cd /home/jerome/Data/gcheckers
-    sed -n '1,240p' doc/PLANS.md
-    sed -n '1,260p' src/games/homeworlds/RULES.md
-    sed -n '1,260p' doc/execplan-game-backend-interface.md
+    make all
+    make test_homeworlds_game test_homeworlds_backend
+    build/tests/test_homeworlds_game
+    build/tests/test_homeworlds_backend
+    build/tests/test_game_backend --profile=homeworlds
+    build/tests/test_game_model --profile=homeworlds
+
+Commands to inspect the architecture before changing code:
+
+    sed -n '1,220p' src/game_app_profile.c
+    sed -n '1,140p' src/game_app_profile.h
+    sed -n '1,80p' src/active_game_backend.h
+    sed -n '1,260p' Makefile
     find src/games/homeworlds -maxdepth 2 -type f | sort
-    rg -n "supports_square_grid_board|BoardView|supports_move_builder|supports_ai_search" src
+    rg -n "supports_shared_shell|create_window|create_board_host|list_good_moves" src tests doc/OVERVIEW.md
 
-Expected evidence from the research pass:
+Expected evidence from the architecture inspection:
 
-    src/games/homeworlds/RULES.md
+    src/active_game_backend.h:
+    #define GGAME_ACTIVE_GAME_BACKEND (ggame_active_app_profile()->backend)
 
-    src/board_view.c:230:  g_return_if_fail(backend->supports_square_grid_board);
-    src/board_selection_controller.c:... Board selection controller requires list-move backends
+    Makefile:
+    all: $(GSETTINGS_SCHEMA_COMPILED) $(LIBGAME_A) $(CREATE_PUZZLES_BINS) $(APP_BINS)
+    ghomeworlds all-homeworlds: $(HOMEWORLDS_APP_BIN)
 
-As implementation proceeds, add the milestone-specific build and test commands from the milestone text above with the
-actual observed output snippets.
+    src/game_app_profile.c:
+    .id = "homeworlds"
+    .backend = &homeworlds_game_backend
+    .features.supports_shared_shell = FALSE
+    .ui.create_window = ghomeworlds_app_window_create
+
+When adding a new source file under `src/games/homeworlds/`, update the relevant `HOMEWORLDS_*_SRCS` variable in
+`Makefile`. When changing `src/`, update `doc/OVERVIEW.md` in the same branch.
 
 ## Validation and Acceptance
 
-Validation is split between pure rule tests, backend capability tests, UI/window tests, and a manual gameplay run.
+For Homeworlds rules, the important observable behaviors are:
 
-For rule validation, the important observable behaviors are:
+- Legal setup accepts a two-star homeworld plus one owned ship and rejects illegal setups.
+- Construct takes the smallest available pyramid of the matching color.
+- Trade swaps color while preserving size.
+- Attack requires sufficient ship size.
+- Movement/discovery obeys the rule that systems are connected only when they do not share a star size.
+- Catastrophes remove all pieces of the overpopulated color and collapse systems whose stars are removed.
+- A player loses when their turn begins with no ships at their homeworld.
 
-- legal setup accepts valid binary-star homeworlds and rejects illegal ones
-- construct takes the smallest available pyramid of the matching color
-- trade swaps color but preserves size
-- attack requires sufficient ship size
-- movement/discovery obeys “no shared star size” connectivity
-- catastrophes remove all pieces of the overpopulated color and collapse systems when a star is destroyed
-- a player loses when their turn begins with no ships at their homeworld
+For Homeworlds UI, the important observable behaviors are:
 
-For UI validation, the important observable behaviors are:
+- `build/bin/ghomeworlds` opens a Homeworlds-branded playable window.
+- The central view renders Homeworlds systems, ships, and bank pieces, not a square checkerboard.
+- User clicks follow the staged move builder and never require full move-list enumeration.
+- Selected items, legal next choices, pending sacrifice/action state, and terminal outcomes are visible.
+- The AI control applies legal moves through the staged random policy without requiring full move enumeration.
 
-- `GAME=homeworlds build/bin/ghomeworlds` opens a Homeworlds-branded application, not the checkers one
-- the central board area renders Homeworlds systems and ships, not a square checkerboard
-- unsupported features such as puzzles and external serialization are hidden or disabled instead of failing at runtime
-- a human can complete setup and play turns without the program needing to enumerate all legal moves globally
+For cross-game safety, every shared build or profile change must also protect Checkers and Boop:
 
-For cross-game safety, always rerun the default checkers build after a shared-UI milestone. Acceptance is not just
-that Homeworlds works, but that `make` for the default checkers build still succeeds and the focused regression tests
-named in the milestones continue to pass.
+- `make all` must still build `gcheckers`, `gboop`, and `ghomeworlds`.
+- Checkers and Boop must remain runtime profiles, not compile-time preprocessor selections.
+- Boop shared-shell support for SGF, puzzles, analysis, save-position, and board-host controls must not be removed.
+- Profile tests should be run for `--profile=checkers`, `--profile=boop`, and `--profile=homeworlds` when profile
+  behavior changes.
+
+At the time of this revision, the full `make test` target is known to stop at `/sgf-view/link-angles` with a GTK
+`invalid (NULL) pointer instance` fatal critical. Do not treat that as caused by Homeworlds unless a later change
+shows otherwise, but do continue running focused tests and record any new failures.
 
 ## Idempotence and Recovery
 
-All file-creation steps in this plan are additive and safe to repeat. Re-running `make` or `GAME=homeworlds make`
-should rebuild only what changed. If a milestone stops halfway through, the recovery path is to finish wiring the new
-files into `Makefile`, rerun the focused build for that milestone, and only then continue to the next milestone.
+The safe recovery rule is: keep the current profile/build architecture working, and make Homeworlds changes additive.
+If a Homeworlds UI milestone fails halfway, `make all-homeworlds` should still compile either the last working
+Homeworlds window or a clearly incomplete one. Avoid editing Checkers or Boop shared-shell code unless the Homeworlds
+milestone explicitly needs a small generic hook and has regression tests for the existing profiles.
 
-The main risky area is the shared board-widget abstraction, because it touches the existing checkers window path. Keep
-that migration parallel and reversible: first add a generic wrapper around the current checkers `BoardView`, prove
-checkers still passes its focused tests, and only then attach the new Homeworlds widget through the same abstraction.
+Re-running `make all`, `make all-homeworlds`, and the Homeworlds tests is safe. Re-running profile tests with
+`--profile=checkers`, `--profile=boop`, and `--profile=homeworlds` is safe. Generated puzzle files and profiler
+outputs should not be committed unless the milestone explicitly requires fixture updates.
 
-Do not delete the existing square-grid code during the Homeworlds bring-up. Treat it as the stable checkers adapter
-until Homeworlds is fully working and both games are validated.
+If a change accidentally reintroduces `GAME=homeworlds`, `GGAME_GAME_HOMEWORLDS`, or other preprocessor-selected game
+objects, stop and remove that direction. The current source of truth is `GGameAppProfile`.
 
 ## Artifacts and Notes
 
-Important evidence snippets to preserve as implementation proceeds:
+Important current-state snippets:
 
-    GAME=homeworlds make
+    $ make all
+    make: Nothing to be done for 'all'.
+
+    $ build/tests/test_homeworlds_game
+    All tests passed.
+
+    $ build/tests/test_homeworlds_backend
+    All tests passed.
+
+    $ build/tests/test_homeworlds_window
+    ok 1 /homeworlds/view/homeworld-layout
+    ok 2 /homeworlds/view/piece-metrics
+    ok 3 /homeworlds/view/setup-bank-buttons
+    ok 4 /homeworlds/view/advances-setup
+    ok 5 /homeworlds/view/random-ai-after-setup
+    ok 6 /homeworlds/window/replaces-skeleton
+
+    $ build/tests/test_desktop_metadata
+    # exits 0
+
+    $ build/tests/test_flatpak_manifest
+    # exits 0
+
+    $ make test
     ...
-    cc ... -DGGAME_GAME_HOMEWORLDS -o build/bin/ghomeworlds ...
+    not ok /sgf-view/link-angles - GLib-GObject-FATAL-CRITICAL: invalid (NULL) pointer instance
+    make: *** [Makefile:222: test] Error 133
 
-    build/tests/test_homeworlds_game
-    All tests passed.
+    $ git status --short
+     M Makefile
+     M doc/OVERVIEW.md
+     M doc/execplan-homeworlds.md
+     M src/games/homeworlds/homeworlds_app_window.c
+     M tests/test_desktop_metadata.sh
+     M tests/test_flatpak_manifest.sh
+     M tests/test_homeworlds_backend.c
+    ?? annotate
+    ?? annotate1
+    ?? annotate2
+    ?? annotate3
+    ?? annotate4
+    ?? annotate5
+    ?? data/icons/hicolor/scalable/apps/io.github.jeromea.ghomeworlds.svg
+    ?? data/io.github.jeromea.ghomeworlds.desktop
+    ?? data/io.github.jeromea.ghomeworlds.metainfo.xml
+    ?? flatpak/io.github.jeromea.ghomeworlds.yaml
+    ?? puzzles/boop/
+    ?? src/games/homeworlds/homeworlds.png
+    ?? src/games/homeworlds/homeworlds_random_ai.c
+    ?? src/games/homeworlds/homeworlds_random_ai.h
+    ?? src/games/homeworlds/homeworlds_view.c
+    ?? src/games/homeworlds/homeworlds_view.h
+    ?? tests/test_homeworlds_window.c
 
-    build/tests/test_homeworlds_backend
-    All tests passed.
-
-    GAME=homeworlds build/bin/ghomeworlds
-    [manual run: complete setup, perform actions, trigger catastrophe, observe victory]
-
-Add short transcripts here as each milestone lands. Keep them concise and focused on proof rather than on full build
-logs.
+The untracked `annotate*` files and `puzzles/boop/` directory are unrelated local artifacts observed during this
+revision. Do not include them in Homeworlds commits unless a future task explicitly says to.
+The untracked `src/games/homeworlds/homeworlds.png` file is intentional: it is the Homeworlds visual mockup referenced
+by this plan and should be included when committing the Homeworlds UI plan/assets.
 
 ## Interfaces and Dependencies
 
-In `src/games/homeworlds/homeworlds_backend.h`, define:
+The active profile API must remain:
 
-    extern const GameBackend homeworlds_game_backend;
+    const GGameAppProfile *ggame_app_profile_get_by_kind(GGameAppKind kind);
+    gboolean ggame_app_profile_set_active(const GGameAppProfile *profile);
+    const GGameAppProfile *ggame_active_app_profile(void);
 
-In `src/active_game_backend.h`, add:
+The active backend API must remain profile-driven:
 
-    #elif defined(GGAME_GAME_HOMEWORLDS)
-    #include "games/homeworlds/homeworlds_backend.h"
-    #define GGAME_ACTIVE_GAME_BACKEND (&homeworlds_game_backend)
+    #define GGAME_ACTIVE_GAME_BACKEND (ggame_active_app_profile()->backend)
 
-In `src/games/homeworlds/homeworlds_game.h`, define explicit Homeworlds engine types. The exact fields may evolve, but
-the final API must include functions in this shape:
+The Homeworlds profile should continue to identify the backend and custom window hook:
 
-    void homeworlds_game_init(HomeworldsGame *game);
-    void homeworlds_game_clear(HomeworldsGame *game);
-    gboolean homeworlds_game_apply_move(HomeworldsGame *game, const HomeworldsMove *move);
-    GameBackendOutcome homeworlds_game_outcome(const HomeworldsGame *game);
+    .kind = GGAME_APP_KIND_HOMEWORLDS
+    .id = "homeworlds"
+    .app_id = "io.github.jeromea.ghomeworlds"
+    .backend = &homeworlds_game_backend
+    .ui.create_window = ghomeworlds_app_window_create
 
-In `src/games/homeworlds/homeworlds_move_builder.h`, define a backend-owned move builder with functions in this shape:
+The Homeworlds backend must continue to advertise:
 
-    gboolean homeworlds_move_builder_init(const HomeworldsGame *game, GameBackendMoveBuilder *out_builder);
-    GameBackendMoveList homeworlds_move_builder_list_candidates(const GameBackendMoveBuilder *builder);
-    gboolean homeworlds_move_builder_step(GameBackendMoveBuilder *builder, gconstpointer candidate);
-    gboolean homeworlds_move_builder_is_complete(const GameBackendMoveBuilder *builder);
-    gboolean homeworlds_move_builder_build_move(const GameBackendMoveBuilder *builder, gpointer out_move);
-    void homeworlds_move_builder_clear(GameBackendMoveBuilder *builder);
+    .supports_move_list = FALSE
+    .supports_move_builder = TRUE
+    .supports_ai_search = TRUE
+    .list_good_moves = homeworlds_backend_list_good_moves
 
-In shared `src/`, add a board-surface abstraction that allows `src/window.c` to own one game-specific board widget
-without naming `BoardView` directly. The exact type name may differ, but it must cover:
+A future `homeworlds_view` API may evolve, but it should expose these concepts:
 
-    - retrieving the GTK widget to pack into the window
-    - binding the active `GGameModel`
-    - updating the rendered position
-    - enabling/disabling input
-    - clearing any in-progress selection or move-builder state
-    - installing a move-completion callback
+    - bind or receive the active `GGameModel`
+    - render the current `HomeworldsPosition`
+    - start and reset a `HomeworldsMoveBuilderState`
+    - render legal next candidates from `homeworlds_move_builder_list_candidates()`
+    - notify the window when `homeworlds_move_builder_build_move()` produces a complete `HomeworldsMove`
+    - clear partial selection after a move is applied or cancelled
 
-The Homeworlds board widget should implement layered system placement instead of explicit edge drawing. The placement
-algorithm should be guided first by the two players’ homeworld star sizes, then by one-hop reachability from those
-homeworld layers, and only then by a central catch-all layer for the remaining systems.
+Do not introduce a full-move-list dependency for human interaction. Do not make Homeworlds a square-grid backend.
+Do not remove Checkers/Boop profile features to simplify Homeworlds.
 
-The Homeworlds backend must not implement full exhaustive move listing for AI. Instead, it must provide:
-
-    GameBackendMoveList (*list_good_moves)(gconstpointer position,
-                                           guint max_count,
-                                           guint depth_hint);
-
-The contract of `list_good_moves` is:
-
-    - every returned move is legal
-    - the list is a subset of the full legal move space
-    - the moves are ordered best-first according to backend heuristics
-    - callers may treat omission as intentional pruning, not as “no legal move exists”
-
-Human interaction must continue to rely on the move builder, not on `list_good_moves`.
-
-Revision note: this revision replaces the earlier backend-owned move-log idea with a requirement that the shared SGF
-tree remain the single history source of truth for Homeworlds, even if move payloads are opaque blobs, and it replaces
-the earlier node-and-edge rendering wording with the traditional layered Homeworlds system layout.
+Revision note, 2026-05-13: this document was rewritten because the repository had moved beyond the original
+compile-time-game plan. The new plan explicitly preserves the profile registry, all-game Makefile, and Boop
+shared-shell support, and narrows the remaining Homeworlds work to the missing playable profile-owned UI. It also
+records `src/games/homeworlds/homeworlds.png` as a visual reference whose details are subordinate to the prose
+requirements.

@@ -1,0 +1,51 @@
+#ifndef HOMEWORLDS_VIEW_H
+#define HOMEWORLDS_VIEW_H
+
+#include "../../game_model.h"
+#include "homeworlds_types.h"
+
+#include <gtk/gtk.h>
+
+G_BEGIN_DECLS
+
+typedef struct _HomeworldsView HomeworldsView;
+typedef void (*HomeworldsViewMoveAppliedFunc)(HomeworldsView *view, gpointer user_data);
+
+typedef struct {
+  double star_x[HOMEWORLDS_STAR_SLOT_COUNT];
+  double star_y;
+  double ship_x;
+  double ship_y;
+  gboolean ship_points_up;
+} HomeworldsViewHomeworldLayout;
+
+typedef struct {
+  double base;
+  double height;
+} HomeworldsViewPyramidMetrics;
+
+HomeworldsView *homeworlds_view_new(GGameModel *model);
+void homeworlds_view_free(HomeworldsView *view);
+
+GtkWidget *homeworlds_view_get_widget(HomeworldsView *view);
+void homeworlds_view_refresh(HomeworldsView *view);
+void homeworlds_view_reset_selection(HomeworldsView *view);
+gboolean homeworlds_view_has_partial_selection(const HomeworldsView *view);
+gboolean homeworlds_view_apply_random_move(HomeworldsView *view);
+gboolean homeworlds_view_apply_candidate_at(HomeworldsView *view, gsize index);
+gsize homeworlds_view_get_candidate_count(const HomeworldsView *view);
+
+void homeworlds_view_set_move_applied_callback(HomeworldsView *view,
+                                               HomeworldsViewMoveAppliedFunc func,
+                                               gpointer user_data);
+gboolean homeworlds_view_calculate_homeworld_layout(guint system_index,
+                                                    double center_x,
+                                                    double center_y,
+                                                    HomeworldsViewHomeworldLayout *out_layout);
+gboolean homeworlds_view_pyramid_metrics(HomeworldsSize size, HomeworldsViewPyramidMetrics *out_metrics);
+double homeworlds_view_pip_radius(void);
+double homeworlds_view_star_side(HomeworldsSize size);
+
+G_END_DECLS
+
+#endif

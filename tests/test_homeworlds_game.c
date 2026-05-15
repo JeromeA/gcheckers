@@ -112,6 +112,20 @@ static void test_setup_and_loss_detection(void) {
   assert(homeworlds_position_outcome(&position) == GAME_BACKEND_OUTCOME_SIDE_0_WIN);
 }
 
+static void test_setup_accepts_any_bank_pyramids(void) {
+  HomeworldsPosition position = {0};
+  HomeworldsPyramid large_star = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE);
+  HomeworldsPyramid small_ship = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL);
+  HomeworldsMove move = test_setup_move(0, large_star, large_star, small_ship);
+
+  homeworlds_position_init(&position);
+  assert(homeworlds_position_apply_move(&position, &move));
+  assert(position.turn == 1);
+  assert(position.systems[0].stars[0] == large_star);
+  assert(position.systems[0].stars[1] == large_star);
+  assert(position.systems[0].ships[0][0] == small_ship);
+}
+
 static void test_construct_uses_smallest_available_ship(void) {
   HomeworldsPosition position = {0};
   HomeworldsMove move = {0};
@@ -175,7 +189,9 @@ static void test_move_and_discover_follow_connectivity(void) {
 
   test_prepare_basic_position(&move_position);
   move_position.systems[0].ships[0][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_LARGE);
-  assert(test_system_add_star(&move_position, 2, homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE)));
+  assert(test_system_add_star(&move_position,
+                              2,
+                              homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE)));
   assert(test_bank_remove(&move_position, homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE)));
 
   move = test_single_step_move(0,
@@ -268,6 +284,7 @@ static void test_catastrophe_removes_matching_color_and_collapses_star_system(vo
 
 int main(void) {
   test_setup_and_loss_detection();
+  test_setup_accepts_any_bank_pyramids();
   test_construct_uses_smallest_available_ship();
   test_trade_preserves_size();
   test_attack_requires_size_and_changes_owner();

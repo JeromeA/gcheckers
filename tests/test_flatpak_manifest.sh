@@ -16,6 +16,7 @@ fi
 
 checkers_manifest="$repo_root/flatpak/io.github.jeromea.gcheckers.yaml"
 boop_manifest="$repo_root/flatpak/io.github.jeromea.gboop.yaml"
+homeworlds_manifest="$repo_root/flatpak/io.github.jeromea.ghomeworlds.yaml"
 
 grep -q "^id: io.github.jeromea.gcheckers$" "$checkers_manifest"
 grep -q "^runtime: org.gnome.Platform$" "$checkers_manifest"
@@ -41,3 +42,15 @@ grep -q -- "--socket=fallback-x11" "$boop_manifest"
 grep -q -- "--device=dri" "$boop_manifest"
 grep -q "type: dir" "$boop_manifest"
 grep -q "path: \\." "$boop_manifest"
+
+grep -q "^id: io.github.jeromea.ghomeworlds$" "$homeworlds_manifest"
+grep -q "^runtime: org.gnome.Platform$" "$homeworlds_manifest"
+grep -q "^runtime-version: '50'$" "$homeworlds_manifest"
+grep -q "^sdk: org.gnome.Sdk$" "$homeworlds_manifest"
+grep -q "^command: ghomeworlds$" "$homeworlds_manifest"
+grep -q "make install-homeworlds install-schemas PREFIX=/app" "$homeworlds_manifest"
+grep -q -- "--socket=wayland" "$homeworlds_manifest"
+grep -q -- "--socket=fallback-x11" "$homeworlds_manifest"
+grep -q -- "--device=dri" "$homeworlds_manifest"
+grep -q "type: dir" "$homeworlds_manifest"
+grep -q "path: \\." "$homeworlds_manifest"

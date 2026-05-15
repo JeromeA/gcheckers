@@ -15,6 +15,7 @@ else
 fi
 checkers_app_id="io.github.jeromea.gcheckers"
 boop_app_id="io.github.jeromea.gboop"
+homeworlds_app_id="io.github.jeromea.ghomeworlds"
 checkers_desktop_file="$repo_root/data/$checkers_app_id.desktop"
 checkers_metainfo_file="$repo_root/data/$checkers_app_id.metainfo.xml"
 checkers_icon_file="$repo_root/data/icons/hicolor/scalable/apps/$checkers_app_id.svg"
@@ -23,6 +24,9 @@ boop_desktop_file="$repo_root/data/$boop_app_id.desktop"
 boop_metainfo_file="$repo_root/data/$boop_app_id.metainfo.xml"
 boop_icon_file="$repo_root/data/icons/hicolor/scalable/apps/$boop_app_id.svg"
 boop_schema_file="$repo_root/data/schemas/$boop_app_id.gschema.xml"
+homeworlds_desktop_file="$repo_root/data/$homeworlds_app_id.desktop"
+homeworlds_metainfo_file="$repo_root/data/$homeworlds_app_id.metainfo.xml"
+homeworlds_icon_file="$repo_root/data/icons/hicolor/scalable/apps/$homeworlds_app_id.svg"
 install_root=$(mktemp -d "${TMPDIR:-/tmp}/gcheckers-install.XXXXXX")
 trap 'rm -rf "$install_root"' EXIT HUP INT TERM
 
@@ -55,6 +59,14 @@ fi
 grep -q "<schema id=\"$boop_app_id\" path=\"/io/github/jeromea/gboop/\">" "$boop_schema_file"
 test -f "$boop_icon_file"
 
+grep -q "^Icon=$homeworlds_app_id\$" "$homeworlds_desktop_file"
+grep -q "^Exec=ghomeworlds\$" "$homeworlds_desktop_file"
+grep -q "<id>$homeworlds_app_id</id>" "$homeworlds_metainfo_file"
+grep -q "<launchable type=\"desktop-id\">$homeworlds_app_id.desktop</launchable>" "$homeworlds_metainfo_file"
+grep -q "<project_license>GPL-3.0-only</project_license>" "$homeworlds_metainfo_file"
+grep -q "<binary>ghomeworlds</binary>" "$homeworlds_metainfo_file"
+test -f "$homeworlds_icon_file"
+
 make -C "$repo_root" install PREFIX="$install_root/prefix" >/dev/null
 
 test -f "$install_root/prefix/bin/gcheckers"
@@ -62,10 +74,13 @@ test -f "$install_root/prefix/bin/gboop"
 test -f "$install_root/prefix/bin/ghomeworlds"
 test -f "$install_root/prefix/share/applications/$checkers_app_id.desktop"
 test -f "$install_root/prefix/share/applications/$boop_app_id.desktop"
+test -f "$install_root/prefix/share/applications/$homeworlds_app_id.desktop"
 test -f "$install_root/prefix/share/metainfo/$checkers_app_id.metainfo.xml"
 test -f "$install_root/prefix/share/metainfo/$boop_app_id.metainfo.xml"
+test -f "$install_root/prefix/share/metainfo/$homeworlds_app_id.metainfo.xml"
 test -f "$install_root/prefix/share/icons/hicolor/scalable/apps/$checkers_app_id.svg"
 test -f "$install_root/prefix/share/icons/hicolor/scalable/apps/$boop_app_id.svg"
+test -f "$install_root/prefix/share/icons/hicolor/scalable/apps/$homeworlds_app_id.svg"
 test -f "$install_root/prefix/share/glib-2.0/schemas/$checkers_app_id.gschema.xml"
 test -f "$install_root/prefix/share/glib-2.0/schemas/$boop_app_id.gschema.xml"
 test -f "$install_root/prefix/share/glib-2.0/schemas/gschemas.compiled"

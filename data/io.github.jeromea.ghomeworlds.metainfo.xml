@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.jeromea.ghomeworlds</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <name>ghomeworlds</name>
+  <summary>Play Homeworlds with a custom GTK interface</summary>
+  <developer id="io.github.jeromea">
+    <name>JeromeA</name>
+  </developer>
+  <launchable type="desktop-id">io.github.jeromea.ghomeworlds.desktop</launchable>
+  <provides>
+    <binary>ghomeworlds</binary>
+  </provides>
+  <description>
+    <p>
+      ghomeworlds is the Homeworlds build target of the shared ggame repository.
+    </p>
+    <p>
+      It uses the same profile and backend infrastructure as the other games while providing a Homeworlds-specific
+      window for systems, bank pieces, catastrophes, and staged move choices.
+    </p>
+  </description>
+  <categories>
+    <category>Game</category>
+    <category>BoardGame</category>
+  </categories>
+  <url type="homepage">https://github.com/JeromeA/gcheckers</url>
+  <url type="bugtracker">https://github.com/JeromeA/gcheckers/issues</url>
+  <url type="vcs-browser">https://github.com/JeromeA/gcheckers</url>
+</component>

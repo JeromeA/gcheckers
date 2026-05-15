@@ -7,7 +7,7 @@ Game-specific code lives under `src/games/<game>/` and provides the rules, posit
 evaluation, notation helpers, optional puzzle tooling, and any board-specific callbacks needed by the selected
 backend. `src/games/boop/` contains both the boop rules/backend and the boop-only supply/promotion controls that now
 plug into the shared window, while `src/games/homeworlds/` provides the rules/backend plus a profile-owned toplevel
-window hook.
+window and custom Homeworlds view.
 
 The default build now compiles one shared object graph and links all three application binaries. Each process selects
 exactly one `GGameAppProfile` at startup through its launcher, then shared code queries
@@ -491,8 +491,8 @@ the players' homeworlds), two star slots per system, and fourteen ship slots per
 one place later if needed.
 Rules covered: setup, construct, trade, attack, move, discover, sacrifice, catastrophe resolution, empty-system
 cleanup, start-of-turn loss detection, static evaluation, terminal scoring, hashing, and move formatting.
-Collaborates with: `homeworlds_move_builder.c`, `homeworlds_backend.c`, `tests/test_homeworlds_game.c`, and the
-future Homeworlds GTK view.
+Collaborates with: `homeworlds_move_builder.c`, `homeworlds_backend.c`, `homeworlds_view.c`,
+`tests/test_homeworlds_game.c`, and `tests/test_homeworlds_backend.c`.
 
 ## Homeworlds move builder (`src/games/homeworlds/homeworlds_move_builder.c`,
 `src/games/homeworlds/homeworlds_move_builder.h`)
@@ -502,7 +502,26 @@ of the position plus the partial move under construction, and advances through s
 selection, source-ship selection, action choice, and target-specific substages for trade, attack, and move/discover.
 Sacrifices are modeled as a prefix step that fixes the remaining action color and count, after which the builder loops
 back through source-ship selection for each granted action.
-Collaborates with: `homeworlds_game.c`, `homeworlds_backend.c`, and `tests/test_homeworlds_backend.c`.
+Collaborates with: `homeworlds_game.c`, `homeworlds_backend.c`, `homeworlds_random_ai.c`, `homeworlds_view.c`, and
+`tests/test_homeworlds_backend.c`.
+
+## Homeworlds UI and random AI (`src/games/homeworlds/homeworlds_app_window.c`,
+`src/games/homeworlds/homeworlds_view.c`, `src/games/homeworlds/homeworlds_random_ai.c`)
+Module: profile-owned Homeworlds window, staged GTK view/controller, and simple stochastic move policy.
+Role: let `ghomeworlds` use the runtime Homeworlds profile while staying outside the square-grid shared shell. The
+window owns a `GGameModel` bound to `homeworlds_game_backend`, status controls, new-game/reset actions, and a `Random
+AI` button. `homeworlds_view.c` renders a starfield board with system boxes, homeworld labels, pipped square stars,
+tall pipped ship pyramids, overlaid clickable bank piles, staged legal-choice buttons, and direct catastrophe buttons.
+Homeworld rendering keeps player 1 at the bottom, player 2 at the top, and places each homeworld's own ships beside
+its stars from that player's perspective. During setup, the bank piles on the board are real `GtkButton`s that feed
+the staged builder directly, so start stars and the start ship do not require a long side-panel button list. Human
+interaction advances
+`homeworlds_move_builder` one visible choice at a time and applies the completed `HomeworldsMove` through
+`GGameModel`; it never asks the backend for a full legal move list.
+`homeworlds_random_ai.c` uses the same staged builder to pick a bounded legal random move,
+avoids capture choices with no target, and handles move/discover choices without enumerating full turn sequences.
+Collaborates with: `GGameAppProfile`, `GGameModel`, `homeworlds_game.c`, `homeworlds_move_builder.c`,
+`homeworlds_backend.c`, and `tests/test_homeworlds_window.c`.
 
 ## Boop engine (`src/games/boop/boop_types.h`, `src/games/boop/boop_game.c`,
 `src/games/boop/boop_game.h`, `src/games/boop/boop_backend.c`, `src/games/boop/boop_backend.h`,
@@ -569,7 +588,8 @@ Role: `game_backend.h` defines the generic callback table used to describe one c
 formatting APIs into that generic table. `src/games/homeworlds/homeworlds_backend.c` now adapts the slot-based
 Homeworlds engine and staged move builder, advertises `supports_move_builder = TRUE`, `supports_move_list = FALSE`,
 `supports_ai_search = TRUE`, and implements `list_good_moves` by exploring the builder in heuristic order and stopping
-after a bounded subset. `src/games/boop/boop_backend.c` adapts the boop engine, advertises move lists, staged
+after a bounded subset. The playable Homeworlds UI uses the same builder directly rather than asking this backend for
+full move enumeration. `src/games/boop/boop_backend.c` adapts the boop engine, advertises move lists, staged
 move-building, square-grid rendering, AI search, notation formatting/parsing, hashing, and backend-owned SGF position
 snapshot hooks.
 Scope: shared application code still has some checkers-native compatibility layers, but the physical checkers source
@@ -606,7 +626,8 @@ actions, and publishes one shared menubar model (`File` -> `New game...`, `Impor
 and whole-game analysis; `Puzzle` -> `Play puzzles`; `View` -> drawer toggles) with keyboard accelerators. Both
 `gcheckers` and `gboop` are built from this same shell and diverge through `GGameAppProfile` feature flags and boop's
 optional board-host hook. Unsupported actions stay in the same shared shell but are disabled for profiles that do not
-support them. `src/ghomeworlds.c` remains a branded skeleton window outside that shared shell.
+support them. `src/ghomeworlds.c` selects the Homeworlds profile and opens the profile-owned Homeworlds window instead
+of the shared square-grid shell.
 The active application ID, display strings, settings schema ID, and backend all come from `GGameAppProfile`, with the
 current profiles selecting `io.github.jeromea.gcheckers`, `io.github.jeromea.gboop`, or
 `io.github.jeromea.ghomeworlds`.

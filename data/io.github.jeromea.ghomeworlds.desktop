@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=ghomeworlds
+Comment=Play Homeworlds with a staged move-selection interface
+Exec=ghomeworlds
+Icon=io.github.jeromea.ghomeworlds
+Terminal=false
+Categories=Game;BoardGame;GTK;
+Keywords=homeworlds;board;game;pyramid;starship;
+StartupNotify=true

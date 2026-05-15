@@ -48,7 +48,8 @@ static const HomeworldsMoveBuilderState *homeworlds_builder_state_const(const Ga
   return builder->builder_state;
 }
 
-static gboolean homeworlds_builder_find_selected_ship_slot(const HomeworldsMoveBuilderState *state, guint *out_ship_slot) {
+static gboolean homeworlds_builder_find_selected_ship_slot(const HomeworldsMoveBuilderState *state,
+                                                           guint *out_ship_slot) {
   const HomeworldsSystem *system = NULL;
   const guint side = state->working_position.turn;
 
@@ -120,14 +121,16 @@ static gboolean homeworlds_builder_commit_action(HomeworldsMoveBuilderState *sta
   return homeworlds_builder_finish_or_continue(state);
 }
 
-static gboolean homeworlds_builder_apply_step_in_place(HomeworldsMoveBuilderState *state, const HomeworldsTurnStep *step) {
+static gboolean homeworlds_builder_apply_step_in_place(HomeworldsMoveBuilderState *state,
+                                                       const HomeworldsTurnStep *step) {
   g_return_val_if_fail(state != NULL, FALSE);
   g_return_val_if_fail(step != NULL, FALSE);
 
   return homeworlds_position_apply_turn_step(&state->working_position, step);
 }
 
-static gboolean homeworlds_builder_apply_prefix_step(HomeworldsMoveBuilderState *state, const HomeworldsTurnStep *step) {
+static gboolean homeworlds_builder_apply_prefix_step(HomeworldsMoveBuilderState *state,
+                                                     const HomeworldsTurnStep *step) {
   g_return_val_if_fail(state != NULL, FALSE);
   g_return_val_if_fail(step != NULL, FALSE);
 
@@ -141,9 +144,49 @@ static gboolean homeworlds_builder_apply_prefix_step(HomeworldsMoveBuilderState 
   return TRUE;
 }
 
-static GameBackendMoveList homeworlds_builder_list_setup_stars(const HomeworldsMoveBuilderState *state,
-                                                               gboolean skip_duplicate_first_star) {
+static guint homeworlds_builder_bank_count(const HomeworldsPosition *position, HomeworldsPyramid pyramid) {
+  guint count = 0;
+
+  g_return_val_if_fail(position != NULL, 0);
+  g_return_val_if_fail(homeworlds_pyramid_is_valid(pyramid), 0);
+
+  for (guint i = 0; i < HOMEWORLDS_BANK_SLOT_COUNT; ++i) {
+    if (position->bank[i] == pyramid) {
+      count++;
+    }
+  }
+
+  return count;
+}
+
+static guint homeworlds_builder_setup_reserved_count(const HomeworldsMoveBuilderState *state,
+                                                     HomeworldsPyramid pyramid) {
+  guint count = 0;
+
+  g_return_val_if_fail(state != NULL, 0);
+  g_return_val_if_fail(homeworlds_pyramid_is_valid(pyramid), 0);
+
+  for (guint i = 0; i < HOMEWORLDS_STAR_SLOT_COUNT; ++i) {
+    if (state->move.setup_stars[i] == pyramid) {
+      count++;
+    }
+  }
+
+  return count;
+}
+
+static gboolean homeworlds_builder_setup_pyramid_is_available(const HomeworldsMoveBuilderState *state,
+                                                              HomeworldsPyramid pyramid) {
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(homeworlds_pyramid_is_valid(pyramid), FALSE);
+
+  return homeworlds_builder_bank_count(&state->working_position, pyramid) >
+         homeworlds_builder_setup_reserved_count(state, pyramid);
+}
+
+static GameBackendMoveList homeworlds_builder_list_setup_stars(const HomeworldsMoveBuilderState *state) {
   HomeworldsCandidateBuffer buffer = {0};
+  gboolean seen_pyramids[13] = {FALSE};
 
   g_return_val_if_fail(state != NULL, (GameBackendMoveList){0});
 
@@ -152,10 +195,11 @@ static GameBackendMoveList homeworlds_builder_list_setup_stars(const HomeworldsM
     if (!homeworlds_pyramid_is_valid(pyramid)) {
       continue;
     }
-    if (homeworlds_pyramid_size(pyramid) == HOMEWORLDS_SIZE_LARGE) {
+    if (seen_pyramids[pyramid]) {
       continue;
     }
-    if (skip_duplicate_first_star && pyramid == state->move.setup_stars[0]) {
+    seen_pyramids[pyramid] = TRUE;
+    if (!homeworlds_builder_setup_pyramid_is_available(state, pyramid)) {
       continue;
     }
 
@@ -174,12 +218,20 @@ static GameBackendMoveList homeworlds_builder_list_setup_stars(const HomeworldsM
 
 static GameBackendMoveList homeworlds_builder_list_setup_ships(const HomeworldsMoveBuilderState *state) {
   HomeworldsCandidateBuffer buffer = {0};
+  gboolean seen_pyramids[13] = {FALSE};
 
   g_return_val_if_fail(state != NULL, (GameBackendMoveList){0});
 
   for (guint i = 0; i < HOMEWORLDS_BANK_SLOT_COUNT; ++i) {
     HomeworldsPyramid pyramid = state->working_position.bank[i];
-    if (!homeworlds_pyramid_is_valid(pyramid) || homeworlds_pyramid_size(pyramid) != HOMEWORLDS_SIZE_LARGE) {
+    if (!homeworlds_pyramid_is_valid(pyramid)) {
+      continue;
+    }
+    if (seen_pyramids[pyramid]) {
+      continue;
+    }
+    seen_pyramids[pyramid] = TRUE;
+    if (!homeworlds_builder_setup_pyramid_is_available(state, pyramid)) {
       continue;
     }
 
@@ -251,7 +303,8 @@ static GameBackendMoveList homeworlds_builder_list_actions(const HomeworldsMoveB
 
   g_return_val_if_fail(state != NULL, (GameBackendMoveList){0});
   g_return_val_if_fail(state->selected_system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, (GameBackendMoveList){0});
-  g_return_val_if_fail(homeworlds_builder_find_selected_ship_slot(state, &selected_ship_slot), (GameBackendMoveList){0});
+  g_return_val_if_fail(homeworlds_builder_find_selected_ship_slot(state, &selected_ship_slot),
+                       (GameBackendMoveList){0});
 
   system = &state->working_position.systems[state->selected_system_index];
   ship = system->ships[side][selected_ship_slot];
@@ -338,7 +391,8 @@ static GameBackendMoveList homeworlds_builder_list_trade_colors(const Homeworlds
 
   g_return_val_if_fail(state != NULL, (GameBackendMoveList){0});
   g_return_val_if_fail(state->selected_system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, (GameBackendMoveList){0});
-  g_return_val_if_fail(homeworlds_builder_find_selected_ship_slot(state, &selected_ship_slot), (GameBackendMoveList){0});
+  g_return_val_if_fail(homeworlds_builder_find_selected_ship_slot(state, &selected_ship_slot),
+                       (GameBackendMoveList){0});
 
   system = &state->working_position.systems[state->selected_system_index];
   ship = system->ships[state->working_position.turn][selected_ship_slot];
@@ -374,7 +428,8 @@ static GameBackendMoveList homeworlds_builder_list_attack_targets(const Homeworl
   guint selected_ship_slot = 0;
 
   g_return_val_if_fail(state != NULL, (GameBackendMoveList){0});
-  g_return_val_if_fail(homeworlds_builder_find_selected_ship_slot(state, &selected_ship_slot), (GameBackendMoveList){0});
+  g_return_val_if_fail(homeworlds_builder_find_selected_ship_slot(state, &selected_ship_slot),
+                       (GameBackendMoveList){0});
 
   system = &state->working_position.systems[state->selected_system_index];
   attacker = system->ships[state->working_position.turn][selected_ship_slot];
@@ -408,7 +463,8 @@ static GameBackendMoveList homeworlds_builder_list_move_targets(const Homeworlds
   from_system = &state->working_position.systems[state->selected_system_index];
 
   for (guint system_index = 0; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
-    if (system_index == state->selected_system_index || homeworlds_system_is_empty(&state->working_position.systems[system_index])) {
+    if (system_index == state->selected_system_index ||
+        homeworlds_system_is_empty(&state->working_position.systems[system_index])) {
       continue;
     }
     if (!homeworlds_system_is_connected(from_system, &state->working_position.systems[system_index])) {
@@ -481,9 +537,9 @@ GameBackendMoveList homeworlds_move_builder_list_candidates(const GameBackendMov
 
   switch ((HomeworldsBuilderStage) state->stage) {
     case HOMEWORLDS_BUILDER_STAGE_SETUP_FIRST_STAR:
-      return homeworlds_builder_list_setup_stars(state, FALSE);
+      return homeworlds_builder_list_setup_stars(state);
     case HOMEWORLDS_BUILDER_STAGE_SETUP_SECOND_STAR:
-      return homeworlds_builder_list_setup_stars(state, TRUE);
+      return homeworlds_builder_list_setup_stars(state);
     case HOMEWORLDS_BUILDER_STAGE_SETUP_SHIP:
       return homeworlds_builder_list_setup_ships(state);
     case HOMEWORLDS_BUILDER_STAGE_SELECT_SHIP:
@@ -511,7 +567,8 @@ gboolean homeworlds_move_builder_step(GameBackendMoveBuilder *builder, const Hom
   switch ((HomeworldsBuilderStage) state->stage) {
     case HOMEWORLDS_BUILDER_STAGE_SETUP_FIRST_STAR:
       if (candidate->data.kind != HOMEWORLDS_CANDIDATE_SETUP_STAR ||
-          !homeworlds_pyramid_is_valid(candidate->data.pyramid)) {
+          !homeworlds_pyramid_is_valid(candidate->data.pyramid) ||
+          !homeworlds_builder_setup_pyramid_is_available(state, candidate->data.pyramid)) {
         return FALSE;
       }
       state->move.setup_stars[0] = candidate->data.pyramid;
@@ -520,7 +577,7 @@ gboolean homeworlds_move_builder_step(GameBackendMoveBuilder *builder, const Hom
     case HOMEWORLDS_BUILDER_STAGE_SETUP_SECOND_STAR:
       if (candidate->data.kind != HOMEWORLDS_CANDIDATE_SETUP_STAR ||
           !homeworlds_pyramid_is_valid(candidate->data.pyramid) ||
-          candidate->data.pyramid == state->move.setup_stars[0]) {
+          !homeworlds_builder_setup_pyramid_is_available(state, candidate->data.pyramid)) {
         return FALSE;
       }
       state->move.setup_stars[1] = candidate->data.pyramid;
@@ -529,7 +586,7 @@ gboolean homeworlds_move_builder_step(GameBackendMoveBuilder *builder, const Hom
     case HOMEWORLDS_BUILDER_STAGE_SETUP_SHIP:
       if (candidate->data.kind != HOMEWORLDS_CANDIDATE_SETUP_SHIP ||
           !homeworlds_pyramid_is_valid(candidate->data.pyramid) ||
-          homeworlds_pyramid_size(candidate->data.pyramid) != HOMEWORLDS_SIZE_LARGE) {
+          !homeworlds_builder_setup_pyramid_is_available(state, candidate->data.pyramid)) {
         return FALSE;
       }
       state->move.setup_ship = candidate->data.pyramid;

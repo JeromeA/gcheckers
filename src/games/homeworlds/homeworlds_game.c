@@ -169,9 +169,6 @@ static gboolean homeworlds_position_apply_setup_move(HomeworldsPosition *positio
       !homeworlds_pyramid_is_valid(move->setup_ship)) {
     return FALSE;
   }
-  if (homeworlds_pyramid_size(move->setup_ship) != HOMEWORLDS_SIZE_LARGE) {
-    return FALSE;
-  }
 
   if (!homeworlds_bank_take(position, move->setup_stars[0]) ||
       !homeworlds_bank_take(position, move->setup_stars[1]) ||
@@ -392,7 +389,10 @@ gboolean homeworlds_position_apply_turn_step(HomeworldsPosition *position, const
       }
 
       HomeworldsPyramid ship = 0;
-      if (!homeworlds_system_remove_ship(&position->systems[step->system_index], position->turn, step->ship_slot, &ship)) {
+      if (!homeworlds_system_remove_ship(&position->systems[step->system_index],
+                                         position->turn,
+                                         step->ship_slot,
+                                         &ship)) {
         return FALSE;
       }
 
@@ -526,7 +526,9 @@ gboolean homeworlds_position_apply_move(HomeworldsPosition *position, const Home
   return TRUE;
 }
 
-gboolean homeworlds_position_apply_catastrophe(HomeworldsPosition *position, guint system_index, HomeworldsColor color) {
+gboolean homeworlds_position_apply_catastrophe(HomeworldsPosition *position,
+                                               guint system_index,
+                                               HomeworldsColor color) {
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
   g_return_val_if_fail(color <= HOMEWORLDS_COLOR_BLUE, FALSE);
