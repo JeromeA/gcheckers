@@ -84,8 +84,8 @@ assumptions.
 
 - Observation: the random AI must reject source ships whose apparent actions cannot be completed.
   Evidence: a red-only starting homeworld exposes an attack action with no target and a sacrifice that leaves no ship
-  for the granted actions; the stochastic policy now checks continuations recursively and falls back to pass when that
-  is the only legal complete move.
+  for the granted actions; the stochastic policy now checks continuations recursively and rejects those source ships
+  instead of passing.
 
 - Observation: setup candidates are too numerous for a practical side-panel button list.
   Evidence: the initial setup stage can expose many near-duplicate bank choices. The view now renders the bank over the
@@ -234,8 +234,9 @@ spent or a legal pass/end option is selected. The view should visibly distinguis
 disabled/non-candidate items.
 
 Keep AI integration narrow. The default AI in the Homeworlds window should be builder-driven and stochastic: choose a
-random owned ship to activate, choose a random currently available action, avoid choosing capture when there is nothing
-to capture, and then execute that staged action through the same move-builder legality path as human input. For a
+random owned ship to activate, choose a random currently available action, never choose pass, avoid choosing capture
+when there is nothing to capture, and then execute that staged action through the same move-builder legality path as
+human input. For a
 move/discover action, if there are `N` existing destination systems, choose a random number in `[0, N]`; values below
 `N` move to that indexed existing destination, while value `N` means discover by choosing a random valid new
 destination from the bank. The UI must not require `list_moves`, and it must not enumerate all legal moves to find
@@ -344,8 +345,9 @@ implemented through staged move-builder choices rather than full move enumeratio
 
 Add a simple AI control to the Homeworlds window. It should be disabled while a human move is partially selected and
 enabled only when the current position is ongoing. The default policy should choose a random owned ship to activate,
-choose a random available action for that ship, skip capture as an action choice when there are no legal capture
-targets, and then complete the selected action through the builder. For move/discover, first collect the `N` existing
+choose a random available action for that ship, never choose pass, skip capture as an action choice when there are no
+legal capture targets, and then complete the selected action through the builder. For move/discover, first collect the
+`N` existing
 systems the ship can legally move to. Pick a random integer from `0` through `N` inclusive. If the value is lower than
 `N`, move to that existing destination. If the value is exactly `N`, choose a random valid discovery destination from
 the bank and move there. If no discovery destination is valid, retry among the existing destinations or choose another

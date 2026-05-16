@@ -519,7 +519,8 @@ interaction advances
 `homeworlds_move_builder` one visible choice at a time and applies the completed `HomeworldsMove` through
 `GGameModel`; it never asks the backend for a full legal move list.
 `homeworlds_random_ai.c` uses the same staged builder to pick a bounded legal random move,
-avoids capture choices with no target, and handles move/discover choices without enumerating full turn sequences.
+never selects pass, avoids capture choices with no target, and handles move/discover choices without enumerating full
+turn sequences.
 Collaborates with: `GGameAppProfile`, `GGameModel`, `homeworlds_game.c`, `homeworlds_move_builder.c`,
 `homeworlds_backend.c`, and `tests/test_homeworlds_window.c`.
 

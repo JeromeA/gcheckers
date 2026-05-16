@@ -341,3 +341,15 @@ path-specific distance adjustment.
 
 The fix stores a total ply count in `BoopPosition`, increments it on each applied move, serializes it in Boop SGF
 snapshots, includes it in the position hash, and makes Boop terminal scores use `10000 - position->ply_count`.
+
+## Homeworlds random AI could choose pass
+
+The Homeworlds random AI should pick an actual playable move when one is available, not consume its turn with the
+interactive pass fallback.
+
+The staged move builder exposes pass as a ship-selection candidate for human play. The random AI reused that candidate
+list and explicitly accepted pass whenever it was not resolving a sacrifice action, so some random seeds produced a
+`pass` move even in positions with legal ship actions.
+
+The fix filters pass out of the random AI candidate selection path. A backend regression test now runs multiple seeded
+random moves from a normal play position and asserts that every generated turn has at least one non-pass step.

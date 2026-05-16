@@ -229,6 +229,26 @@ static void test_backend_random_ai_builds_setup_move(void) {
   g_rand_free(rand);
 }
 
+static void test_backend_random_ai_never_passes(void) {
+  HomeworldsPosition position = {0};
+
+  test_prepare_position(&position);
+  for (guint seed = 0; seed < 64; ++seed) {
+    HomeworldsPosition copy = position;
+    HomeworldsMove move = {0};
+    GRand *rand = g_rand_new_with_seed(seed);
+
+    assert(homeworlds_random_ai_build_move(&copy, rand, &move));
+    assert(move.kind == HOMEWORLDS_MOVE_KIND_TURN);
+    assert(move.step_count > 0);
+    for (guint step = 0; step < move.step_count; ++step) {
+      assert(move.steps[step].kind != HOMEWORLDS_STEP_PASS);
+    }
+    assert(homeworlds_position_apply_move(&copy, &move));
+    g_rand_free(rand);
+  }
+}
+
 static void test_backend_random_ai_skips_attack_without_targets(void) {
   HomeworldsPosition position = {0};
 
@@ -254,6 +274,7 @@ int main(void) {
   test_backend_move_builder_completes_turn();
   test_backend_good_moves_are_subset_and_ordered();
   test_backend_random_ai_builds_setup_move();
+  test_backend_random_ai_never_passes();
   test_backend_random_ai_skips_attack_without_targets();
   return 0;
 }

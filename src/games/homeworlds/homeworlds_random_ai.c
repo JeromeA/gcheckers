@@ -77,20 +77,13 @@ static gboolean homeworlds_random_ai_candidate_has_continuation(const GameBacken
 
 static gboolean homeworlds_random_ai_filter_select_ship(const GameBackendMoveBuilder *builder,
                                                         const HomeworldsMoveCandidate *candidate) {
-  const HomeworldsMoveBuilderState *state = homeworlds_random_ai_builder_state(builder);
-
-  g_return_val_if_fail(state != NULL, FALSE);
   g_return_val_if_fail(candidate != NULL, FALSE);
 
   if (candidate->data.kind == HOMEWORLDS_CANDIDATE_SELECT_SHIP) {
     return homeworlds_random_ai_candidate_has_continuation(builder, candidate);
   }
-  if (state->pending_actions_remaining > 0) {
-    return FALSE;
-  }
 
-  return candidate->data.kind == HOMEWORLDS_CANDIDATE_ACTION &&
-         candidate->data.target_color == HOMEWORLDS_STEP_PASS;
+  return FALSE;
 }
 
 static gboolean homeworlds_random_ai_filter_action(const GameBackendMoveBuilder *builder,
@@ -98,6 +91,9 @@ static gboolean homeworlds_random_ai_filter_action(const GameBackendMoveBuilder 
   g_return_val_if_fail(candidate != NULL, FALSE);
 
   if (candidate->data.kind != HOMEWORLDS_CANDIDATE_ACTION) {
+    return FALSE;
+  }
+  if (candidate->data.target_color == HOMEWORLDS_STEP_PASS) {
     return FALSE;
   }
   if (candidate->data.target_color == HOMEWORLDS_STEP_ATTACK &&
