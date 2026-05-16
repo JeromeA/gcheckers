@@ -956,22 +956,8 @@ GameBackendMoveList boop_position_list_moves(const BoopPosition *position) {
   };
 }
 
-GameBackendMoveList boop_position_list_good_moves(const BoopPosition *position,
-                                                  guint max_count,
-                                                  guint /*depth_hint*/) {
-  GameBackendMoveList all_moves = boop_position_list_moves(position);
-  if (max_count == 0 || all_moves.count <= max_count) {
-    return all_moves;
-  }
-
-  BoopMove *moves = g_new0(BoopMove, max_count);
-  g_return_val_if_fail(moves != NULL, all_moves);
-  memcpy(moves, all_moves.moves, max_count * sizeof(*moves));
-  boop_move_list_free(&all_moves);
-  return (GameBackendMoveList){
-    .moves = moves,
-    .count = max_count,
-  };
+GameBackendMoveList boop_position_list_good_moves(const BoopPosition *position, guint /*depth_hint*/) {
+  return boop_position_list_moves(position);
 }
 
 void boop_move_list_free(GameBackendMoveList *moves) {

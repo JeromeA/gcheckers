@@ -34,13 +34,12 @@ typedef struct {
 
 static GameBackendMoveList game_ai_search_list_candidate_moves(const GameBackend *backend,
                                                                gconstpointer position,
-                                                               guint max_count,
                                                                guint depth_hint) {
   g_return_val_if_fail(backend != NULL, (GameBackendMoveList){0});
   g_return_val_if_fail(position != NULL, (GameBackendMoveList){0});
 
   if (backend->list_good_moves != NULL) {
-    return backend->list_good_moves(position, max_count, depth_hint);
+    return backend->list_good_moves(position, depth_hint);
   }
 
   g_return_val_if_fail(backend->list_moves != NULL, (GameBackendMoveList){0});
@@ -348,7 +347,7 @@ static gint game_ai_search_recursive(gpointer position,
     return score;
   }
 
-  GameBackendMoveList moves = game_ai_search_list_candidate_moves(backend, position, 0, depth_remaining);
+  GameBackendMoveList moves = game_ai_search_list_candidate_moves(backend, position, depth_remaining);
   if (moves.count == 0) {
     gint score = backend->terminal_score(position, game_ai_search_derived_outcome(backend, position), ply_depth);
     backend->move_list_free(&moves);
@@ -603,7 +602,7 @@ gboolean game_ai_search_analyze_moves_cancellable_with_tt(const GameBackend *bac
   out_moves->moves = NULL;
   out_moves->count = 0;
 
-  GameBackendMoveList moves = game_ai_search_list_candidate_moves(backend, position, 0, max_depth);
+  GameBackendMoveList moves = game_ai_search_list_candidate_moves(backend, position, max_depth);
   if (moves.count == 0) {
     backend->move_list_free(&moves);
     g_debug("No available moves for alpha-beta analysis");

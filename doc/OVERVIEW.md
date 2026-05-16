@@ -355,7 +355,8 @@ evaluation quality. Analysis APIs can report searched node counts and TT stats (
 accumulate when callers reuse the same `GameAiSearchStats` across calls.
 This is now an optional backend capability: backends that opt into `supports_ai_search` must provide backend-sized move
 records plus either `list_good_moves` or the full move-list API. The search layer now prefers `list_good_moves`, so a
-backend can expose heuristic best-first subsets to AI without also exposing exhaustive move lists to shared code.
+backend can expose heuristic best-first subsets to AI without also exposing exhaustive move lists to shared code. Any
+candidate truncation is backend-owned; the generic search does not pass a caller-selected cap.
 Depth accounting treats forced plies (`exactly one legal move`) as free extensions: depth is consumed only on
 decision nodes with multiple legal moves.
 Score convention: search scores are white-centric at all plies (`+` good for white, `-` good for black). Root move
@@ -524,9 +525,9 @@ interaction advances
 move handler. In the app, that appends SGF nodes through `GGameSgfController`; standalone view tests can still install
 no handler and apply directly to `GGameModel`. Homeworlds intentionally does not expose a full legal move list, so the
 shared SGF controller validates completed moves by applying them to a copied position before appending the node.
-`homeworlds_backend.c` walks the same staged builder to feed the shared alpha-beta search with bounded good moves. That
-AI candidate path rejects pass moves, while dead-end choices such as attacks with no target naturally produce no
-completed move.
+`homeworlds_backend.c` walks the same staged builder to feed the shared alpha-beta search with backend-good moves. That
+AI candidate path rejects pass moves, applies Homeworlds-specific opening and safety heuristics, and lets dead-end
+choices such as attacks with no target naturally produce no completed move.
 Collaborates with: `GGameAppProfile`, `GGameWindow`, `GGameModel`, `GGameSgfController`, `homeworlds_game.c`,
 `homeworlds_move_builder.c`, `homeworlds_backend.c`, and `tests/test_homeworlds_window.c`.
 
@@ -594,9 +595,10 @@ Role: `game_backend.h` defines the generic callback table used to describe one c
 `src/games/checkers/checkers_backend.c` adapts the moved checkers engine, ruleset catalog, move list, AI, and move
 formatting APIs into that generic table. `src/games/homeworlds/homeworlds_backend.c` now adapts the slot-based
 Homeworlds engine and staged move builder, advertises `supports_move_builder = TRUE`, `supports_move_list = FALSE`,
-`supports_ai_search = TRUE`, and implements `list_good_moves` by exploring the builder in heuristic order and stopping
-after a bounded subset. The playable Homeworlds UI uses the same builder directly rather than asking this backend for
-full move enumeration. `src/games/boop/boop_backend.c` adapts the boop engine, advertises move lists, staged
+`supports_ai_search = TRUE`, and implements `list_good_moves` by exploring the builder in heuristic order while
+filtering nonsensical setup, pass, unsafe homeworld, and unsafe catastrophe-triggering build choices. The playable
+Homeworlds UI uses the same builder directly rather than asking this backend for full move enumeration.
+`src/games/boop/boop_backend.c` adapts the boop engine, advertises move lists, staged
 move-building, square-grid rendering, AI search, notation formatting/parsing, hashing, and backend-owned SGF position
 snapshot hooks.
 Scope: shared application code still has some checkers-native compatibility layers, but the physical checkers source

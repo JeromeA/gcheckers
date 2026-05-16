@@ -219,7 +219,7 @@ static void test_backend_position_and_move_flow(void) {
       assert(!backend->move_builder_is_complete(&builder));
       backend->move_builder_clear(&builder);
 
-      GameBackendMoveList good_moves = backend->list_good_moves(position, 4, 1);
+      GameBackendMoveList good_moves = backend->list_good_moves(position, 1);
       assert(good_moves.count > 0);
       backend->move_list_free(&good_moves);
       backend->position_clear(position);
@@ -273,9 +273,8 @@ static void test_backend_position_and_move_flow(void) {
       assert(backend->apply_move(position, move));
       assert(backend->position_turn(position) == 1);
 
-      GameBackendMoveList good_moves = backend->list_good_moves(position, 4, 1);
+      GameBackendMoveList good_moves = backend->list_good_moves(position, 1);
       assert(good_moves.count > 0);
-      assert(good_moves.count <= 4);
       backend->move_list_free(&good_moves);
 
       backend->move_list_free(&candidates);

@@ -218,9 +218,7 @@ static guint test_good_move_only_position_turn(gconstpointer position) {
   return good_position->turn;
 }
 
-static GameBackendMoveList test_good_move_only_list_good_moves(gconstpointer position,
-                                                              guint max_count,
-                                                              guint /*depth_hint*/) {
+static GameBackendMoveList test_good_move_only_list_good_moves(gconstpointer position, guint /*depth_hint*/) {
   const TestGoodMoveOnlyPosition *good_position = position;
   TestGoodMoveOnlyMove *moves = NULL;
   gsize count = 0;
@@ -234,9 +232,7 @@ static GameBackendMoveList test_good_move_only_list_good_moves(gconstpointer pos
   moves = g_new0(TestGoodMoveOnlyMove, 2);
   g_return_val_if_fail(moves != NULL, (GameBackendMoveList){0});
   moves[count++].delta = 2;
-  if (max_count == 0 || max_count > 1) {
-    moves[count++].delta = 1;
-  }
+  moves[count++].delta = 1;
 
   return (GameBackendMoveList){
     .moves = moves,

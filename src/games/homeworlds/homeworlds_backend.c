@@ -6,6 +6,12 @@
 
 #include <string.h>
 
+typedef struct {
+  HomeworldsMove *moves;
+  gsize count;
+  gsize capacity;
+} HomeworldsMoveBuffer;
+
 static const char *homeworlds_backend_side_label(guint side) {
   switch (side) {
     case 0:
@@ -108,11 +114,222 @@ static gboolean homeworlds_backend_moves_equal(gconstpointer left, gconstpointer
   return memcmp(left, right, sizeof(HomeworldsMove)) == 0;
 }
 
-static gboolean homeworlds_backend_move_is_good(const HomeworldsMove *move) {
+static gboolean homeworlds_backend_move_buffer_append(HomeworldsMoveBuffer *buffer, const HomeworldsMove *move) {
+  g_return_val_if_fail(buffer != NULL, FALSE);
+  g_return_val_if_fail(move != NULL, FALSE);
+
+  if (buffer->count == buffer->capacity) {
+    gsize next_capacity = buffer->capacity == 0 ? 16 : buffer->capacity * 2;
+    HomeworldsMove *next_moves = g_realloc_n(buffer->moves, next_capacity, sizeof(*next_moves));
+    g_return_val_if_fail(next_moves != NULL, FALSE);
+    buffer->moves = next_moves;
+    buffer->capacity = next_capacity;
+  }
+
+  buffer->moves[buffer->count++] = *move;
+  return TRUE;
+}
+
+static guint homeworlds_backend_setup_star_size_mask(const HomeworldsMove *move) {
+  guint mask = 0;
+
+  g_return_val_if_fail(move != NULL, 0);
+
+  for (guint i = 0; i < HOMEWORLDS_STAR_SLOT_COUNT; ++i) {
+    HomeworldsPyramid star = move->setup_stars[i];
+    if (!homeworlds_pyramid_is_valid(star)) {
+      return 0;
+    }
+
+    mask |= 1u << (homeworlds_pyramid_size(star) - 1);
+  }
+
+  return mask;
+}
+
+static guint homeworlds_backend_homeworld_star_size_mask(const HomeworldsPosition *position, guint side) {
+  guint mask = 0;
+
+  g_return_val_if_fail(position != NULL, 0);
+  g_return_val_if_fail(side < 2, 0);
+
+  for (guint i = 0; i < HOMEWORLDS_STAR_SLOT_COUNT; ++i) {
+    HomeworldsPyramid star = position->systems[side].stars[i];
+    if (!homeworlds_pyramid_is_valid(star)) {
+      return 0;
+    }
+
+    mask |= 1u << (homeworlds_pyramid_size(star) - 1);
+  }
+
+  return mask;
+}
+
+static gboolean homeworlds_backend_setup_colors_are_distinct(const HomeworldsMove *move) {
+  gboolean seen_colors[4] = {FALSE};
+
+  g_return_val_if_fail(move != NULL, FALSE);
+
+  for (guint i = 0; i < HOMEWORLDS_STAR_SLOT_COUNT; ++i) {
+    HomeworldsPyramid star = move->setup_stars[i];
+    if (!homeworlds_pyramid_is_valid(star)) {
+      return FALSE;
+    }
+
+    HomeworldsColor color = homeworlds_pyramid_color(star);
+    if (seen_colors[color]) {
+      return FALSE;
+    }
+    seen_colors[color] = TRUE;
+  }
+
+  if (!homeworlds_pyramid_is_valid(move->setup_ship)) {
+    return FALSE;
+  }
+
+  HomeworldsColor ship_color = homeworlds_pyramid_color(move->setup_ship);
+  if (seen_colors[ship_color]) {
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
+static gboolean homeworlds_backend_setup_includes_green(const HomeworldsMove *move) {
+  g_return_val_if_fail(move != NULL, FALSE);
+
+  for (guint i = 0; i < HOMEWORLDS_STAR_SLOT_COUNT; ++i) {
+    HomeworldsPyramid star = move->setup_stars[i];
+    if (homeworlds_pyramid_is_valid(star) && homeworlds_pyramid_color(star) == HOMEWORLDS_COLOR_GREEN) {
+      return TRUE;
+    }
+  }
+
+  return homeworlds_pyramid_is_valid(move->setup_ship) &&
+         homeworlds_pyramid_color(move->setup_ship) == HOMEWORLDS_COLOR_GREEN;
+}
+
+static gboolean homeworlds_backend_setup_move_is_good(const HomeworldsMoveBuilderState *state,
+                                                      const HomeworldsMove *move) {
+  guint star_size_mask = 0;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(move != NULL, FALSE);
+
+  if (move->kind != HOMEWORLDS_MOVE_KIND_SETUP || move->acting_side > 1 ||
+      !homeworlds_backend_setup_colors_are_distinct(move) ||
+      homeworlds_pyramid_size(move->setup_ship) != HOMEWORLDS_SIZE_LARGE) {
+    return FALSE;
+  }
+  if (move->acting_side == 0 && !homeworlds_backend_setup_includes_green(move)) {
+    return FALSE;
+  }
+
+  star_size_mask = homeworlds_backend_setup_star_size_mask(move);
+  if (star_size_mask == 0 || (star_size_mask & (star_size_mask - 1)) == 0) {
+    return FALSE;
+  }
+
+  if (move->acting_side == 1 &&
+      star_size_mask == homeworlds_backend_homeworld_star_size_mask(&state->working_position, 0)) {
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
+static gboolean homeworlds_backend_position_is_initial_turn(const HomeworldsPosition *position) {
+  g_return_val_if_fail(position != NULL, FALSE);
+
+  if (position->phase != HOMEWORLDS_PHASE_PLAY || position->turn != 0 ||
+      homeworlds_system_ship_count_for_side(&position->systems[0], 0) != 1 ||
+      homeworlds_system_ship_count_for_side(&position->systems[1], 1) != 1) {
+    return FALSE;
+  }
+
+  for (guint system_index = 0; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
+    const HomeworldsSystem *system = &position->systems[system_index];
+
+    if (system_index != 0 && homeworlds_system_ship_count_for_side(system, 0) != 0) {
+      return FALSE;
+    }
+    if (system_index != 1 && homeworlds_system_ship_count_for_side(system, 1) != 0) {
+      return FALSE;
+    }
+  }
+
+  return TRUE;
+}
+
+static gboolean homeworlds_backend_selected_ship_is_last_homeworld_ship(const HomeworldsMoveBuilderState *state) {
+  guint side = 0;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+
+  side = state->working_position.turn;
+  if (state->selected_system_index != side) {
+    return FALSE;
+  }
+
+  return homeworlds_system_ship_count_for_side(&state->working_position.systems[side], side) == 1;
+}
+
+static gboolean homeworlds_backend_construct_would_overpopulate_without_targets(
+    const HomeworldsMoveBuilderState *state) {
+  const HomeworldsSystem *system = NULL;
+  HomeworldsPyramid source = 0;
+  HomeworldsPyramid built = 0;
+  guint selected_ship_slot = 0;
+  guint side = 0;
+  guint opponent = 0;
+  gboolean found_selected_ship = FALSE;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(state->selected_system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
+
+  side = state->working_position.turn;
+  opponent = side == 0 ? 1 : 0;
+  system = &state->working_position.systems[state->selected_system_index];
+  if (homeworlds_system_ship_count_for_side(system, opponent) != 0) {
+    return FALSE;
+  }
+
+  for (guint ship_slot = 0; ship_slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++ship_slot) {
+    if (system->ships[side][ship_slot] != state->selected_ship_pyramid) {
+      continue;
+    }
+
+    selected_ship_slot = ship_slot;
+    found_selected_ship = TRUE;
+    break;
+  }
+
+  if (!found_selected_ship) {
+    return FALSE;
+  }
+
+  source = system->ships[side][selected_ship_slot];
+  if (!homeworlds_pyramid_is_valid(source) ||
+      !homeworlds_system_find_smallest_bank_ship(&state->working_position,
+                                                 homeworlds_pyramid_color(source),
+                                                 &built)) {
+    return FALSE;
+  }
+
+  return homeworlds_system_color_count(system, homeworlds_pyramid_color(built)) >= 3;
+}
+
+static gboolean homeworlds_backend_move_is_good(const HomeworldsMoveBuilderState *state, const HomeworldsMove *move) {
+  g_return_val_if_fail(state != NULL, FALSE);
   g_return_val_if_fail(move != NULL, FALSE);
 
   if (move->kind == HOMEWORLDS_MOVE_KIND_SETUP) {
-    return TRUE;
+    return homeworlds_backend_setup_move_is_good(state, move);
+  }
+
+  if (homeworlds_backend_position_is_initial_turn(&state->working_position) &&
+      (move->step_count != 1 || move->steps[0].kind != HOMEWORLDS_STEP_CONSTRUCT)) {
+    return FALSE;
   }
 
   for (guint i = 0; i < move->step_count; ++i) {
@@ -134,24 +351,33 @@ static gboolean homeworlds_backend_candidate_is_good(const HomeworldsMoveBuilder
       candidate->data.target_color == HOMEWORLDS_STEP_PASS) {
     return FALSE;
   }
+  if (state->stage == HOMEWORLDS_BUILDER_STAGE_SELECT_ACTION &&
+      candidate->data.kind == HOMEWORLDS_CANDIDATE_ACTION) {
+    if (homeworlds_backend_position_is_initial_turn(&state->working_position) &&
+        candidate->data.target_color != HOMEWORLDS_STEP_CONSTRUCT) {
+      return FALSE;
+    }
+    if (homeworlds_backend_selected_ship_is_last_homeworld_ship(state) &&
+        (candidate->data.target_color == HOMEWORLDS_STEP_MOVE ||
+         candidate->data.target_color == HOMEWORLDS_STEP_SACRIFICE)) {
+      return FALSE;
+    }
+    if (candidate->data.target_color == HOMEWORLDS_STEP_CONSTRUCT &&
+        homeworlds_backend_construct_would_overpopulate_without_targets(state)) {
+      return FALSE;
+    }
+  }
 
   return TRUE;
 }
 
 static gboolean homeworlds_backend_collect_good_moves_recursive(const HomeworldsMoveBuilderState *state,
-                                                                HomeworldsMove *moves,
-                                                                gsize max_count,
-                                                                gsize *inout_count) {
+                                                                HomeworldsMoveBuffer *buffer) {
   GameBackendMoveBuilder builder = {0};
   GameBackendMoveList candidates = {0};
 
   g_return_val_if_fail(state != NULL, FALSE);
-  g_return_val_if_fail(moves != NULL, FALSE);
-  g_return_val_if_fail(inout_count != NULL, FALSE);
-
-  if (*inout_count >= max_count) {
-    return TRUE;
-  }
+  g_return_val_if_fail(buffer != NULL, FALSE);
 
   builder.builder_state = (gpointer) state;
   builder.builder_state_size = sizeof(*state);
@@ -162,17 +388,15 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(const Homeworlds
     if (!homeworlds_move_builder_build_move(&builder, &move)) {
       return FALSE;
     }
-    if (!homeworlds_backend_move_is_good(&move)) {
+    if (!homeworlds_backend_move_is_good(state, &move)) {
       return TRUE;
     }
 
-    moves[*inout_count] = move;
-    (*inout_count)++;
-    return TRUE;
+    return homeworlds_backend_move_buffer_append(buffer, &move);
   }
 
   candidates = homeworlds_move_builder_list_candidates(&builder);
-  for (gsize i = 0; i < candidates.count && *inout_count < max_count; ++i) {
+  for (gsize i = 0; i < candidates.count; ++i) {
     const HomeworldsMoveCandidate *candidate = homeworlds_backend_move_list_get(&candidates, i);
     HomeworldsMoveBuilderState child_state = *state;
     GameBackendMoveBuilder child = {
@@ -184,7 +408,7 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(const Homeworlds
         !homeworlds_move_builder_step(&child, candidate)) {
       continue;
     }
-    if (!homeworlds_backend_collect_good_moves_recursive(&child_state, moves, max_count, inout_count)) {
+    if (!homeworlds_backend_collect_good_moves_recursive(&child_state, buffer)) {
       homeworlds_backend_move_list_free(&candidates);
       return FALSE;
     }
@@ -194,32 +418,25 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(const Homeworlds
   return TRUE;
 }
 
-static GameBackendMoveList homeworlds_backend_list_good_moves(gconstpointer position,
-                                                              guint max_count,
-                                                              guint /*depth_hint*/) {
+static GameBackendMoveList homeworlds_backend_list_good_moves(gconstpointer position, guint /*depth_hint*/) {
   GameBackendMoveBuilder builder = {0};
-  HomeworldsMove *moves = NULL;
-  gsize count = 0;
-  gsize capped_count = max_count == 0 ? 16 : max_count;
+  HomeworldsMoveBuffer buffer = {0};
 
   g_return_val_if_fail(position != NULL, (GameBackendMoveList){0});
 
-  moves = g_new0(HomeworldsMove, capped_count);
-  g_return_val_if_fail(moves != NULL, (GameBackendMoveList){0});
   if (!homeworlds_move_builder_init(position, &builder)) {
-    g_free(moves);
     return (GameBackendMoveList){0};
   }
-  if (!homeworlds_backend_collect_good_moves_recursive(builder.builder_state, moves, capped_count, &count)) {
+  if (!homeworlds_backend_collect_good_moves_recursive(builder.builder_state, &buffer)) {
     homeworlds_move_builder_clear(&builder);
-    g_free(moves);
+    g_free(buffer.moves);
     return (GameBackendMoveList){0};
   }
 
   homeworlds_move_builder_clear(&builder);
   return (GameBackendMoveList){
-    .moves = moves,
-    .count = count,
+    .moves = buffer.moves,
+    .count = buffer.count,
   };
 }
 
