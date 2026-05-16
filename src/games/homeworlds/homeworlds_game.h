@@ -32,6 +32,7 @@ gint homeworlds_position_evaluate_static(const HomeworldsPosition *position);
 gint homeworlds_position_terminal_score(GameBackendOutcome outcome, guint ply_depth);
 guint64 homeworlds_position_hash(const HomeworldsPosition *position);
 gboolean homeworlds_move_format(const HomeworldsMove *move, char *buffer, gsize size);
+gboolean homeworlds_move_parse(const char *notation, HomeworldsMove *out_move);
 
 G_END_DECLS
 

@@ -338,7 +338,7 @@ static void ggame_application_startup(GApplication *app) {
       },
   };
   g_action_map_add_action_entries(G_ACTION_MAP(app), app_actions, G_N_ELEMENTS(app_actions), app);
-  ggame_application_set_action_enabled(G_ACTION_MAP(app), "new-game", profile->features.supports_shared_shell);
+  ggame_application_set_action_enabled(G_ACTION_MAP(app), "new-game", TRUE);
   ggame_application_set_action_enabled(G_ACTION_MAP(app), "import", profile->features.supports_import);
   ggame_application_set_action_enabled(G_ACTION_MAP(app), "settings", profile->features.supports_settings);
 
@@ -429,15 +429,11 @@ static void ggame_application_activate(GApplication *app) {
     return;
   }
 
-  if (profile->ui.create_window != NULL) {
-    window = profile->ui.create_window(GTK_APPLICATION(app));
-  } else {
-    GGameModel *model = ggame_model_new(profile->backend);
-    g_return_if_fail(GGAME_IS_MODEL(model));
+  GGameModel *model = ggame_model_new(profile->backend);
+  g_return_if_fail(GGAME_IS_MODEL(model));
 
-    window = GTK_WINDOW(ggame_window_new(GTK_APPLICATION(app), model));
-    g_object_unref(model);
-  }
+  window = GTK_WINDOW(ggame_window_new(GTK_APPLICATION(app), model));
+  g_object_unref(model);
 
   g_return_if_fail(GTK_IS_WINDOW(window));
 

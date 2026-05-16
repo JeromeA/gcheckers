@@ -1,6 +1,7 @@
 #ifndef HOMEWORLDS_VIEW_H
 #define HOMEWORLDS_VIEW_H
 
+#include "../../game_app_profile.h"
 #include "../../game_model.h"
 #include "homeworlds_types.h"
 
@@ -10,6 +11,7 @@ G_BEGIN_DECLS
 
 typedef struct _HomeworldsView HomeworldsView;
 typedef void (*HomeworldsViewMoveAppliedFunc)(HomeworldsView *view, gpointer user_data);
+typedef gboolean (*HomeworldsViewMoveHandler)(gconstpointer move, gpointer user_data);
 
 typedef struct {
   double star_x[HOMEWORLDS_STAR_SLOT_COUNT];
@@ -26,6 +28,10 @@ typedef struct {
 
 HomeworldsView *homeworlds_view_new(GGameModel *model);
 void homeworlds_view_free(HomeworldsView *view);
+GtkWidget *homeworlds_view_create_board_host(GGameModel *model,
+                                             BoardView *board_view,
+                                             GGameAppMoveHandler move_handler,
+                                             gpointer move_handler_data);
 
 GtkWidget *homeworlds_view_get_widget(HomeworldsView *view);
 void homeworlds_view_refresh(HomeworldsView *view);
@@ -38,6 +44,9 @@ gsize homeworlds_view_get_candidate_count(const HomeworldsView *view);
 void homeworlds_view_set_move_applied_callback(HomeworldsView *view,
                                                HomeworldsViewMoveAppliedFunc func,
                                                gpointer user_data);
+void homeworlds_view_set_move_handler(HomeworldsView *view,
+                                      HomeworldsViewMoveHandler handler,
+                                      gpointer user_data);
 gboolean homeworlds_view_calculate_homeworld_layout(guint system_index,
                                                     double center_x,
                                                     double center_y,

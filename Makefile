@@ -40,9 +40,9 @@ ICON_FILES := $(CHECKERS_ICON_FILE) $(BOOP_ICON_FILE) $(HOMEWORLDS_ICON_FILE)
 FLATPAK_MANIFESTS := $(CHECKERS_FLATPAK_MANIFEST) $(BOOP_FLATPAK_MANIFEST) $(HOMEWORLDS_FLATPAK_MANIFEST)
 HOMEWORLDS_GAME_SRCS := $(HOMEWORLDS_DIR)/homeworlds_game.c $(HOMEWORLDS_DIR)/homeworlds_move_builder.c \
 	$(HOMEWORLDS_DIR)/homeworlds_random_ai.c
-HOMEWORLDS_BACKEND_SRCS := $(HOMEWORLDS_DIR)/homeworlds_backend.c
-HOMEWORLDS_APP_WINDOW_SRCS := $(HOMEWORLDS_DIR)/homeworlds_app_window.c $(HOMEWORLDS_DIR)/homeworlds_view.c
-HOMEWORLDS_APP_WINDOW_STUB_SRCS := $(HOMEWORLDS_DIR)/homeworlds_app_window_stub.c
+HOMEWORLDS_BACKEND_SRCS := $(HOMEWORLDS_DIR)/homeworlds_backend.c $(HOMEWORLDS_DIR)/homeworlds_sgf_position.c
+HOMEWORLDS_UI_SRCS := $(HOMEWORLDS_DIR)/homeworlds_view.c
+HOMEWORLDS_UI_STUB_SRCS := $(HOMEWORLDS_DIR)/homeworlds_view_stub.c
 HOMEWORLDS_ALL_SRCS := $(HOMEWORLDS_GAME_SRCS) $(HOMEWORLDS_BACKEND_SRCS)
 BOOP_GAME_SRCS := $(BOOP_DIR)/boop_game.c
 BOOP_BACKEND_SRCS := $(BOOP_DIR)/boop_backend.c $(BOOP_DIR)/boop_sgf_position.c
@@ -75,7 +75,7 @@ CHECKERS_SRCS := $(CHECKERS_DIR)/board.c $(CHECKERS_DIR)/board_geometry.c $(CHEC
 	$(CHECKERS_DIR)/ai_alpha_beta.c $(CHECKERS_DIR)/ai_transposition_table.c $(CHECKERS_DIR)/ai_zobrist.c \
 	$(CHECKERS_DIR)/checkers_model.c
 SRCS := $(CHECKERS_SRCS) $(CHECKERS_BACKEND_SRCS) \
-	$(HOMEWORLDS_GAME_SRCS) $(HOMEWORLDS_BACKEND_SRCS) $(HOMEWORLDS_APP_WINDOW_STUB_SRCS) \
+	$(HOMEWORLDS_GAME_SRCS) $(HOMEWORLDS_BACKEND_SRCS) $(HOMEWORLDS_UI_STUB_SRCS) \
 	$(BOOP_RULES_SRCS) src/ai_search.c src/game_model.c src/game_app_profile.c
 BOARD_SRCS := $(CHECKERS_DIR)/board.c
 SGF_TREE_SRCS := src/sgf_tree.c
@@ -260,19 +260,41 @@ $(TEST_HOMEWORLDS_GAME_BIN): tests/test_homeworlds_game.c $(HOMEWORLDS_GAME_SRCS
 	$(CC) $(CFLAGS) -o $@ tests/test_homeworlds_game.c $(HOMEWORLDS_GAME_SRCS) $(LDLIBS)
 
 test_homeworlds_backend: $(TEST_HOMEWORLDS_BACKEND_BIN)
-$(TEST_HOMEWORLDS_BACKEND_BIN): tests/test_homeworlds_backend.c $(HOMEWORLDS_ALL_SRCS) \
+$(TEST_HOMEWORLDS_BACKEND_BIN): tests/test_homeworlds_backend.c $(HOMEWORLDS_ALL_SRCS) $(SGF_TREE_SRCS) \
 	$(HOMEWORLDS_DIR)/homeworlds_backend.h $(HOMEWORLDS_DIR)/homeworlds_game.h \
 	$(HOMEWORLDS_DIR)/homeworlds_move_builder.h $(HOMEWORLDS_DIR)/homeworlds_random_ai.h
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ tests/test_homeworlds_backend.c $(HOMEWORLDS_ALL_SRCS) $(LDLIBS)
+	$(CC) $(CFLAGS) -o $@ tests/test_homeworlds_backend.c $(HOMEWORLDS_ALL_SRCS) $(SGF_TREE_SRCS) $(LDLIBS)
 
 test_homeworlds_window: $(TEST_HOMEWORLDS_WINDOW_BIN)
-$(TEST_HOMEWORLDS_WINDOW_BIN): tests/test_homeworlds_window.c $(HOMEWORLDS_APP_WINDOW_SRCS) \
-	$(HOMEWORLDS_ALL_SRCS) src/game_model.c $(HOMEWORLDS_DIR)/homeworlds_app_window.h \
+$(TEST_HOMEWORLDS_WINDOW_BIN): tests/test_homeworlds_window.c $(HOMEWORLDS_UI_SRCS) \
+	$(HOMEWORLDS_ALL_SRCS) src/application.c src/window.c $(APP_PATHS_SRCS) $(PUZZLE_PROGRESS_SRCS) \
+	$(PUZZLE_CATALOG_SRCS) src/app_settings.c src/app_settings.h src/settings_dialog.c src/settings_dialog.h \
+	src/new_game_dialog.c src/puzzle_dialog.c src/puzzle_dialog.h $(CHECKERS_DIR)/rulesets.c \
+	$(CHECKERS_DIR)/rulesets.h src/import_dialog.c src/sgf_file_actions.c src/sgf_file_actions.h \
+	src/file_dialog_history.c src/file_dialog_history.h src/bga_client.c src/bga_client.h src/window.h \
+	src/style.c src/style.h src/player_controls_panel.c src/player_controls_panel.h src/analysis_graph.c \
+	src/analysis_graph.h src/sgf_controller.c src/sgf_controller.h src/board_view.c src/board_view.h \
+	src/board_grid.c src/board_grid.h src/board_square.c src/board_square.h src/board_move_overlay.c \
+	src/board_move_overlay.h src/board_selection_controller.c src/board_selection_controller.h \
+	src/piece_palette.c src/piece_palette.h src/man_paintable.c src/man_paintable.h src/sgf_io.c src/sgf_io.h \
+	src/sgf_move_props.c src/sgf_move_props.h src/sgf_tree.c src/sgf_tree.h src/sgf_view.c src/sgf_view.h \
+	src/sgf_view_disc_factory.c src/sgf_view_disc_factory.h src/sgf_view_layout.c src/sgf_view_layout.h \
+	src/sgf_view_link_renderer.c src/sgf_view_link_renderer.h src/sgf_view_scroller.c \
+	src/sgf_view_scroller.h src/sgf_view_selection_controller.c src/sgf_view_selection_controller.h \
+	$(TEST_PROFILE_UTILS_SRCS) $(SRCS) $(BOOP_UI_SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS) \
 	$(HOMEWORLDS_DIR)/homeworlds_view.h
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_homeworlds_window.c $(HOMEWORLDS_APP_WINDOW_SRCS) \
-		$(HOMEWORLDS_ALL_SRCS) src/game_model.c $(LDLIBS) $(GTK_LIBS)
+	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_homeworlds_window.c $(TEST_PROFILE_UTILS_SRCS) \
+		src/application.c src/window.c $(APP_PATHS_SRCS) $(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) \
+		src/app_settings.c src/settings_dialog.c src/new_game_dialog.c src/puzzle_dialog.c \
+		src/import_dialog.c src/sgf_file_actions.c src/file_dialog_history.c src/bga_client.c src/style.c \
+		src/player_controls_panel.c src/analysis_graph.c src/sgf_controller.c src/board_view.c \
+		src/board_grid.c src/board_square.c src/board_move_overlay.c src/board_selection_controller.c \
+		src/piece_palette.c src/man_paintable.c src/sgf_io.c src/sgf_move_props.c src/sgf_tree.c \
+		src/sgf_view.c src/sgf_view_disc_factory.c src/sgf_view_layout.c src/sgf_view_link_renderer.c \
+		src/sgf_view_scroller.c src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(SRCS) \
+		$(BOOP_UI_SRCS) $(HOMEWORLDS_UI_SRCS) $(LDLIBS) $(GTK_LIBS)
 
 test_boop_game: $(TEST_BOOP_GAME_BIN)
 $(TEST_BOOP_GAME_BIN): tests/test_boop_game.c $(BOOP_GAME_SRCS) $(BOOP_DIR)/boop_game.h
@@ -668,7 +690,7 @@ $(BOOP_APP_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/gboop.c $(APP_MAIN_SRCS) src/a
 		src/sgf_view_link_renderer.c src/sgf_view_scroller.c src/sgf_view_selection_controller.c \
 		$(WIDGET_UTILS_SRCS) $(SRCS) $(BOOP_UI_SRCS) $(LDLIBS) $(GTK_LIBS)
 
-$(HOMEWORLDS_APP_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/ghomeworlds.c $(APP_MAIN_SRCS) $(HOMEWORLDS_APP_WINDOW_SRCS) \
+$(HOMEWORLDS_APP_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/ghomeworlds.c $(APP_MAIN_SRCS) $(HOMEWORLDS_UI_SRCS) \
 	src/application.c src/window.c \
 	$(APP_PATHS_SRCS) $(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c src/app_settings.h \
 	src/settings_dialog.c src/settings_dialog.h src/new_game_dialog.c src/puzzle_dialog.c src/puzzle_dialog.h \
@@ -686,7 +708,7 @@ $(HOMEWORLDS_APP_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/ghomeworlds.c $(APP_MAIN
 	src/sgf_view_scroller.h src/sgf_view_selection_controller.c src/sgf_view_selection_controller.h \
 	$(SRCS) $(BOOP_UI_SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/ghomeworlds.c $(APP_MAIN_SRCS) $(HOMEWORLDS_APP_WINDOW_SRCS) \
+	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/ghomeworlds.c $(APP_MAIN_SRCS) $(HOMEWORLDS_UI_SRCS) \
 		src/application.c $(APP_PATHS_SRCS) \
 		$(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c src/window.c src/settings_dialog.c \
 		src/new_game_dialog.c src/puzzle_dialog.c src/import_dialog.c src/file_dialog_history.c src/style.c \

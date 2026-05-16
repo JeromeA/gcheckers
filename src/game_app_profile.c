@@ -3,8 +3,8 @@
 #include "games/boop/boop_backend.h"
 #include "games/boop/boop_controls.h"
 #include "games/checkers/checkers_backend.h"
-#include "games/homeworlds/homeworlds_app_window.h"
 #include "games/homeworlds/homeworlds_backend.h"
+#include "games/homeworlds/homeworlds_view.h"
 
 static const GGameAppProfile checkers_app_profile = {
   .kind = GGAME_APP_KIND_CHECKERS,
@@ -16,8 +16,6 @@ static const GGameAppProfile checkers_app_profile = {
   .backend = &checkers_game_backend,
   .features =
       {
-          .supports_shared_shell = TRUE,
-          .supports_sgf_files = TRUE,
           .supports_ai_players = TRUE,
           .supports_analysis = TRUE,
           .supports_puzzles = TRUE,
@@ -46,19 +44,17 @@ static const GGameAppProfile homeworlds_app_profile = {
   .backend = &homeworlds_game_backend,
   .features =
       {
-          .supports_shared_shell = FALSE,
-          .supports_sgf_files = FALSE,
-          .supports_ai_players = FALSE,
-          .supports_analysis = FALSE,
+          .supports_ai_players = TRUE,
+          .supports_analysis = TRUE,
           .supports_puzzles = FALSE,
           .supports_import = FALSE,
           .supports_settings = FALSE,
-          .supports_save_position = FALSE,
+          .supports_save_position = TRUE,
           .supports_edit_mode = FALSE,
       },
   .ui =
       {
-          .create_window = ghomeworlds_app_window_create,
+          .create_board_host = homeworlds_view_create_board_host,
       },
   .layout =
       {
@@ -80,8 +76,6 @@ static const GGameAppProfile boop_app_profile = {
   .backend = &boop_game_backend,
   .features =
       {
-          .supports_shared_shell = TRUE,
-          .supports_sgf_files = TRUE,
           .supports_ai_players = TRUE,
           .supports_analysis = TRUE,
           .supports_puzzles = TRUE,

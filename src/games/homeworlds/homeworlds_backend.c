@@ -2,6 +2,7 @@
 
 #include "homeworlds_game.h"
 #include "homeworlds_move_builder.h"
+#include "homeworlds_sgf_position.h"
 
 #include <string.h>
 
@@ -28,6 +29,18 @@ static const char *homeworlds_backend_outcome_banner_text(GameBackendOutcome out
     case GAME_BACKEND_OUTCOME_ONGOING:
     default:
       return NULL;
+  }
+}
+
+static SgfColor homeworlds_backend_sgf_color_for_side(guint side) {
+  switch (side) {
+    case 0:
+      return SGF_COLOR_BLACK;
+    case 1:
+      return SGF_COLOR_WHITE;
+    default:
+      g_debug("Unsupported Homeworlds side index for SGF color");
+      return SGF_COLOR_NONE;
   }
 }
 
@@ -216,6 +229,15 @@ static gboolean homeworlds_backend_format_move(gconstpointer move, char *buffer,
   return homeworlds_move_format(homeworlds_move, buffer, size);
 }
 
+static gboolean homeworlds_backend_parse_move(const char *notation, gpointer out_move) {
+  HomeworldsMove *homeworlds_move = out_move;
+
+  g_return_val_if_fail(notation != NULL, FALSE);
+  g_return_val_if_fail(homeworlds_move != NULL, FALSE);
+
+  return homeworlds_move_parse(notation, homeworlds_move);
+}
+
 const GameBackend homeworlds_game_backend = {
   .id = "homeworlds",
   .display_name = "Homeworlds",
@@ -226,6 +248,7 @@ const GameBackend homeworlds_game_backend = {
   .supports_move_builder = TRUE,
   .supports_ai_search = TRUE,
   .side_label = homeworlds_backend_side_label,
+  .sgf_color_for_side = homeworlds_backend_sgf_color_for_side,
   .outcome_banner_text = homeworlds_backend_outcome_banner_text,
   .position_init = homeworlds_backend_position_init,
   .position_clear = homeworlds_backend_position_clear,
@@ -249,5 +272,8 @@ const GameBackend homeworlds_game_backend = {
   .terminal_score = homeworlds_backend_terminal_score,
   .hash_position = homeworlds_backend_hash_position,
   .format_move = homeworlds_backend_format_move,
+  .parse_move = homeworlds_backend_parse_move,
+  .sgf_apply_setup_node = homeworlds_sgf_position_apply_setup_node,
+  .sgf_write_position_node = homeworlds_sgf_position_write_position_node,
   .supports_square_grid_board = FALSE,
 };

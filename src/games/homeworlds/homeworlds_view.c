@@ -44,8 +44,11 @@ struct _HomeworldsView {
   GtkWidget *last_move_label;
   GameBackendMoveBuilder builder;
   gboolean builder_ready;
+  HomeworldsViewMoveHandler move_handler;
+  gpointer move_handler_data;
   HomeworldsViewMoveAppliedFunc move_applied;
   gpointer move_applied_data;
+  gulong model_state_changed_handler_id;
 };
 
 static void homeworlds_view_update_from_current_builder(HomeworldsView *view);
@@ -651,9 +654,33 @@ static void homeworlds_view_rebuild_builder(HomeworldsView *view) {
   }
 }
 
+static gboolean homeworlds_view_apply_completed_move(HomeworldsView *view, const HomeworldsMove *move) {
+  char formatted[128] = {0};
+
+  g_return_val_if_fail(view != NULL, FALSE);
+  g_return_val_if_fail(move != NULL, FALSE);
+
+  if (view->move_handler != NULL) {
+    if (!view->move_handler(move, view->move_handler_data)) {
+      g_debug("Homeworlds move handler rejected the completed move");
+      return FALSE;
+    }
+  } else if (!ggame_model_apply_move(view->model, move)) {
+    g_debug("Homeworlds model rejected the completed move");
+    return FALSE;
+  }
+
+  if (homeworlds_move_format(move, formatted, sizeof(formatted))) {
+    gtk_label_set_text(GTK_LABEL(view->last_move_label), formatted);
+  }
+  if (view->move_applied != NULL) {
+    view->move_applied(view, view->move_applied_data);
+  }
+  return TRUE;
+}
+
 static gboolean homeworlds_view_complete_move_if_ready(HomeworldsView *view) {
   HomeworldsMove move = {0};
-  char formatted[128] = {0};
 
   g_return_val_if_fail(view != NULL, FALSE);
 
@@ -664,18 +691,7 @@ static gboolean homeworlds_view_complete_move_if_ready(HomeworldsView *view) {
     g_debug("Completed Homeworlds builder did not produce a move");
     return FALSE;
   }
-  if (!ggame_model_apply_move(view->model, &move)) {
-    g_debug("Homeworlds model rejected the completed move");
-    return FALSE;
-  }
-
-  if (homeworlds_move_format(&move, formatted, sizeof(formatted))) {
-    gtk_label_set_text(GTK_LABEL(view->last_move_label), formatted);
-  }
-  if (view->move_applied != NULL) {
-    view->move_applied(view, view->move_applied_data);
-  }
-  return TRUE;
+  return homeworlds_view_apply_completed_move(view, &move);
 }
 
 static void homeworlds_view_candidate_clicked(GtkButton *button, gpointer user_data) {
@@ -993,6 +1009,14 @@ static void homeworlds_view_update_from_current_builder(HomeworldsView *view) {
   gtk_widget_queue_draw(view->drawing_area);
 }
 
+static void homeworlds_view_model_state_changed(GGameModel * /*model*/, gpointer user_data) {
+  HomeworldsView *view = user_data;
+
+  g_return_if_fail(view != NULL);
+
+  homeworlds_view_refresh(view);
+}
+
 HomeworldsView *homeworlds_view_new(GGameModel *model) {
   HomeworldsView *view = NULL;
   GtkWidget *bank_frame = NULL;
@@ -1006,6 +1030,10 @@ HomeworldsView *homeworlds_view_new(GGameModel *model) {
   view = g_new0(HomeworldsView, 1);
   g_return_val_if_fail(view != NULL, NULL);
   view->model = g_object_ref(model);
+  view->model_state_changed_handler_id = g_signal_connect(view->model,
+                                                          "state-changed",
+                                                          G_CALLBACK(homeworlds_view_model_state_changed),
+                                                          view);
 
   view->root = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 16);
   gtk_widget_set_hexpand(view->root, TRUE);
@@ -1093,11 +1121,34 @@ HomeworldsView *homeworlds_view_new(GGameModel *model) {
   return view;
 }
 
+GtkWidget *homeworlds_view_create_board_host(GGameModel *model,
+                                             BoardView * /*board_view*/,
+                                             GGameAppMoveHandler move_handler,
+                                             gpointer move_handler_data) {
+  HomeworldsView *view = NULL;
+  GtkWidget *widget = NULL;
+
+  g_return_val_if_fail(GGAME_IS_MODEL(model), NULL);
+
+  view = homeworlds_view_new(model);
+  g_return_val_if_fail(view != NULL, NULL);
+  homeworlds_view_set_move_handler(view, (HomeworldsViewMoveHandler)move_handler, move_handler_data);
+
+  widget = homeworlds_view_get_widget(view);
+  g_return_val_if_fail(GTK_IS_WIDGET(widget), NULL);
+  g_object_set_data_full(G_OBJECT(widget), "homeworlds-view-state", view, (GDestroyNotify)homeworlds_view_free);
+  return widget;
+}
+
 void homeworlds_view_free(HomeworldsView *view) {
   if (view == NULL) {
     return;
   }
 
+  if (view->model != NULL && view->model_state_changed_handler_id != 0) {
+    g_signal_handler_disconnect(view->model, view->model_state_changed_handler_id);
+    view->model_state_changed_handler_id = 0;
+  }
   if (view->builder_ready) {
     homeworlds_move_builder_clear(&view->builder);
   }
@@ -1153,7 +1204,6 @@ gboolean homeworlds_view_has_partial_selection(const HomeworldsView *view) {
 gboolean homeworlds_view_apply_random_move(HomeworldsView *view) {
   const HomeworldsPosition *position = NULL;
   HomeworldsMove move = {0};
-  char formatted[128] = {0};
 
   g_return_val_if_fail(view != NULL, FALSE);
 
@@ -1171,16 +1221,8 @@ gboolean homeworlds_view_apply_random_move(HomeworldsView *view) {
     g_debug("Homeworlds random AI could not build a legal move");
     return FALSE;
   }
-  if (!ggame_model_apply_move(view->model, &move)) {
-    g_debug("Homeworlds model rejected random AI move");
+  if (!homeworlds_view_apply_completed_move(view, &move)) {
     return FALSE;
-  }
-
-  if (homeworlds_move_format(&move, formatted, sizeof(formatted))) {
-    gtk_label_set_text(GTK_LABEL(view->last_move_label), formatted);
-  }
-  if (view->move_applied != NULL) {
-    view->move_applied(view, view->move_applied_data);
   }
   homeworlds_view_refresh(view);
   return TRUE;
@@ -1247,4 +1289,13 @@ void homeworlds_view_set_move_applied_callback(HomeworldsView *view,
 
   view->move_applied = func;
   view->move_applied_data = user_data;
+}
+
+void homeworlds_view_set_move_handler(HomeworldsView *view,
+                                      HomeworldsViewMoveHandler handler,
+                                      gpointer user_data) {
+  g_return_if_fail(view != NULL);
+
+  view->move_handler = handler;
+  view->move_handler_data = user_data;
 }

@@ -519,7 +519,10 @@ static void gboop_controls_install_css(void) {
   g_once_init_leave(&initialized, 1);
 }
 
-GtkWidget *gboop_controls_create_board_host(GGameModel *model, BoardView *board_view) {
+GtkWidget *gboop_controls_create_board_host(GGameModel *model,
+                                            BoardView *board_view,
+                                            GGameAppMoveHandler /*move_handler*/,
+                                            gpointer /*move_handler_data*/) {
   GBoopControlsState *state = NULL;
   GtkWidget *host = NULL;
   GtkWidget *board_frame = NULL;

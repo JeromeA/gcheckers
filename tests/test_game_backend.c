@@ -31,8 +31,6 @@ static void test_app_profile_metadata(void) {
 
   switch (profile->kind) {
     case GGAME_APP_KIND_CHECKERS:
-      assert(profile->features.supports_shared_shell);
-      assert(profile->features.supports_sgf_files);
       assert(profile->features.supports_ai_players);
       assert(profile->features.supports_puzzles);
       assert(profile->features.supports_import);
@@ -40,20 +38,19 @@ static void test_app_profile_metadata(void) {
       assert(profile->features.supports_save_position);
       assert(profile->features.supports_edit_mode);
       assert(profile->features.supports_analysis);
-      assert(profile->ui.create_window == NULL);
       assert(profile->ui.create_board_host == NULL);
       break;
     case GGAME_APP_KIND_HOMEWORLDS:
-      assert(!profile->features.supports_shared_shell);
+      assert(profile->features.supports_ai_players);
+      assert(profile->features.supports_analysis);
       assert(!profile->features.supports_puzzles);
       assert(!profile->features.supports_import);
       assert(!profile->features.supports_settings);
-      assert(profile->ui.create_window != NULL);
-      assert(profile->ui.create_board_host == NULL);
+      assert(profile->features.supports_save_position);
+      assert(!profile->features.supports_edit_mode);
+      assert(profile->ui.create_board_host != NULL);
       break;
     case GGAME_APP_KIND_BOOP:
-      assert(profile->features.supports_shared_shell);
-      assert(profile->features.supports_sgf_files);
       assert(profile->features.supports_ai_players);
       assert(profile->features.supports_puzzles);
       assert(!profile->features.supports_import);
@@ -61,7 +58,6 @@ static void test_app_profile_metadata(void) {
       assert(profile->features.supports_save_position);
       assert(!profile->features.supports_edit_mode);
       assert(profile->features.supports_analysis);
-      assert(profile->ui.create_window == NULL);
       assert(profile->ui.create_board_host != NULL);
       break;
     default:
@@ -105,9 +101,13 @@ static void test_backend_metadata(void) {
       assert(backend->supports_move_builder);
       assert(backend->supports_ai_search);
       assert(backend->list_good_moves != NULL);
-      assert(backend->sgf_apply_setup_node == NULL);
-      assert(backend->sgf_write_position_node == NULL);
-      assert(backend->sgf_color_for_side == NULL);
+      assert(!backend->supports_square_grid_board);
+      assert(backend->sgf_apply_setup_node != NULL);
+      assert(backend->sgf_write_position_node != NULL);
+      assert(backend->sgf_color_for_side != NULL);
+      assert(backend->sgf_color_for_side(0) == SGF_COLOR_BLACK);
+      assert(backend->sgf_color_for_side(1) == SGF_COLOR_WHITE);
+      assert(backend->parse_move != NULL);
       assert(strcmp(backend->side_label(0), "Player 1") == 0);
       assert(strcmp(backend->side_label(1), "Player 2") == 0);
       break;

@@ -353,3 +353,29 @@ list and explicitly accepted pass whenever it was not resolving a sacrifice acti
 
 The fix filters pass out of the random AI candidate selection path. A backend regression test now runs multiple seeded
 random moves from a normal play position and asserts that every generated turn has at least one non-pass step.
+
+## Homeworlds bypassed the shared SGF shell
+
+Homeworlds should use the same application window as the other games, so SGF navigation, load/save actions, menus, and
+toolbar controls are owned by generic code.
+
+The Homeworlds profile installed a custom toplevel window hook. That window owned its own model and view, so there was
+no shared `GGameSgfController`, no SGF drawer, and no generic file-action path for Homeworlds moves. The profile API
+also made that split an available option for future backends.
+
+The fix removes the custom-window hook from app profiles. `ghomeworlds` now launches `GGameWindow`, installs the
+Homeworlds view only as a board host, routes completed Homeworlds moves through the shared move handler, and adds
+Homeworlds SGF move parsing plus whole-position snapshot hooks. Regression coverage verifies that a Homeworlds setup
+played through the generic window appends SGF nodes and can be replayed through the shared controller.
+
+## Legacy checkers model could go stale after generic-window moves
+
+Checkers compatibility callers that still hold a `GCheckersModel` should observe moves applied through the shared
+`GGameModel` path.
+
+The generic window now applies moves through `GGameSgfController` and the backend-backed `GGameModel`. The legacy
+`GCheckersModel` wrapper published its state into that generic model, but did not mirror state changes coming back from
+generic callers. Tests that inspected the compatibility wrapper after a forced move still saw the starting turn.
+
+The fix connects the wrapper to its inner `GGameModel::state-changed` signal and copies the generic checkers position
+back into the legacy wrapper, with a guard to avoid recursive self-sync notifications.

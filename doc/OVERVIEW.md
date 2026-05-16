@@ -7,22 +7,22 @@ Game-specific code lives under `src/games/<game>/` and provides the rules, posit
 evaluation, notation helpers, optional puzzle tooling, and any board-specific callbacks needed by the selected
 backend. `src/games/boop/` contains both the boop rules/backend and the boop-only supply/promotion controls that now
 plug into the shared window, while `src/games/homeworlds/` provides the rules/backend plus a profile-owned toplevel
-window and custom Homeworlds view.
+board host and SGF snapshot codec for the shared window.
 
 The default build now compiles one shared object graph and links all three application binaries. Each process selects
 exactly one `GGameAppProfile` at startup through its launcher, then shared code queries
 `src/game_app_profile.[ch]` for the active profile and reaches the profile-owned `GameBackend` and feature/UI hooks
 from there. Shared code talks to the rules/search/rendering layer through generic APIs such as `GGameModel`,
-`ai_search`, and the square-grid board callbacks, so adding another game is mostly a matter of adding a new backend
-directory plus the corresponding profile and packaging entries.
+`ai_search`, SGF backend hooks, square-grid board callbacks, or a custom board host, so adding another game is mostly a
+matter of adding a new backend directory plus the corresponding profile and packaging entries.
 
 ## `GGameAppProfile` (`src/game_app_profile.c`, `src/game_app_profile.h`)
 Module: runtime app-profile registry and descriptors.
 Role: describe each branded target, including app ID, display strings, settings schema ID, the profile-owned
 `GameBackend *`, feature flags, derived helpers such as puzzle-catalog support, shared-window layout defaults, and
-optional UI hooks such as boop's custom board host or the Homeworlds toplevel window creator. Launchers select one of
-these profiles at startup, and `ggame_active_app_profile()` exposes the chosen profile to shared code. Checkers and
-boop both advertise `supports_shared_shell = TRUE`, while Homeworlds still reports no shared-shell support.
+an optional board-host hook. Launchers select one of these profiles at startup, and `ggame_active_app_profile()`
+exposes the chosen profile to shared code. Profiles do not get a custom-window hook; the menu bar, toolbar, SGF
+controller, and drawer actions are always owned by the generic application window.
 Collaborates with: `src/application.c`, `src/window.c`, `src/app_settings.c`, `src/file_dialog_history.c`, and
 `src/active_game_backend.h`.
 
@@ -31,7 +31,9 @@ Class: `GGameWindow` (`GtkApplicationWindow`).
 Role: composition root that binds model state to UI updates, keeps board input available, and coordinates auto-play.
 Owns: the active `GGameAppProfile`, one `GGameModel`, `BoardView`, `PlayerControlsPanel`, `GGameSgfController`, and
 an optional profile-owned board host around the board. For boop, that board host adds the supply piles, selected-rank
-highlight, promotion confirmation button, and boop color styling while keeping the same shared shell.
+highlight, promotion confirmation button, and boop color styling while keeping the same shared shell. For Homeworlds,
+the board host replaces the square `BoardView` presentation with the system graph, bank piles, staged-choice controls,
+and catastrophe controls while still routing completed moves through the shared SGF controller.
 Collaborates with: `ggame_style_init()` for CSS, model signals for refresh, profile feature flags to enable/disable
 actions, and SGF analysis signals to reset player dropdowns. Computer turns are routed by control mode with
 alpha-beta depth configured from the shared `Computer depth` slider (`0..16`). Uses a three-pane layout: board and
@@ -40,7 +42,7 @@ shared window actions exposed in the `Analysis` menubar submenu: current-positio
 node, and full-game analysis always processes nodes in reverse order so TT state is reused from later positions
 first. Current-position analysis now runs through the generic backend AI API for every shared-shell build, while
 full-game analysis keeps the checkers setup-aware replay path for checkers and uses backend-position SGF replay for
-boop.
+boop and Homeworlds.
 Shared pane defaults also come from the active profile. Checkers keeps the historical `500/300/300` board,
 navigation, and analysis widths with both drawers visible by default, while boop starts with a wider `760` board pane
 and the analysis drawer hidden by default so its square board host can reach the same practical size as the old
@@ -117,7 +119,7 @@ full-game analysis, the latest node that received analysis is highlighted in yel
 branch.
 Top-level menu actions are
 also exposed in a toolbar
-(`New game...`, `Force move`, `Save position...`, SGF timeline rewind/step/skip actions) via GTK actions.
+(`New game...`, `Force move`, SGF timeline rewind/step/skip actions, and analysis actions) via GTK actions.
 Owns modal flows for `New game` and `Import games` wizards.
 `New game` now builds its optional `Variant` dropdown and summary label from the active backend metadata rather than
 hard-coding checkers names in the dialog. `GGameWindow`'s public new-game and puzzle APIs now take backend variants,
@@ -340,7 +342,8 @@ Role: wrap the engine for GTK, including move validation, alpha-beta move select
 last-move caching for board overlay rendering. Exposes structured move-analysis API
 (`gcheckers_model_analyze_moves`) returning scored moves plus search stats. Also exposes `gcheckers_model_set_state()`
 to publish replayed SGF positions (for setup/property-driven nodes) into the GTK model. It now also owns a synced
-`GGameModel` mirror so shared square-grid UI can consume backend-driven state without pulling checkers headers.
+`GGameModel` mirror so shared square-grid UI can consume backend-driven state without pulling checkers headers, and it
+mirrors generic model updates back into the legacy wrapper for compatibility callers.
 Collaborates with: `GGameWindow`, SGF controllers, and shared square-grid board widgets.
 
 ## Generic AI search (`src/ai_search.c`, `src/ai_search.h`)
@@ -490,9 +493,10 @@ the players' homeworlds), two star slots per system, and fourteen ship slots per
 `homeworlds_types.h` own pyramid encoding/decoding and low-level slot semantics so the representation can change in
 one place later if needed.
 Rules covered: setup, construct, trade, attack, move, discover, sacrifice, catastrophe resolution, empty-system
-cleanup, start-of-turn loss detection, static evaluation, terminal scoring, hashing, and move formatting.
-Collaborates with: `homeworlds_move_builder.c`, `homeworlds_backend.c`, `homeworlds_view.c`,
-`tests/test_homeworlds_game.c`, and `tests/test_homeworlds_backend.c`.
+cleanup, start-of-turn loss detection, static evaluation, terminal scoring, hashing, compact move formatting/parsing,
+and whole-position SGF snapshots in `homeworlds_sgf_position.c`.
+Collaborates with: `homeworlds_move_builder.c`, `homeworlds_backend.c`, `homeworlds_sgf_position.c`,
+`homeworlds_view.c`, `tests/test_homeworlds_game.c`, and `tests/test_homeworlds_backend.c`.
 
 ## Homeworlds move builder (`src/games/homeworlds/homeworlds_move_builder.c`,
 `src/games/homeworlds/homeworlds_move_builder.h`)
@@ -505,24 +509,25 @@ back through source-ship selection for each granted action.
 Collaborates with: `homeworlds_game.c`, `homeworlds_backend.c`, `homeworlds_random_ai.c`, `homeworlds_view.c`, and
 `tests/test_homeworlds_backend.c`.
 
-## Homeworlds UI and random AI (`src/games/homeworlds/homeworlds_app_window.c`,
-`src/games/homeworlds/homeworlds_view.c`, `src/games/homeworlds/homeworlds_random_ai.c`)
-Module: profile-owned Homeworlds window, staged GTK view/controller, and simple stochastic move policy.
-Role: let `ghomeworlds` use the runtime Homeworlds profile while staying outside the square-grid shared shell. The
-window owns a `GGameModel` bound to `homeworlds_game_backend`, status controls, new-game/reset actions, and a `Random
-AI` button. `homeworlds_view.c` renders a starfield board with system boxes, homeworld labels, pipped square stars,
-tall pipped ship pyramids, overlaid clickable bank piles, staged legal-choice buttons, and direct catastrophe buttons.
+## Homeworlds UI and random AI (`src/games/homeworlds/homeworlds_view.c`,
+`src/games/homeworlds/homeworlds_random_ai.c`)
+Module: Homeworlds board host, staged GTK view/controller, and simple stochastic move policy.
+Role: let `ghomeworlds` use the shared `GGameWindow` while replacing only the square board presentation.
+`homeworlds_view.c` renders a starfield board with system boxes, homeworld labels, pipped square stars, tall pipped
+ship pyramids, overlaid clickable bank piles, staged legal-choice buttons, and direct catastrophe buttons.
 Homeworld rendering keeps player 1 at the bottom, player 2 at the top, and places each homeworld's own ships beside
 its stars from that player's perspective. During setup, the bank piles on the board are real `GtkButton`s that feed
 the staged builder directly, so start stars and the start ship do not require a long side-panel button list. Human
 interaction advances
-`homeworlds_move_builder` one visible choice at a time and applies the completed `HomeworldsMove` through
-`GGameModel`; it never asks the backend for a full legal move list.
+`homeworlds_move_builder` one visible choice at a time and sends each completed `HomeworldsMove` to the generic window
+move handler. In the app, that appends SGF nodes through `GGameSgfController`; standalone view tests can still install
+no handler and apply directly to `GGameModel`. Homeworlds intentionally does not expose a full legal move list, so the
+shared SGF controller validates completed moves by applying them to a copied position before appending the node.
 `homeworlds_random_ai.c` uses the same staged builder to pick a bounded legal random move,
 never selects pass, avoids capture choices with no target, and handles move/discover choices without enumerating full
 turn sequences.
-Collaborates with: `GGameAppProfile`, `GGameModel`, `homeworlds_game.c`, `homeworlds_move_builder.c`,
-`homeworlds_backend.c`, and `tests/test_homeworlds_window.c`.
+Collaborates with: `GGameAppProfile`, `GGameWindow`, `GGameModel`, `GGameSgfController`, `homeworlds_game.c`,
+`homeworlds_move_builder.c`, `homeworlds_backend.c`, and `tests/test_homeworlds_window.c`.
 
 ## Boop engine (`src/games/boop/boop_types.h`, `src/games/boop/boop_game.c`,
 `src/games/boop/boop_game.h`, `src/games/boop/boop_backend.c`, `src/games/boop/boop_backend.h`,
@@ -627,8 +632,8 @@ actions, and publishes one shared menubar model (`File` -> `New game...`, `Impor
 and whole-game analysis; `Puzzle` -> `Play puzzles`; `View` -> drawer toggles) with keyboard accelerators. Both
 `gcheckers` and `gboop` are built from this same shell and diverge through `GGameAppProfile` feature flags and boop's
 optional board-host hook. Unsupported actions stay in the same shared shell but are disabled for profiles that do not
-support them. `src/ghomeworlds.c` selects the Homeworlds profile and opens the profile-owned Homeworlds window instead
-of the shared square-grid shell.
+support them. `src/ghomeworlds.c` selects the Homeworlds profile and opens the same shared shell with the Homeworlds
+board-host hook.
 The active application ID, display strings, settings schema ID, and backend all come from `GGameAppProfile`, with the
 current profiles selecting `io.github.jeromea.gcheckers`, `io.github.jeromea.gboop`, or
 `io.github.jeromea.ghomeworlds`.

@@ -8,8 +8,6 @@
 G_BEGIN_DECLS
 
 typedef struct _GtkWidget GtkWidget;
-typedef struct _GtkApplication GtkApplication;
-typedef struct _GtkWindow GtkWindow;
 typedef struct _BoardView BoardView;
 typedef struct _GGameModel GGameModel;
 
@@ -20,8 +18,6 @@ typedef enum {
 } GGameAppKind;
 
 typedef struct {
-  gboolean supports_shared_shell;
-  gboolean supports_sgf_files;
   gboolean supports_ai_players;
   gboolean supports_analysis;
   gboolean supports_puzzles;
@@ -31,9 +27,13 @@ typedef struct {
   gboolean supports_edit_mode;
 } GGameAppFeatures;
 
+typedef gboolean (*GGameAppMoveHandler)(gconstpointer move, gpointer user_data);
+
 typedef struct {
-  GtkWindow *(*create_window)(GtkApplication *app);
-  GtkWidget *(*create_board_host)(GGameModel *model, BoardView *board_view);
+  GtkWidget *(*create_board_host)(GGameModel *model,
+                                  BoardView *board_view,
+                                  GGameAppMoveHandler move_handler,
+                                  gpointer move_handler_data);
 } GGameAppUiHooks;
 
 typedef struct {

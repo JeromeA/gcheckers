@@ -5,6 +5,7 @@
 #include "../src/games/homeworlds/homeworlds_game.h"
 #include "../src/games/homeworlds/homeworlds_move_builder.h"
 #include "../src/games/homeworlds/homeworlds_random_ai.h"
+#include "../src/sgf_tree.h"
 
 static HomeworldsMove test_setup_move(guint side,
                                       HomeworldsPyramid first_star,
@@ -63,7 +64,78 @@ static void test_backend_metadata(void) {
   assert(backend->supports_move_builder);
   assert(backend->supports_ai_search);
   assert(backend->list_good_moves != NULL);
+  assert(backend->parse_move != NULL);
+  assert(backend->sgf_color_for_side != NULL);
+  assert(backend->sgf_apply_setup_node != NULL);
+  assert(backend->sgf_write_position_node != NULL);
+  assert(backend->sgf_color_for_side(0) == SGF_COLOR_BLACK);
+  assert(backend->sgf_color_for_side(1) == SGF_COLOR_WHITE);
   assert(strcmp(backend->side_label(0), "Player 1") == 0);
+}
+
+static void test_backend_move_roundtrips(const HomeworldsMove *move) {
+  const GameBackend *backend = &homeworlds_game_backend;
+  char notation[128] = {0};
+  HomeworldsMove parsed = {0};
+
+  assert(move != NULL);
+  assert(backend->format_move(move, notation, sizeof(notation)));
+  assert(notation[0] != '\0');
+  assert(backend->parse_move(notation, &parsed));
+  assert(backend->moves_equal(move, &parsed));
+}
+
+static void test_backend_move_codec_roundtrips_setup_and_turn(void) {
+  HomeworldsMove setup = test_setup_move(0,
+                                         homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL),
+                                         homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_MEDIUM),
+                                         homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE));
+  HomeworldsMove turn = {
+    .kind = HOMEWORLDS_MOVE_KIND_TURN,
+    .acting_side = 0,
+    .step_count = 2,
+    .steps = {
+      {
+        .kind = HOMEWORLDS_STEP_SACRIFICE,
+        .system_index = 0,
+        .ship_owner = 0,
+        .ship_slot = 0,
+      },
+      {
+        .kind = HOMEWORLDS_STEP_TRADE,
+        .system_index = 0,
+        .ship_owner = 0,
+        .ship_slot = 1,
+        .target_color = HOMEWORLDS_COLOR_GREEN,
+      },
+    },
+  };
+
+  test_backend_move_roundtrips(&setup);
+  test_backend_move_roundtrips(&turn);
+}
+
+static void test_backend_sgf_snapshot_roundtrips_position(void) {
+  const GameBackend *backend = &homeworlds_game_backend;
+  HomeworldsPosition saved = {0};
+  HomeworldsPosition loaded = {0};
+  g_autoptr(SgfTree) tree = NULL;
+  SgfNode *root = NULL;
+
+  test_prepare_position(&saved);
+  saved.systems[2].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL);
+  saved.systems[2].ships[0][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_MEDIUM);
+  saved.bank[0] = 0;
+
+  tree = sgf_tree_new();
+  assert(SGF_IS_TREE(tree));
+  root = (SgfNode *)sgf_tree_get_root(tree);
+  assert(root != NULL);
+
+  assert(backend->sgf_write_position_node(&saved, root, NULL));
+  homeworlds_position_init(&loaded);
+  assert(backend->sgf_apply_setup_node(&loaded, root, NULL));
+  assert(memcmp(&saved, &loaded, sizeof(saved)) == 0);
 }
 
 static void test_backend_move_builder_completes_setup(void) {
@@ -210,7 +282,7 @@ static void test_backend_good_moves_are_subset_and_ordered(void) {
   assert(good_moves.count == 2);
   assert(backend->format_move(backend->move_list_get(&good_moves, 0), first_text, sizeof(first_text)));
   assert(backend->format_move(backend->move_list_get(&good_moves, 1), second_text, sizeof(second_text)));
-  assert(strstr(first_text, "attack") != NULL);
+  assert(first_text[0] == 'T');
   assert(strcmp(first_text, second_text) != 0);
   backend->move_list_free(&good_moves);
 }
@@ -269,6 +341,8 @@ static void test_backend_random_ai_skips_attack_without_targets(void) {
 
 int main(void) {
   test_backend_metadata();
+  test_backend_move_codec_roundtrips_setup_and_turn();
+  test_backend_sgf_snapshot_roundtrips_position();
   test_backend_move_builder_completes_setup();
   test_backend_move_builder_setup_accepts_all_pyramid_sizes();
   test_backend_move_builder_completes_turn();

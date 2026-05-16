@@ -1,13 +1,50 @@
 #include <gtk/gtk.h>
 
+#include "../src/game_app_profile.h"
 #include "../src/game_model.h"
-#include "../src/games/homeworlds/homeworlds_app_window.h"
 #include "../src/games/homeworlds/homeworlds_backend.h"
 #include "../src/games/homeworlds/homeworlds_game.h"
 #include "../src/games/homeworlds/homeworlds_view.h"
+#include "../src/sgf_controller.h"
+#include "../src/sgf_tree.h"
+#include "../src/window.h"
 
 static void test_homeworlds_window_skip(void) {
   g_test_skip("GTK display not available.");
+}
+
+static GtkApplication *test_homeworlds_app = NULL;
+
+static HomeworldsMove test_homeworlds_setup_move(guint side,
+                                                 HomeworldsPyramid first_star,
+                                                 HomeworldsPyramid second_star,
+                                                 HomeworldsPyramid ship) {
+  HomeworldsMove move = {0};
+
+  move.kind = HOMEWORLDS_MOVE_KIND_SETUP;
+  move.acting_side = side;
+  move.setup_stars[0] = first_star;
+  move.setup_stars[1] = second_star;
+  move.setup_ship = ship;
+  return move;
+}
+
+static void test_homeworlds_prepare_play_position(GGameModel *model) {
+  HomeworldsMove p0 = test_homeworlds_setup_move(
+      0,
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL),
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_MEDIUM),
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE));
+  HomeworldsMove p1 = test_homeworlds_setup_move(
+      1,
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL),
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_LARGE),
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE));
+
+  g_return_if_fail(GGAME_IS_MODEL(model));
+
+  g_assert_true(ggame_model_apply_move(model, &p0));
+  g_assert_true(ggame_model_apply_move(model, &p1));
 }
 
 static GtkWidget *test_homeworlds_find_widget_named(GtkWidget *root, const char *name) {
@@ -29,17 +66,20 @@ static GtkWidget *test_homeworlds_find_widget_named(GtkWidget *root, const char 
   return NULL;
 }
 
-static GtkLabel *test_homeworlds_find_label_with_text(GtkWidget *root, const char *text) {
+static GtkWidget *test_homeworlds_find_widget_for_action(GtkWidget *root, const char *action_name) {
   g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
-  g_return_val_if_fail(text != NULL, NULL);
+  g_return_val_if_fail(action_name != NULL, NULL);
 
-  if (GTK_IS_LABEL(root) && g_strcmp0(gtk_label_get_text(GTK_LABEL(root)), text) == 0) {
-    return GTK_LABEL(root);
+  if (GTK_IS_ACTIONABLE(root)) {
+    const char *widget_action = gtk_actionable_get_action_name(GTK_ACTIONABLE(root));
+    if (widget_action != NULL && g_strcmp0(widget_action, action_name) == 0) {
+      return root;
+    }
   }
 
   for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
        child = gtk_widget_get_next_sibling(child)) {
-    GtkLabel *match = test_homeworlds_find_label_with_text(child, text);
+    GtkWidget *match = test_homeworlds_find_widget_for_action(child, action_name);
     if (match != NULL) {
       return match;
     }
@@ -48,23 +88,54 @@ static GtkLabel *test_homeworlds_find_label_with_text(GtkWidget *root, const cha
   return NULL;
 }
 
-static GtkButton *test_homeworlds_find_button_with_label(GtkWidget *root, const char *label) {
-  g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
-  g_return_val_if_fail(label != NULL, NULL);
+static GtkApplication *test_homeworlds_create_app(void) {
+  if (test_homeworlds_app == NULL) {
+    GError *error = NULL;
 
-  if (GTK_IS_BUTTON(root) && g_strcmp0(gtk_button_get_label(GTK_BUTTON(root)), label) == 0) {
-    return GTK_BUTTON(root);
+    test_homeworlds_app = gtk_application_new("io.github.jeromea.ghomeworlds.test",
+                                              G_APPLICATION_DEFAULT_FLAGS | G_APPLICATION_NON_UNIQUE);
+    g_assert_nonnull(test_homeworlds_app);
+    g_assert_true(g_application_register(G_APPLICATION(test_homeworlds_app), NULL, &error));
+    g_assert_no_error(error);
   }
 
-  for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
-       child = gtk_widget_get_next_sibling(child)) {
-    GtkButton *match = test_homeworlds_find_button_with_label(child, label);
-    if (match != NULL) {
-      return match;
-    }
-  }
+  return g_object_ref(test_homeworlds_app);
+}
 
-  return NULL;
+static GGameWindow *test_homeworlds_create_window(GtkApplication **out_app, GGameModel **out_model) {
+  GtkApplication *app = test_homeworlds_create_app();
+  GGameModel *model = ggame_model_new(&homeworlds_game_backend);
+  GGameWindow *window = NULL;
+
+  g_assert_nonnull(model);
+  window = ggame_window_new(app, model);
+  g_assert_nonnull(window);
+
+  if (out_app != NULL) {
+    *out_app = app;
+  } else {
+    g_object_unref(app);
+  }
+  if (out_model != NULL) {
+    *out_model = model;
+  } else {
+    g_object_unref(model);
+  }
+  return window;
+}
+
+static HomeworldsView *test_homeworlds_get_window_view(GGameWindow *window) {
+  GtkWidget *view_widget = NULL;
+  HomeworldsView *view = NULL;
+
+  g_return_val_if_fail(GGAME_IS_WINDOW(window), NULL);
+
+  view_widget = test_homeworlds_find_widget_named(GTK_WIDGET(window), "homeworlds-view");
+  g_return_val_if_fail(GTK_IS_WIDGET(view_widget), NULL);
+
+  view = g_object_get_data(G_OBJECT(view_widget), "homeworlds-view-state");
+  g_return_val_if_fail(view != NULL, NULL);
+  return view;
 }
 
 static guint test_homeworlds_count_widgets_with_data(GtkWidget *root, const char *key) {
@@ -172,26 +243,74 @@ static void test_homeworlds_view_piece_metrics_keep_pyramids_tall(void) {
 }
 
 static void test_homeworlds_window_replaces_skeleton(void) {
-  GtkApplication *app = gtk_application_new("io.github.jeromea.ghomeworlds.test", G_APPLICATION_DEFAULT_FLAGS);
-  GError *error = NULL;
-  GtkWindow *window = NULL;
+  GtkApplication *app = NULL;
+  GGameModel *model = NULL;
+  GGameWindow *window = NULL;
   GtkWidget *root = NULL;
 
-  g_assert_true(g_application_register(G_APPLICATION(app), NULL, &error));
-  g_assert_no_error(error);
-
-  window = ghomeworlds_app_window_create(app);
-  g_assert_nonnull(window);
+  window = test_homeworlds_create_window(&app, &model);
   root = GTK_WIDGET(window);
 
-  g_assert_null(test_homeworlds_find_label_with_text(root, "Homeworlds skeleton build"));
-  g_assert_nonnull(test_homeworlds_find_widget_named(root, "homeworlds-window"));
+  g_assert_nonnull(ggame_window_get_sgf_controller(window));
   g_assert_nonnull(test_homeworlds_find_widget_named(root, "homeworlds-view"));
   g_assert_nonnull(test_homeworlds_find_widget_named(root, "homeworlds-board"));
   g_assert_nonnull(test_homeworlds_find_widget_named(root, "homeworlds-board-bank"));
-  g_assert_nonnull(test_homeworlds_find_button_with_label(root, "Random AI"));
+  g_assert_nonnull(test_homeworlds_find_widget_for_action(root, "app.new-game"));
+  g_assert_nonnull(test_homeworlds_find_widget_for_action(root, "win.game-force-move"));
+  g_assert_nonnull(test_homeworlds_find_widget_for_action(root, "win.navigation-step-forward"));
+  g_assert_nonnull(test_homeworlds_find_widget_for_action(root, "win.navigation-step-backward"));
+  g_assert_nonnull(test_homeworlds_find_widget_for_action(root, "win.navigation-rewind"));
 
-  gtk_window_destroy(window);
+  gtk_window_destroy(GTK_WINDOW(window));
+  g_object_unref(model);
+  g_object_unref(app);
+}
+
+static void test_homeworlds_window_setup_moves_are_recorded_in_sgf(void) {
+  GtkApplication *app = NULL;
+  GGameModel *model = NULL;
+  GGameWindow *window = test_homeworlds_create_window(&app, &model);
+  HomeworldsView *view = test_homeworlds_get_window_view(window);
+  GGameSgfController *controller = ggame_window_get_sgf_controller(window);
+  SgfTree *tree = ggame_sgf_controller_get_tree(controller);
+  const SgfNode *current = NULL;
+  const HomeworldsPosition *position = NULL;
+
+  g_assert_nonnull(view);
+  g_assert_nonnull(controller);
+  g_assert_nonnull(tree);
+
+  for (guint i = 0; i < 6; ++i) {
+    g_assert_true(homeworlds_view_apply_candidate_at(view, 0));
+  }
+
+  position = ggame_model_peek_position(model);
+  g_assert_nonnull(position);
+  g_assert_cmpuint(position->phase, ==, HOMEWORLDS_PHASE_PLAY);
+
+  current = sgf_tree_get_current(tree);
+  g_assert_nonnull(current);
+  g_assert_cmpuint(sgf_node_get_move_number(current), ==, 2);
+
+  g_assert_true(ggame_sgf_controller_rewind_to_start(controller));
+  position = ggame_model_peek_position(model);
+  g_assert_nonnull(position);
+  g_assert_cmpuint(position->phase, ==, HOMEWORLDS_PHASE_SETUP);
+  g_assert_cmpuint(position->turn, ==, 0);
+
+  g_assert_true(ggame_sgf_controller_step_forward(controller));
+  position = ggame_model_peek_position(model);
+  g_assert_nonnull(position);
+  g_assert_cmpuint(position->phase, ==, HOMEWORLDS_PHASE_SETUP);
+  g_assert_cmpuint(position->turn, ==, 1);
+
+  g_assert_true(ggame_sgf_controller_step_forward(controller));
+  position = ggame_model_peek_position(model);
+  g_assert_nonnull(position);
+  g_assert_cmpuint(position->phase, ==, HOMEWORLDS_PHASE_PLAY);
+
+  gtk_window_destroy(GTK_WINDOW(window));
+  g_object_unref(model);
   g_object_unref(app);
 }
 
@@ -262,9 +381,7 @@ static void test_homeworlds_view_applies_random_ai_after_setup(void) {
   HomeworldsView *view = homeworlds_view_new(model);
   const HomeworldsPosition *position = NULL;
 
-  for (guint i = 0; i < 6; ++i) {
-    g_assert_true(homeworlds_view_apply_candidate_at(view, 0));
-  }
+  test_homeworlds_prepare_play_position(model);
   g_assert_true(homeworlds_view_apply_random_move(view));
 
   position = ggame_model_peek_position(model);
@@ -277,20 +394,30 @@ static void test_homeworlds_view_applies_random_ai_after_setup(void) {
 
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
+  const GGameAppProfile *profile = ggame_app_profile_get_by_kind(GGAME_APP_KIND_HOMEWORLDS);
+  int result = 0;
+
+  g_assert_nonnull(profile);
+  g_assert_true(ggame_app_profile_set_active(profile));
 
   g_test_add_func("/homeworlds/view/homeworld-layout", test_homeworlds_view_homeworld_layout_uses_player_perspective);
   g_test_add_func("/homeworlds/view/piece-metrics", test_homeworlds_view_piece_metrics_keep_pyramids_tall);
   if (!gtk_init_check()) {
     g_test_add_func("/homeworlds/window/replaces-skeleton", test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/window/setup-recorded-in-sgf", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/setup-bank-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/advances-setup", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/random-ai-after-setup", test_homeworlds_window_skip);
   } else {
     g_test_add_func("/homeworlds/window/replaces-skeleton", test_homeworlds_window_replaces_skeleton);
+    g_test_add_func("/homeworlds/window/setup-recorded-in-sgf",
+                    test_homeworlds_window_setup_moves_are_recorded_in_sgf);
     g_test_add_func("/homeworlds/view/setup-bank-buttons", test_homeworlds_view_setup_uses_board_bank_buttons);
     g_test_add_func("/homeworlds/view/advances-setup", test_homeworlds_view_advances_setup);
     g_test_add_func("/homeworlds/view/random-ai-after-setup", test_homeworlds_view_applies_random_ai_after_setup);
   }
 
-  return g_test_run();
+  result = g_test_run();
+  g_clear_object(&test_homeworlds_app);
+  return result;
 }

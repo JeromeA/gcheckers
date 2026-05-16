@@ -2,7 +2,10 @@
 
 #include <glib.h>
 
-__attribute__((weak)) GtkWidget *gboop_controls_create_board_host(GGameModel *model, BoardView *board_view) {
+__attribute__((weak)) GtkWidget *gboop_controls_create_board_host(GGameModel *model,
+                                                                  BoardView *board_view,
+                                                                  GGameAppMoveHandler /*move_handler*/,
+                                                                  gpointer /*move_handler_data*/) {
   g_return_val_if_fail(model != NULL, NULL);
   g_return_val_if_fail(board_view != NULL, NULL);
 

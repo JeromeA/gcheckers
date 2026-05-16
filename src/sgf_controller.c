@@ -69,6 +69,14 @@ static void ggame_sgf_controller_disconnect_model(GGameSgfController *self) {
   g_clear_object(&self->game_model);
 }
 
+static void ggame_sgf_controller_clear_board_selection(GGameSgfController *self) {
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self));
+
+  if (self->board_view != NULL) {
+    board_view_clear_selection(self->board_view);
+  }
+}
+
 static gboolean ggame_sgf_controller_extract_node_move(const SgfNode *node,
                                                        gpointer move,
                                                        gboolean *has_move) {
@@ -212,7 +220,7 @@ static gboolean ggame_sgf_controller_replay_to_node_checkers(GGameSgfController 
     success = FALSE;
   }
   if (success) {
-    board_view_clear_selection(self->board_view);
+    ggame_sgf_controller_clear_board_selection(self);
   }
 
   game_destroy(&game);
@@ -258,7 +266,7 @@ static gboolean ggame_sgf_controller_replay_to_node_generic(GGameSgfController *
     success = FALSE;
   }
   if (success) {
-    board_view_clear_selection(self->board_view);
+    ggame_sgf_controller_clear_board_selection(self);
   }
 
   backend->position_clear(position);
@@ -467,10 +475,12 @@ static void ggame_sgf_controller_init(GGameSgfController *self) {
 }
 
 GGameSgfController *ggame_sgf_controller_new(BoardView *board_view) {
-  g_return_val_if_fail(BOARD_IS_VIEW(board_view), NULL);
+  g_return_val_if_fail(board_view == NULL || BOARD_IS_VIEW(board_view), NULL);
 
   GGameSgfController *self = g_object_new(GGAME_TYPE_SGF_CONTROLLER, NULL);
-  self->board_view = g_object_ref(board_view);
+  if (board_view != NULL) {
+    self->board_view = g_object_ref(board_view);
+  }
   return self;
 }
 
@@ -507,13 +517,48 @@ void ggame_sgf_controller_new_game(GGameSgfController *self) {
     g_debug("Failed to stamp SGF RU on new game tree");
   }
   sgf_view_set_tree(self->sgf_view, self->sgf_tree);
-  board_view_clear_selection(self->board_view);
+  ggame_sgf_controller_clear_board_selection(self);
   self->is_replaying = FALSE;
 
   const SgfNode *root = sgf_tree_get_root(self->sgf_tree);
   if (root != NULL) {
     ggame_sgf_controller_emit_node_changed(self, root);
   }
+}
+
+static gboolean ggame_sgf_controller_validate_move_without_list(GGameSgfController *self,
+                                                                const GameBackend *backend,
+                                                                gconstpointer position,
+                                                                gconstpointer move) {
+  GGameModel *game_model = NULL;
+  const GameBackendVariant *variant = NULL;
+  guint8 *copy = NULL;
+  gboolean valid = FALSE;
+
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
+  g_return_val_if_fail(backend != NULL, FALSE);
+  g_return_val_if_fail(position != NULL, FALSE);
+  g_return_val_if_fail(move != NULL, FALSE);
+  g_return_val_if_fail(backend->position_size > 0, FALSE);
+  g_return_val_if_fail(backend->position_copy != NULL, FALSE);
+  g_return_val_if_fail(backend->apply_move != NULL, FALSE);
+
+  game_model = ggame_sgf_controller_peek_active_game_model(self);
+  g_return_val_if_fail(GGAME_IS_MODEL(game_model), FALSE);
+  variant = ggame_model_peek_variant(game_model);
+
+  copy = g_malloc0(backend->position_size);
+  g_return_val_if_fail(copy != NULL, FALSE);
+  if (backend->position_init != NULL) {
+    backend->position_init(copy, variant);
+  }
+  backend->position_copy(copy, position);
+  valid = backend->apply_move(copy, move);
+  if (backend->position_clear != NULL) {
+    backend->position_clear(copy);
+  }
+  g_free(copy);
+  return valid;
 }
 
 gboolean ggame_sgf_controller_apply_move(GGameSgfController *self, gconstpointer move) {
@@ -539,43 +584,56 @@ gboolean ggame_sgf_controller_apply_move(GGameSgfController *self, gconstpointer
   g_return_val_if_fail(backend != NULL, FALSE);
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(backend->position_turn != NULL, FALSE);
-  g_return_val_if_fail(backend->supports_move_list, FALSE);
-  g_return_val_if_fail(backend->move_list_get != NULL, FALSE);
-  g_return_val_if_fail(backend->move_list_free != NULL, FALSE);
-  g_return_val_if_fail(backend->moves_equal != NULL, FALSE);
+  if (backend->supports_move_list) {
+    g_return_val_if_fail(backend->move_list_get != NULL, FALSE);
+    g_return_val_if_fail(backend->move_list_free != NULL, FALSE);
+    g_return_val_if_fail(backend->moves_equal != NULL, FALSE);
 
-  moves = ggame_model_list_moves(game_model);
-  for (gsize i = 0; i < moves.count; ++i) {
-    const void *candidate = backend->move_list_get(&moves, i);
+    moves = ggame_model_list_moves(game_model);
+    for (gsize i = 0; i < moves.count; ++i) {
+      const void *candidate = backend->move_list_get(&moves, i);
 
-    if (candidate != NULL && backend->moves_equal(candidate, move)) {
-      found = TRUE;
-      break;
+      if (candidate != NULL && backend->moves_equal(candidate, move)) {
+        found = TRUE;
+        break;
+      }
     }
-  }
 
-  if (!found) {
-    g_debug("Attempted to apply move not present in current model move list");
-    backend->move_list_free(&moves);
-    return FALSE;
+    if (!found) {
+      g_debug("Attempted to apply move not present in current model move list");
+      backend->move_list_free(&moves);
+      return FALSE;
+    }
+  } else {
+    found = ggame_sgf_controller_validate_move_without_list(self, backend, position, move);
+    if (!found) {
+      g_debug("Attempted to apply a move rejected by the active backend");
+      return FALSE;
+    }
   }
 
   color = ggame_sgf_controller_color_from_side(backend, backend->position_turn(position));
   if (color == SGF_COLOR_NONE) {
     g_debug("Failed to determine SGF side for current model position");
-    backend->move_list_free(&moves);
+    if (backend->supports_move_list) {
+      backend->move_list_free(&moves);
+    }
     return FALSE;
   }
 
   if (!sgf_move_props_format_notation(move, notation, sizeof(notation), &error)) {
     g_debug("Failed to format SGF move notation: %s", error != NULL ? error->message : "unknown error");
-    backend->move_list_free(&moves);
+    if (backend->supports_move_list) {
+      backend->move_list_free(&moves);
+    }
     return FALSE;
   }
 
   previous = sgf_tree_get_current(self->sgf_tree);
   node = sgf_tree_append_move(self->sgf_tree, color, notation);
-  backend->move_list_free(&moves);
+  if (backend->supports_move_list) {
+    backend->move_list_free(&moves);
+  }
 
   if (node == NULL) {
     g_debug("Failed to append SGF move");
@@ -754,7 +812,7 @@ gboolean ggame_sgf_controller_load_file(GGameSgfController *self, const char *pa
   g_clear_object(&self->sgf_tree);
   self->sgf_tree = g_steal_pointer(&loaded);
   sgf_view_set_tree(self->sgf_view, self->sgf_tree);
-  board_view_clear_selection(self->board_view);
+  ggame_sgf_controller_clear_board_selection(self);
 
   selected = sgf_tree_get_current(self->sgf_tree);
   if (GCHECKERS_IS_MODEL(self->checkers_model)) {
