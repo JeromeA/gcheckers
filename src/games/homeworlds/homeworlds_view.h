@@ -37,7 +37,6 @@ GtkWidget *homeworlds_view_get_widget(HomeworldsView *view);
 void homeworlds_view_refresh(HomeworldsView *view);
 void homeworlds_view_reset_selection(HomeworldsView *view);
 gboolean homeworlds_view_has_partial_selection(const HomeworldsView *view);
-gboolean homeworlds_view_apply_random_move(HomeworldsView *view);
 gboolean homeworlds_view_apply_candidate_at(HomeworldsView *view, gsize index);
 gsize homeworlds_view_get_candidate_count(const HomeworldsView *view);
 

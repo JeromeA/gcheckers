@@ -83,8 +83,8 @@ compile-time game selection, or Checkers-only assumptions.
 ## Outcomes & Retrospective
 
 Homeworlds is playable through `build/bin/ghomeworlds` and uses the shared application shell. The old standalone window
-path has been removed. Homeworlds-specific code now lives in the engine, backend, staged move builder, random AI,
-SGF-position codec, and board-host view.
+path has been removed. Homeworlds-specific code now lives in the engine, backend, staged move builder, SGF-position
+codec, and board-host view.
 
 The main architectural lesson is that generic application ownership matters. SGF, menus, file actions, and analysis are
 cross-game application features; only board presentation and rule-specific move construction belong in game code.
@@ -113,7 +113,6 @@ The Homeworlds files are:
 - `src/games/homeworlds/homeworlds_move_builder.c` and `.h`: staged legal-choice generation for setup and turns.
 - `src/games/homeworlds/homeworlds_backend.c` and `.h`: `GameBackend` adapter.
 - `src/games/homeworlds/homeworlds_sgf_position.c` and `.h`: whole-position SGF snapshot codec.
-- `src/games/homeworlds/homeworlds_random_ai.c` and `.h`: builder-driven random AI.
 - `src/games/homeworlds/homeworlds_view.c` and `.h`: GTK board host and staged Homeworlds interaction.
 - `src/games/homeworlds/homeworlds_view_stub.c`: weak board-host stub for headless link contexts.
 - `src/games/homeworlds/homeworlds.png`: visual mockup for the Homeworlds UI.

@@ -38,8 +38,7 @@ DESKTOP_FILES := $(CHECKERS_DESKTOP_FILE) $(BOOP_DESKTOP_FILE) $(HOMEWORLDS_DESK
 METAINFO_FILES := $(CHECKERS_METAINFO_FILE) $(BOOP_METAINFO_FILE) $(HOMEWORLDS_METAINFO_FILE)
 ICON_FILES := $(CHECKERS_ICON_FILE) $(BOOP_ICON_FILE) $(HOMEWORLDS_ICON_FILE)
 FLATPAK_MANIFESTS := $(CHECKERS_FLATPAK_MANIFEST) $(BOOP_FLATPAK_MANIFEST) $(HOMEWORLDS_FLATPAK_MANIFEST)
-HOMEWORLDS_GAME_SRCS := $(HOMEWORLDS_DIR)/homeworlds_game.c $(HOMEWORLDS_DIR)/homeworlds_move_builder.c \
-	$(HOMEWORLDS_DIR)/homeworlds_random_ai.c
+HOMEWORLDS_GAME_SRCS := $(HOMEWORLDS_DIR)/homeworlds_game.c $(HOMEWORLDS_DIR)/homeworlds_move_builder.c
 HOMEWORLDS_BACKEND_SRCS := $(HOMEWORLDS_DIR)/homeworlds_backend.c $(HOMEWORLDS_DIR)/homeworlds_sgf_position.c
 HOMEWORLDS_UI_SRCS := $(HOMEWORLDS_DIR)/homeworlds_view.c
 HOMEWORLDS_UI_STUB_SRCS := $(HOMEWORLDS_DIR)/homeworlds_view_stub.c
@@ -262,7 +261,7 @@ $(TEST_HOMEWORLDS_GAME_BIN): tests/test_homeworlds_game.c $(HOMEWORLDS_GAME_SRCS
 test_homeworlds_backend: $(TEST_HOMEWORLDS_BACKEND_BIN)
 $(TEST_HOMEWORLDS_BACKEND_BIN): tests/test_homeworlds_backend.c $(HOMEWORLDS_ALL_SRCS) $(SGF_TREE_SRCS) \
 	$(HOMEWORLDS_DIR)/homeworlds_backend.h $(HOMEWORLDS_DIR)/homeworlds_game.h \
-	$(HOMEWORLDS_DIR)/homeworlds_move_builder.h $(HOMEWORLDS_DIR)/homeworlds_random_ai.h
+	$(HOMEWORLDS_DIR)/homeworlds_move_builder.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_homeworlds_backend.c $(HOMEWORLDS_ALL_SRCS) $(SGF_TREE_SRCS) $(LDLIBS)
 

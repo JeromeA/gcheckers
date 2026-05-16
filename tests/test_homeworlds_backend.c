@@ -4,7 +4,6 @@
 #include "../src/games/homeworlds/homeworlds_backend.h"
 #include "../src/games/homeworlds/homeworlds_game.h"
 #include "../src/games/homeworlds/homeworlds_move_builder.h"
-#include "../src/games/homeworlds/homeworlds_random_ai.h"
 #include "../src/sgf_tree.h"
 
 static HomeworldsMove test_setup_move(guint side,
@@ -287,56 +286,99 @@ static void test_backend_good_moves_are_subset_and_ordered(void) {
   backend->move_list_free(&good_moves);
 }
 
-static void test_backend_random_ai_builds_setup_move(void) {
+static void test_backend_good_moves_build_setup_move(void) {
+  const GameBackend *backend = &homeworlds_game_backend;
   HomeworldsPosition position = {0};
-  HomeworldsMove move = {0};
-  GRand *rand = g_rand_new_with_seed(11);
+  GameBackendMoveList good_moves = {0};
+  const HomeworldsMove *move = NULL;
 
   homeworlds_position_init(&position);
-  assert(homeworlds_random_ai_build_move(&position, rand, &move));
-  assert(move.kind == HOMEWORLDS_MOVE_KIND_SETUP);
-  assert(homeworlds_position_apply_move(&position, &move));
+  good_moves = backend->list_good_moves(&position, 1, 0);
+  assert(good_moves.count == 1);
+  move = backend->move_list_get(&good_moves, 0);
+  assert(move != NULL);
+  assert(move->kind == HOMEWORLDS_MOVE_KIND_SETUP);
+  assert(homeworlds_position_apply_move(&position, move));
   assert(position.turn == 1);
-
-  g_rand_free(rand);
+  backend->move_list_free(&good_moves);
 }
 
-static void test_backend_random_ai_never_passes(void) {
+static void test_backend_good_moves_never_pass(void) {
+  const GameBackend *backend = &homeworlds_game_backend;
   HomeworldsPosition position = {0};
+  GameBackendMoveList good_moves = {0};
 
   test_prepare_position(&position);
-  for (guint seed = 0; seed < 64; ++seed) {
-    HomeworldsPosition copy = position;
-    HomeworldsMove move = {0};
-    GRand *rand = g_rand_new_with_seed(seed);
 
-    assert(homeworlds_random_ai_build_move(&copy, rand, &move));
-    assert(move.kind == HOMEWORLDS_MOVE_KIND_TURN);
-    assert(move.step_count > 0);
-    for (guint step = 0; step < move.step_count; ++step) {
-      assert(move.steps[step].kind != HOMEWORLDS_STEP_PASS);
+  good_moves = backend->list_good_moves(&position, 256, 0);
+  assert(good_moves.count > 0);
+  for (gsize i = 0; i < good_moves.count; ++i) {
+    const HomeworldsMove *move = backend->move_list_get(&good_moves, i);
+
+    assert(move != NULL);
+    assert(move->kind == HOMEWORLDS_MOVE_KIND_TURN);
+    assert(move->step_count > 0);
+    for (guint step = 0; step < move->step_count; ++step) {
+      assert(move->steps[step].kind != HOMEWORLDS_STEP_PASS);
     }
-    assert(homeworlds_position_apply_move(&copy, &move));
-    g_rand_free(rand);
   }
+  backend->move_list_free(&good_moves);
 }
 
-static void test_backend_random_ai_skips_attack_without_targets(void) {
+static void test_backend_good_moves_return_empty_when_only_pass_is_available(void) {
+  const GameBackend *backend = &homeworlds_game_backend;
+  HomeworldsPosition position = {
+    .phase = HOMEWORLDS_PHASE_PLAY,
+    .turn = 0,
+    .systems = {
+      [0] = {
+        .stars = {
+          homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL),
+          homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_MEDIUM),
+        },
+        .ships = {
+          [0] = {
+            homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL),
+          },
+        },
+      },
+      [1] = {
+        .stars = {
+          homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL),
+          homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_MEDIUM),
+        },
+        .ships = {
+          [1] = {
+            homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL),
+          },
+        },
+      },
+    },
+  };
+  GameBackendMoveList good_moves = {0};
+
+  good_moves = backend->list_good_moves(&position, 8, 0);
+  assert(good_moves.count == 0);
+  backend->move_list_free(&good_moves);
+}
+
+static void test_backend_good_moves_skip_attack_without_targets(void) {
+  const GameBackend *backend = &homeworlds_game_backend;
   HomeworldsPosition position = {0};
+  GameBackendMoveList good_moves = {0};
 
   test_prepare_position(&position);
-  for (guint seed = 0; seed < 64; ++seed) {
-    HomeworldsPosition copy = position;
-    HomeworldsMove move = {0};
-    GRand *rand = g_rand_new_with_seed(seed);
+  good_moves = backend->list_good_moves(&position, 256, 0);
+  assert(good_moves.count > 0);
+  for (gsize i = 0; i < good_moves.count; ++i) {
+    const HomeworldsMove *move = backend->move_list_get(&good_moves, i);
 
-    assert(homeworlds_random_ai_build_move(&copy, rand, &move));
-    for (guint step = 0; step < move.step_count; ++step) {
-      assert(move.steps[step].kind != HOMEWORLDS_STEP_ATTACK);
+    assert(move != NULL);
+    for (guint step = 0; step < move->step_count; ++step) {
+      assert(move->steps[step].kind != HOMEWORLDS_STEP_ATTACK);
     }
-    assert(homeworlds_position_apply_move(&copy, &move));
-    g_rand_free(rand);
   }
+  backend->move_list_free(&good_moves);
 }
 
 static void test_backend_moving_last_ship_out_of_homeworld_loses_immediately(void) {
@@ -454,9 +496,10 @@ int main(void) {
   test_backend_move_builder_setup_accepts_all_pyramid_sizes();
   test_backend_move_builder_completes_turn();
   test_backend_good_moves_are_subset_and_ordered();
-  test_backend_random_ai_builds_setup_move();
-  test_backend_random_ai_never_passes();
-  test_backend_random_ai_skips_attack_without_targets();
+  test_backend_good_moves_build_setup_move();
+  test_backend_good_moves_never_pass();
+  test_backend_good_moves_return_empty_when_only_pass_is_available();
+  test_backend_good_moves_skip_attack_without_targets();
   test_backend_moving_last_ship_out_of_homeworld_loses_immediately();
   test_backend_destroying_opponent_homeworld_wins_immediately();
   return 0;

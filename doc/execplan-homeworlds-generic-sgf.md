@@ -119,7 +119,7 @@ Third, add complete Homeworlds SGF support. `homeworlds_move_format()` must seri
 `src/games/homeworlds/homeworlds_sgf_position.[ch]` files and encode the whole position in custom `GH*` properties.
 
 Fourth, route Homeworlds UI moves into the generic move path. Add a move handler to `HomeworldsView`, call it whenever
-the staged builder or random AI completes a move, and add `homeworlds_view_create_board_host()` for the profile hook.
+the staged builder completes a move, and add `homeworlds_view_create_board_host()` for the profile hook.
 The generic window will pass its existing `ggame_window_apply_player_move()` handler into profile board hosts.
 
 Finally, update tests and docs. Homeworlds backend tests should prove move notation and snapshot round-trips.

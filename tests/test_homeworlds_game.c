@@ -282,6 +282,21 @@ static void test_catastrophe_removes_matching_color_and_collapses_star_system(vo
   assert(position.systems[2].ships[1][0] == 0);
 }
 
+static void test_static_evaluation_counts_largest_homeworld_ship_twice(void) {
+  HomeworldsPosition position = {0};
+
+  homeworlds_position_init(&position);
+  position.phase = HOMEWORLDS_PHASE_PLAY;
+
+  assert(test_system_add_ship(&position, 0, 0, homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL)));
+  assert(test_system_add_ship(&position, 0, 0, homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE)));
+  assert(test_system_add_ship(&position, 1, 1, homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL)));
+  assert(test_system_add_ship(&position, 1, 1, homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW,
+                                                                       HOMEWORLDS_SIZE_MEDIUM)));
+
+  assert(homeworlds_position_evaluate_static(&position) == 20);
+}
+
 int main(void) {
   test_setup_and_loss_detection();
   test_setup_accepts_any_bank_pyramids();
@@ -291,5 +306,6 @@ int main(void) {
   test_move_and_discover_follow_connectivity();
   test_sacrifice_grants_multiple_actions();
   test_catastrophe_removes_matching_color_and_collapses_star_system();
+  test_static_evaluation_counts_largest_homeworld_ship_twice();
   return 0;
 }

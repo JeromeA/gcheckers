@@ -108,6 +108,36 @@ static gboolean homeworlds_backend_moves_equal(gconstpointer left, gconstpointer
   return memcmp(left, right, sizeof(HomeworldsMove)) == 0;
 }
 
+static gboolean homeworlds_backend_move_is_good(const HomeworldsMove *move) {
+  g_return_val_if_fail(move != NULL, FALSE);
+
+  if (move->kind == HOMEWORLDS_MOVE_KIND_SETUP) {
+    return TRUE;
+  }
+
+  for (guint i = 0; i < move->step_count; ++i) {
+    if (move->steps[i].kind == HOMEWORLDS_STEP_PASS) {
+      return FALSE;
+    }
+  }
+
+  return TRUE;
+}
+
+static gboolean homeworlds_backend_candidate_is_good(const HomeworldsMoveBuilderState *state,
+                                                     const HomeworldsMoveCandidate *candidate) {
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(candidate != NULL, FALSE);
+
+  if (state->stage == HOMEWORLDS_BUILDER_STAGE_SELECT_SHIP &&
+      candidate->data.kind == HOMEWORLDS_CANDIDATE_ACTION &&
+      candidate->data.target_color == HOMEWORLDS_STEP_PASS) {
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
 static gboolean homeworlds_backend_collect_good_moves_recursive(const HomeworldsMoveBuilderState *state,
                                                                 HomeworldsMove *moves,
                                                                 gsize max_count,
@@ -132,6 +162,9 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(const Homeworlds
     if (!homeworlds_move_builder_build_move(&builder, &move)) {
       return FALSE;
     }
+    if (!homeworlds_backend_move_is_good(&move)) {
+      return TRUE;
+    }
 
     moves[*inout_count] = move;
     (*inout_count)++;
@@ -147,7 +180,8 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(const Homeworlds
       .builder_state_size = sizeof(child_state),
     };
 
-    if (candidate == NULL || !homeworlds_move_builder_step(&child, candidate)) {
+    if (candidate == NULL || !homeworlds_backend_candidate_is_good(state, candidate) ||
+        !homeworlds_move_builder_step(&child, candidate)) {
       continue;
     }
     if (!homeworlds_backend_collect_good_moves_recursive(&child_state, moves, max_count, inout_count)) {

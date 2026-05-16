@@ -695,6 +695,24 @@ gboolean homeworlds_position_find_empty_system(const HomeworldsPosition *positio
   return FALSE;
 }
 
+static gint homeworlds_system_largest_ship_value_for_side(const HomeworldsSystem *system, guint side) {
+  gint best_value = 0;
+
+  g_return_val_if_fail(system != NULL, 0);
+  g_return_val_if_fail(side < 2, 0);
+
+  for (guint slot = 0; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
+    HomeworldsPyramid ship = system->ships[side][slot];
+    if (!homeworlds_pyramid_is_valid(ship)) {
+      continue;
+    }
+
+    best_value = MAX(best_value, (gint) homeworlds_pyramid_size(ship) * 10);
+  }
+
+  return best_value;
+}
+
 gint homeworlds_position_evaluate_static(const HomeworldsPosition *position) {
   g_return_val_if_fail(position != NULL, 0);
 
@@ -716,8 +734,8 @@ gint homeworlds_position_evaluate_static(const HomeworldsPosition *position) {
     }
   }
 
-  score += (gint) homeworlds_system_ship_count_for_side(&position->systems[0], 0) * 15;
-  score -= (gint) homeworlds_system_ship_count_for_side(&position->systems[1], 1) * 15;
+  score += homeworlds_system_largest_ship_value_for_side(&position->systems[0], 0);
+  score -= homeworlds_system_largest_ship_value_for_side(&position->systems[1], 1);
   return score;
 }
 

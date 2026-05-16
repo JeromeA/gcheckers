@@ -494,7 +494,8 @@ the players' homeworlds), two star slots per system, and fourteen ship slots per
 one place later if needed.
 Rules covered: setup, construct, trade, attack, move, discover, sacrifice, catastrophe resolution, empty-system
 cleanup, end-of-turn homeworld loss detection for either side, static evaluation, terminal scoring, hashing, compact
-move formatting/parsing, and whole-position SGF snapshots in `homeworlds_sgf_position.c`.
+move formatting/parsing, and whole-position SGF snapshots in `homeworlds_sgf_position.c`. Static evaluation counts
+ship material and repeats the largest own ship at each player's homeworld.
 Collaborates with: `homeworlds_move_builder.c`, `homeworlds_backend.c`, `homeworlds_sgf_position.c`,
 `homeworlds_view.c`, `tests/test_homeworlds_game.c`, and `tests/test_homeworlds_backend.c`.
 
@@ -506,12 +507,12 @@ of the position plus the partial move under construction, and advances through s
 selection, source-ship selection, action choice, and target-specific substages for trade, attack, and move/discover.
 Sacrifices are modeled as a prefix step that fixes the remaining action color and count, after which the builder loops
 back through source-ship selection for each granted action.
-Collaborates with: `homeworlds_game.c`, `homeworlds_backend.c`, `homeworlds_random_ai.c`, `homeworlds_view.c`, and
+Collaborates with: `homeworlds_game.c`, `homeworlds_backend.c`, `homeworlds_view.c`, and
 `tests/test_homeworlds_backend.c`.
 
-## Homeworlds UI and random AI (`src/games/homeworlds/homeworlds_view.c`,
-`src/games/homeworlds/homeworlds_random_ai.c`)
-Module: Homeworlds board host, staged GTK view/controller, and simple stochastic move policy.
+## Homeworlds UI and AI candidates (`src/games/homeworlds/homeworlds_view.c`,
+`src/games/homeworlds/homeworlds_backend.c`)
+Module: Homeworlds board host, staged GTK view/controller, and backend-owned AI candidate policy.
 Role: let `ghomeworlds` use the shared `GGameWindow` while replacing only the square board presentation.
 `homeworlds_view.c` renders a starfield board with system boxes, homeworld labels, pipped square stars, tall pipped
 ship pyramids, overlaid clickable bank piles, staged legal-choice buttons, and direct catastrophe buttons.
@@ -523,9 +524,9 @@ interaction advances
 move handler. In the app, that appends SGF nodes through `GGameSgfController`; standalone view tests can still install
 no handler and apply directly to `GGameModel`. Homeworlds intentionally does not expose a full legal move list, so the
 shared SGF controller validates completed moves by applying them to a copied position before appending the node.
-`homeworlds_random_ai.c` uses the same staged builder to pick a bounded legal random move,
-never selects pass, avoids capture choices with no target, and handles move/discover choices without enumerating full
-turn sequences.
+`homeworlds_backend.c` walks the same staged builder to feed the shared alpha-beta search with bounded good moves. That
+AI candidate path rejects pass moves, while dead-end choices such as attacks with no target naturally produce no
+completed move.
 Collaborates with: `GGameAppProfile`, `GGameWindow`, `GGameModel`, `GGameSgfController`, `homeworlds_game.c`,
 `homeworlds_move_builder.c`, `homeworlds_backend.c`, and `tests/test_homeworlds_window.c`.
 

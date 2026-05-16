@@ -342,17 +342,17 @@ path-specific distance adjustment.
 The fix stores a total ply count in `BoopPosition`, increments it on each applied move, serializes it in Boop SGF
 snapshots, includes it in the position hash, and makes Boop terminal scores use `10000 - position->ply_count`.
 
-## Homeworlds random AI could choose pass
+## Legacy Homeworlds random AI could choose pass
 
-The Homeworlds random AI should pick an actual playable move when one is available, not consume its turn with the
-interactive pass fallback.
+The legacy Homeworlds random helper should have picked an actual playable move when one was available, not consumed its
+turn with the interactive pass fallback.
 
 The staged move builder exposes pass as a ship-selection candidate for human play. The random AI reused that candidate
 list and explicitly accepted pass whenever it was not resolving a sacrifice action, so some random seeds produced a
 `pass` move even in positions with legal ship actions.
 
-The fix filters pass out of the random AI candidate selection path. A backend regression test now runs multiple seeded
-random moves from a normal play position and asserts that every generated turn has at least one non-pass step.
+The first fix filtered pass out of the random helper. That helper was later removed, and the no-pass policy now lives in
+the backend good-move generation used by computer play.
 
 ## Homeworlds bypassed the shared SGF shell
 
@@ -392,3 +392,14 @@ when turn switched back.
 The fix checks the acting player's homeworld before switching turns, then checks the opponent's homeworld, and only
 advances the turn if neither side has lost. Regression coverage now asserts both self-vacating loss and opponent
 homeworld destruction.
+
+## Homeworlds computer play ignored the simple AI directives
+
+The Homeworlds computer player should use the shared alpha-beta path, but its candidate pool should still follow the
+basic policy that the AI never passes and never chooses dead-end actions such as attacks with no target.
+
+Those directives were implemented only in an unused random-AI helper. `Force move` and computer-controlled players
+call the generic SGF/alpha-beta flow, which asks the backend for `list_good_moves()`, so the random helper had no
+effect on normal app play.
+
+The fix moves the policy into the Homeworlds backend good-move generation and removes the unused random-AI module.

@@ -2,7 +2,6 @@
 
 #include "homeworlds_game.h"
 #include "homeworlds_move_builder.h"
-#include "homeworlds_random_ai.h"
 
 #include <string.h>
 
@@ -1199,33 +1198,6 @@ gboolean homeworlds_view_has_partial_selection(const HomeworldsView *view) {
     default:
       return TRUE;
   }
-}
-
-gboolean homeworlds_view_apply_random_move(HomeworldsView *view) {
-  const HomeworldsPosition *position = NULL;
-  HomeworldsMove move = {0};
-
-  g_return_val_if_fail(view != NULL, FALSE);
-
-  if (homeworlds_view_has_partial_selection(view)) {
-    g_debug("Random Homeworlds move refused while a partial selection is active");
-    return FALSE;
-  }
-
-  position = ggame_model_peek_position(view->model);
-  g_return_val_if_fail(position != NULL, FALSE);
-  if (position->phase == HOMEWORLDS_PHASE_FINISHED) {
-    return FALSE;
-  }
-  if (!homeworlds_random_ai_build_move(position, NULL, &move)) {
-    g_debug("Homeworlds random AI could not build a legal move");
-    return FALSE;
-  }
-  if (!homeworlds_view_apply_completed_move(view, &move)) {
-    return FALSE;
-  }
-  homeworlds_view_refresh(view);
-  return TRUE;
 }
 
 gboolean homeworlds_view_apply_candidate_at(HomeworldsView *view, gsize index) {
