@@ -3031,6 +3031,9 @@ static void ggame_window_on_sgf_node_changed(GGameSgfController * /*controller*/
   g_return_if_fail(GGAME_IS_WINDOW(self));
   g_return_if_fail(node != NULL);
 
+  if (self->profile != NULL && self->profile->ui.sync_board_host_node != NULL && self->board_host != NULL) {
+    self->profile->ui.sync_board_host_node(self->board_host, node);
+  }
   ggame_window_show_analysis_for_current_node(self);
   ggame_window_refresh_analysis_graph(self);
 }

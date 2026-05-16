@@ -144,6 +144,26 @@ static GtkButton *test_homeworlds_find_selectable_bank_button(GtkWidget *root) {
   return NULL;
 }
 
+static GtkButton *test_homeworlds_find_selectable_ship_button(GtkWidget *root) {
+  g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
+
+  if (GTK_IS_BUTTON(root) &&
+      g_object_get_data(G_OBJECT(root), "homeworlds-board-ship-choice") != NULL &&
+      gtk_widget_get_sensitive(root)) {
+    return GTK_BUTTON(root);
+  }
+
+  for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
+       child = gtk_widget_get_next_sibling(child)) {
+    GtkButton *match = test_homeworlds_find_selectable_ship_button(child);
+    if (match != NULL) {
+      return match;
+    }
+  }
+
+  return NULL;
+}
+
 static GtkButton *test_homeworlds_find_bank_button_for_pyramid(GtkWidget *root, HomeworldsPyramid pyramid) {
   g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
   g_return_val_if_fail(homeworlds_pyramid_is_valid(pyramid), NULL);
@@ -162,6 +182,27 @@ static GtkButton *test_homeworlds_find_bank_button_for_pyramid(GtkWidget *root, 
   }
 
   return NULL;
+}
+
+static guint test_homeworlds_count_non_board_candidate_buttons(GtkWidget *root, HomeworldsCandidateKind kind) {
+  guint count = 0;
+
+  g_return_val_if_fail(GTK_IS_WIDGET(root), 0);
+
+  if (GTK_IS_BUTTON(root) &&
+      g_object_get_data(G_OBJECT(root), "homeworlds-board-ship-choice") == NULL) {
+    const HomeworldsMoveCandidate *candidate = g_object_get_data(G_OBJECT(root), "homeworlds-candidate");
+    if (candidate != NULL && candidate->data.kind == kind) {
+      count++;
+    }
+  }
+
+  for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
+       child = gtk_widget_get_next_sibling(child)) {
+    count += test_homeworlds_count_non_board_candidate_buttons(child, kind);
+  }
+
+  return count;
 }
 
 static void test_homeworlds_view_homeworld_layout_uses_player_perspective(void) {
@@ -259,20 +300,24 @@ static void test_homeworlds_window_setup_moves_are_recorded_in_sgf(void) {
   current = sgf_tree_get_current(tree);
   g_assert_nonnull(current);
   g_assert_cmpuint(sgf_node_get_move_number(current), ==, 2);
+  g_assert_cmpstr(homeworlds_view_get_last_move_text(view), !=, "None");
 
   g_assert_true(ggame_sgf_controller_rewind_to_start(controller));
+  g_assert_cmpstr(homeworlds_view_get_last_move_text(view), ==, "None");
   position = ggame_model_peek_position(model);
   g_assert_nonnull(position);
   g_assert_cmpuint(position->phase, ==, HOMEWORLDS_PHASE_SETUP);
   g_assert_cmpuint(position->turn, ==, 0);
 
   g_assert_true(ggame_sgf_controller_step_forward(controller));
+  g_assert_cmpstr(homeworlds_view_get_last_move_text(view), !=, "None");
   position = ggame_model_peek_position(model);
   g_assert_nonnull(position);
   g_assert_cmpuint(position->phase, ==, HOMEWORLDS_PHASE_SETUP);
   g_assert_cmpuint(position->turn, ==, 1);
 
   g_assert_true(ggame_sgf_controller_step_forward(controller));
+  g_assert_cmpstr(homeworlds_view_get_last_move_text(view), !=, "None");
   position = ggame_model_peek_position(model);
   g_assert_nonnull(position);
   g_assert_cmpuint(position->phase, ==, HOMEWORLDS_PHASE_PLAY);
@@ -296,16 +341,19 @@ static void test_homeworlds_view_setup_uses_board_bank_buttons(void) {
   button = test_homeworlds_find_bank_button_for_pyramid(root, large_star);
   g_assert_nonnull(button);
   g_assert_true(gtk_widget_get_sensitive(GTK_WIDGET(button)));
+  g_assert_true(gtk_widget_has_css_class(GTK_WIDGET(button), "homeworlds-bank-choice"));
   g_signal_emit_by_name(button, "clicked");
 
   button = test_homeworlds_find_bank_button_for_pyramid(root, large_star);
   g_assert_nonnull(button);
   g_assert_true(gtk_widget_get_sensitive(GTK_WIDGET(button)));
+  g_assert_true(gtk_widget_has_css_class(GTK_WIDGET(button), "homeworlds-bank-choice"));
   g_signal_emit_by_name(button, "clicked");
 
   button = test_homeworlds_find_bank_button_for_pyramid(root, small_ship);
   g_assert_nonnull(button);
   g_assert_true(gtk_widget_get_sensitive(GTK_WIDGET(button)));
+  g_assert_true(gtk_widget_has_css_class(GTK_WIDGET(button), "homeworlds-bank-choice"));
   g_signal_emit_by_name(button, "clicked");
 
   for (guint i = 0; i < 3; ++i) {
@@ -317,6 +365,29 @@ static void test_homeworlds_view_setup_uses_board_bank_buttons(void) {
   position = ggame_model_peek_position(model);
   g_assert_nonnull(position);
   g_assert_cmpuint(position->phase, ==, HOMEWORLDS_PHASE_PLAY);
+
+  homeworlds_view_free(view);
+  g_object_unref(model);
+}
+
+static void test_homeworlds_view_uses_board_ship_buttons(void) {
+  GGameModel *model = ggame_model_new(&homeworlds_game_backend);
+  HomeworldsView *view = homeworlds_view_new(model);
+  GtkWidget *root = homeworlds_view_get_widget(view);
+  GtkButton *button = NULL;
+
+  for (guint i = 0; i < 6; ++i) {
+    g_assert_true(homeworlds_view_apply_candidate_at(view, 0));
+  }
+
+  g_assert_cmpuint(homeworlds_view_get_candidate_count(view), >, 0);
+  g_assert_cmpuint(test_homeworlds_count_non_board_candidate_buttons(root, HOMEWORLDS_CANDIDATE_SELECT_SHIP), ==, 0);
+
+  button = test_homeworlds_find_selectable_ship_button(root);
+  g_assert_nonnull(button);
+  g_assert_true(gtk_widget_has_css_class(GTK_WIDGET(button), "homeworlds-board-choice"));
+  g_signal_emit_by_name(button, "clicked");
+  g_assert_true(homeworlds_view_has_partial_selection(view));
 
   homeworlds_view_free(view);
   g_object_unref(model);
@@ -358,12 +429,14 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/window/replaces-skeleton", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/window/setup-recorded-in-sgf", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/setup-bank-buttons", test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/view/board-ship-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/advances-setup", test_homeworlds_window_skip);
   } else {
     g_test_add_func("/homeworlds/window/replaces-skeleton", test_homeworlds_window_replaces_skeleton);
     g_test_add_func("/homeworlds/window/setup-recorded-in-sgf",
                     test_homeworlds_window_setup_moves_are_recorded_in_sgf);
     g_test_add_func("/homeworlds/view/setup-bank-buttons", test_homeworlds_view_setup_uses_board_bank_buttons);
+    g_test_add_func("/homeworlds/view/board-ship-buttons", test_homeworlds_view_uses_board_ship_buttons);
     g_test_add_func("/homeworlds/view/advances-setup", test_homeworlds_view_advances_setup);
   }
 

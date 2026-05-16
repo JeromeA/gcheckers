@@ -515,12 +515,15 @@ Collaborates with: `homeworlds_game.c`, `homeworlds_backend.c`, `homeworlds_view
 `src/games/homeworlds/homeworlds_backend.c`)
 Module: Homeworlds board host, staged GTK view/controller, and backend-owned AI candidate policy.
 Role: let `ghomeworlds` use the shared `GGameWindow` while replacing only the square board presentation.
-`homeworlds_view.c` renders a starfield board with system boxes, homeworld labels, pipped square stars, tall pipped
-ship pyramids, overlaid clickable bank piles, staged legal-choice buttons, and direct catastrophe buttons.
+`homeworlds_view.c` renders a starfield board with dynamic system boxes sized around their contents, homeworld labels,
+pipped square stars, tall pipped ship pyramids, overlaid clickable bank piles, staged legal-choice buttons, and direct
+catastrophe buttons.
 Homeworld rendering keeps player 1 at the bottom, player 2 at the top, and places each homeworld's own ships beside
 its stars from that player's perspective. During setup, the bank piles on the board are real `GtkButton`s that feed
-the staged builder directly, so start stars and the start ship do not require a long side-panel button list. Human
-interaction advances
+the staged builder directly, so start stars and the start ship do not require a long side-panel button list. During
+normal turns, selectable ships are also overlaid as board buttons and the side panel only keeps non-board choices such
+as pass or follow-up actions. The Homeworlds board host also syncs its last-move label from SGF current-node changes so
+timeline navigation and direct play report the same move. Human interaction advances
 `homeworlds_move_builder` one visible choice at a time and sends each completed `HomeworldsMove` to the generic window
 move handler. In the app, that appends SGF nodes through `GGameSgfController`; standalone view tests can still install
 no handler and apply directly to `GGameModel`. Homeworlds intentionally does not expose a full legal move list, so the

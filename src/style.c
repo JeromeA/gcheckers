@@ -119,6 +119,23 @@ static const char *ggame_style_css =
     ".puzzle-picker-icon {"
     "  -gtk-icon-size: 14px;"
     "}"
+    "button.homeworlds-board-choice {"
+    "  min-width: 0;"
+    "  min-height: 0;"
+    "  padding: 0;"
+    "  background-color: rgba(30, 32, 38, 0.10);"
+    "  background-image: none;"
+    "  border: 1px solid rgba(220, 220, 220, 0.85);"
+    "  border-radius: 8px;"
+    "}"
+    "button.homeworlds-board-choice:hover {"
+    "  background-color: rgba(220, 220, 220, 0.16);"
+    "  border-color: rgba(245, 245, 245, 0.95);"
+    "}"
+    "button.homeworlds-bank-choice {"
+    "  border: 1px solid rgba(220, 220, 220, 0.85);"
+    "  border-radius: 8px;"
+    "}"
     "scale { padding: 0; }";
 
 void ggame_style_init(void) {

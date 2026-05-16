@@ -403,3 +403,16 @@ call the generic SGF/alpha-beta flow, which asks the backend for `list_good_move
 effect on normal app play.
 
 The fix moves the policy into the Homeworlds backend good-move generation and removes the unused random-AI module.
+
+## Homeworlds last-move panel stayed stale during SGF navigation
+
+The Homeworlds text panel should show the move attached to the currently selected SGF node, not only the last move that
+was played through the board controls.
+
+The shared SGF controller correctly replayed the model when navigating the SGF tree, but the Homeworlds board host kept
+its own `Last move` label and only updated it when the view completed a move itself. Rewinding or stepping through SGF
+nodes therefore left the panel showing stale text from the previous direct interaction.
+
+The fix adds a generic board-host SGF synchronization hook in the app profile UI hooks and implements it for
+Homeworlds by parsing the selected SGF node's move property. The shared window calls this hook on every current-node
+change, so the Homeworlds side panel now updates during SGF timeline navigation.

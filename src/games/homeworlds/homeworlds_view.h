@@ -32,6 +32,7 @@ GtkWidget *homeworlds_view_create_board_host(GGameModel *model,
                                              BoardView *board_view,
                                              GGameAppMoveHandler move_handler,
                                              gpointer move_handler_data);
+void homeworlds_view_sync_board_host_node(GtkWidget *board_host, const SgfNode *node);
 
 GtkWidget *homeworlds_view_get_widget(HomeworldsView *view);
 void homeworlds_view_refresh(HomeworldsView *view);
@@ -39,6 +40,7 @@ void homeworlds_view_reset_selection(HomeworldsView *view);
 gboolean homeworlds_view_has_partial_selection(const HomeworldsView *view);
 gboolean homeworlds_view_apply_candidate_at(HomeworldsView *view, gsize index);
 gsize homeworlds_view_get_candidate_count(const HomeworldsView *view);
+const char *homeworlds_view_get_last_move_text(const HomeworldsView *view);
 
 void homeworlds_view_set_move_applied_callback(HomeworldsView *view,
                                                HomeworldsViewMoveAppliedFunc func,

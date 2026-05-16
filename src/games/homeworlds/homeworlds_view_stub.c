@@ -11,3 +11,8 @@ __attribute__((weak)) GtkWidget *homeworlds_view_create_board_host(GGameModel *m
   g_debug("Homeworlds board-host UI hook is unavailable in this build context");
   return NULL;
 }
+
+__attribute__((weak)) void homeworlds_view_sync_board_host_node(GtkWidget *board_host, const SgfNode *node) {
+  g_return_if_fail(board_host != NULL);
+  g_return_if_fail(node != NULL);
+}

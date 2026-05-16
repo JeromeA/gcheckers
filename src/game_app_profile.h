@@ -10,6 +10,7 @@ G_BEGIN_DECLS
 typedef struct _GtkWidget GtkWidget;
 typedef struct _BoardView BoardView;
 typedef struct _GGameModel GGameModel;
+typedef struct _SgfNode SgfNode;
 
 typedef enum {
   GGAME_APP_KIND_CHECKERS = 0,
@@ -34,6 +35,7 @@ typedef struct {
                                   BoardView *board_view,
                                   GGameAppMoveHandler move_handler,
                                   gpointer move_handler_data);
+  void (*sync_board_host_node)(GtkWidget *board_host, const SgfNode *node);
 } GGameAppUiHooks;
 
 typedef struct {

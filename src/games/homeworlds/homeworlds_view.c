@@ -2,6 +2,7 @@
 
 #include "homeworlds_game.h"
 #include "homeworlds_move_builder.h"
+#include "../../sgf_move_props.h"
 
 #include <string.h>
 
@@ -18,10 +19,6 @@ typedef struct {
   guint count;
 } HomeworldsBankButtonIcon;
 
-#define HOMEWORLDS_VIEW_HOMEWORLD_BOX_WIDTH 190.0
-#define HOMEWORLDS_VIEW_HOMEWORLD_BOX_HEIGHT 140.0
-#define HOMEWORLDS_VIEW_SYSTEM_BOX_WIDTH 150.0
-#define HOMEWORLDS_VIEW_SYSTEM_BOX_HEIGHT 118.0
 #define HOMEWORLDS_VIEW_HOMEWORLD_STAR_OFFSET 22.0
 #define HOMEWORLDS_VIEW_HOMEWORLD_SHIP_OFFSET 72.0
 #define HOMEWORLDS_VIEW_HOMEWORLD_PIECE_Y_OFFSET 12.0
@@ -30,12 +27,50 @@ typedef struct {
 #define HOMEWORLDS_VIEW_SMALL_STAR_SIDE 20.0
 #define HOMEWORLDS_VIEW_PYRAMID_HEIGHT_TO_BASE 2.0
 #define HOMEWORLDS_VIEW_PIP_REFERENCE_RATIO 0.055
+#define HOMEWORLDS_VIEW_ITEM_GAP 7.0
+#define HOMEWORLDS_VIEW_ROW_GAP 10.0
+#define HOMEWORLDS_VIEW_SYSTEM_PADDING_X 14.0
+#define HOMEWORLDS_VIEW_SYSTEM_PADDING_BOTTOM 14.0
+#define HOMEWORLDS_VIEW_SYSTEM_LABEL_HEIGHT 32.0
+#define HOMEWORLDS_VIEW_SYSTEM_CORNER_RADIUS 16.0
+#define HOMEWORLDS_VIEW_PIECE_BUTTON_PAD 5.0
+#define HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH 880
+#define HOMEWORLDS_VIEW_FALLBACK_BOARD_HEIGHT 620
+#define HOMEWORLDS_VIEW_SYSTEM_PIECE_MAX (HOMEWORLDS_STAR_SLOT_COUNT + (2 * HOMEWORLDS_SHIP_SLOT_COUNT))
+
+typedef struct {
+  HomeworldsPyramid pyramid;
+  gboolean is_ship;
+  guint side;
+  guint slot;
+  double x;
+  double y;
+  double width;
+  double height;
+  gboolean points_up;
+} HomeworldsViewPieceLayout;
+
+typedef struct {
+  HomeworldsViewPieceLayout pieces[HOMEWORLDS_VIEW_SYSTEM_PIECE_MAX];
+  guint piece_count;
+  double box_x;
+  double box_y;
+  double box_width;
+  double box_height;
+} HomeworldsViewSystemLayout;
+
+typedef struct {
+  HomeworldsViewPieceLayout pieces[HOMEWORLDS_VIEW_SYSTEM_PIECE_MAX];
+  guint count;
+  double height;
+} HomeworldsViewPieceRow;
 
 struct _HomeworldsView {
   GGameModel *model;
   GtkWidget *root;
   GtkWidget *board_overlay;
   GtkWidget *drawing_area;
+  GtkWidget *ship_button_layer;
   GtkWidget *board_bank_box;
   GtkWidget *stage_label;
   GtkWidget *candidate_box;
@@ -52,6 +87,8 @@ struct _HomeworldsView {
 
 static void homeworlds_view_update_from_current_builder(HomeworldsView *view);
 static void homeworlds_view_update_board_bank(HomeworldsView *view);
+static void homeworlds_view_update_ship_buttons(HomeworldsView *view);
+static void homeworlds_view_candidate_clicked(GtkButton *button, gpointer user_data);
 
 static const HomeworldsColorStyle homeworlds_view_color_styles[] = {
   [HOMEWORLDS_COLOR_RED] = {0.86, 0.18, 0.16, "red", "R"},
@@ -271,6 +308,19 @@ static void homeworlds_view_clear_box(GtkWidget *box) {
   }
 }
 
+static void homeworlds_view_clear_fixed(GtkWidget *fixed) {
+  GtkWidget *child = NULL;
+
+  g_return_if_fail(GTK_IS_FIXED(fixed));
+
+  child = gtk_widget_get_first_child(fixed);
+  while (child != NULL) {
+    GtkWidget *next = gtk_widget_get_next_sibling(child);
+    gtk_fixed_remove(GTK_FIXED(fixed), child);
+    child = next;
+  }
+}
+
 static gboolean homeworlds_view_stage_uses_board_bank(const HomeworldsView *view) {
   const HomeworldsMoveBuilderState *state = homeworlds_view_builder_state(view);
 
@@ -393,21 +443,6 @@ static void homeworlds_view_draw_star(cairo_t *cr,
   homeworlds_view_draw_base_pips(cr, x, pip_y, side * 0.56, size, pip_radius);
 }
 
-static guint homeworlds_view_system_ship_count(const HomeworldsSystem *system, guint side) {
-  guint count = 0;
-
-  g_return_val_if_fail(system != NULL, 0);
-  g_return_val_if_fail(side < 2, 0);
-
-  for (guint slot = 0; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
-    if (homeworlds_pyramid_is_valid(system->ships[side][slot])) {
-      count++;
-    }
-  }
-
-  return count;
-}
-
 static void homeworlds_view_system_center(guint system_index,
                                           double width,
                                           double height,
@@ -433,6 +468,281 @@ static void homeworlds_view_system_center(guint system_index,
 
   *out_x = width * (0.45 + ((double) col * 0.13));
   *out_y = height * (0.20 + ((double) row * 0.18));
+}
+
+static void homeworlds_view_piece_dimensions(HomeworldsPyramid pyramid,
+                                             gboolean is_ship,
+                                             double *out_width,
+                                             double *out_height) {
+  g_return_if_fail(homeworlds_pyramid_is_valid(pyramid));
+  g_return_if_fail(out_width != NULL);
+  g_return_if_fail(out_height != NULL);
+
+  if (is_ship) {
+    HomeworldsViewPyramidMetrics metrics = {0};
+    g_return_if_fail(homeworlds_view_pyramid_metrics(homeworlds_pyramid_size(pyramid), &metrics));
+    *out_width = metrics.base;
+    *out_height = metrics.height;
+    return;
+  }
+
+  *out_width = homeworlds_view_star_side(homeworlds_pyramid_size(pyramid));
+  *out_height = *out_width;
+}
+
+static gboolean homeworlds_view_piece_layout_bounds(const HomeworldsViewPieceLayout *piece,
+                                                    double *out_left,
+                                                    double *out_top,
+                                                    double *out_right,
+                                                    double *out_bottom) {
+  g_return_val_if_fail(piece != NULL, FALSE);
+  g_return_val_if_fail(out_left != NULL, FALSE);
+  g_return_val_if_fail(out_top != NULL, FALSE);
+  g_return_val_if_fail(out_right != NULL, FALSE);
+  g_return_val_if_fail(out_bottom != NULL, FALSE);
+
+  *out_left = piece->x - (piece->width / 2.0);
+  *out_top = piece->y - (piece->height / 2.0);
+  *out_right = piece->x + (piece->width / 2.0);
+  *out_bottom = piece->y + (piece->height / 2.0);
+  return TRUE;
+}
+
+static gboolean homeworlds_view_piece_row_append(HomeworldsViewPieceRow *row,
+                                                 HomeworldsPyramid pyramid,
+                                                 gboolean is_ship,
+                                                 guint side,
+                                                 guint slot,
+                                                 gboolean points_up) {
+  HomeworldsViewPieceLayout *piece = NULL;
+
+  g_return_val_if_fail(row != NULL, FALSE);
+  g_return_val_if_fail(homeworlds_pyramid_is_valid(pyramid), FALSE);
+  g_return_val_if_fail(row->count < G_N_ELEMENTS(row->pieces), FALSE);
+
+  piece = &row->pieces[row->count++];
+  *piece = (HomeworldsViewPieceLayout){
+    .pyramid = pyramid,
+    .is_ship = is_ship,
+    .side = side,
+    .slot = slot,
+    .points_up = points_up,
+  };
+  homeworlds_view_piece_dimensions(pyramid, is_ship, &piece->width, &piece->height);
+  row->height = MAX(row->height, piece->height);
+  return TRUE;
+}
+
+static gboolean homeworlds_view_system_layout_append_piece(HomeworldsViewSystemLayout *layout,
+                                                           const HomeworldsViewPieceLayout *piece) {
+  g_return_val_if_fail(layout != NULL, FALSE);
+  g_return_val_if_fail(piece != NULL, FALSE);
+  g_return_val_if_fail(layout->piece_count < G_N_ELEMENTS(layout->pieces), FALSE);
+
+  layout->pieces[layout->piece_count++] = *piece;
+  return TRUE;
+}
+
+static gboolean homeworlds_view_system_layout_append_row(HomeworldsViewSystemLayout *layout,
+                                                         const HomeworldsViewPieceRow *row,
+                                                         double center_x,
+                                                         double center_y) {
+  double total_width = 0.0;
+  double cursor = 0.0;
+
+  g_return_val_if_fail(layout != NULL, FALSE);
+  g_return_val_if_fail(row != NULL, FALSE);
+
+  if (row->count == 0) {
+    return TRUE;
+  }
+
+  for (guint i = 0; i < row->count; ++i) {
+    total_width += row->pieces[i].width;
+  }
+  total_width += HOMEWORLDS_VIEW_ITEM_GAP * (double)(row->count - 1);
+  cursor = center_x - (total_width / 2.0);
+
+  for (guint i = 0; i < row->count; ++i) {
+    HomeworldsViewPieceLayout piece = row->pieces[i];
+    piece.x = cursor + (piece.width / 2.0);
+    piece.y = center_y;
+    cursor += piece.width + HOMEWORLDS_VIEW_ITEM_GAP;
+    if (!homeworlds_view_system_layout_append_piece(layout, &piece)) {
+      return FALSE;
+    }
+  }
+
+  return TRUE;
+}
+
+static void homeworlds_view_system_layout_finish(HomeworldsViewSystemLayout *layout,
+                                                 guint system_index,
+                                                 double center_x,
+                                                 double center_y) {
+  const double min_width = system_index < 2 ? 168.0 : 108.0;
+  const double min_height = 56.0;
+  double min_x = center_x - (min_width / 2.0);
+  double max_x = center_x + (min_width / 2.0);
+  double min_y = center_y - 8.0;
+  double max_y = center_y + 8.0;
+
+  g_return_if_fail(layout != NULL);
+
+  for (guint i = 0; i < layout->piece_count; ++i) {
+    double left = 0.0;
+    double top = 0.0;
+    double right = 0.0;
+    double bottom = 0.0;
+
+    if (!homeworlds_view_piece_layout_bounds(&layout->pieces[i], &left, &top, &right, &bottom)) {
+      continue;
+    }
+
+    min_x = MIN(min_x, left);
+    max_x = MAX(max_x, right);
+    min_y = MIN(min_y, top);
+    max_y = MAX(max_y, bottom);
+  }
+
+  layout->box_x = min_x - HOMEWORLDS_VIEW_SYSTEM_PADDING_X;
+  layout->box_y = min_y - HOMEWORLDS_VIEW_SYSTEM_LABEL_HEIGHT;
+  layout->box_width = MAX(min_width, (max_x - min_x) + (2.0 * HOMEWORLDS_VIEW_SYSTEM_PADDING_X));
+  layout->box_height = MAX(min_height,
+                           (max_y - layout->box_y) + HOMEWORLDS_VIEW_SYSTEM_PADDING_BOTTOM);
+}
+
+static gboolean homeworlds_view_collect_star_row(const HomeworldsSystem *system, HomeworldsViewPieceRow *row) {
+  g_return_val_if_fail(system != NULL, FALSE);
+  g_return_val_if_fail(row != NULL, FALSE);
+
+  for (guint star_slot = 0; star_slot < HOMEWORLDS_STAR_SLOT_COUNT; ++star_slot) {
+    HomeworldsPyramid star = system->stars[star_slot];
+    if (!homeworlds_pyramid_is_valid(star)) {
+      continue;
+    }
+    if (!homeworlds_view_piece_row_append(row, star, FALSE, 0, star_slot, FALSE)) {
+      return FALSE;
+    }
+  }
+
+  return TRUE;
+}
+
+static gboolean homeworlds_view_collect_ship_row(const HomeworldsSystem *system,
+                                                 guint side,
+                                                 gboolean points_up,
+                                                 HomeworldsViewPieceRow *row) {
+  g_return_val_if_fail(system != NULL, FALSE);
+  g_return_val_if_fail(side < 2, FALSE);
+  g_return_val_if_fail(row != NULL, FALSE);
+
+  for (guint slot = 0; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
+    HomeworldsPyramid ship = system->ships[side][slot];
+    if (!homeworlds_pyramid_is_valid(ship)) {
+      continue;
+    }
+    if (!homeworlds_view_piece_row_append(row, ship, TRUE, side, slot, points_up)) {
+      return FALSE;
+    }
+  }
+
+  return TRUE;
+}
+
+static gboolean homeworlds_view_layout_generic_rows(HomeworldsViewSystemLayout *layout,
+                                                    const HomeworldsViewPieceRow *rows,
+                                                    guint row_count,
+                                                    double center_x,
+                                                    double center_y) {
+  double total_height = 0.0;
+  double cursor_y = 0.0;
+  guint visible_rows = 0;
+
+  g_return_val_if_fail(layout != NULL, FALSE);
+  g_return_val_if_fail(rows != NULL, FALSE);
+
+  for (guint i = 0; i < row_count; ++i) {
+    if (rows[i].count == 0) {
+      continue;
+    }
+    visible_rows++;
+    total_height += rows[i].height;
+  }
+  if (visible_rows > 1) {
+    total_height += HOMEWORLDS_VIEW_ROW_GAP * (double)(visible_rows - 1);
+  }
+
+  cursor_y = center_y - (total_height / 2.0);
+  for (guint i = 0; i < row_count; ++i) {
+    if (rows[i].count == 0) {
+      continue;
+    }
+
+    if (!homeworlds_view_system_layout_append_row(layout,
+                                                  &rows[i],
+                                                  center_x,
+                                                  cursor_y + (rows[i].height / 2.0))) {
+      return FALSE;
+    }
+    cursor_y += rows[i].height + HOMEWORLDS_VIEW_ROW_GAP;
+  }
+
+  return TRUE;
+}
+
+static gboolean homeworlds_view_calculate_system_layout(const HomeworldsSystem *system,
+                                                        guint system_index,
+                                                        double center_x,
+                                                        double center_y,
+                                                        HomeworldsViewSystemLayout *out_layout) {
+  HomeworldsViewPieceRow rows[3] = {0};
+
+  g_return_val_if_fail(system != NULL, FALSE);
+  g_return_val_if_fail(out_layout != NULL, FALSE);
+
+  memset(out_layout, 0, sizeof(*out_layout));
+  if (system_index < 2) {
+    const guint own_side = system_index;
+    const guint opponent_side = own_side == 0 ? 1 : 0;
+    const gboolean own_points_up = own_side == 0;
+    const gboolean opponent_points_up = !own_points_up;
+    guint own_row = own_side == 0 ? 1 : 0;
+    guint opponent_row = own_side == 0 ? 0 : 1;
+
+    if (own_side == 1 && !homeworlds_view_collect_ship_row(system, own_side, own_points_up, &rows[own_row])) {
+      return FALSE;
+    }
+    if (!homeworlds_view_collect_star_row(system, &rows[own_row])) {
+      return FALSE;
+    }
+    if (own_side == 0 && !homeworlds_view_collect_ship_row(system, own_side, own_points_up, &rows[own_row])) {
+      return FALSE;
+    }
+    if (!homeworlds_view_collect_ship_row(system, opponent_side, opponent_points_up, &rows[opponent_row])) {
+      return FALSE;
+    }
+
+    if (!homeworlds_view_layout_generic_rows(out_layout,
+                                             rows,
+                                             2,
+                                             center_x,
+                                             center_y + HOMEWORLDS_VIEW_HOMEWORLD_PIECE_Y_OFFSET)) {
+      return FALSE;
+    }
+    homeworlds_view_system_layout_finish(out_layout, system_index, center_x, center_y);
+    return TRUE;
+  }
+
+  if (!homeworlds_view_collect_star_row(system, &rows[0]) ||
+      !homeworlds_view_collect_ship_row(system, 1, FALSE, &rows[1]) ||
+      !homeworlds_view_collect_ship_row(system, 0, TRUE, &rows[2]) ||
+      !homeworlds_view_layout_generic_rows(out_layout, rows, G_N_ELEMENTS(rows), center_x, center_y)) {
+    return FALSE;
+  }
+
+  homeworlds_view_system_layout_finish(out_layout, system_index, center_x, center_y);
+  return TRUE;
 }
 
 gboolean homeworlds_view_calculate_homeworld_layout(guint system_index,
@@ -468,27 +778,31 @@ static void homeworlds_view_draw_system(cairo_t *cr,
                                         double center_x,
                                         double center_y,
                                         gboolean selected) {
-  double box_width = system_index < 2 ? HOMEWORLDS_VIEW_HOMEWORLD_BOX_WIDTH : HOMEWORLDS_VIEW_SYSTEM_BOX_WIDTH;
-  double box_height = system_index < 2 ? HOMEWORLDS_VIEW_HOMEWORLD_BOX_HEIGHT : HOMEWORLDS_VIEW_SYSTEM_BOX_HEIGHT;
-  double x = center_x - (box_width / 2.0);
-  double y = center_y - (box_height / 2.0);
-  HomeworldsViewHomeworldLayout homeworld_layout = {0};
-  gboolean has_homeworld_layout = FALSE;
-  guint stars_drawn = 0;
+  HomeworldsViewSystemLayout layout = {0};
+  double x = 0.0;
+  double y = 0.0;
+  double box_width = 0.0;
+  double box_height = 0.0;
+  double radius = HOMEWORLDS_VIEW_SYSTEM_CORNER_RADIUS;
 
   g_return_if_fail(system != NULL);
 
-  has_homeworld_layout = homeworlds_view_calculate_homeworld_layout(system_index,
-                                                                    center_x,
-                                                                    center_y,
-                                                                    &homeworld_layout);
+  if (!homeworlds_view_calculate_system_layout(system, system_index, center_x, center_y, &layout)) {
+    return;
+  }
+
+  x = layout.box_x;
+  y = layout.box_y;
+  box_width = layout.box_width;
+  box_height = layout.box_height;
+  radius = MIN(radius, MIN(box_width, box_height) / 2.0);
 
   cairo_save(cr);
   cairo_new_sub_path(cr);
-  cairo_arc(cr, x + box_width - 16.0, y + 16.0, 16.0, -G_PI / 2.0, 0.0);
-  cairo_arc(cr, x + box_width - 16.0, y + box_height - 16.0, 16.0, 0.0, G_PI / 2.0);
-  cairo_arc(cr, x + 16.0, y + box_height - 16.0, 16.0, G_PI / 2.0, G_PI);
-  cairo_arc(cr, x + 16.0, y + 16.0, 16.0, G_PI, G_PI * 1.5);
+  cairo_arc(cr, x + box_width - radius, y + radius, radius, -G_PI / 2.0, 0.0);
+  cairo_arc(cr, x + box_width - radius, y + box_height - radius, radius, 0.0, G_PI / 2.0);
+  cairo_arc(cr, x + radius, y + box_height - radius, radius, G_PI / 2.0, G_PI);
+  cairo_arc(cr, x + radius, y + radius, radius, G_PI, G_PI * 1.5);
   cairo_close_path(cr);
   cairo_set_source_rgba(cr, 0.05, 0.07, 0.12, selected ? 0.78 : 0.58);
   cairo_fill_preserve(cr);
@@ -509,49 +823,146 @@ static void homeworlds_view_draw_system(cairo_t *cr,
     cairo_show_text(cr, label);
   }
 
-  for (guint star_slot = 0; star_slot < HOMEWORLDS_STAR_SLOT_COUNT; ++star_slot) {
-    HomeworldsPyramid star = system->stars[star_slot];
-    if (!homeworlds_pyramid_is_valid(star)) {
-      continue;
-    }
+  for (guint i = 0; i < layout.piece_count; ++i) {
+    const HomeworldsViewPieceLayout *piece = &layout.pieces[i];
+    HomeworldsSize size = homeworlds_pyramid_size(piece->pyramid);
+    HomeworldsColor color = homeworlds_pyramid_color(piece->pyramid);
 
-    HomeworldsSize size = homeworlds_pyramid_size(star);
-    double star_x = has_homeworld_layout ? homeworld_layout.star_x[stars_drawn]
-                                         : center_x - 22.0 + ((double) stars_drawn * 44.0);
-    double star_y = has_homeworld_layout ? homeworld_layout.star_y : y + 48.0;
-    homeworlds_view_draw_star(cr, star_x, star_y, size, homeworlds_pyramid_color(star));
-    stars_drawn++;
-  }
-
-  for (guint side = 0; side < 2; ++side) {
-    guint count = homeworlds_view_system_ship_count(system, side);
-    guint drawn = 0;
-    gboolean use_homeworld_ship_layout = has_homeworld_layout && side == system_index;
-    gboolean ship_points_up = use_homeworld_ship_layout ? homeworld_layout.ship_points_up : side == 0;
-    double ship_row_center_x = use_homeworld_ship_layout ? homeworld_layout.ship_x : center_x;
-    double ship_y = use_homeworld_ship_layout ? homeworld_layout.ship_y
-                                              : (side == 0 ? y + box_height - 42.0 : y + 70.0);
-
-    if (count == 0) {
-      continue;
-    }
-
-    for (guint slot = 0; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
-      HomeworldsPyramid ship = system->ships[side][slot];
-      if (!homeworlds_pyramid_is_valid(ship)) {
-        continue;
-      }
-
-      HomeworldsSize size = homeworlds_pyramid_size(ship);
-      double step = count > 1 ? MIN(22.0, (box_width - 42.0) / ((double) count - 1.0)) : 0.0;
-      double ship_x = ship_row_center_x - (((double) count - 1.0) * step / 2.0) + ((double) drawn * step);
-
-      homeworlds_view_draw_pyramid(cr, ship_x, ship_y, size, ship_points_up, homeworlds_pyramid_color(ship));
-      drawn++;
+    if (piece->is_ship) {
+      homeworlds_view_draw_pyramid(cr, piece->x, piece->y, size, piece->points_up, color);
+    } else {
+      homeworlds_view_draw_star(cr, piece->x, piece->y, size, color);
     }
   }
 
   cairo_restore(cr);
+}
+
+static void homeworlds_view_board_size(HomeworldsView *view, int *out_width, int *out_height) {
+  int width = 0;
+  int height = 0;
+
+  g_return_if_fail(view != NULL);
+  g_return_if_fail(out_width != NULL);
+  g_return_if_fail(out_height != NULL);
+
+  width = gtk_widget_get_width(view->drawing_area);
+  height = gtk_widget_get_height(view->drawing_area);
+  *out_width = width > 1 ? width : HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH;
+  *out_height = height > 1 ? height : HOMEWORLDS_VIEW_FALLBACK_BOARD_HEIGHT;
+}
+
+static const HomeworldsMoveCandidate *homeworlds_view_find_ship_candidate(const GameBackendMoveList *candidates,
+                                                                          guint system_index,
+                                                                          const HomeworldsViewPieceLayout *piece) {
+  g_return_val_if_fail(candidates != NULL, NULL);
+  g_return_val_if_fail(piece != NULL, NULL);
+
+  for (gsize i = 0; i < candidates->count; ++i) {
+    const HomeworldsMoveCandidate *candidate = &((const HomeworldsMoveCandidate *) candidates->moves)[i];
+
+    if (candidate->data.kind == HOMEWORLDS_CANDIDATE_SELECT_SHIP &&
+        candidate->data.system_index == system_index &&
+        candidate->data.ship_owner == piece->side &&
+        candidate->data.pyramid == piece->pyramid) {
+      return candidate;
+    }
+  }
+
+  return NULL;
+}
+
+static void homeworlds_view_update_ship_buttons(HomeworldsView *view) {
+  const HomeworldsMoveBuilderState *state = NULL;
+  const HomeworldsPosition *position = NULL;
+  GameBackendMoveList candidates = {0};
+  int board_width = 0;
+  int board_height = 0;
+
+  g_return_if_fail(view != NULL);
+  g_return_if_fail(GTK_IS_FIXED(view->ship_button_layer));
+
+  homeworlds_view_clear_fixed(view->ship_button_layer);
+  state = homeworlds_view_builder_state(view);
+  if (state == NULL || state->stage != HOMEWORLDS_BUILDER_STAGE_SELECT_SHIP) {
+    return;
+  }
+
+  position = homeworlds_view_position(view);
+  if (position == NULL) {
+    return;
+  }
+
+  homeworlds_view_board_size(view, &board_width, &board_height);
+  candidates = homeworlds_move_builder_list_candidates(&view->builder);
+  for (guint system_index = 0; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
+    const HomeworldsSystem *system = &position->systems[system_index];
+    HomeworldsViewSystemLayout layout = {0};
+    double center_x = 0.0;
+    double center_y = 0.0;
+
+    if (system_index >= 2 && homeworlds_system_is_empty(system)) {
+      continue;
+    }
+
+    homeworlds_view_system_center(system_index, board_width, board_height, &center_x, &center_y);
+    if (!homeworlds_view_calculate_system_layout(system, system_index, center_x, center_y, &layout)) {
+      continue;
+    }
+
+    for (guint piece_index = 0; piece_index < layout.piece_count; ++piece_index) {
+      const HomeworldsViewPieceLayout *piece = &layout.pieces[piece_index];
+      const HomeworldsMoveCandidate *candidate = NULL;
+      GtkWidget *button = NULL;
+      char *tooltip = NULL;
+      double button_x = 0.0;
+      double button_y = 0.0;
+      int button_width = 0;
+      int button_height = 0;
+
+      if (!piece->is_ship) {
+        continue;
+      }
+
+      candidate = homeworlds_view_find_ship_candidate(&candidates, system_index, piece);
+      if (candidate == NULL) {
+        continue;
+      }
+
+      button = gtk_button_new();
+      gtk_widget_add_css_class(button, "homeworlds-board-choice");
+      gtk_widget_set_can_focus(button, TRUE);
+      g_object_set_data(G_OBJECT(button), "homeworlds-board-ship-choice", GUINT_TO_POINTER(1));
+      g_object_set_data_full(G_OBJECT(button),
+                             "homeworlds-candidate",
+                             g_memdup2(candidate, sizeof(*candidate)),
+                             g_free);
+      tooltip = homeworlds_view_candidate_label(candidate);
+      gtk_widget_set_tooltip_text(button, tooltip);
+      g_free(tooltip);
+      g_signal_connect(button, "clicked", G_CALLBACK(homeworlds_view_candidate_clicked), view);
+
+      button_x = piece->x - (piece->width / 2.0) - HOMEWORLDS_VIEW_PIECE_BUTTON_PAD;
+      button_y = piece->y - (piece->height / 2.0) - HOMEWORLDS_VIEW_PIECE_BUTTON_PAD;
+      button_width = (int)(piece->width + (2.0 * HOMEWORLDS_VIEW_PIECE_BUTTON_PAD) + 1.0);
+      button_height = (int)(piece->height + (2.0 * HOMEWORLDS_VIEW_PIECE_BUTTON_PAD) + 1.0);
+      gtk_widget_set_size_request(button, button_width, button_height);
+      gtk_fixed_put(GTK_FIXED(view->ship_button_layer), button, button_x, button_y);
+    }
+  }
+
+  g_clear_pointer(&candidates.moves, g_free);
+}
+
+static void homeworlds_view_board_resized(GtkDrawingArea * /*drawing_area*/,
+                                          int /*width*/,
+                                          int /*height*/,
+                                          gpointer user_data) {
+  HomeworldsView *view = user_data;
+
+  g_return_if_fail(view != NULL);
+
+  homeworlds_view_update_ship_buttons(view);
 }
 
 static void homeworlds_view_draw_starfield(cairo_t *cr, int width, int height) {
@@ -871,7 +1282,7 @@ static GtkWidget *homeworlds_view_create_bank_button(HomeworldsView *view, Homew
 
   selectable = homeworlds_view_find_bank_candidate(view, pyramid, &candidate);
   button = gtk_button_new();
-  gtk_widget_add_css_class(button, "flat");
+  gtk_widget_add_css_class(button, selectable ? "homeworlds-bank-choice" : "flat");
   gtk_widget_set_size_request(button, 68, 92);
   gtk_widget_set_can_focus(button, selectable);
   gtk_widget_set_sensitive(button, selectable);
@@ -962,11 +1373,14 @@ static void homeworlds_view_update_board_bank(HomeworldsView *view) {
 
 static void homeworlds_view_update_candidates(HomeworldsView *view) {
   GameBackendMoveList candidates = {0};
+  const HomeworldsMoveBuilderState *state = NULL;
+  gboolean appended = FALSE;
 
   g_return_if_fail(view != NULL);
 
   homeworlds_view_clear_box(view->candidate_box);
   gtk_label_set_text(GTK_LABEL(view->stage_label), homeworlds_view_stage_text(view));
+  state = homeworlds_view_builder_state(view);
 
   if (!view->builder_ready) {
     gtk_box_append(GTK_BOX(view->candidate_box), gtk_label_new("The game is finished."));
@@ -992,6 +1406,30 @@ static void homeworlds_view_update_candidates(HomeworldsView *view) {
     return;
   }
 
+  if (state != NULL && state->stage == HOMEWORLDS_BUILDER_STAGE_SELECT_SHIP) {
+    GtkWidget *label = gtk_label_new("Click a highlighted ship on the board to activate it.");
+    gtk_label_set_wrap(GTK_LABEL(label), TRUE);
+    gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
+    gtk_box_append(GTK_BOX(view->candidate_box), label);
+
+    for (gsize i = 0; i < candidates.count; ++i) {
+      const HomeworldsMoveCandidate *candidate = &((const HomeworldsMoveCandidate *) candidates.moves)[i];
+      if (candidate->data.kind == HOMEWORLDS_CANDIDATE_SELECT_SHIP) {
+        continue;
+      }
+      homeworlds_view_append_candidate_button(view, candidate);
+      appended = TRUE;
+    }
+    if (!appended) {
+      GtkWidget *fallback = gtk_label_new("No side-panel choices are available for this step.");
+      gtk_label_set_wrap(GTK_LABEL(fallback), TRUE);
+      gtk_label_set_xalign(GTK_LABEL(fallback), 0.0f);
+      gtk_box_append(GTK_BOX(view->candidate_box), fallback);
+    }
+    g_clear_pointer(&candidates.moves, g_free);
+    return;
+  }
+
   for (gsize i = 0; i < candidates.count; ++i) {
     const HomeworldsMoveCandidate *candidate = &((const HomeworldsMoveCandidate *) candidates.moves)[i];
     homeworlds_view_append_candidate_button(view, candidate);
@@ -1005,6 +1443,7 @@ static void homeworlds_view_update_from_current_builder(HomeworldsView *view) {
   homeworlds_view_update_candidates(view);
   homeworlds_view_update_catastrophes(view);
   homeworlds_view_update_board_bank(view);
+  homeworlds_view_update_ship_buttons(view);
   gtk_widget_queue_draw(view->drawing_area);
 }
 
@@ -1051,7 +1490,15 @@ HomeworldsView *homeworlds_view_new(GGameModel *model) {
   gtk_drawing_area_set_content_width(GTK_DRAWING_AREA(view->drawing_area), 880);
   gtk_drawing_area_set_content_height(GTK_DRAWING_AREA(view->drawing_area), 620);
   gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(view->drawing_area), homeworlds_view_draw, view, NULL);
+  g_signal_connect(view->drawing_area, "resize", G_CALLBACK(homeworlds_view_board_resized), view);
   gtk_overlay_set_child(GTK_OVERLAY(view->board_overlay), view->drawing_area);
+
+  view->ship_button_layer = gtk_fixed_new();
+  gtk_widget_set_hexpand(view->ship_button_layer, TRUE);
+  gtk_widget_set_vexpand(view->ship_button_layer, TRUE);
+  gtk_widget_set_halign(view->ship_button_layer, GTK_ALIGN_FILL);
+  gtk_widget_set_valign(view->ship_button_layer, GTK_ALIGN_FILL);
+  gtk_overlay_add_overlay(GTK_OVERLAY(view->board_overlay), view->ship_button_layer);
 
   bank_frame = gtk_frame_new("Bank");
   gtk_widget_set_name(bank_frame, "homeworlds-board-bank");
@@ -1168,6 +1615,7 @@ void homeworlds_view_refresh(HomeworldsView *view) {
   homeworlds_view_update_candidates(view);
   homeworlds_view_update_catastrophes(view);
   homeworlds_view_update_board_bank(view);
+  homeworlds_view_update_ship_buttons(view);
   gtk_widget_queue_draw(view->drawing_area);
 }
 
@@ -1252,6 +1700,40 @@ gsize homeworlds_view_get_candidate_count(const HomeworldsView *view) {
   count = candidates.count;
   g_clear_pointer(&candidates.moves, g_free);
   return count;
+}
+
+const char *homeworlds_view_get_last_move_text(const HomeworldsView *view) {
+  g_return_val_if_fail(view != NULL, NULL);
+  g_return_val_if_fail(GTK_IS_LABEL(view->last_move_label), NULL);
+
+  return gtk_label_get_text(GTK_LABEL(view->last_move_label));
+}
+
+void homeworlds_view_sync_board_host_node(GtkWidget *board_host, const SgfNode *node) {
+  HomeworldsView *view = NULL;
+  HomeworldsMove move = {0};
+  SgfColor color = SGF_COLOR_NONE;
+  gboolean has_move = FALSE;
+  char formatted[128] = {0};
+
+  g_return_if_fail(GTK_IS_WIDGET(board_host));
+  g_return_if_fail(node != NULL);
+
+  view = g_object_get_data(G_OBJECT(board_host), "homeworlds-view-state");
+  if (view == NULL) {
+    return;
+  }
+
+  if (!sgf_move_props_try_parse_node(node, &color, &move, &has_move, NULL) || !has_move) {
+    gtk_label_set_text(GTK_LABEL(view->last_move_label), "None");
+    return;
+  }
+
+  if (homeworlds_move_format(&move, formatted, sizeof(formatted))) {
+    gtk_label_set_text(GTK_LABEL(view->last_move_label), formatted);
+  } else {
+    gtk_label_set_text(GTK_LABEL(view->last_move_label), "Unknown");
+  }
 }
 
 void homeworlds_view_set_move_applied_callback(HomeworldsView *view,
