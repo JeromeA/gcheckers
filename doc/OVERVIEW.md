@@ -493,8 +493,8 @@ the players' homeworlds), two star slots per system, and fourteen ship slots per
 `homeworlds_types.h` own pyramid encoding/decoding and low-level slot semantics so the representation can change in
 one place later if needed.
 Rules covered: setup, construct, trade, attack, move, discover, sacrifice, catastrophe resolution, empty-system
-cleanup, start-of-turn loss detection, static evaluation, terminal scoring, hashing, compact move formatting/parsing,
-and whole-position SGF snapshots in `homeworlds_sgf_position.c`.
+cleanup, end-of-turn homeworld loss detection for either side, static evaluation, terminal scoring, hashing, compact
+move formatting/parsing, and whole-position SGF snapshots in `homeworlds_sgf_position.c`.
 Collaborates with: `homeworlds_move_builder.c`, `homeworlds_backend.c`, `homeworlds_sgf_position.c`,
 `homeworlds_view.c`, `tests/test_homeworlds_game.c`, and `tests/test_homeworlds_backend.c`.
 

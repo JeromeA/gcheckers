@@ -143,10 +143,22 @@ void homeworlds_position_finish_turn(HomeworldsPosition *position) {
     return;
   }
 
-  position->turn = position->turn == 0 ? 1 : 0;
-  if (homeworlds_system_ship_count_for_side(&position->systems[position->turn], position->turn) == 0) {
+  guint acting_side = position->turn;
+  guint opponent = acting_side == 0 ? 1 : 0;
+
+  if (homeworlds_system_ship_count_for_side(&position->systems[acting_side], acting_side) == 0) {
     position->phase = HOMEWORLDS_PHASE_FINISHED;
+    position->turn = acting_side;
+    return;
   }
+
+  if (homeworlds_system_ship_count_for_side(&position->systems[opponent], opponent) == 0) {
+    position->phase = HOMEWORLDS_PHASE_FINISHED;
+    position->turn = opponent;
+    return;
+  }
+
+  position->turn = opponent;
 }
 
 static gboolean homeworlds_position_apply_setup_move(HomeworldsPosition *position, const HomeworldsMove *move) {

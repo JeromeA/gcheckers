@@ -339,6 +339,113 @@ static void test_backend_random_ai_skips_attack_without_targets(void) {
   }
 }
 
+static void test_backend_moving_last_ship_out_of_homeworld_loses_immediately(void) {
+  HomeworldsPosition position = {
+    .phase = HOMEWORLDS_PHASE_PLAY,
+    .turn = 0,
+    .systems = {
+      [0] = {
+        .stars = {
+          homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL),
+          homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_MEDIUM),
+        },
+        .ships = {
+          [0] = {
+            homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL),
+          },
+        },
+      },
+      [1] = {
+        .stars = {
+          homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL),
+          homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_LARGE),
+        },
+        .ships = {
+          [1] = {
+            homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE),
+          },
+        },
+      },
+      [2] = {
+        .stars = {
+          homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE),
+        },
+      },
+    },
+  };
+  HomeworldsMove move = {
+    .kind = HOMEWORLDS_MOVE_KIND_TURN,
+    .acting_side = 0,
+    .step_count = 1,
+    .steps = {
+      {
+        .kind = HOMEWORLDS_STEP_MOVE,
+        .system_index = 0,
+        .ship_owner = 0,
+        .ship_slot = 0,
+        .target_system_index = 2,
+      },
+    },
+  };
+
+  assert(homeworlds_position_apply_move(&position, &move));
+  assert(position.phase == HOMEWORLDS_PHASE_FINISHED);
+  assert(position.turn == 0);
+  assert(homeworlds_position_outcome(&position) == GAME_BACKEND_OUTCOME_SIDE_1_WIN);
+}
+
+static void test_backend_destroying_opponent_homeworld_wins_immediately(void) {
+  HomeworldsPosition position = {
+    .phase = HOMEWORLDS_PHASE_PLAY,
+    .turn = 0,
+    .systems = {
+      [0] = {
+        .stars = {
+          homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL),
+        },
+        .ships = {
+          [0] = {
+            homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL),
+          },
+        },
+      },
+      [1] = {
+        .stars = {
+          homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_MEDIUM),
+        },
+        .ships = {
+          [0] = {
+            homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE),
+          },
+          [1] = {
+            homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL),
+          },
+        },
+      },
+    },
+  };
+  HomeworldsMove move = {
+    .kind = HOMEWORLDS_MOVE_KIND_TURN,
+    .acting_side = 0,
+    .step_count = 1,
+    .steps = {
+      {
+        .kind = HOMEWORLDS_STEP_ATTACK,
+        .system_index = 1,
+        .ship_owner = 0,
+        .ship_slot = 0,
+        .target_ship_owner = 1,
+        .target_ship_slot = 0,
+      },
+    },
+  };
+
+  assert(homeworlds_position_apply_move(&position, &move));
+  assert(position.phase == HOMEWORLDS_PHASE_FINISHED);
+  assert(position.turn == 1);
+  assert(homeworlds_position_outcome(&position) == GAME_BACKEND_OUTCOME_SIDE_0_WIN);
+}
+
 int main(void) {
   test_backend_metadata();
   test_backend_move_codec_roundtrips_setup_and_turn();
@@ -350,5 +457,7 @@ int main(void) {
   test_backend_random_ai_builds_setup_move();
   test_backend_random_ai_never_passes();
   test_backend_random_ai_skips_attack_without_targets();
+  test_backend_moving_last_ship_out_of_homeworld_loses_immediately();
+  test_backend_destroying_opponent_homeworld_wins_immediately();
   return 0;
 }

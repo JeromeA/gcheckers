@@ -379,3 +379,16 @@ generic callers. Tests that inspected the compatibility wrapper after a forced m
 
 The fix connects the wrapper to its inner `GGameModel::state-changed` signal and copies the generic checkers position
 back into the legacy wrapper, with a guard to avoid recursive self-sync notifications.
+
+## Homeworlds loss detection was delayed after self-vacating a homeworld
+
+Moving the last ship out of your own homeworld should lose immediately at the end of that turn.
+
+`homeworlds_position_finish_turn()` switched `position->turn` to the opponent before checking whether the side to move
+had any ships at their homeworld. That detected opponent homeworld destruction, but missed the case where the acting
+player vacated or destroyed their own homeworld. The game stayed ongoing for the opponent's next move and only ended
+when turn switched back.
+
+The fix checks the acting player's homeworld before switching turns, then checks the opponent's homeworld, and only
+advances the turn if neither side has lost. Regression coverage now asserts both self-vacating loss and opponent
+homeworld destruction.
