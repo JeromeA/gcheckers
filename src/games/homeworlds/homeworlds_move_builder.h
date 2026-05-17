@@ -33,6 +33,9 @@ gboolean homeworlds_move_builder_init(const HomeworldsPosition *position, GameBa
 void homeworlds_move_builder_clear(GameBackendMoveBuilder *builder);
 GameBackendMoveList homeworlds_move_builder_list_candidates(const GameBackendMoveBuilder *builder);
 gboolean homeworlds_move_builder_step(GameBackendMoveBuilder *builder, const HomeworldsMoveCandidate *candidate);
+gboolean homeworlds_move_builder_apply_catastrophe(GameBackendMoveBuilder *builder,
+                                                   guint system_index,
+                                                   HomeworldsColor color);
 gboolean homeworlds_move_builder_is_complete(const GameBackendMoveBuilder *builder);
 gboolean homeworlds_move_builder_build_move(const GameBackendMoveBuilder *builder, HomeworldsMove *out_move);
 

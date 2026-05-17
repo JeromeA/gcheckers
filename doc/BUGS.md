@@ -487,3 +487,14 @@ left by movement, sacrifice, capture, or catastrophe.
 Ship-only catastrophes removed all matching ships but only performed abandoned-star cleanup when a star of the same
 color had also been destroyed. A system could therefore keep stars on the board with no ships. The fix runs the normal
 orphan-star cleanup after every successful catastrophe.
+
+## Homeworlds manual catastrophes were recorded as separate same-player SGF moves
+
+A Homeworlds turn can contain multiple steps. Catastrophes are free steps that may happen before the primary action,
+so a manual catastrophe followed by a pass or action should be one SGF move node with multiple steps, not two
+consecutive nodes by the same player.
+
+The catastrophe buttons submitted a complete one-step move immediately. Because catastrophe-only moves do not finish
+the turn, the next action appended a second SGF node by the same player. The fix stages manual catastrophes into the
+Homeworlds move builder, updates the builder's working position, and appends the SGF node only when the turn later
+completes.

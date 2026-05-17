@@ -205,6 +205,30 @@ static GtkButton *test_homeworlds_find_cancel_choice_button(GtkWidget *root) {
   return NULL;
 }
 
+static GtkButton *test_homeworlds_find_catastrophe_button(GtkWidget *root,
+                                                          guint system_index,
+                                                          HomeworldsColor color) {
+  g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
+  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, NULL);
+  g_return_val_if_fail(color <= HOMEWORLDS_COLOR_BLUE, NULL);
+
+  if (GTK_IS_BUTTON(root) &&
+      GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(root), "homeworlds-system-index")) == system_index &&
+      GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(root), "homeworlds-color")) == color) {
+    return GTK_BUTTON(root);
+  }
+
+  for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
+       child = gtk_widget_get_next_sibling(child)) {
+    GtkButton *match = test_homeworlds_find_catastrophe_button(child, system_index, color);
+    if (match != NULL) {
+      return match;
+    }
+  }
+
+  return NULL;
+}
+
 static GtkButton *test_homeworlds_find_bank_button_for_pyramid(GtkWidget *root, HomeworldsPyramid pyramid) {
   g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
   g_return_val_if_fail(homeworlds_pyramid_is_valid(pyramid), NULL);
@@ -506,6 +530,55 @@ static void test_homeworlds_window_setup_moves_are_recorded_in_sgf(void) {
   g_object_unref(app);
 }
 
+static void test_homeworlds_window_catastrophe_prefix_records_single_sgf_move(void) {
+  GtkApplication *app = NULL;
+  GGameModel *model = NULL;
+  GGameWindow *window = test_homeworlds_create_window(&app, &model);
+  HomeworldsView *view = test_homeworlds_get_window_view(window);
+  GtkWidget *root = GTK_WIDGET(window);
+  PlayerControlsPanel *panel = ggame_window_get_controls_panel(window);
+  GGameSgfController *controller = ggame_window_get_sgf_controller(window);
+  SgfTree *tree = ggame_sgf_controller_get_tree(controller);
+  HomeworldsPosition position = {0};
+  HomeworldsMove move = {0};
+  GtkButton *catastrophe_button = NULL;
+  GtkButton *pass_button = NULL;
+
+  g_assert_nonnull(view);
+  g_assert_nonnull(panel);
+  g_assert_nonnull(controller);
+  g_assert_nonnull(tree);
+
+  player_controls_panel_set_mode(panel, 1, PLAYER_CONTROL_MODE_USER);
+  test_homeworlds_prepare_play_position(&position);
+  position.systems[2].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL);
+  position.systems[2].ships[0][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL);
+  position.systems[2].ships[0][1] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_MEDIUM);
+  position.systems[2].ships[1][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE);
+  position.systems[2].ships[1][1] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL);
+  g_assert_true(ggame_model_set_position(model, &position));
+
+  catastrophe_button = test_homeworlds_find_catastrophe_button(root, 2, HOMEWORLDS_COLOR_BLUE);
+  g_assert_nonnull(catastrophe_button);
+  g_signal_emit_by_name(catastrophe_button, "clicked");
+  g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 0);
+
+  pass_button = test_homeworlds_find_non_visual_action_button(root, HOMEWORLDS_STEP_PASS);
+  g_assert_nonnull(pass_button);
+  g_signal_emit_by_name(pass_button, "clicked");
+
+  g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 1);
+  g_assert_true(ggame_sgf_controller_get_current_node_move(controller, &move));
+  g_assert_cmpuint(move.kind, ==, HOMEWORLDS_MOVE_KIND_TURN);
+  g_assert_cmpuint(move.step_count, ==, 2);
+  g_assert_cmpuint(move.steps[0].kind, ==, HOMEWORLDS_STEP_CATASTROPHE);
+  g_assert_cmpuint(move.steps[1].kind, ==, HOMEWORLDS_STEP_PASS);
+
+  gtk_window_destroy(GTK_WINDOW(window));
+  g_object_unref(model);
+  g_object_unref(app);
+}
+
 static void test_homeworlds_view_setup_uses_board_bank_buttons(void) {
   GGameModel *model = ggame_model_new(&homeworlds_game_backend);
   HomeworldsView *view = homeworlds_view_new(model);
@@ -755,6 +828,8 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/view/attack-board-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/move-board-bank-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/advances-setup", test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/window/catastrophe-prefix-records-single-sgf-move",
+                    test_homeworlds_window_skip);
   } else {
     g_test_add_func("/homeworlds/window/replaces-skeleton", test_homeworlds_window_replaces_skeleton);
     g_test_add_func("/homeworlds/window/defaults-to-fast-computer", test_homeworlds_window_defaults_to_fast_computer);
@@ -770,6 +845,8 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/view/move-board-bank-buttons",
                     test_homeworlds_view_move_targets_use_board_and_bank_buttons);
     g_test_add_func("/homeworlds/view/advances-setup", test_homeworlds_view_advances_setup);
+    g_test_add_func("/homeworlds/window/catastrophe-prefix-records-single-sgf-move",
+                    test_homeworlds_window_catastrophe_prefix_records_single_sgf_move);
   }
 
   result = g_test_run();

@@ -395,7 +395,7 @@ static gboolean homeworlds_view_can_cancel_selection(const HomeworldsView *view)
     case HOMEWORLDS_BUILDER_STAGE_COMPLETE:
       return FALSE;
     case HOMEWORLDS_BUILDER_STAGE_SELECT_SHIP:
-      return state->pending_actions_remaining > 0;
+      return state->pending_actions_remaining > 0 || state->move.step_count > 0;
     case HOMEWORLDS_BUILDER_STAGE_SETUP_SECOND_STAR:
     case HOMEWORLDS_BUILDER_STAGE_SETUP_SHIP:
     case HOMEWORLDS_BUILDER_STAGE_SELECT_ACTION:
@@ -1427,11 +1427,6 @@ static const char *homeworlds_view_visual_choice_text(const HomeworldsMoveBuilde
 
 static void homeworlds_view_catastrophe_clicked(GtkButton *button, gpointer user_data) {
   HomeworldsView *view = user_data;
-  const HomeworldsPosition *position = NULL;
-  HomeworldsMove move = {
-    .kind = HOMEWORLDS_MOVE_KIND_TURN,
-    .step_count = 1,
-  };
   guint system_index = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(button), "homeworlds-system-index"));
   guint color = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(button), "homeworlds-color"));
 
@@ -1443,19 +1438,14 @@ static void homeworlds_view_catastrophe_clicked(GtkButton *button, gpointer user
     return;
   }
 
-  position = ggame_model_peek_position(view->model);
-  g_return_if_fail(position != NULL);
-  move.steps[0].kind = HOMEWORLDS_STEP_CATASTROPHE;
-  move.steps[0].target_color = (guint8)color;
-  if (!homeworlds_position_system_ref_for_index(position, system_index, &move.steps[0].target_system)) {
-    g_debug("Unable to format Homeworlds catastrophe system");
+  if (!view->builder_ready ||
+      !homeworlds_move_builder_apply_catastrophe(&view->builder, system_index, (HomeworldsColor) color)) {
+    g_debug("Homeworlds move builder rejected selected catastrophe");
+    homeworlds_view_refresh(view);
     return;
   }
 
-  if (!homeworlds_view_apply_completed_move(view, &move)) {
-    g_debug("Homeworlds catastrophe button did not match a legal catastrophe");
-  }
-  homeworlds_view_refresh(view);
+  homeworlds_view_update_from_current_builder(view);
 }
 
 static void homeworlds_view_update_catastrophes(HomeworldsView *view) {

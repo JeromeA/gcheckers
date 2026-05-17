@@ -529,8 +529,9 @@ Role: let `ghomeworlds` use the shared `GGameWindow` while replacing only the sq
 `homeworlds_view.c` renders a starfield board with dynamic system boxes sized around their contents, reachability-row
 placement between the two homeworlds, bank-aware row width distribution, homeworld labels, pipped square stars, tall
 pipped ship pyramids, overlaid
-clickable bank piles, staged legal-choice buttons, and catastrophe buttons that submit normal symbolic moves so SGF,
-model state, and the last-move label stay synchronized. Homeworld rendering keeps player 1 at the bottom, player 2 at
+clickable bank piles, staged legal-choice buttons, and catastrophe buttons that stage normal symbolic steps into the
+current move so SGF, model state, and the last-move label stay synchronized. Homeworld rendering keeps player 1 at the
+bottom, player 2 at
 the top, and lays out every system in one horizontal row with player 2 ships left of the stars and player 1 ships right
 of the stars. During setup and target
 selection, the bank piles on the board are real `GtkButton`s that feed the staged builder directly, so start stars,
@@ -541,8 +542,10 @@ an in-progress move. The Homeworlds board host also syncs its last-move label fr
 navigation and direct play report the same move. Human interaction
 advances
 `homeworlds_move_builder` one visible choice at a time and sends each completed `HomeworldsMove` to the generic window
-move handler. In the app, that appends SGF nodes through `GGameSgfController`; standalone view tests can still install
-no handler and apply directly to `GGameModel`. Homeworlds intentionally does not expose a full legal move list, so the
+move handler. Manual catastrophes update the builder's working position and are emitted as part of the same multi-step
+move once the turn completes. In the app, completed moves append SGF nodes through `GGameSgfController`; standalone
+view tests can still install no handler and apply directly to `GGameModel`. Homeworlds intentionally does not expose a
+full legal move list, so the
 shared SGF controller validates completed moves by applying them to a copied position before appending the node.
 `homeworlds_backend.c` walks the same staged builder to feed the shared alpha-beta search with backend-good moves. That
 AI candidate path rejects pass moves, applies Homeworlds-specific opening and safety heuristics, and lets dead-end

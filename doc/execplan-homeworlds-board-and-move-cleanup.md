@@ -18,7 +18,7 @@ multiple steps.
 - [x] (2026-05-17) Improved row placement so systems account for the bank overlay and spread across each row.
 - [x] (2026-05-17) Aligned each system's stars and ships in one horizontal row from the owners' perspectives.
 - [x] (2026-05-17) Returned orphaned stars to the bank after ship catastrophes as well as moves.
-- [ ] Record user-triggered catastrophes as steps in a single SGF move.
+- [x] (2026-05-17) Recorded user-triggered catastrophes as steps in a single SGF move.
 
 ## Surprises & Discoveries
 
@@ -32,15 +32,24 @@ multiple steps.
   Rationale: The user asked to remove the visible lines, but the row layout still uses reachability to group systems.
   Date/Author: 2026-05-17 Codex.
 
+- Decision: Use the existing `HomeworldsMove.steps[]` representation for manual catastrophes rather than adding a new
+  move blob or SGF encoding.
+  Rationale: The engine, parser, and formatter already support multi-step turns. The bug was in the UI submitting
+  catastrophe buttons as complete moves before the rest of the turn.
+  Date/Author: 2026-05-17 Codex.
+
 ## Outcomes & Retrospective
 
 Removed the cairo connection-line pass from `homeworlds_view_draw()` while keeping reachability row placement intact.
 Rows now use `(index + 1) / (count + 1)` slot placement so one system is centered and two systems sit on row thirds.
-The usable row width reserves the right-side bank footprint. Remaining milestones are still pending.
+The usable row width reserves the right-side bank footprint.
 System internals now render as one row ordered player 2 ships, stars, then player 1 ships, matching each owner's
 right-hand side from their own perspective.
 Catastrophe application now runs orphan-star cleanup after all successful catastrophes, not only star-destroying
 catastrophes.
+Manual catastrophes are now staged into the Homeworlds move builder, update the builder's working position immediately,
+and are recorded in SGF only when the later primary action or pass completes the turn.
+All five requested items are complete and committed as separate milestones.
 
 ## Context and Orientation
 
