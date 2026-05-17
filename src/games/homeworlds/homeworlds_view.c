@@ -1273,32 +1273,6 @@ static void homeworlds_view_draw(GtkDrawingArea * /*drawing_area*/,
   state = homeworlds_view_builder_state(view);
   homeworlds_view_draw_starfield(cr, width, height);
 
-  cairo_set_source_rgba(cr, 0.65, 0.72, 0.86, 0.20);
-  cairo_set_line_width(cr, 1.0);
-  for (guint left = 0; left < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++left) {
-    if (homeworlds_system_is_empty(&position->systems[left])) {
-      continue;
-    }
-    for (guint right = left + 1; right < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++right) {
-      if (homeworlds_system_is_empty(&position->systems[right]) ||
-          !homeworlds_system_is_connected(&position->systems[left], &position->systems[right])) {
-        continue;
-      }
-
-      double left_x = 0.0;
-      double left_y = 0.0;
-      double right_x = 0.0;
-      double right_y = 0.0;
-      if (!homeworlds_view_calculate_system_center(position, left, width, height, &left_x, &left_y) ||
-          !homeworlds_view_calculate_system_center(position, right, width, height, &right_x, &right_y)) {
-        continue;
-      }
-      cairo_move_to(cr, left_x, left_y);
-      cairo_line_to(cr, right_x, right_y);
-      cairo_stroke(cr);
-    }
-  }
-
   for (guint system_index = 0; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
     if (system_index >= 2 && homeworlds_system_is_empty(&position->systems[system_index])) {
       continue;
