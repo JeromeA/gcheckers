@@ -19,8 +19,9 @@ matter of adding a new backend directory plus the corresponding profile and pack
 ## `GGameAppProfile` (`src/game_app_profile.c`, `src/game_app_profile.h`)
 Module: runtime app-profile registry and descriptors.
 Role: describe each branded target, including app ID, display strings, settings schema ID, the profile-owned
-`GameBackend *`, feature flags, derived helpers such as puzzle-catalog support, shared-window layout defaults, and
-an optional board-host hook. Launchers select one of these profiles at startup, and `ggame_active_app_profile()`
+`GameBackend *`, feature flags, derived helpers such as puzzle-catalog support, shared-window layout and computer-depth
+defaults, and an optional board-host hook. Launchers select one of these profiles at startup, and
+`ggame_active_app_profile()`
 exposes the chosen profile to shared code. Profiles do not get a custom-window hook; the menu bar, toolbar, SGF
 controller, and drawer actions are always owned by the generic application window.
 Collaborates with: `src/application.c`, `src/window.c`, `src/app_settings.c`, `src/file_dialog_history.c`, and
@@ -43,11 +44,12 @@ node, and full-game analysis always processes nodes in reverse order so TT state
 first. Current-position analysis now runs through the generic backend AI API for every shared-shell build, while
 full-game analysis keeps the checkers setup-aware replay path for checkers and uses backend-position SGF replay for
 boop and Homeworlds.
-Shared pane defaults also come from the active profile. Checkers keeps the historical `500/300/300` board,
-navigation, and analysis widths with both drawers visible by default, while boop starts with a wider `760` board pane
-and the analysis drawer hidden by default so its square board host can reach the same practical size as the old
-standalone `gboop` window. Even with that hidden default, boop now enables the shared `Analysis` actions and
-populates the drawer on demand.
+Shared pane and computer-depth defaults also come from the active profile. Checkers keeps the historical `500/300/300`
+board, navigation, and analysis widths with both drawers visible by default, while boop starts with a wider `760` board
+pane and the analysis drawer hidden by default so its square board host can reach the same practical size as the old
+standalone `gboop` window. Homeworlds keeps AI-player support but starts with computer depth `0` because its move
+search is expensive. Even with its hidden default, boop now enables the shared `Analysis` actions and populates the
+drawer on demand.
 The analysis pane owns its own `Analysis depth` slider; analysis no longer reuses the player `Computer depth`
 setting. Current-position analysis iterates up to the selected depth, and full-game analysis uses the same selected
 depth as a fixed search limit. Analysis menu entries are one-shot actions, so SGF navigation does not implicitly keep
@@ -195,8 +197,8 @@ Collaborates with: `GGameWindow` (data binding) and `GGameSgfController` (select
 Class: `PlayerControlsPanel` (`GtkBox`).
 Role: encapsulate two-side player mode controls.
 Modes: side 0 / side 1 each select `User` or `Computer`, plus a shared `Computer depth` slider (`0..16`).
-Defaults: both side controls start as `User`, and labels are backend-supplied by the window (`White`/`Black` for the
-current checkers backend).
+Defaults: side 0 starts as `User`, side 1 starts as `Computer`, and the active profile supplies the initial computer
+depth. Labels are backend-supplied by the window (`White`/`Black` for the current checkers backend).
 Signals: `control-changed` for window-level coordination.
 Collaborates with: `GGameWindow` signal handlers and GTK widgets (`GtkDropDown`, `GtkScale`).
 

@@ -122,7 +122,7 @@ static void player_controls_panel_init(PlayerControlsPanel *self) {
   gtk_widget_set_size_request(GTK_WIDGET(self->side0_control), 100, -1);
   gtk_widget_set_size_request(GTK_WIDGET(self->side1_control), 100, -1);
   player_controls_panel_set_mode(self, 0, PLAYER_CONTROL_MODE_USER);
-  player_controls_panel_set_mode(self, 1, PLAYER_CONTROL_MODE_USER);
+  player_controls_panel_set_mode(self, 1, PLAYER_CONTROL_MODE_COMPUTER);
   player_controls_panel_set_computer_depth(self, PLAYER_COMPUTER_DEPTH_DEFAULT);
   gtk_box_append(GTK_BOX(side0_box), GTK_WIDGET(self->side0_control));
   gtk_box_append(GTK_BOX(side1_box), GTK_WIDGET(self->side1_control));

@@ -57,6 +57,7 @@ typedef struct {
   GGameAppFeatures features;
   GGameAppUiHooks ui;
   GGameAppLayout layout;
+  guint default_computer_depth;
 } GGameAppProfile;
 
 const GGameAppProfile *ggame_app_profile_get_by_kind(GGameAppKind kind);

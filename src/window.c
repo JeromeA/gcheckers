@@ -3745,6 +3745,9 @@ static void ggame_window_init(GGameWindow *self) {
   g_object_set_data(G_OBJECT(self), "board-panel", left_panel);
 
   self->controls_panel = g_object_ref_sink(player_controls_panel_new());
+  if (self->profile != NULL) {
+    player_controls_panel_set_computer_depth(self->controls_panel, self->profile->default_computer_depth);
+  }
   ggame_window_sync_side_labels(self);
   gtk_box_append(GTK_BOX(left_panel), GTK_WIDGET(self->controls_panel));
   g_signal_connect(self->controls_panel,

@@ -5,6 +5,7 @@
 #include "../src/games/homeworlds/homeworlds_backend.h"
 #include "../src/games/homeworlds/homeworlds_game.h"
 #include "../src/games/homeworlds/homeworlds_view.h"
+#include "../src/player_controls_panel.h"
 #include "../src/sgf_controller.h"
 #include "../src/sgf_tree.h"
 #include "../src/window.h"
@@ -398,6 +399,22 @@ static void test_homeworlds_window_replaces_skeleton(void) {
   g_object_unref(app);
 }
 
+static void test_homeworlds_window_defaults_to_fast_computer(void) {
+  GtkApplication *app = NULL;
+  GGameModel *model = NULL;
+  GGameWindow *window = test_homeworlds_create_window(&app, &model);
+  PlayerControlsPanel *panel = ggame_window_get_controls_panel(window);
+
+  g_assert_nonnull(panel);
+  g_assert_cmpuint(player_controls_panel_get_mode(panel, 0), ==, PLAYER_CONTROL_MODE_USER);
+  g_assert_cmpuint(player_controls_panel_get_mode(panel, 1), ==, PLAYER_CONTROL_MODE_COMPUTER);
+  g_assert_cmpuint(player_controls_panel_get_computer_depth(panel), ==, 0);
+
+  gtk_window_destroy(GTK_WINDOW(window));
+  g_object_unref(model);
+  g_object_unref(app);
+}
+
 static void test_homeworlds_window_setup_moves_are_recorded_in_sgf(void) {
   GtkApplication *app = NULL;
   GGameModel *model = NULL;
@@ -638,6 +655,7 @@ int main(int argc, char **argv) {
   g_test_add_func("/homeworlds/view/piece-metrics", test_homeworlds_view_piece_metrics_keep_pyramids_tall);
   if (!gtk_init_check()) {
     g_test_add_func("/homeworlds/window/replaces-skeleton", test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/window/defaults-to-fast-computer", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/window/setup-recorded-in-sgf", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/setup-bank-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/board-ship-buttons", test_homeworlds_window_skip);
@@ -647,6 +665,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/view/advances-setup", test_homeworlds_window_skip);
   } else {
     g_test_add_func("/homeworlds/window/replaces-skeleton", test_homeworlds_window_replaces_skeleton);
+    g_test_add_func("/homeworlds/window/defaults-to-fast-computer", test_homeworlds_window_defaults_to_fast_computer);
     g_test_add_func("/homeworlds/window/setup-recorded-in-sgf",
                     test_homeworlds_window_setup_moves_are_recorded_in_sgf);
     g_test_add_func("/homeworlds/view/setup-bank-buttons", test_homeworlds_view_setup_uses_board_bank_buttons);

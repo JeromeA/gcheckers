@@ -5,6 +5,7 @@
 #include "games/checkers/checkers_backend.h"
 #include "games/homeworlds/homeworlds_backend.h"
 #include "games/homeworlds/homeworlds_view.h"
+#include "player_controls_panel.h"
 
 static const GGameAppProfile checkers_app_profile = {
   .kind = GGAME_APP_KIND_CHECKERS,
@@ -32,6 +33,7 @@ static const GGameAppProfile checkers_app_profile = {
           .show_navigation_drawer_by_default = TRUE,
           .show_analysis_drawer_by_default = TRUE,
       },
+  .default_computer_depth = PLAYER_COMPUTER_DEPTH_DEFAULT,
 };
 
 static const GGameAppProfile homeworlds_app_profile = {
@@ -65,6 +67,7 @@ static const GGameAppProfile homeworlds_app_profile = {
           .show_navigation_drawer_by_default = TRUE,
           .show_analysis_drawer_by_default = FALSE,
       },
+  .default_computer_depth = PLAYER_COMPUTER_DEPTH_MIN,
 };
 
 static const GGameAppProfile boop_app_profile = {
@@ -97,6 +100,7 @@ static const GGameAppProfile boop_app_profile = {
           .show_navigation_drawer_by_default = TRUE,
           .show_analysis_drawer_by_default = FALSE,
       },
+  .default_computer_depth = PLAYER_COMPUTER_DEPTH_DEFAULT,
 };
 
 static const GGameAppProfile *const ggame_app_profiles[] = {
