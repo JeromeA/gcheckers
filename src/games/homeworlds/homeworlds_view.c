@@ -28,7 +28,6 @@ typedef struct {
 #define HOMEWORLDS_VIEW_PYRAMID_HEIGHT_TO_BASE 2.0
 #define HOMEWORLDS_VIEW_PIP_REFERENCE_RATIO 0.055
 #define HOMEWORLDS_VIEW_ITEM_GAP 7.0
-#define HOMEWORLDS_VIEW_ROW_GAP 10.0
 #define HOMEWORLDS_VIEW_SYSTEM_PADDING_X 14.0
 #define HOMEWORLDS_VIEW_SYSTEM_PADDING_BOTTOM 14.0
 #define HOMEWORLDS_VIEW_SYSTEM_LABEL_HEIGHT 32.0
@@ -878,94 +877,26 @@ static gboolean homeworlds_view_collect_ship_row(const HomeworldsSystem *system,
   return TRUE;
 }
 
-static gboolean homeworlds_view_layout_generic_rows(HomeworldsViewSystemLayout *layout,
-                                                    const HomeworldsViewPieceRow *rows,
-                                                    guint row_count,
-                                                    double center_x,
-                                                    double center_y) {
-  double total_height = 0.0;
-  double cursor_y = 0.0;
-  guint visible_rows = 0;
-
-  g_return_val_if_fail(layout != NULL, FALSE);
-  g_return_val_if_fail(rows != NULL, FALSE);
-
-  for (guint i = 0; i < row_count; ++i) {
-    if (rows[i].count == 0) {
-      continue;
-    }
-    visible_rows++;
-    total_height += rows[i].height;
-  }
-  if (visible_rows > 1) {
-    total_height += HOMEWORLDS_VIEW_ROW_GAP * (double)(visible_rows - 1);
-  }
-
-  cursor_y = center_y - (total_height / 2.0);
-  for (guint i = 0; i < row_count; ++i) {
-    if (rows[i].count == 0) {
-      continue;
-    }
-
-    if (!homeworlds_view_system_layout_append_row(layout,
-                                                  &rows[i],
-                                                  center_x,
-                                                  cursor_y + (rows[i].height / 2.0))) {
-      return FALSE;
-    }
-    cursor_y += rows[i].height + HOMEWORLDS_VIEW_ROW_GAP;
-  }
-
-  return TRUE;
-}
-
 static gboolean homeworlds_view_calculate_system_layout(const HomeworldsSystem *system,
                                                         guint system_index,
                                                         double center_x,
                                                         double center_y,
                                                         HomeworldsViewSystemLayout *out_layout) {
-  HomeworldsViewPieceRow rows[3] = {0};
+  HomeworldsViewPieceRow row = {0};
+  double piece_center_y = center_y;
 
   g_return_val_if_fail(system != NULL, FALSE);
   g_return_val_if_fail(out_layout != NULL, FALSE);
 
   memset(out_layout, 0, sizeof(*out_layout));
   if (system_index < 2) {
-    const guint own_side = system_index;
-    const guint opponent_side = own_side == 0 ? 1 : 0;
-    const gboolean own_points_up = own_side == 0;
-    const gboolean opponent_points_up = !own_points_up;
-    guint own_row = own_side == 0 ? 1 : 0;
-    guint opponent_row = own_side == 0 ? 0 : 1;
-
-    if (own_side == 1 && !homeworlds_view_collect_ship_row(system, own_side, own_points_up, &rows[own_row])) {
-      return FALSE;
-    }
-    if (!homeworlds_view_collect_star_row(system, &rows[own_row])) {
-      return FALSE;
-    }
-    if (own_side == 0 && !homeworlds_view_collect_ship_row(system, own_side, own_points_up, &rows[own_row])) {
-      return FALSE;
-    }
-    if (!homeworlds_view_collect_ship_row(system, opponent_side, opponent_points_up, &rows[opponent_row])) {
-      return FALSE;
-    }
-
-    if (!homeworlds_view_layout_generic_rows(out_layout,
-                                             rows,
-                                             2,
-                                             center_x,
-                                             center_y + HOMEWORLDS_VIEW_HOMEWORLD_PIECE_Y_OFFSET)) {
-      return FALSE;
-    }
-    homeworlds_view_system_layout_finish(out_layout, system_index, center_x, center_y);
-    return TRUE;
+    piece_center_y += HOMEWORLDS_VIEW_HOMEWORLD_PIECE_Y_OFFSET;
   }
 
-  if (!homeworlds_view_collect_star_row(system, &rows[0]) ||
-      !homeworlds_view_collect_ship_row(system, 1, FALSE, &rows[1]) ||
-      !homeworlds_view_collect_ship_row(system, 0, TRUE, &rows[2]) ||
-      !homeworlds_view_layout_generic_rows(out_layout, rows, G_N_ELEMENTS(rows), center_x, center_y)) {
+  if (!homeworlds_view_collect_ship_row(system, 1, FALSE, &row) ||
+      !homeworlds_view_collect_star_row(system, &row) ||
+      !homeworlds_view_collect_ship_row(system, 0, TRUE, &row) ||
+      !homeworlds_view_system_layout_append_row(out_layout, &row, center_x, piece_center_y)) {
     return FALSE;
   }
 

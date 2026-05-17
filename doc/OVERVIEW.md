@@ -531,7 +531,8 @@ placement between the two homeworlds, bank-aware row width distribution, homewor
 pipped ship pyramids, overlaid
 clickable bank piles, staged legal-choice buttons, and catastrophe buttons that submit normal symbolic moves so SGF,
 model state, and the last-move label stay synchronized. Homeworld rendering keeps player 1 at the bottom, player 2 at
-the top, and places each homeworld's own ships beside its stars from that player's perspective. During setup and target
+the top, and lays out every system in one horizontal row with player 2 ships left of the stars and player 1 ships right
+of the stars. During setup and target
 selection, the bank piles on the board are real `GtkButton`s that feed the staged builder directly, so start stars,
 start ships, trade colors, and discovery stars do not require a long side-panel button list. During normal turns,
 selectable ships, capture targets, and existing-system move targets are also overlaid as board buttons; the side panel

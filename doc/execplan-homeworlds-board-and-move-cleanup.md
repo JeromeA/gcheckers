@@ -16,7 +16,7 @@ multiple steps.
 - [x] (2026-05-17) Identified the Homeworlds connection-line drawing loop in `src/games/homeworlds/homeworlds_view.c`.
 - [x] (2026-05-17) Removed visual connection lines between star systems.
 - [x] (2026-05-17) Improved row placement so systems account for the bank overlay and spread across each row.
-- [ ] Align each system's stars and ships in one horizontal row from the owners' perspectives.
+- [x] (2026-05-17) Aligned each system's stars and ships in one horizontal row from the owners' perspectives.
 - [ ] Return orphaned stars to the bank after ship catastrophes as well as moves.
 - [ ] Record user-triggered catastrophes as steps in a single SGF move.
 
@@ -37,6 +37,8 @@ multiple steps.
 Removed the cairo connection-line pass from `homeworlds_view_draw()` while keeping reachability row placement intact.
 Rows now use `(index + 1) / (count + 1)` slot placement so one system is centered and two systems sit on row thirds.
 The usable row width reserves the right-side bank footprint. Remaining milestones are still pending.
+System internals now render as one row ordered player 2 ships, stars, then player 1 ships, matching each owner's
+right-hand side from their own perspective.
 
 ## Context and Orientation
 
