@@ -14,7 +14,7 @@ You lose if you don’t have any ships at your Homeworld at the start of your tu
 The four colors of pyramids give you access to different abilities. You have access to an action type in a star system
 if either one of your ships there or the star itself is the appropriate color.
 
-Green = Construct
+Green = Build
 Choose a ship you have in that system. Take the smallest available pyramid of the same color from the bank, and place
 it in the system as a new ship.
 Blue = Trade

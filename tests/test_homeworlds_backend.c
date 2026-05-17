@@ -302,7 +302,7 @@ static void test_backend_move_builder_completes_turn(void) {
   GameBackendMoveBuilder builder = {0};
   GameBackendMoveList candidates = {0};
   const HomeworldsMoveCandidate *selected_ship = NULL;
-  const HomeworldsMoveCandidate *construct = NULL;
+  const HomeworldsMoveCandidate *build = NULL;
   HomeworldsMove move = {0};
 
   test_prepare_position(&position);
@@ -328,21 +328,21 @@ static void test_backend_move_builder_completes_turn(void) {
     const HomeworldsMoveCandidate *candidate = backend->move_list_get(&candidates, i);
     assert(candidate != NULL);
     if (candidate->data.kind != HOMEWORLDS_CANDIDATE_ACTION ||
-        candidate->data.target_color != HOMEWORLDS_STEP_CONSTRUCT) {
+        candidate->data.target_color != HOMEWORLDS_STEP_BUILD) {
       continue;
     }
 
-    construct = candidate;
+    build = candidate;
     break;
   }
-  assert(construct != NULL);
-  assert(backend->move_builder_step(&builder, construct));
+  assert(build != NULL);
+  assert(backend->move_builder_step(&builder, build));
   backend->move_list_free(&candidates);
 
   assert(backend->move_builder_is_complete(&builder));
   assert(backend->move_builder_build_move(&builder, &move));
   assert(move.step_count == 1);
-  assert(move.steps[0].kind == HOMEWORLDS_STEP_CONSTRUCT);
+  assert(move.steps[0].kind == HOMEWORLDS_STEP_BUILD);
   backend->move_builder_clear(&builder);
 }
 
@@ -480,7 +480,7 @@ static void test_backend_good_moves_first_turn_always_builds(void) {
     assert(move != NULL);
     assert(move->kind == HOMEWORLDS_MOVE_KIND_TURN);
     assert(move->step_count == 1);
-    assert(move->steps[0].kind == HOMEWORLDS_STEP_CONSTRUCT);
+    assert(move->steps[0].kind == HOMEWORLDS_STEP_BUILD);
   }
   backend->move_list_free(&good_moves);
 }
@@ -627,7 +627,7 @@ static void test_backend_good_moves_keep_last_homeworld_ship(void) {
   backend->move_list_free(&good_moves);
 }
 
-static void test_backend_good_moves_skip_unsafe_construct_catastrophe(void) {
+static void test_backend_good_moves_skip_unsafe_build_catastrophe(void) {
   const GameBackend *backend = &homeworlds_game_backend;
   HomeworldsPosition position = {0};
   GameBackendMoveList good_moves = {0};
@@ -680,7 +680,7 @@ static void test_backend_good_moves_skip_unsafe_construct_catastrophe(void) {
     for (guint step_index = 0; step_index < move->step_count; ++step_index) {
       const HomeworldsTurnStep *step = &move->steps[step_index];
 
-      assert(step->kind != HOMEWORLDS_STEP_CONSTRUCT ||
+      assert(step->kind != HOMEWORLDS_STEP_BUILD ||
              step->actor.system.kind != HOMEWORLDS_SYSTEM_REF_HOMEWORLD ||
              step->actor.system.homeworld_side != 0);
     }
@@ -803,7 +803,7 @@ int main(void) {
   test_backend_good_moves_return_empty_when_only_pass_is_available();
   test_backend_good_moves_skip_attack_without_targets();
   test_backend_good_moves_keep_last_homeworld_ship();
-  test_backend_good_moves_skip_unsafe_construct_catastrophe();
+  test_backend_good_moves_skip_unsafe_build_catastrophe();
   test_backend_moving_last_ship_out_of_homeworld_loses_immediately();
   test_backend_destroying_opponent_homeworld_wins_immediately();
   return 0;

@@ -285,8 +285,7 @@ static gboolean homeworlds_backend_selected_ship_is_last_homeworld_ship(const Ho
   return homeworlds_system_ship_count_for_side(&state->working_position.systems[side], side) == 1;
 }
 
-static gboolean homeworlds_backend_construct_would_overpopulate_without_targets(
-    const HomeworldsMoveBuilderState *state) {
+static gboolean homeworlds_backend_build_would_overpopulate_without_targets(const HomeworldsMoveBuilderState *state) {
   const HomeworldsSystem *system = NULL;
   HomeworldsPyramid source = 0;
   HomeworldsPyramid built = 0;
@@ -339,7 +338,7 @@ static gboolean homeworlds_backend_move_is_good(const HomeworldsMoveBuilderState
   }
 
   if (homeworlds_backend_position_is_initial_turn(&state->working_position) &&
-      (move->step_count != 1 || move->steps[0].kind != HOMEWORLDS_STEP_CONSTRUCT)) {
+      (move->step_count != 1 || move->steps[0].kind != HOMEWORLDS_STEP_BUILD)) {
     return FALSE;
   }
 
@@ -365,7 +364,7 @@ static gboolean homeworlds_backend_candidate_is_good(const HomeworldsMoveBuilder
   if (state->stage == HOMEWORLDS_BUILDER_STAGE_SELECT_ACTION &&
       candidate->data.kind == HOMEWORLDS_CANDIDATE_ACTION) {
     if (homeworlds_backend_position_is_initial_turn(&state->working_position) &&
-        candidate->data.target_color != HOMEWORLDS_STEP_CONSTRUCT) {
+        candidate->data.target_color != HOMEWORLDS_STEP_BUILD) {
       return FALSE;
     }
     if (homeworlds_backend_selected_ship_is_last_homeworld_ship(state) &&
@@ -373,8 +372,8 @@ static gboolean homeworlds_backend_candidate_is_good(const HomeworldsMoveBuilder
          candidate->data.target_color == HOMEWORLDS_STEP_SACRIFICE)) {
       return FALSE;
     }
-    if (candidate->data.target_color == HOMEWORLDS_STEP_CONSTRUCT &&
-        homeworlds_backend_construct_would_overpopulate_without_targets(state)) {
+    if (candidate->data.target_color == HOMEWORLDS_STEP_BUILD &&
+        homeworlds_backend_build_would_overpopulate_without_targets(state)) {
       return FALSE;
     }
   }

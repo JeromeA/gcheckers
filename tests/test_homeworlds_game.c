@@ -148,14 +148,14 @@ static void test_setup_accepts_any_bank_pyramids(void) {
   assert(position.systems[0].ships[0][0] == small_ship);
 }
 
-static void test_construct_uses_smallest_available_ship(void) {
+static void test_build_uses_smallest_available_ship(void) {
   HomeworldsPosition position = {0};
   HomeworldsMove move = {0};
 
   test_prepare_basic_position(&position);
   move = test_single_step_move(0,
                                (HomeworldsTurnStep){
-                                   .kind = HOMEWORLDS_STEP_CONSTRUCT,
+                                   .kind = HOMEWORLDS_STEP_BUILD,
                                    .actor = test_ship_ref(test_homeworld_ref(0),
                                                           HOMEWORLDS_COLOR_GREEN,
                                                           HOMEWORLDS_SIZE_LARGE),
@@ -349,7 +349,7 @@ static void test_static_evaluation_counts_largest_homeworld_ship_twice(void) {
 int main(void) {
   test_setup_and_loss_detection();
   test_setup_accepts_any_bank_pyramids();
-  test_construct_uses_smallest_available_ship();
+  test_build_uses_smallest_available_ship();
   test_trade_preserves_size();
   test_attack_requires_size_and_changes_owner();
   test_move_and_discover_follow_connectivity();

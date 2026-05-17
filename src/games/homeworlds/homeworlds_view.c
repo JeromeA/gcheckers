@@ -195,24 +195,24 @@ static const char *homeworlds_view_size_name(HomeworldsSize size) {
 static const char *homeworlds_view_action_name(HomeworldsStepKind action) {
   switch (action) {
     case HOMEWORLDS_STEP_PASS:
-      return "pass";
-    case HOMEWORLDS_STEP_CONSTRUCT:
-      return "construct";
+      return "Pass";
+    case HOMEWORLDS_STEP_BUILD:
+      return "Build";
     case HOMEWORLDS_STEP_TRADE:
-      return "trade";
+      return "Trade";
     case HOMEWORLDS_STEP_ATTACK:
-      return "attack";
+      return "Capture";
     case HOMEWORLDS_STEP_MOVE:
-      return "move/discover";
+      return "Move";
     case HOMEWORLDS_STEP_SACRIFICE:
-      return "sacrifice";
+      return "Sacrifice";
     case HOMEWORLDS_STEP_CATASTROPHE:
-      return "catastrophe";
+      return "Catastrophe";
     case HOMEWORLDS_STEP_DISCOVER:
-      return "discover";
+      return "Discover";
     case HOMEWORLDS_STEP_NONE:
     default:
-      return "action";
+      return "Action";
   }
 }
 
@@ -249,11 +249,11 @@ static char *homeworlds_view_candidate_label(const HomeworldsMoveCandidate *cand
       g_free(pyramid_label);
       return label;
     case HOMEWORLDS_CANDIDATE_ACTION:
-      return g_strdup_printf("Action: %s", homeworlds_view_action_name(candidate->data.target_color));
+      return g_strdup(homeworlds_view_action_name(candidate->data.target_color));
     case HOMEWORLDS_CANDIDATE_TRADE_COLOR:
       return g_strdup_printf("Trade to %s", homeworlds_view_color_name(candidate->data.target_color));
     case HOMEWORLDS_CANDIDATE_ATTACK_TARGET:
-      return g_strdup_printf("Attack player %u ship slot %u",
+      return g_strdup_printf("Capture player %u ship slot %u",
                              (guint) candidate->data.target_ship_owner + 1,
                              (guint) candidate->data.target_ship_slot);
     case HOMEWORLDS_CANDIDATE_MOVE_TARGET:

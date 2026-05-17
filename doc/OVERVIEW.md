@@ -497,7 +497,7 @@ the players' homeworlds), two star slots per system, and fourteen ship slots per
 one place later if needed. `HomeworldsMove` does not store physical slot indexes or an acting side; it stores the same
 symbolic system and ship references used by notation (`H1`, `G3'`, `g2`, etc.), and the rules engine resolves those
 references against the current position at apply time.
-Rules covered: setup, construct, trade, attack, move, discover, sacrifice, catastrophe resolution, empty-system
+Rules covered: setup, build, trade, attack, move, discover, sacrifice, catastrophe resolution, empty-system
 cleanup, end-of-turn homeworld loss detection for either side, static evaluation, terminal scoring, hashing, compact
 move formatting/parsing, and whole-position SGF snapshots in `homeworlds_sgf_position.c`. Move notation uses pyramid
 letters and sizes directly, such as `Y2B1g3`, `H1 g1+`, `G3 y2>G2 G3 y!`, and `pass`. Static evaluation counts ship

@@ -1,4 +1,5 @@
 #include <gtk/gtk.h>
+#include <string.h>
 
 #include "../src/game_app_profile.h"
 #include "../src/game_model.h"
@@ -256,6 +257,19 @@ static GtkButton *test_homeworlds_find_non_visual_action_button(GtkWidget *root,
   }
 
   return NULL;
+}
+
+static void test_homeworlds_assert_action_button_label(GtkWidget *root,
+                                                       HomeworldsStepKind action,
+                                                       const char *expected_label) {
+  GtkButton *button = NULL;
+
+  g_return_if_fail(GTK_IS_WIDGET(root));
+  g_return_if_fail(expected_label != NULL);
+
+  button = test_homeworlds_find_non_visual_action_button(root, action);
+  g_assert_nonnull(button);
+  g_assert_cmpstr(gtk_button_get_label(button), ==, expected_label);
 }
 
 static HomeworldsMove test_homeworlds_setup_move(HomeworldsPyramid first_star,
@@ -533,6 +547,30 @@ static void test_homeworlds_view_uses_board_ship_buttons(void) {
   g_object_unref(model);
 }
 
+static void test_homeworlds_view_action_buttons_use_plain_labels(void) {
+  HomeworldsPosition position = {0};
+  GGameModel *model = ggame_model_new(&homeworlds_game_backend);
+  HomeworldsView *view = homeworlds_view_new(model);
+  GtkWidget *root = homeworlds_view_get_widget(view);
+
+  test_homeworlds_prepare_play_position(&position);
+  memset(position.systems[0].ships[0], 0, sizeof(position.systems[0].ships[0]));
+  position.systems[0].ships[0][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_LARGE);
+  position.systems[0].ships[0][1] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE);
+  g_assert_true(ggame_model_set_position(model, &position));
+
+  test_homeworlds_assert_action_button_label(root, HOMEWORLDS_STEP_PASS, "Pass");
+
+  g_assert_true(homeworlds_view_apply_candidate_at(view, 0));
+  test_homeworlds_assert_action_button_label(root, HOMEWORLDS_STEP_ATTACK, "Capture");
+  test_homeworlds_assert_action_button_label(root, HOMEWORLDS_STEP_MOVE, "Move");
+  test_homeworlds_assert_action_button_label(root, HOMEWORLDS_STEP_BUILD, "Build");
+  test_homeworlds_assert_action_button_label(root, HOMEWORLDS_STEP_TRADE, "Trade");
+
+  homeworlds_view_free(view);
+  g_object_unref(model);
+}
+
 static void test_homeworlds_view_trade_targets_use_bank_buttons(void) {
   HomeworldsPosition position = {0};
   GGameModel *model = ggame_model_new(&homeworlds_game_backend);
@@ -659,6 +697,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/window/setup-recorded-in-sgf", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/setup-bank-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/board-ship-buttons", test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/view/action-button-labels", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/trade-bank-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/attack-board-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/move-board-bank-buttons", test_homeworlds_window_skip);
@@ -670,6 +709,7 @@ int main(int argc, char **argv) {
                     test_homeworlds_window_setup_moves_are_recorded_in_sgf);
     g_test_add_func("/homeworlds/view/setup-bank-buttons", test_homeworlds_view_setup_uses_board_bank_buttons);
     g_test_add_func("/homeworlds/view/board-ship-buttons", test_homeworlds_view_uses_board_ship_buttons);
+    g_test_add_func("/homeworlds/view/action-button-labels", test_homeworlds_view_action_buttons_use_plain_labels);
     g_test_add_func("/homeworlds/view/trade-bank-buttons", test_homeworlds_view_trade_targets_use_bank_buttons);
     g_test_add_func("/homeworlds/view/attack-board-buttons", test_homeworlds_view_attack_targets_use_board_buttons);
     g_test_add_func("/homeworlds/view/move-board-bank-buttons",

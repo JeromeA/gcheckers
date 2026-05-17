@@ -347,7 +347,7 @@ static gboolean homeworlds_position_apply_setup_move(HomeworldsPosition *positio
   return TRUE;
 }
 
-static gboolean homeworlds_position_apply_construct(HomeworldsPosition *position, const HomeworldsTurnStep *step) {
+static gboolean homeworlds_position_apply_build(HomeworldsPosition *position, const HomeworldsTurnStep *step) {
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(step != NULL, FALSE);
 
@@ -584,8 +584,8 @@ gboolean homeworlds_position_apply_turn_step(HomeworldsPosition *position, const
   switch ((HomeworldsStepKind) step->kind) {
     case HOMEWORLDS_STEP_PASS:
       return TRUE;
-    case HOMEWORLDS_STEP_CONSTRUCT:
-      return homeworlds_position_apply_construct(position, step);
+    case HOMEWORLDS_STEP_BUILD:
+      return homeworlds_position_apply_build(position, step);
     case HOMEWORLDS_STEP_TRADE:
       return homeworlds_position_apply_trade(position, step);
     case HOMEWORLDS_STEP_ATTACK:
@@ -713,7 +713,7 @@ gboolean homeworlds_position_apply_move(HomeworldsPosition *position, const Home
       HomeworldsColor action_color = HOMEWORLDS_COLOR_RED;
 
       switch ((HomeworldsStepKind) step->kind) {
-        case HOMEWORLDS_STEP_CONSTRUCT:
+        case HOMEWORLDS_STEP_BUILD:
           action_color = HOMEWORLDS_COLOR_GREEN;
           break;
         case HOMEWORLDS_STEP_TRADE:
@@ -1134,7 +1134,7 @@ static gboolean homeworlds_move_append_turn_step(GString *text, const Homeworlds
   }
 
   switch ((HomeworldsStepKind)step->kind) {
-    case HOMEWORLDS_STEP_CONSTRUCT:
+    case HOMEWORLDS_STEP_BUILD:
       g_string_append_c(text, '+');
       return TRUE;
     case HOMEWORLDS_STEP_TRADE:
@@ -1285,7 +1285,7 @@ static gboolean homeworlds_move_parse_turn_step(const char **cursor, HomeworldsT
 
   switch (**cursor) {
     case '+':
-      out_step->kind = HOMEWORLDS_STEP_CONSTRUCT;
+      out_step->kind = HOMEWORLDS_STEP_BUILD;
       (*cursor)++;
       return TRUE;
     case '=':

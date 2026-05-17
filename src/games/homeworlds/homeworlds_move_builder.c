@@ -369,7 +369,7 @@ static GameBackendMoveList homeworlds_builder_list_actions(const HomeworldsMoveB
         homeworlds_system_has_access_to_color(system, side, HOMEWORLDS_COLOR_GREEN)) {
       HomeworldsMoveCandidate candidate = {
         .data.kind = HOMEWORLDS_CANDIDATE_ACTION,
-        .data.target_color = HOMEWORLDS_STEP_CONSTRUCT,
+        .data.target_color = HOMEWORLDS_STEP_BUILD,
       };
       homeworlds_candidate_buffer_append(&buffer, &candidate);
     } else if (forced_color == HOMEWORLDS_COLOR_BLUE &&
@@ -413,11 +413,11 @@ static GameBackendMoveList homeworlds_builder_list_actions(const HomeworldsMoveB
     homeworlds_candidate_buffer_append(&buffer, &move);
   }
   if (homeworlds_system_has_access_to_color(system, side, HOMEWORLDS_COLOR_GREEN)) {
-    HomeworldsMoveCandidate construct = {
+    HomeworldsMoveCandidate build = {
       .data.kind = HOMEWORLDS_CANDIDATE_ACTION,
-      .data.target_color = HOMEWORLDS_STEP_CONSTRUCT,
+      .data.target_color = HOMEWORLDS_STEP_BUILD,
     };
-    homeworlds_candidate_buffer_append(&buffer, &construct);
+    homeworlds_candidate_buffer_append(&buffer, &build);
   }
   if (homeworlds_system_has_access_to_color(system, side, HOMEWORLDS_COLOR_BLUE)) {
     HomeworldsMoveCandidate trade = {
@@ -701,7 +701,7 @@ gboolean homeworlds_move_builder_step(GameBackendMoveBuilder *builder, const Hom
       if (candidate->data.kind != HOMEWORLDS_CANDIDATE_ACTION) {
         return FALSE;
       }
-      if (candidate->data.target_color == HOMEWORLDS_STEP_CONSTRUCT) {
+      if (candidate->data.target_color == HOMEWORLDS_STEP_BUILD) {
         homeworlds_builder_consume_pending_action(state);
         return homeworlds_builder_commit_action(state, &step);
       }
