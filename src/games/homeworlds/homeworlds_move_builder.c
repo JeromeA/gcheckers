@@ -478,6 +478,7 @@ static GameBackendMoveList homeworlds_builder_list_attack_targets(const Homeworl
   const HomeworldsSystem *system = NULL;
   HomeworldsPyramid attacker = 0;
   guint selected_ship_slot = 0;
+  gboolean seen_pyramids[13] = {FALSE};
 
   g_return_val_if_fail(state != NULL, (GameBackendMoveList){0});
   g_return_val_if_fail(homeworlds_builder_find_selected_ship_slot(state, &selected_ship_slot),
@@ -492,9 +493,13 @@ static GameBackendMoveList homeworlds_builder_list_attack_targets(const Homeworl
     if (!homeworlds_pyramid_is_valid(target)) {
       continue;
     }
+    if (seen_pyramids[target]) {
+      continue;
+    }
     if (homeworlds_pyramid_size(attacker) < homeworlds_pyramid_size(target)) {
       continue;
     }
+    seen_pyramids[target] = TRUE;
 
     HomeworldsMoveCandidate candidate = {
       .data.kind = HOMEWORLDS_CANDIDATE_ATTACK_TARGET,
@@ -510,6 +515,7 @@ static GameBackendMoveList homeworlds_builder_list_attack_targets(const Homeworl
 static GameBackendMoveList homeworlds_builder_list_move_targets(const HomeworldsMoveBuilderState *state) {
   HomeworldsCandidateBuffer buffer = {0};
   const HomeworldsSystem *from_system = NULL;
+  gboolean seen_discovery_stars[13] = {FALSE};
 
   g_return_val_if_fail(state != NULL, (GameBackendMoveList){0});
   from_system = &state->working_position.systems[state->selected_system_index];
@@ -535,6 +541,9 @@ static GameBackendMoveList homeworlds_builder_list_move_targets(const Homeworlds
     if (!homeworlds_pyramid_is_valid(star)) {
       continue;
     }
+    if (seen_discovery_stars[star]) {
+      continue;
+    }
 
     HomeworldsSystem temporary = {0};
     temporary.stars[0] = star;
@@ -548,6 +557,7 @@ static GameBackendMoveList homeworlds_builder_list_move_targets(const Homeworlds
       .data.pyramid = star,
     };
     homeworlds_candidate_buffer_append(&buffer, &candidate);
+    seen_discovery_stars[star] = TRUE;
   }
 
   return homeworlds_candidate_buffer_finish(&buffer);

@@ -512,6 +512,8 @@ selection, source-ship selection, action choice, and target-specific substages f
 Sacrifices are modeled as a prefix step that fixes the remaining action color and count, after which the builder loops
 back through source-ship selection for each granted action. Candidate data can still use transient slot indexes for UI
 selection, but committed move steps are converted to symbolic references before they are applied or saved to SGF.
+Physically interchangeable choices, such as identical bank stars for discovery or identical enemy ships for capture,
+are deduplicated before they become user-visible choices.
 Collaborates with: `homeworlds_game.c`, `homeworlds_backend.c`, `homeworlds_view.c`, and
 `tests/test_homeworlds_backend.c`.
 

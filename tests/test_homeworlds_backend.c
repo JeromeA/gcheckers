@@ -346,6 +346,73 @@ static void test_backend_move_builder_completes_turn(void) {
   backend->move_builder_clear(&builder);
 }
 
+static void test_backend_move_builder_deduplicates_discovery_stars(void) {
+  const GameBackend *backend = &homeworlds_game_backend;
+  HomeworldsPosition position = {0};
+  HomeworldsPyramid yellow_large = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_LARGE);
+  HomeworldsPyramid blue_large = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE);
+  GameBackendMoveBuilder builder = {0};
+  GameBackendMoveList candidates = {0};
+  const HomeworldsMoveCandidate *selected_ship = NULL;
+  const HomeworldsMoveCandidate *move_action = NULL;
+  guint blue_large_discoveries = 0;
+  gboolean seen_discovery_stars[13] = {FALSE};
+
+  test_prepare_position(&position);
+  position.systems[0].ships[0][0] = yellow_large;
+  assert(backend->move_builder_init(&position, &builder));
+
+  candidates = backend->move_builder_list_candidates(&builder);
+  for (gsize i = 0; i < candidates.count; ++i) {
+    const HomeworldsMoveCandidate *candidate = backend->move_list_get(&candidates, i);
+
+    assert(candidate != NULL);
+    if (candidate->data.kind == HOMEWORLDS_CANDIDATE_SELECT_SHIP &&
+        candidate->data.system_index == 0 &&
+        candidate->data.pyramid == yellow_large) {
+      selected_ship = candidate;
+      break;
+    }
+  }
+  assert(selected_ship != NULL);
+  assert(backend->move_builder_step(&builder, selected_ship));
+  backend->move_list_free(&candidates);
+
+  candidates = backend->move_builder_list_candidates(&builder);
+  for (gsize i = 0; i < candidates.count; ++i) {
+    const HomeworldsMoveCandidate *candidate = backend->move_list_get(&candidates, i);
+
+    assert(candidate != NULL);
+    if (candidate->data.kind == HOMEWORLDS_CANDIDATE_ACTION &&
+        candidate->data.target_color == HOMEWORLDS_STEP_MOVE) {
+      move_action = candidate;
+      break;
+    }
+  }
+  assert(move_action != NULL);
+  assert(backend->move_builder_step(&builder, move_action));
+  backend->move_list_free(&candidates);
+
+  candidates = backend->move_builder_list_candidates(&builder);
+  for (gsize i = 0; i < candidates.count; ++i) {
+    const HomeworldsMoveCandidate *candidate = backend->move_list_get(&candidates, i);
+
+    assert(candidate != NULL);
+    if (candidate->data.kind != HOMEWORLDS_CANDIDATE_MOVE_TARGET ||
+        candidate->data.target_system_index != HOMEWORLDS_INVALID_INDEX) {
+      continue;
+    }
+
+    assert(homeworlds_pyramid_is_valid(candidate->data.pyramid));
+    assert(!seen_discovery_stars[candidate->data.pyramid]);
+    seen_discovery_stars[candidate->data.pyramid] = TRUE;
+    blue_large_discoveries += candidate->data.pyramid == blue_large;
+  }
+  assert(blue_large_discoveries == 1);
+  backend->move_list_free(&candidates);
+  backend->move_builder_clear(&builder);
+}
+
 static void test_backend_good_moves_are_subset_and_ordered(void) {
   const GameBackend *backend = &homeworlds_game_backend;
   HomeworldsPosition position = {0};
@@ -728,6 +795,7 @@ int main(void) {
   test_backend_move_builder_completes_setup();
   test_backend_move_builder_setup_accepts_all_pyramid_sizes();
   test_backend_move_builder_completes_turn();
+  test_backend_move_builder_deduplicates_discovery_stars();
   test_backend_good_moves_are_subset_and_ordered();
   test_backend_good_moves_follow_setup_policy_without_truncation();
   test_backend_good_moves_first_turn_always_builds();

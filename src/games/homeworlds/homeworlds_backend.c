@@ -123,6 +123,12 @@ static gboolean homeworlds_backend_move_buffer_append(HomeworldsMoveBuffer *buff
   g_return_val_if_fail(buffer != NULL, FALSE);
   g_return_val_if_fail(move != NULL, FALSE);
 
+  for (gsize i = 0; i < buffer->count; ++i) {
+    if (homeworlds_backend_moves_equal(&buffer->moves[i], move)) {
+      return TRUE;
+    }
+  }
+
   if (buffer->count == buffer->capacity) {
     gsize next_capacity = buffer->capacity == 0 ? 16 : buffer->capacity * 2;
     HomeworldsMove *next_moves = g_realloc_n(buffer->moves, next_capacity, sizeof(*next_moves));

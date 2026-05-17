@@ -429,3 +429,16 @@ generic `catastrophe` string instead of a replayable move.
 The fix represents catastrophes as normal symbolic `HomeworldsMove` steps such as `G3 y!`. The view now submits that
 move through the same completion path as other Homeworlds actions, while the rules engine allows catastrophe-only
 moves without advancing the turn.
+
+## Homeworlds discovery listed identical bank stars as separate choices
+
+The Homeworlds move builder should expose one discovery choice per symbolic new star, not one choice per physical copy
+of that pyramid in the bank.
+
+Discovery target generation scanned every bank slot and appended a candidate for each matching physical pyramid. If
+the bank still had multiple `B3` pyramids, the UI showed multiple `B3` discovery choices even though all of them would
+produce the same symbolic move.
+
+The fix deduplicates discovery candidates by pyramid before they are shown, also deduplicates identical capture targets
+and completed backend moves, and keeps committed moves represented by symbolic system/ship references rather than bank
+slots.
