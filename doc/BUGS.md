@@ -416,3 +416,16 @@ nodes therefore left the panel showing stale text from the previous direct inter
 The fix adds a generic board-host SGF synchronization hook in the app profile UI hooks and implements it for
 Homeworlds by parsing the selected SGF node's move property. The shared window calls this hook on every current-node
 change, so the Homeworlds side panel now updates during SGF timeline navigation.
+
+## Homeworlds manual catastrophes bypassed SGF recording
+
+Homeworlds catastrophes are free actions that can happen at any time, but they should still be recorded in SGF and
+shown in the same notation as other moves.
+
+The catastrophe buttons mutated a copied position directly and then replaced the model state. That kept the board
+visually correct, but skipped the shared move handler, so no SGF node was appended and the last-move label displayed a
+generic `catastrophe` string instead of a replayable move.
+
+The fix represents catastrophes as normal symbolic `HomeworldsMove` steps such as `G3 y!`. The view now submits that
+move through the same completion path as other Homeworlds actions, while the rules engine allows catastrophe-only
+moves without advancing the turn.

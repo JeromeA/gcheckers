@@ -6,14 +6,37 @@
 #include "../src/games/homeworlds/homeworlds_move_builder.h"
 #include "../src/sgf_tree.h"
 
-static HomeworldsMove test_setup_move(guint side,
+static HomeworldsSystemRef test_homeworld_ref(guint side) {
+  assert(side < 2);
+
+  return (HomeworldsSystemRef){
+    .kind = HOMEWORLDS_SYSTEM_REF_HOMEWORLD,
+    .homeworld_side = side,
+  };
+}
+
+static HomeworldsSystemRef test_star_ref(HomeworldsColor color, HomeworldsSize size, guint duplicate_index) {
+  return (HomeworldsSystemRef){
+    .kind = HOMEWORLDS_SYSTEM_REF_STAR,
+    .duplicate_index = (guint8)duplicate_index,
+    .star = homeworlds_pyramid_make(color, size),
+  };
+}
+
+static HomeworldsShipRef test_ship_ref(HomeworldsSystemRef system, HomeworldsColor color, HomeworldsSize size) {
+  return (HomeworldsShipRef){
+    .system = system,
+    .ship = homeworlds_pyramid_make(color, size),
+  };
+}
+
+static HomeworldsMove test_setup_move(guint /*side*/,
                                       HomeworldsPyramid first_star,
                                       HomeworldsPyramid second_star,
                                       HomeworldsPyramid ship) {
   HomeworldsMove move = {0};
 
   move.kind = HOMEWORLDS_MOVE_KIND_SETUP;
-  move.acting_side = side;
   move.setup_stars[0] = first_star;
   move.setup_stars[1] = second_star;
   move.setup_ship = ship;
@@ -138,27 +161,37 @@ static void test_backend_move_codec_roundtrips_setup_and_turn(void) {
                                          homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE));
   HomeworldsMove turn = {
     .kind = HOMEWORLDS_MOVE_KIND_TURN,
-    .acting_side = 0,
     .step_count = 2,
     .steps = {
       {
         .kind = HOMEWORLDS_STEP_SACRIFICE,
-        .system_index = 0,
-        .ship_owner = 0,
-        .ship_slot = 0,
+        .actor = test_ship_ref(test_homeworld_ref(0), HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE),
       },
       {
         .kind = HOMEWORLDS_STEP_TRADE,
-        .system_index = 0,
-        .ship_owner = 0,
-        .ship_slot = 1,
+        .actor = test_ship_ref(test_homeworld_ref(0), HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE),
         .target_color = HOMEWORLDS_COLOR_GREEN,
       },
     },
   };
+  char notation[128] = {0};
+  HomeworldsMove parsed = {0};
 
   test_backend_move_roundtrips(&setup);
   test_backend_move_roundtrips(&turn);
+  assert(homeworlds_move_format(&setup, notation, sizeof(notation)));
+  assert(strcmp(notation, "R1B2g3") == 0);
+  assert(homeworlds_move_format(&turn, notation, sizeof(notation)));
+  assert(strcmp(notation, "H1 g3-/H1 r3=g") == 0);
+  assert(homeworlds_move_parse("Y2B1g3", &parsed));
+  assert(homeworlds_move_format(&parsed, notation, sizeof(notation)));
+  assert(strcmp(notation, "Y2B1g3") == 0);
+  assert(homeworlds_move_parse("G3 y2>G2 G3 y!", &parsed));
+  assert(homeworlds_move_format(&parsed, notation, sizeof(notation)));
+  assert(strcmp(notation, "G3 y2>G2 G3 y!") == 0);
+  assert(homeworlds_move_parse("pass", &parsed));
+  assert(homeworlds_move_format(&parsed, notation, sizeof(notation)));
+  assert(strcmp(notation, "pass") == 0);
 }
 
 static void test_backend_sgf_snapshot_roundtrips_position(void) {
@@ -328,7 +361,7 @@ static void test_backend_good_moves_are_subset_and_ordered(void) {
   assert(good_moves.count >= 2);
   assert(backend->format_move(backend->move_list_get(&good_moves, 0), first_text, sizeof(first_text)));
   assert(backend->format_move(backend->move_list_get(&good_moves, 1), second_text, sizeof(second_text)));
-  assert(first_text[0] == 'T');
+  assert(first_text[0] == 'H' || strchr("RYGB", first_text[0]) != NULL);
   assert(strcmp(first_text, second_text) != 0);
   backend->move_list_free(&good_moves);
 }
@@ -514,7 +547,9 @@ static void test_backend_good_moves_keep_last_homeworld_ship(void) {
     for (guint step_index = 0; step_index < move->step_count; ++step_index) {
       const HomeworldsTurnStep *step = &move->steps[step_index];
 
-      if (step->system_index != 0 || step->ship_owner != 0 || step->ship_slot != 0) {
+      if (step->actor.system.kind != HOMEWORLDS_SYSTEM_REF_HOMEWORLD ||
+          step->actor.system.homeworld_side != 0 ||
+          step->actor.ship != homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_LARGE)) {
         continue;
       }
       assert(step->kind != HOMEWORLDS_STEP_SACRIFICE);
@@ -578,7 +613,9 @@ static void test_backend_good_moves_skip_unsafe_construct_catastrophe(void) {
     for (guint step_index = 0; step_index < move->step_count; ++step_index) {
       const HomeworldsTurnStep *step = &move->steps[step_index];
 
-      assert(step->kind != HOMEWORLDS_STEP_CONSTRUCT || step->system_index != 0);
+      assert(step->kind != HOMEWORLDS_STEP_CONSTRUCT ||
+             step->actor.system.kind != HOMEWORLDS_SYSTEM_REF_HOMEWORLD ||
+             step->actor.system.homeworld_side != 0);
     }
   }
   backend->move_list_free(&good_moves);
@@ -620,15 +657,12 @@ static void test_backend_moving_last_ship_out_of_homeworld_loses_immediately(voi
   };
   HomeworldsMove move = {
     .kind = HOMEWORLDS_MOVE_KIND_TURN,
-    .acting_side = 0,
     .step_count = 1,
     .steps = {
       {
         .kind = HOMEWORLDS_STEP_MOVE,
-        .system_index = 0,
-        .ship_owner = 0,
-        .ship_slot = 0,
-        .target_system_index = 2,
+        .actor = test_ship_ref(test_homeworld_ref(0), HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL),
+        .target_system = test_star_ref(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE, 0),
       },
     },
   };
@@ -671,16 +705,12 @@ static void test_backend_destroying_opponent_homeworld_wins_immediately(void) {
   };
   HomeworldsMove move = {
     .kind = HOMEWORLDS_MOVE_KIND_TURN,
-    .acting_side = 0,
     .step_count = 1,
     .steps = {
       {
         .kind = HOMEWORLDS_STEP_ATTACK,
-        .system_index = 1,
-        .ship_owner = 0,
-        .ship_slot = 0,
-        .target_ship_owner = 1,
-        .target_ship_slot = 0,
+        .actor = test_ship_ref(test_homeworld_ref(1), HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE),
+        .target_ship = test_ship_ref(test_homeworld_ref(1), HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL),
       },
     },
   };

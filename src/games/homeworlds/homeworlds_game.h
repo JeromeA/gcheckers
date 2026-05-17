@@ -18,6 +18,12 @@ gboolean homeworlds_position_apply_move(HomeworldsPosition *position, const Home
 gboolean homeworlds_position_apply_catastrophe(HomeworldsPosition *position, guint system_index, HomeworldsColor color);
 gboolean homeworlds_position_apply_turn_step(HomeworldsPosition *position, const HomeworldsTurnStep *step);
 void homeworlds_position_finish_turn(HomeworldsPosition *position);
+gboolean homeworlds_position_system_ref_for_index(const HomeworldsPosition *position,
+                                                  guint system_index,
+                                                  HomeworldsSystemRef *out_ref);
+gboolean homeworlds_position_resolve_system_ref(const HomeworldsPosition *position,
+                                                const HomeworldsSystemRef *ref,
+                                                guint *out_system_index);
 
 gboolean homeworlds_system_is_connected(const HomeworldsSystem *left, const HomeworldsSystem *right);
 guint homeworlds_system_ship_count_for_side(const HomeworldsSystem *system, guint side);

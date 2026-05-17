@@ -108,10 +108,15 @@ static const void *homeworlds_backend_move_list_get(const GameBackendMoveList *m
 }
 
 static gboolean homeworlds_backend_moves_equal(gconstpointer left, gconstpointer right) {
+  char left_text[128] = {0};
+  char right_text[128] = {0};
+
   g_return_val_if_fail(left != NULL, FALSE);
   g_return_val_if_fail(right != NULL, FALSE);
 
-  return memcmp(left, right, sizeof(HomeworldsMove)) == 0;
+  return homeworlds_move_format(left, left_text, sizeof(left_text)) &&
+         homeworlds_move_format(right, right_text, sizeof(right_text)) &&
+         strcmp(left_text, right_text) == 0;
 }
 
 static gboolean homeworlds_backend_move_buffer_append(HomeworldsMoveBuffer *buffer, const HomeworldsMove *move) {
@@ -212,16 +217,17 @@ static gboolean homeworlds_backend_setup_includes_green(const HomeworldsMove *mo
 static gboolean homeworlds_backend_setup_move_is_good(const HomeworldsMoveBuilderState *state,
                                                       const HomeworldsMove *move) {
   guint star_size_mask = 0;
+  guint side = 0;
 
   g_return_val_if_fail(state != NULL, FALSE);
   g_return_val_if_fail(move != NULL, FALSE);
 
-  if (move->kind != HOMEWORLDS_MOVE_KIND_SETUP || move->acting_side > 1 ||
-      !homeworlds_backend_setup_colors_are_distinct(move) ||
+  side = state->working_position.turn;
+  if (move->kind != HOMEWORLDS_MOVE_KIND_SETUP || side > 1 || !homeworlds_backend_setup_colors_are_distinct(move) ||
       homeworlds_pyramid_size(move->setup_ship) != HOMEWORLDS_SIZE_LARGE) {
     return FALSE;
   }
-  if (move->acting_side == 0 && !homeworlds_backend_setup_includes_green(move)) {
+  if (side == 0 && !homeworlds_backend_setup_includes_green(move)) {
     return FALSE;
   }
 
@@ -230,8 +236,7 @@ static gboolean homeworlds_backend_setup_move_is_good(const HomeworldsMoveBuilde
     return FALSE;
   }
 
-  if (move->acting_side == 1 &&
-      star_size_mask == homeworlds_backend_homeworld_star_size_mask(&state->working_position, 0)) {
+  if (side == 1 && star_size_mask == homeworlds_backend_homeworld_star_size_mask(&state->working_position, 0)) {
     return FALSE;
   }
 

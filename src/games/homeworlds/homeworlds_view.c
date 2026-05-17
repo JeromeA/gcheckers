@@ -1155,7 +1155,10 @@ static void homeworlds_view_append_candidate_button(HomeworldsView *view, const 
 static void homeworlds_view_catastrophe_clicked(GtkButton *button, gpointer user_data) {
   HomeworldsView *view = user_data;
   const HomeworldsPosition *position = NULL;
-  HomeworldsPosition next = {0};
+  HomeworldsMove move = {
+    .kind = HOMEWORLDS_MOVE_KIND_TURN,
+    .step_count = 1,
+  };
   guint system_index = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(button), "homeworlds-system-index"));
   guint color = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(button), "homeworlds-color"));
 
@@ -1169,19 +1172,15 @@ static void homeworlds_view_catastrophe_clicked(GtkButton *button, gpointer user
 
   position = ggame_model_peek_position(view->model);
   g_return_if_fail(position != NULL);
-  next = *position;
-  if (!homeworlds_position_apply_catastrophe(&next, system_index, (HomeworldsColor) color)) {
-    g_debug("Homeworlds catastrophe button did not match a legal catastrophe");
+  move.steps[0].kind = HOMEWORLDS_STEP_CATASTROPHE;
+  move.steps[0].target_color = (guint8)color;
+  if (!homeworlds_position_system_ref_for_index(position, system_index, &move.steps[0].target_system)) {
+    g_debug("Unable to format Homeworlds catastrophe system");
     return;
   }
 
-  if (!ggame_model_set_position(view->model, &next)) {
-    g_debug("Unable to update model after Homeworlds catastrophe");
-    return;
-  }
-  gtk_label_set_text(GTK_LABEL(view->last_move_label), "catastrophe");
-  if (view->move_applied != NULL) {
-    view->move_applied(view, view->move_applied_data);
+  if (!homeworlds_view_apply_completed_move(view, &move)) {
+    g_debug("Homeworlds catastrophe button did not match a legal catastrophe");
   }
   homeworlds_view_refresh(view);
 }

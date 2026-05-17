@@ -492,11 +492,14 @@ Module: slot-based Homeworlds rules engine.
 Role: represent Homeworlds positions as fixed-size slots: a 36-slot bank, 16 system slots (systems `0` and `1` are
 the players' homeworlds), two star slots per system, and fourteen ship slots per side per system. Inline helpers in
 `homeworlds_types.h` own pyramid encoding/decoding and low-level slot semantics so the representation can change in
-one place later if needed.
+one place later if needed. `HomeworldsMove` does not store physical slot indexes or an acting side; it stores the same
+symbolic system and ship references used by notation (`H1`, `G3'`, `g2`, etc.), and the rules engine resolves those
+references against the current position at apply time.
 Rules covered: setup, construct, trade, attack, move, discover, sacrifice, catastrophe resolution, empty-system
 cleanup, end-of-turn homeworld loss detection for either side, static evaluation, terminal scoring, hashing, compact
-move formatting/parsing, and whole-position SGF snapshots in `homeworlds_sgf_position.c`. Static evaluation counts
-ship material and repeats the largest own ship at each player's homeworld.
+move formatting/parsing, and whole-position SGF snapshots in `homeworlds_sgf_position.c`. Move notation uses pyramid
+letters and sizes directly, such as `Y2B1g3`, `H1 g1+`, `G3 y2>G2 G3 y!`, and `pass`. Static evaluation counts ship
+material and repeats the largest own ship at each player's homeworld.
 Collaborates with: `homeworlds_move_builder.c`, `homeworlds_backend.c`, `homeworlds_sgf_position.c`,
 `homeworlds_view.c`, `tests/test_homeworlds_game.c`, and `tests/test_homeworlds_backend.c`.
 
@@ -507,7 +510,8 @@ Role: expose incremental legal choices without enumerating the full legal move s
 of the position plus the partial move under construction, and advances through setup-star selection, setup-ship
 selection, source-ship selection, action choice, and target-specific substages for trade, attack, and move/discover.
 Sacrifices are modeled as a prefix step that fixes the remaining action color and count, after which the builder loops
-back through source-ship selection for each granted action.
+back through source-ship selection for each granted action. Candidate data can still use transient slot indexes for UI
+selection, but committed move steps are converted to symbolic references before they are applied or saved to SGF.
 Collaborates with: `homeworlds_game.c`, `homeworlds_backend.c`, `homeworlds_view.c`, and
 `tests/test_homeworlds_backend.c`.
 
@@ -516,8 +520,8 @@ Collaborates with: `homeworlds_game.c`, `homeworlds_backend.c`, `homeworlds_view
 Module: Homeworlds board host, staged GTK view/controller, and backend-owned AI candidate policy.
 Role: let `ghomeworlds` use the shared `GGameWindow` while replacing only the square board presentation.
 `homeworlds_view.c` renders a starfield board with dynamic system boxes sized around their contents, homeworld labels,
-pipped square stars, tall pipped ship pyramids, overlaid clickable bank piles, staged legal-choice buttons, and direct
-catastrophe buttons.
+pipped square stars, tall pipped ship pyramids, overlaid clickable bank piles, staged legal-choice buttons, and
+catastrophe buttons that submit normal symbolic moves so SGF, model state, and the last-move label stay synchronized.
 Homeworld rendering keeps player 1 at the bottom, player 2 at the top, and places each homeworld's own ships beside
 its stars from that player's perspective. During setup, the bank piles on the board are real `GtkButton`s that feed
 the staged builder directly, so start stars and the start ship do not require a long side-panel button list. During

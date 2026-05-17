@@ -51,6 +51,12 @@ typedef enum {
 } HomeworldsStepKind;
 
 typedef enum {
+  HOMEWORLDS_SYSTEM_REF_NONE = 0,
+  HOMEWORLDS_SYSTEM_REF_HOMEWORLD,
+  HOMEWORLDS_SYSTEM_REF_STAR,
+} HomeworldsSystemRefKind;
+
+typedef enum {
   HOMEWORLDS_CANDIDATE_NONE = 0,
   HOMEWORLDS_CANDIDATE_SETUP_STAR,
   HOMEWORLDS_CANDIDATE_SETUP_SHIP,
@@ -68,19 +74,26 @@ typedef struct {
 
 typedef struct {
   guint8 kind;
-  guint8 system_index;
-  guint8 ship_owner;
-  guint8 ship_slot;
-  guint8 target_system_index;
-  guint8 target_ship_owner;
-  guint8 target_ship_slot;
+  guint8 homeworld_side;
+  guint8 duplicate_index;
+  HomeworldsPyramid star;
+} HomeworldsSystemRef;
+
+typedef struct {
+  HomeworldsSystemRef system;
+  HomeworldsPyramid ship;
+} HomeworldsShipRef;
+
+typedef struct {
+  guint8 kind;
+  HomeworldsShipRef actor;
+  HomeworldsSystemRef target_system;
+  HomeworldsShipRef target_ship;
   guint8 target_color;
-  HomeworldsPyramid pyramid;
 } HomeworldsTurnStep;
 
 typedef struct {
   guint8 kind;
-  guint8 acting_side;
   guint8 step_count;
   HomeworldsPyramid setup_stars[HOMEWORLDS_STAR_SLOT_COUNT];
   HomeworldsPyramid setup_ship;
