@@ -133,8 +133,17 @@ static const char *ggame_style_css =
     "  border-color: rgba(245, 245, 245, 0.95);"
     "}"
     "button.homeworlds-bank-choice {"
+    "  min-width: 0;"
+    "  min-height: 0;"
+    "  padding: 0;"
+    "  background-color: transparent;"
+    "  background-image: none;"
     "  border: 1px solid rgba(220, 220, 220, 0.85);"
     "  border-radius: 8px;"
+    "}"
+    "button.homeworlds-bank-choice:hover {"
+    "  background-color: rgba(220, 220, 220, 0.14);"
+    "  border-color: rgba(245, 245, 245, 0.95);"
     "}"
     "scale { padding: 0; }";
 

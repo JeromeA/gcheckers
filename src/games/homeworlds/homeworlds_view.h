@@ -52,6 +52,12 @@ gboolean homeworlds_view_calculate_homeworld_layout(guint system_index,
                                                     double center_x,
                                                     double center_y,
                                                     HomeworldsViewHomeworldLayout *out_layout);
+gboolean homeworlds_view_calculate_system_center(const HomeworldsPosition *position,
+                                                 guint system_index,
+                                                 double width,
+                                                 double height,
+                                                 double *out_x,
+                                                 double *out_y);
 gboolean homeworlds_view_pyramid_metrics(HomeworldsSize size, HomeworldsViewPyramidMetrics *out_metrics);
 double homeworlds_view_pip_radius(void);
 double homeworlds_view_star_side(HomeworldsSize size);

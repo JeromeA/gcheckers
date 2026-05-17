@@ -505,6 +505,7 @@ static GameBackendMoveList homeworlds_builder_list_attack_targets(const Homeworl
       .data.kind = HOMEWORLDS_CANDIDATE_ATTACK_TARGET,
       .data.target_ship_owner = state->working_position.turn == 0 ? 1 : 0,
       .data.target_ship_slot = slot,
+      .data.pyramid = target,
     };
     homeworlds_candidate_buffer_append(&buffer, &candidate);
   }

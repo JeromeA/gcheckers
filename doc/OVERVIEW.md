@@ -35,9 +35,9 @@ highlight, promotion confirmation button, and boop color styling while keeping t
 the board host replaces the square `BoardView` presentation with the system graph, bank piles, staged-choice controls,
 and catastrophe controls while still routing completed moves through the shared SGF controller.
 Collaborates with: `ggame_style_init()` for CSS, model signals for refresh, profile feature flags to enable/disable
-actions, and SGF analysis signals to reset player dropdowns. Computer turns are routed by control mode with
-alpha-beta depth configured from the shared `Computer depth` slider (`0..16`). Uses a three-pane layout: board and
-player controls (left), SGF mode selector and SGF view (middle), and analysis (right). Analysis is launched from
+actions, and SGF navigation signals to synchronize analysis and board-host state. Computer turns are routed by control
+mode with alpha-beta depth configured from the shared `Computer depth` slider (`0..16`). Uses a three-pane layout: board
+and player controls (left), SGF mode selector and SGF view (middle), and analysis (right). Analysis is launched from
 shared window actions exposed in the `Analysis` menubar submenu: current-position analysis iterates on the selected
 node, and full-game analysis always processes nodes in reverse order so TT state is reused from later positions
 first. Current-position analysis now runs through the generic backend AI API for every shared-shell build, while
@@ -56,7 +56,8 @@ restarting current-position analysis. Full-game analysis reconstructs each node 
 the same position source of truth as normal controller navigation.
 Board orientation is runtime-only window state: live games choose `follow-player`, `follow-turn`, or `fixed`
 orientation based on the new-game player modes, and SGF review/manual navigation switches back to `fixed` so analysis
-navigation does not keep rotating the board.
+navigation does not keep rotating the board. SGF navigation does not mutate the player-mode dropdowns; `User` and
+`Computer` selections persist until the user or new-game settings explicitly change them.
 Those shared board-orientation and board-input-enable decisions now come from the cached `GGameModel` through backend
 `position_turn()` and `position_outcome()` callbacks rather than directly inspecting checkers state.
 Puzzle mode starts with a modal chooser (`src/puzzle_dialog.c`) that lets the user pick one backend
@@ -197,8 +198,7 @@ Modes: side 0 / side 1 each select `User` or `Computer`, plus a shared `Computer
 Defaults: both side controls start as `User`, and labels are backend-supplied by the window (`White`/`Black` for the
 current checkers backend).
 Signals: `control-changed` for window-level coordination.
-Collaborates with: `GGameWindow` (signal handlers and `player_controls_panel_set_all_user()`) and GTK widgets
-(`GtkDropDown`, `GtkScale`).
+Collaborates with: `GGameWindow` signal handlers and GTK widgets (`GtkDropDown`, `GtkScale`).
 
 ## `Puzzle Catalog` (`src/puzzle_catalog.c`, `src/puzzle_catalog.h`)
 Module: backend-variant puzzle discovery helpers.
@@ -228,7 +228,7 @@ Collaborates with: `src/create_puzzles_runner.c`, `src/ai_search.c`, `src/puzzle
 ## `ggame_style_init()` (`src/style.c`)
 Module: `ggame_style_init()` (style helper, not a class).
 Role: installs application CSS once per process using `g_once_init_enter/leave`, including SGF disc colors and the
-colored puzzle-picker square styles.
+colored puzzle-picker square styles, plus transparent Homeworlds board/bank choice hitboxes with visible borders.
 Owns: CSS string and `GtkCssProvider` setup.
 Collaborates with: `GdkDisplay`/`GtkStyleContext` and is invoked by `GGameWindow`.
 
@@ -521,15 +521,17 @@ Collaborates with: `homeworlds_game.c`, `homeworlds_backend.c`, `homeworlds_view
 `src/games/homeworlds/homeworlds_backend.c`)
 Module: Homeworlds board host, staged GTK view/controller, and backend-owned AI candidate policy.
 Role: let `ghomeworlds` use the shared `GGameWindow` while replacing only the square board presentation.
-`homeworlds_view.c` renders a starfield board with dynamic system boxes sized around their contents, homeworld labels,
-pipped square stars, tall pipped ship pyramids, overlaid clickable bank piles, staged legal-choice buttons, and
-catastrophe buttons that submit normal symbolic moves so SGF, model state, and the last-move label stay synchronized.
-Homeworld rendering keeps player 1 at the bottom, player 2 at the top, and places each homeworld's own ships beside
-its stars from that player's perspective. During setup, the bank piles on the board are real `GtkButton`s that feed
-the staged builder directly, so start stars and the start ship do not require a long side-panel button list. During
-normal turns, selectable ships are also overlaid as board buttons and the side panel only keeps non-board choices such
-as pass or follow-up actions. The Homeworlds board host also syncs its last-move label from SGF current-node changes so
-timeline navigation and direct play report the same move. Human interaction advances
+`homeworlds_view.c` renders a starfield board with dynamic system boxes sized around their contents, reachability-row
+placement between the two homeworlds, homeworld labels, pipped square stars, tall pipped ship pyramids, overlaid
+clickable bank piles, staged legal-choice buttons, and catastrophe buttons that submit normal symbolic moves so SGF,
+model state, and the last-move label stay synchronized. Homeworld rendering keeps player 1 at the bottom, player 2 at
+the top, and places each homeworld's own ships beside its stars from that player's perspective. During setup and target
+selection, the bank piles on the board are real `GtkButton`s that feed the staged builder directly, so start stars,
+start ships, trade colors, and discovery stars do not require a long side-panel button list. During normal turns,
+selectable ships, capture targets, and existing-system move targets are also overlaid as board buttons; the side panel
+only keeps non-board choices such as pass or follow-up actions. The Homeworlds board host also syncs its last-move
+label from SGF current-node changes so timeline navigation and direct play report the same move. Human interaction
+advances
 `homeworlds_move_builder` one visible choice at a time and sends each completed `HomeworldsMove` to the generic window
 move handler. In the app, that appends SGF nodes through `GGameSgfController`; standalone view tests can still install
 no handler and apply directly to `GGameModel`. Homeworlds intentionally does not expose a full legal move list, so the

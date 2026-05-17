@@ -959,7 +959,7 @@ static void test_ggame_window_auto_moves_when_next_player_is_computer(void) {
   g_clear_object(&app);
 }
 
-static void test_ggame_window_sgf_navigation_resets_controls_to_user(void) {
+static void test_ggame_window_sgf_navigation_preserves_player_controls(void) {
   GtkApplication *app = test_ggame_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
   GGameWindow *window = test_ggame_window_new(app, model);
@@ -986,8 +986,16 @@ static void test_ggame_window_sgf_navigation_resets_controls_to_user(void) {
   g_signal_emit_by_name(view, "node-selected", node);
   test_ggame_window_drain_main_context(16);
 
-  g_assert_true(player_controls_panel_is_user_control(panel, 0));
-  g_assert_true(player_controls_panel_is_user_control(panel, 1));
+  g_assert_cmpuint(player_controls_panel_get_mode(panel, 0), ==, PLAYER_CONTROL_MODE_USER);
+  g_assert_cmpuint(player_controls_panel_get_mode(panel, 1), ==, PLAYER_CONTROL_MODE_COMPUTER);
+  g_assert_cmpuint(player_controls_panel_get_computer_depth(panel), ==, 8);
+
+  g_assert_true(ggame_sgf_controller_step_forward(controller));
+  test_ggame_window_drain_main_context(16);
+
+  g_assert_cmpuint(player_controls_panel_get_mode(panel, 0), ==, PLAYER_CONTROL_MODE_USER);
+  g_assert_cmpuint(player_controls_panel_get_mode(panel, 1), ==, PLAYER_CONTROL_MODE_COMPUTER);
+  g_assert_cmpuint(player_controls_panel_get_computer_depth(panel), ==, 8);
 
   g_clear_object(&window);
   g_clear_object(&model);
@@ -2392,8 +2400,8 @@ int main(int argc, char **argv) {
                   test_ggame_window_computer_selection_keeps_board_enabled);
   g_test_add_func("/gcheckers-window/auto-move-next-player-computer",
                   test_ggame_window_auto_moves_when_next_player_is_computer);
-  g_test_add_func("/gcheckers-window/sgf-navigation-resets-controls",
-                  test_ggame_window_sgf_navigation_resets_controls_to_user);
+  g_test_add_func("/gcheckers-window/sgf-navigation-preserves-controls",
+                  test_ggame_window_sgf_navigation_preserves_player_controls);
   g_test_add_func("/gcheckers-window/force-move-user-turn",
                   test_ggame_window_force_move_works_on_user_turn);
   g_test_add_func("/gcheckers-window/toolbar-actions", test_ggame_window_toolbar_actions_exist);

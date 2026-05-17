@@ -442,3 +442,29 @@ produce the same symbolic move.
 The fix deduplicates discovery candidates by pyramid before they are shown, also deduplicates identical capture targets
 and completed backend moves, and keeps committed moves represented by symbolic system/ship references rather than bank
 slots.
+
+## Homeworlds target selection stayed in the side panel and systems drifted outside the board graph
+
+Homeworlds target choices should be made on the visual object being selected: bank pyramids for setup, trade, and
+discovery; ships for activation and capture; and systems for normal movement.
+
+The view only overlaid buttons for setup bank choices and ship activation. Trade colors, capture targets, and movement
+targets still appeared as side-panel buttons, while discovered systems were placed by raw slot number in a fixed grid
+that could put a new system above player 2's homeworld instead of between the two homeworld rows.
+
+The fix reuses the same staged builder for visual target hitboxes, keeps selectable bank buttons transparent with only
+a visible border, and computes non-home system rows from reachability relative to the two homeworlds.
+
+## SGF navigation reset computer-player settings
+
+Player control settings should be persistent runtime preferences. Navigating backward in SGF history, selecting another
+node, or returning to the current head should not silently change a player from `Computer` back to `User`.
+
+The SGF controller emits `manual-requested` for timeline navigation, and the window handled that by forcing both player
+controls to user mode. That avoided automatic replies during review, but it also discarded the explicit computer-player
+configuration the user had chosen. Selecting an already-current SGF node also only emitted the manual-navigation signal,
+so the analysis report could stay stale because no `node-changed` signal was emitted.
+
+The fix keeps SGF navigation's board-orientation and analysis refresh behavior, but stops mutating the player controls.
+The selected `User`/`Computer` modes and computer depth now persist across SGF navigation and branch exploration, and
+manual SGF navigation refreshes the analysis report from the current node.

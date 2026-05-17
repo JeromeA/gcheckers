@@ -164,6 +164,26 @@ static GtkButton *test_homeworlds_find_selectable_ship_button(GtkWidget *root) {
   return NULL;
 }
 
+static GtkButton *test_homeworlds_find_selectable_system_button(GtkWidget *root) {
+  g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
+
+  if (GTK_IS_BUTTON(root) &&
+      g_object_get_data(G_OBJECT(root), "homeworlds-board-system-choice") != NULL &&
+      gtk_widget_get_sensitive(root)) {
+    return GTK_BUTTON(root);
+  }
+
+  for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
+       child = gtk_widget_get_next_sibling(child)) {
+    GtkButton *match = test_homeworlds_find_selectable_system_button(child);
+    if (match != NULL) {
+      return match;
+    }
+  }
+
+  return NULL;
+}
+
 static GtkButton *test_homeworlds_find_bank_button_for_pyramid(GtkWidget *root, HomeworldsPyramid pyramid) {
   g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
   g_return_val_if_fail(homeworlds_pyramid_is_valid(pyramid), NULL);
@@ -184,13 +204,21 @@ static GtkButton *test_homeworlds_find_bank_button_for_pyramid(GtkWidget *root, 
   return NULL;
 }
 
-static guint test_homeworlds_count_non_board_candidate_buttons(GtkWidget *root, HomeworldsCandidateKind kind) {
+static gboolean test_homeworlds_widget_is_visual_choice(GtkWidget *widget) {
+  g_return_val_if_fail(GTK_IS_WIDGET(widget), FALSE);
+
+  return g_object_get_data(G_OBJECT(widget), "homeworlds-board-bank-choice") != NULL ||
+         g_object_get_data(G_OBJECT(widget), "homeworlds-board-ship-choice") != NULL ||
+         g_object_get_data(G_OBJECT(widget), "homeworlds-board-system-choice") != NULL;
+}
+
+static guint test_homeworlds_count_non_visual_candidate_buttons(GtkWidget *root, HomeworldsCandidateKind kind) {
   guint count = 0;
 
   g_return_val_if_fail(GTK_IS_WIDGET(root), 0);
 
   if (GTK_IS_BUTTON(root) &&
-      g_object_get_data(G_OBJECT(root), "homeworlds-board-ship-choice") == NULL) {
+      !test_homeworlds_widget_is_visual_choice(root)) {
     const HomeworldsMoveCandidate *candidate = g_object_get_data(G_OBJECT(root), "homeworlds-candidate");
     if (candidate != NULL && candidate->data.kind == kind) {
       count++;
@@ -199,10 +227,61 @@ static guint test_homeworlds_count_non_board_candidate_buttons(GtkWidget *root, 
 
   for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
        child = gtk_widget_get_next_sibling(child)) {
-    count += test_homeworlds_count_non_board_candidate_buttons(child, kind);
+    count += test_homeworlds_count_non_visual_candidate_buttons(child, kind);
   }
 
   return count;
+}
+
+static GtkButton *test_homeworlds_find_non_visual_action_button(GtkWidget *root, HomeworldsStepKind action) {
+  g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
+
+  if (GTK_IS_BUTTON(root) &&
+      !test_homeworlds_widget_is_visual_choice(root)) {
+    const HomeworldsMoveCandidate *candidate = g_object_get_data(G_OBJECT(root), "homeworlds-candidate");
+    if (candidate != NULL &&
+        candidate->data.kind == HOMEWORLDS_CANDIDATE_ACTION &&
+        candidate->data.target_color == action) {
+      return GTK_BUTTON(root);
+    }
+  }
+
+  for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
+       child = gtk_widget_get_next_sibling(child)) {
+    GtkButton *match = test_homeworlds_find_non_visual_action_button(child, action);
+    if (match != NULL) {
+      return match;
+    }
+  }
+
+  return NULL;
+}
+
+static HomeworldsMove test_homeworlds_setup_move(HomeworldsPyramid first_star,
+                                                 HomeworldsPyramid second_star,
+                                                 HomeworldsPyramid ship) {
+  return (HomeworldsMove){
+    .kind = HOMEWORLDS_MOVE_KIND_SETUP,
+    .setup_stars = {first_star, second_star},
+    .setup_ship = ship,
+  };
+}
+
+static void test_homeworlds_prepare_play_position(HomeworldsPosition *position) {
+  HomeworldsMove player_1 = test_homeworlds_setup_move(
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL),
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_MEDIUM),
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE));
+  HomeworldsMove player_2 = test_homeworlds_setup_move(
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL),
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_LARGE),
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE));
+
+  g_return_if_fail(position != NULL);
+
+  homeworlds_position_init(position);
+  g_assert_true(homeworlds_position_apply_move(position, &player_1));
+  g_assert_true(homeworlds_position_apply_move(position, &player_2));
 }
 
 static void test_homeworlds_view_homeworld_layout_uses_player_perspective(void) {
@@ -220,6 +299,50 @@ static void test_homeworlds_view_homeworld_layout_uses_player_perspective(void) 
   g_assert_cmpfloat(player_2.ship_y, ==, player_2.star_y);
   g_assert_cmpfloat(player_1.ship_x, >, player_1.star_x[1]);
   g_assert_cmpfloat(player_2.ship_x, <, player_2.star_x[0]);
+}
+
+static void test_homeworlds_view_system_layout_groups_by_reachability(void) {
+  HomeworldsPosition position = {0};
+  double player_1_x = 0.0;
+  double player_1_y = 0.0;
+  double player_2_x = 0.0;
+  double player_2_y = 0.0;
+  double small_x = 0.0;
+  double small_y = 0.0;
+  double medium_x = 0.0;
+  double medium_y = 0.0;
+  double large_x = 0.0;
+  double large_y = 0.0;
+  double compact_a_x = 0.0;
+  double compact_a_y = 0.0;
+  double compact_b_x = 0.0;
+  double compact_b_y = 0.0;
+
+  position.phase = HOMEWORLDS_PHASE_PLAY;
+  position.systems[0].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL);
+  position.systems[0].stars[1] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_MEDIUM);
+  position.systems[1].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_MEDIUM);
+  position.systems[1].stars[1] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE);
+  position.systems[2].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE);
+  position.systems[3].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL);
+  position.systems[4].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_MEDIUM);
+
+  g_assert_true(homeworlds_view_calculate_system_center(&position, 0, 900.0, 600.0, &player_1_x, &player_1_y));
+  g_assert_true(homeworlds_view_calculate_system_center(&position, 1, 900.0, 600.0, &player_2_x, &player_2_y));
+  g_assert_true(homeworlds_view_calculate_system_center(&position, 2, 900.0, 600.0, &large_x, &large_y));
+  g_assert_true(homeworlds_view_calculate_system_center(&position, 3, 900.0, 600.0, &small_x, &small_y));
+  g_assert_true(homeworlds_view_calculate_system_center(&position, 4, 900.0, 600.0, &medium_x, &medium_y));
+
+  g_assert_cmpfloat(player_2_y, <, small_y);
+  g_assert_cmpfloat(small_y, <, medium_y);
+  g_assert_cmpfloat(medium_y, <, large_y);
+  g_assert_cmpfloat(large_y, <, player_1_y);
+
+  position.systems[1].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL);
+  position.systems[1].stars[1] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_MEDIUM);
+  g_assert_true(homeworlds_view_calculate_system_center(&position, 2, 900.0, 600.0, &compact_a_x, &compact_a_y));
+  g_assert_true(homeworlds_view_calculate_system_center(&position, 3, 900.0, 600.0, &compact_b_x, &compact_b_y));
+  g_assert_cmpfloat(compact_a_y, ==, compact_b_y);
 }
 
 static void test_homeworlds_view_piece_metrics_keep_pyramids_tall(void) {
@@ -381,13 +504,100 @@ static void test_homeworlds_view_uses_board_ship_buttons(void) {
   }
 
   g_assert_cmpuint(homeworlds_view_get_candidate_count(view), >, 0);
-  g_assert_cmpuint(test_homeworlds_count_non_board_candidate_buttons(root, HOMEWORLDS_CANDIDATE_SELECT_SHIP), ==, 0);
+  g_assert_cmpuint(test_homeworlds_count_non_visual_candidate_buttons(root, HOMEWORLDS_CANDIDATE_SELECT_SHIP), ==, 0);
 
   button = test_homeworlds_find_selectable_ship_button(root);
   g_assert_nonnull(button);
   g_assert_true(gtk_widget_has_css_class(GTK_WIDGET(button), "homeworlds-board-choice"));
   g_signal_emit_by_name(button, "clicked");
   g_assert_true(homeworlds_view_has_partial_selection(view));
+
+  homeworlds_view_free(view);
+  g_object_unref(model);
+}
+
+static void test_homeworlds_view_trade_targets_use_bank_buttons(void) {
+  HomeworldsPosition position = {0};
+  GGameModel *model = ggame_model_new(&homeworlds_game_backend);
+  HomeworldsView *view = homeworlds_view_new(model);
+  GtkWidget *root = homeworlds_view_get_widget(view);
+  HomeworldsPyramid blue_large = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE);
+  GtkButton *button = NULL;
+
+  test_homeworlds_prepare_play_position(&position);
+  g_assert_true(ggame_model_set_position(model, &position));
+
+  g_assert_true(homeworlds_view_apply_candidate_at(view, 0));
+  button = test_homeworlds_find_non_visual_action_button(root, HOMEWORLDS_STEP_TRADE);
+  g_assert_nonnull(button);
+  g_signal_emit_by_name(button, "clicked");
+
+  g_assert_cmpuint(test_homeworlds_count_non_visual_candidate_buttons(root, HOMEWORLDS_CANDIDATE_TRADE_COLOR), ==, 0);
+  button = test_homeworlds_find_bank_button_for_pyramid(root, blue_large);
+  g_assert_nonnull(button);
+  g_assert_true(gtk_widget_get_sensitive(GTK_WIDGET(button)));
+  g_assert_true(gtk_widget_has_css_class(GTK_WIDGET(button), "homeworlds-bank-choice"));
+  g_signal_emit_by_name(button, "clicked");
+  g_assert_false(homeworlds_view_has_partial_selection(view));
+
+  homeworlds_view_free(view);
+  g_object_unref(model);
+}
+
+static void test_homeworlds_view_attack_targets_use_board_buttons(void) {
+  HomeworldsPosition position = {0};
+  GGameModel *model = ggame_model_new(&homeworlds_game_backend);
+  HomeworldsView *view = homeworlds_view_new(model);
+  GtkWidget *root = homeworlds_view_get_widget(view);
+  GtkButton *button = NULL;
+
+  test_homeworlds_prepare_play_position(&position);
+  position.systems[0].ships[1][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL);
+  g_assert_true(ggame_model_set_position(model, &position));
+
+  g_assert_true(homeworlds_view_apply_candidate_at(view, 0));
+  button = test_homeworlds_find_non_visual_action_button(root, HOMEWORLDS_STEP_ATTACK);
+  g_assert_nonnull(button);
+  g_signal_emit_by_name(button, "clicked");
+
+  g_assert_cmpuint(test_homeworlds_count_non_visual_candidate_buttons(root, HOMEWORLDS_CANDIDATE_ATTACK_TARGET), ==, 0);
+  button = test_homeworlds_find_selectable_ship_button(root);
+  g_assert_nonnull(button);
+  g_assert_true(gtk_widget_has_css_class(GTK_WIDGET(button), "homeworlds-board-choice"));
+  g_signal_emit_by_name(button, "clicked");
+  g_assert_false(homeworlds_view_has_partial_selection(view));
+
+  homeworlds_view_free(view);
+  g_object_unref(model);
+}
+
+static void test_homeworlds_view_move_targets_use_board_and_bank_buttons(void) {
+  HomeworldsPosition position = {0};
+  GGameModel *model = ggame_model_new(&homeworlds_game_backend);
+  HomeworldsView *view = homeworlds_view_new(model);
+  GtkWidget *root = homeworlds_view_get_widget(view);
+  HomeworldsPyramid blue_large = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE);
+  GtkButton *button = NULL;
+
+  test_homeworlds_prepare_play_position(&position);
+  position.systems[0].ships[0][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_LARGE);
+  position.systems[2].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE);
+  g_assert_true(ggame_model_set_position(model, &position));
+
+  g_assert_true(homeworlds_view_apply_candidate_at(view, 0));
+  button = test_homeworlds_find_non_visual_action_button(root, HOMEWORLDS_STEP_MOVE);
+  g_assert_nonnull(button);
+  g_signal_emit_by_name(button, "clicked");
+
+  g_assert_cmpuint(test_homeworlds_count_non_visual_candidate_buttons(root, HOMEWORLDS_CANDIDATE_MOVE_TARGET), ==, 0);
+  button = test_homeworlds_find_selectable_system_button(root);
+  g_assert_nonnull(button);
+  g_assert_true(gtk_widget_has_css_class(GTK_WIDGET(button), "homeworlds-board-choice"));
+
+  button = test_homeworlds_find_bank_button_for_pyramid(root, blue_large);
+  g_assert_nonnull(button);
+  g_assert_true(gtk_widget_get_sensitive(GTK_WIDGET(button)));
+  g_assert_true(gtk_widget_has_css_class(GTK_WIDGET(button), "homeworlds-bank-choice"));
 
   homeworlds_view_free(view);
   g_object_unref(model);
@@ -424,12 +634,16 @@ int main(int argc, char **argv) {
   g_assert_true(ggame_app_profile_set_active(profile));
 
   g_test_add_func("/homeworlds/view/homeworld-layout", test_homeworlds_view_homeworld_layout_uses_player_perspective);
+  g_test_add_func("/homeworlds/view/system-layout", test_homeworlds_view_system_layout_groups_by_reachability);
   g_test_add_func("/homeworlds/view/piece-metrics", test_homeworlds_view_piece_metrics_keep_pyramids_tall);
   if (!gtk_init_check()) {
     g_test_add_func("/homeworlds/window/replaces-skeleton", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/window/setup-recorded-in-sgf", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/setup-bank-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/board-ship-buttons", test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/view/trade-bank-buttons", test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/view/attack-board-buttons", test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/view/move-board-bank-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/advances-setup", test_homeworlds_window_skip);
   } else {
     g_test_add_func("/homeworlds/window/replaces-skeleton", test_homeworlds_window_replaces_skeleton);
@@ -437,6 +651,10 @@ int main(int argc, char **argv) {
                     test_homeworlds_window_setup_moves_are_recorded_in_sgf);
     g_test_add_func("/homeworlds/view/setup-bank-buttons", test_homeworlds_view_setup_uses_board_bank_buttons);
     g_test_add_func("/homeworlds/view/board-ship-buttons", test_homeworlds_view_uses_board_ship_buttons);
+    g_test_add_func("/homeworlds/view/trade-bank-buttons", test_homeworlds_view_trade_targets_use_bank_buttons);
+    g_test_add_func("/homeworlds/view/attack-board-buttons", test_homeworlds_view_attack_targets_use_board_buttons);
+    g_test_add_func("/homeworlds/view/move-board-bank-buttons",
+                    test_homeworlds_view_move_targets_use_board_and_bank_buttons);
     g_test_add_func("/homeworlds/view/advances-setup", test_homeworlds_view_advances_setup);
   }
 

@@ -3019,8 +3019,8 @@ static void ggame_window_on_manual_requested(GGameSgfController * /*controller*/
   g_return_if_fail(self->controls_panel != NULL);
 
   ggame_window_set_board_orientation_mode(self, GGAME_WINDOW_BOARD_ORIENTATION_FIXED);
-  player_controls_panel_set_all_user(self->controls_panel);
   ggame_window_update_control_state(self);
+  ggame_window_show_analysis_for_current_node(self);
   ggame_window_refresh_analysis_graph(self);
 }
 

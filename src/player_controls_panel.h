@@ -26,7 +26,6 @@ PlayerControlsPanel *player_controls_panel_new(void);
 GtkDropDown *player_controls_panel_get_drop_down(PlayerControlsPanel *self, guint side);
 void player_controls_panel_set_selected(PlayerControlsPanel *self, guint side, guint selected);
 void player_controls_panel_set_mode(PlayerControlsPanel *self, guint side, PlayerControlMode mode);
-void player_controls_panel_set_all_user(PlayerControlsPanel *self);
 guint player_controls_panel_get_selected(PlayerControlsPanel *self, guint side);
 PlayerControlMode player_controls_panel_get_mode(PlayerControlsPanel *self, guint side);
 gboolean player_controls_panel_is_user_control(PlayerControlsPanel *self, guint side);
