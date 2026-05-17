@@ -527,7 +527,8 @@ Collaborates with: `homeworlds_game.c`, `homeworlds_backend.c`, `homeworlds_view
 Module: Homeworlds board host, staged GTK view/controller, and backend-owned AI candidate policy.
 Role: let `ghomeworlds` use the shared `GGameWindow` while replacing only the square board presentation.
 `homeworlds_view.c` renders a starfield board with dynamic system boxes sized around their contents, reachability-row
-placement between the two homeworlds, homeworld labels, pipped square stars, tall pipped ship pyramids, overlaid
+placement between the two homeworlds, bank-aware row width distribution, homeworld labels, pipped square stars, tall
+pipped ship pyramids, overlaid
 clickable bank piles, staged legal-choice buttons, and catastrophe buttons that submit normal symbolic moves so SGF,
 model state, and the last-move label stay synchronized. Homeworld rendering keeps player 1 at the bottom, player 2 at
 the top, and places each homeworld's own ships beside its stars from that player's perspective. During setup and target

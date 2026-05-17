@@ -351,6 +351,8 @@ static void test_homeworlds_view_system_layout_groups_by_reachability(void) {
   double compact_a_y = 0.0;
   double compact_b_x = 0.0;
   double compact_b_y = 0.0;
+  double compact_c_x = 0.0;
+  double compact_c_y = 0.0;
 
   position.phase = HOMEWORLDS_PHASE_PLAY;
   position.systems[0].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL);
@@ -376,7 +378,11 @@ static void test_homeworlds_view_system_layout_groups_by_reachability(void) {
   position.systems[1].stars[1] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_MEDIUM);
   g_assert_true(homeworlds_view_calculate_system_center(&position, 2, 900.0, 600.0, &compact_a_x, &compact_a_y));
   g_assert_true(homeworlds_view_calculate_system_center(&position, 3, 900.0, 600.0, &compact_b_x, &compact_b_y));
+  g_assert_true(homeworlds_view_calculate_system_center(&position, 4, 900.0, 600.0, &compact_c_x, &compact_c_y));
   g_assert_cmpfloat(compact_a_y, ==, compact_b_y);
+  g_assert_cmpfloat(compact_b_y, ==, compact_c_y);
+  g_assert_cmpfloat_with_epsilon(compact_b_x - compact_a_x, compact_c_x - compact_b_x, 0.001);
+  g_assert_cmpfloat(compact_c_x, <, 628.0);
 }
 
 static void test_homeworlds_view_piece_metrics_keep_pyramids_tall(void) {

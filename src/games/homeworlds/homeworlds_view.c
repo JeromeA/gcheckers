@@ -34,6 +34,13 @@ typedef struct {
 #define HOMEWORLDS_VIEW_SYSTEM_LABEL_HEIGHT 32.0
 #define HOMEWORLDS_VIEW_SYSTEM_CORNER_RADIUS 16.0
 #define HOMEWORLDS_VIEW_PIECE_BUTTON_PAD 5.0
+#define HOMEWORLDS_VIEW_BANK_BUTTON_WIDTH 68
+#define HOMEWORLDS_VIEW_BANK_BUTTON_HEIGHT 92
+#define HOMEWORLDS_VIEW_BANK_LABEL_WIDTH 22
+#define HOMEWORLDS_VIEW_BANK_GRID_COLUMN_SPACING 4
+#define HOMEWORLDS_VIEW_BANK_GRID_ROW_SPACING 4
+#define HOMEWORLDS_VIEW_BANK_MARGIN 18
+#define HOMEWORLDS_VIEW_BANK_INNER_MARGIN 8
 #define HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH 880
 #define HOMEWORLDS_VIEW_FALLBACK_BOARD_HEIGHT 620
 #define HOMEWORLDS_VIEW_SYSTEM_PIECE_MAX (HOMEWORLDS_STAR_SLOT_COUNT + (2 * HOMEWORLDS_SHIP_SLOT_COUNT))
@@ -588,6 +595,42 @@ static void homeworlds_view_row_y_positions(double height,
   *out_player_2 = player_2_y;
 }
 
+static double homeworlds_view_bank_reserved_width(void) {
+  return HOMEWORLDS_VIEW_BANK_MARGIN +
+         (2.0 * HOMEWORLDS_VIEW_BANK_INNER_MARGIN) +
+         HOMEWORLDS_VIEW_BANK_LABEL_WIDTH +
+         (3.0 * HOMEWORLDS_VIEW_BANK_BUTTON_WIDTH) +
+         (3.0 * HOMEWORLDS_VIEW_BANK_GRID_COLUMN_SPACING);
+}
+
+static void homeworlds_view_row_x_bounds(double width,
+                                         double *out_left,
+                                         double *out_right) {
+  double margin = MAX(54.0, width * 0.07);
+  double bank_reserved_width = homeworlds_view_bank_reserved_width();
+  double left = margin;
+  double right = width - bank_reserved_width - margin;
+
+  g_return_if_fail(width > 0.0);
+  g_return_if_fail(out_left != NULL);
+  g_return_if_fail(out_right != NULL);
+
+  if (right <= left + 120.0) {
+    left = width * 0.10;
+    right = width * 0.90;
+  }
+
+  *out_left = left;
+  *out_right = right;
+}
+
+static double homeworlds_view_row_slot_x(double left, double right, guint row_index, guint row_count) {
+  g_return_val_if_fail(row_count > 0, (left + right) / 2.0);
+  g_return_val_if_fail(row_index < row_count, (left + right) / 2.0);
+
+  return left + ((right - left) * ((double)row_index + 1.0) / ((double)row_count + 1.0));
+}
+
 gboolean homeworlds_view_calculate_system_center(const HomeworldsPosition *position,
                                                  guint system_index,
                                                  double width,
@@ -603,8 +646,8 @@ gboolean homeworlds_view_calculate_system_center(const HomeworldsPosition *posit
   HomeworldsViewSystemRow row = HOMEWORLDS_VIEW_SYSTEM_ROW_MIDDLE;
   guint row_count = 0;
   guint row_index = 0;
-  double row_left = width * 0.40;
-  double row_right = width * 0.86;
+  double row_left = 0.0;
+  double row_right = 0.0;
 
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
@@ -621,14 +664,15 @@ gboolean homeworlds_view_calculate_system_center(const HomeworldsPosition *posit
                                   &bottom_y,
                                   &player_1_y,
                                   &player_2_y);
+  homeworlds_view_row_x_bounds(width, &row_left, &row_right);
 
   if (system_index == 0) {
-    *out_x = width * 0.22;
+    *out_x = homeworlds_view_row_slot_x(row_left, row_right, 0, 1);
     *out_y = player_1_y;
     return TRUE;
   }
   if (system_index == 1) {
-    *out_x = width * 0.22;
+    *out_x = homeworlds_view_row_slot_x(row_left, row_right, 0, 1);
     *out_y = player_2_y;
     return TRUE;
   }
@@ -650,8 +694,7 @@ gboolean homeworlds_view_calculate_system_center(const HomeworldsPosition *posit
 
   *out_y = row == HOMEWORLDS_VIEW_SYSTEM_ROW_TOP ? top_y :
            row == HOMEWORLDS_VIEW_SYSTEM_ROW_BOTTOM ? bottom_y : middle_y;
-  *out_x = row_count <= 1 ? (row_left + row_right) / 2.0 :
-            row_left + ((row_right - row_left) * (double)row_index / (double)(row_count - 1));
+  *out_x = homeworlds_view_row_slot_x(row_left, row_right, row_index, row_count);
   return TRUE;
 }
 
@@ -1601,7 +1644,7 @@ static GtkWidget *homeworlds_view_create_bank_button(HomeworldsView *view, Homew
   selectable = homeworlds_view_find_bank_candidate(view, pyramid, &candidate);
   button = gtk_button_new();
   gtk_widget_add_css_class(button, selectable ? "homeworlds-bank-choice" : "flat");
-  gtk_widget_set_size_request(button, 68, 92);
+  gtk_widget_set_size_request(button, HOMEWORLDS_VIEW_BANK_BUTTON_WIDTH, HOMEWORLDS_VIEW_BANK_BUTTON_HEIGHT);
   gtk_widget_set_can_focus(button, selectable);
   gtk_widget_set_sensitive(button, selectable);
   g_object_set_data(G_OBJECT(button), "homeworlds-board-bank-choice", GUINT_TO_POINTER(1));
@@ -1668,13 +1711,13 @@ static void homeworlds_view_update_board_bank(HomeworldsView *view) {
   }
 
   grid = gtk_grid_new();
-  gtk_grid_set_row_spacing(GTK_GRID(grid), 4);
-  gtk_grid_set_column_spacing(GTK_GRID(grid), 4);
+  gtk_grid_set_row_spacing(GTK_GRID(grid), HOMEWORLDS_VIEW_BANK_GRID_ROW_SPACING);
+  gtk_grid_set_column_spacing(GTK_GRID(grid), HOMEWORLDS_VIEW_BANK_GRID_COLUMN_SPACING);
   gtk_box_append(GTK_BOX(view->board_bank_box), grid);
 
   for (guint color = HOMEWORLDS_COLOR_RED; color <= HOMEWORLDS_COLOR_BLUE; ++color) {
     GtkWidget *label = gtk_label_new(homeworlds_view_color_styles[color].short_name);
-    gtk_widget_set_size_request(label, 22, -1);
+    gtk_widget_set_size_request(label, HOMEWORLDS_VIEW_BANK_LABEL_WIDTH, -1);
     gtk_grid_attach(GTK_GRID(grid), label, 0, (int) color, 1, 1);
 
     for (HomeworldsSize size = HOMEWORLDS_SIZE_SMALL; size <= HOMEWORLDS_SIZE_LARGE; size++) {
@@ -1828,15 +1871,15 @@ HomeworldsView *homeworlds_view_new(GGameModel *model) {
   gtk_widget_set_name(bank_frame, "homeworlds-board-bank");
   gtk_widget_set_halign(bank_frame, GTK_ALIGN_END);
   gtk_widget_set_valign(bank_frame, GTK_ALIGN_START);
-  gtk_widget_set_margin_top(bank_frame, 18);
-  gtk_widget_set_margin_end(bank_frame, 18);
+  gtk_widget_set_margin_top(bank_frame, HOMEWORLDS_VIEW_BANK_MARGIN);
+  gtk_widget_set_margin_end(bank_frame, HOMEWORLDS_VIEW_BANK_MARGIN);
   gtk_overlay_add_overlay(GTK_OVERLAY(view->board_overlay), bank_frame);
 
   view->board_bank_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
-  gtk_widget_set_margin_top(view->board_bank_box, 8);
-  gtk_widget_set_margin_bottom(view->board_bank_box, 8);
-  gtk_widget_set_margin_start(view->board_bank_box, 8);
-  gtk_widget_set_margin_end(view->board_bank_box, 8);
+  gtk_widget_set_margin_top(view->board_bank_box, HOMEWORLDS_VIEW_BANK_INNER_MARGIN);
+  gtk_widget_set_margin_bottom(view->board_bank_box, HOMEWORLDS_VIEW_BANK_INNER_MARGIN);
+  gtk_widget_set_margin_start(view->board_bank_box, HOMEWORLDS_VIEW_BANK_INNER_MARGIN);
+  gtk_widget_set_margin_end(view->board_bank_box, HOMEWORLDS_VIEW_BANK_INNER_MARGIN);
   gtk_frame_set_child(GTK_FRAME(bank_frame), view->board_bank_box);
 
   scroller = gtk_scrolled_window_new();
