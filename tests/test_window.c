@@ -1002,6 +1002,50 @@ static void test_ggame_window_sgf_navigation_preserves_player_controls(void) {
   g_clear_object(&app);
 }
 
+static void test_ggame_window_sgf_navigation_does_not_auto_move(void) {
+  GtkApplication *app = test_ggame_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GGameWindow *window = test_ggame_window_new(app, model);
+
+  PlayerControlsPanel *panel = ggame_window_get_controls_panel(window);
+  g_assert_nonnull(panel);
+
+  player_controls_panel_set_mode(panel, 0, PLAYER_CONTROL_MODE_USER);
+  player_controls_panel_set_mode(panel, 1, PLAYER_CONTROL_MODE_USER);
+
+  GGameSgfController *controller = ggame_window_get_sgf_controller(window);
+  g_assert_nonnull(controller);
+
+  CheckersMove move;
+  g_assert_true(apply_first_move(controller, model, &move));
+  test_ggame_window_drain_main_context(16);
+
+  SgfTree *tree = ggame_sgf_controller_get_tree(controller);
+  const SgfNode *first = sgf_tree_get_current(tree);
+  g_assert_nonnull(first);
+  g_assert_cmpuint(sgf_node_get_move_number(first), ==, 1);
+
+  player_controls_panel_set_mode(panel, 1, PLAYER_CONTROL_MODE_COMPUTER);
+
+  g_assert_true(ggame_sgf_controller_rewind_to_start(controller));
+  test_ggame_window_drain_main_context(16);
+  g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 0);
+
+  g_assert_true(ggame_sgf_controller_step_forward(controller));
+  test_ggame_window_drain_main_context(16);
+
+  g_assert_true(sgf_tree_get_current(tree) == first);
+  g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 1);
+
+  const GameState *state = gcheckers_model_peek_state(model);
+  g_assert_nonnull(state);
+  g_assert_cmpuint(state->turn, ==, CHECKERS_COLOR_BLACK);
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
 static void test_ggame_window_defaults_second_player_to_computer(void) {
   GtkApplication *app = test_ggame_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
@@ -2420,6 +2464,8 @@ int main(int argc, char **argv) {
                   test_ggame_window_auto_moves_when_next_player_is_computer);
   g_test_add_func("/gcheckers-window/sgf-navigation-preserves-controls",
                   test_ggame_window_sgf_navigation_preserves_player_controls);
+  g_test_add_func("/gcheckers-window/sgf-navigation-does-not-auto-move",
+                  test_ggame_window_sgf_navigation_does_not_auto_move);
   g_test_add_func("/gcheckers-window/defaults-second-player-computer",
                   test_ggame_window_defaults_second_player_to_computer);
   g_test_add_func("/gcheckers-window/force-move-user-turn",

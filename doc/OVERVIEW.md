@@ -164,7 +164,9 @@ actual snapshot encoding backend-owned.
 `ggame_sgf_controller_set_model()` binds the legacy checkers wrapper plus its inner `GGameModel`;
 `ggame_sgf_controller_set_game_model()` binds generic callers directly. Timeline clearing remains explicit via
 `ggame_sgf_controller_new_game()`. Exposes SGF navigation helpers used by the shared window: rewind to root, step
-backward, step forward on main line, step to next branch point, and step to main-line end.
+backward, step forward on main line, step to next branch point, and step to main-line end. Navigation-driven model
+synchronization runs under the replay guard so the shared window does not treat stepping through the tree as a newly
+played move.
 Selection-only navigation updates SGF view selection in place (`sgf_view_set_selected`) instead of rebuilding the
 entire SGF layout.
 Exposes a current-node refresh helper that replays SGF state into the model after setup-property edits on the current
@@ -175,8 +177,9 @@ whenever SGF current node changes so other UI (analysis graph) can synchronize c
 Collaborates with: `GCheckersModel` compatibility callers plus generic `GGameModel` callers for move
 validation/application, `BoardView` to clear selection on replay/reset, and `GGameWindow` via the `manual-requested`
 signal for SGF navigation/edit flows. Starting a fresh game resets the SGF tree and emits `node-changed`, but does
-not force player controls back to user mode. Also exposes the current node's move so board overlays can use the same
-path for step-by-step and replay-based navigation.
+not force player controls back to user mode. Manual SGF navigation also cancels any pending automatic computer reply.
+Also exposes the current node's move so board overlays can use the same path for step-by-step and replay-based
+navigation.
 Pending move confirmations can still accept further backend builder steps before falling back to selection reset, which
 lets boop disambiguate between confirming a single-kitten graduation and continuing to select a line promotion.
 

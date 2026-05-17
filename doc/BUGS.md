@@ -468,3 +468,13 @@ so the analysis report could stay stale because no `node-changed` signal was emi
 The fix keeps SGF navigation's board-orientation and analysis refresh behavior, but stops mutating the player controls.
 The selected `User`/`Computer` modes and computer depth now persist across SGF navigation and branch exploration, and
 manual SGF navigation refreshes the analysis report from the current node.
+
+## SGF navigation triggered computer replies
+
+Tree navigation should only review recorded nodes. It should not be treated as a newly played move, even when the
+selected node leaves a computer-controlled player to move.
+
+Direct parent-to-child SGF navigation replayed the stored move by applying it to the live model without setting the
+SGF replay guard. The window saw the resulting state change as normal play and scheduled an automatic computer move.
+The fix marks all SGF navigation model synchronization as replay/manual state and cancels any pending auto-move source
+when manual navigation is requested.

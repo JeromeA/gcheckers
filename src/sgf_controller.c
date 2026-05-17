@@ -394,11 +394,23 @@ static gboolean ggame_sgf_controller_move_current(GGameSgfController *self, cons
   return ok;
 }
 
+static gboolean ggame_sgf_controller_move_current_for_navigation(GGameSgfController *self, const SgfNode *node) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
+  g_return_val_if_fail(node != NULL, FALSE);
+
+  gboolean was_replaying = self->is_replaying;
+  self->is_replaying = TRUE;
+
+  gboolean moved = ggame_sgf_controller_move_current(self, node);
+  self->is_replaying = was_replaying;
+  return moved;
+}
+
 static gboolean ggame_sgf_controller_navigate_to(GGameSgfController *self, const SgfNode *node) {
   g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(node != NULL, FALSE);
 
-  if (!ggame_sgf_controller_move_current(self, node)) {
+  if (!ggame_sgf_controller_move_current_for_navigation(self, node)) {
     return FALSE;
   }
 
@@ -415,7 +427,7 @@ static void ggame_sgf_controller_on_node_selected(SgfView * /*view*/,
   g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self));
   g_return_if_fail(node != NULL);
 
-  if (!ggame_sgf_controller_move_current(self, node)) {
+  if (!ggame_sgf_controller_move_current_for_navigation(self, node)) {
     return;
   }
 

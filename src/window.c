@@ -3018,6 +3018,7 @@ static void ggame_window_on_manual_requested(GGameSgfController * /*controller*/
   g_return_if_fail(GGAME_IS_WINDOW(self));
   g_return_if_fail(self->controls_panel != NULL);
 
+  g_clear_handle_id(&self->auto_move_source_id, g_source_remove);
   ggame_window_set_board_orientation_mode(self, GGAME_WINDOW_BOARD_ORIENTATION_FIXED);
   ggame_window_update_control_state(self);
   ggame_window_show_analysis_for_current_node(self);
