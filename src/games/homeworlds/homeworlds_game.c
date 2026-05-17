@@ -790,6 +790,7 @@ gboolean homeworlds_position_apply_catastrophe(HomeworldsPosition *position,
   if (destroyed_star) {
     homeworlds_system_return_all_ships_to_bank(position, system_index);
   }
+  homeworlds_system_cleanup_orphaned_stars(position, system_index);
 
   return TRUE;
 }

@@ -478,3 +478,12 @@ Direct parent-to-child SGF navigation replayed the stored move by applying it to
 SGF replay guard. The window saw the resulting state change as normal play and scheduled an automatic computer move.
 The fix marks all SGF navigation model synchronization as replay/manual state and cancels any pending auto-move source
 when manual navigation is requested.
+
+## Homeworlds ship catastrophes could leave orphaned stars
+
+A star system with no ships should disappear and return its stars to the bank. This must happen whether the last ship
+left by movement, sacrifice, capture, or catastrophe.
+
+Ship-only catastrophes removed all matching ships but only performed abandoned-star cleanup when a star of the same
+color had also been destroyed. A system could therefore keep stars on the board with no ships. The fix runs the normal
+orphan-star cleanup after every successful catastrophe.
