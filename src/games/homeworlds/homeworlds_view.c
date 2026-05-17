@@ -377,6 +377,30 @@ static gboolean homeworlds_view_stage_uses_visual_choices(const HomeworldsView *
   return homeworlds_view_stage_uses_bank_choices(view) || homeworlds_view_stage_uses_board_choices(view);
 }
 
+static gboolean homeworlds_view_can_cancel_selection(const HomeworldsView *view) {
+  const HomeworldsMoveBuilderState *state = homeworlds_view_builder_state(view);
+
+  if (state == NULL) {
+    return FALSE;
+  }
+
+  switch ((HomeworldsBuilderStage) state->stage) {
+    case HOMEWORLDS_BUILDER_STAGE_SETUP_FIRST_STAR:
+    case HOMEWORLDS_BUILDER_STAGE_COMPLETE:
+      return FALSE;
+    case HOMEWORLDS_BUILDER_STAGE_SELECT_SHIP:
+      return state->pending_actions_remaining > 0;
+    case HOMEWORLDS_BUILDER_STAGE_SETUP_SECOND_STAR:
+    case HOMEWORLDS_BUILDER_STAGE_SETUP_SHIP:
+    case HOMEWORLDS_BUILDER_STAGE_SELECT_ACTION:
+    case HOMEWORLDS_BUILDER_STAGE_SELECT_TRADE_COLOR:
+    case HOMEWORLDS_BUILDER_STAGE_SELECT_ATTACK_TARGET:
+    case HOMEWORLDS_BUILDER_STAGE_SELECT_MOVE_TARGET:
+    default:
+      return TRUE;
+  }
+}
+
 static void homeworlds_view_draw_base_pips(cairo_t *cr,
                                            double center_x,
                                            double center_y,
@@ -1401,6 +1425,35 @@ static void homeworlds_view_append_candidate_button(HomeworldsView *view, const 
   g_free(label);
 }
 
+static void homeworlds_view_cancel_selection_clicked(GtkButton *button, gpointer user_data) {
+  HomeworldsView *view = user_data;
+
+  g_return_if_fail(GTK_IS_BUTTON(button));
+  g_return_if_fail(view != NULL);
+
+  homeworlds_view_refresh(view);
+}
+
+static void homeworlds_view_append_cancel_button(HomeworldsView *view) {
+  GtkWidget *button = NULL;
+
+  g_return_if_fail(view != NULL);
+
+  button = gtk_button_new_with_label("Cancel");
+  gtk_widget_set_halign(button, GTK_ALIGN_FILL);
+  g_object_set_data(G_OBJECT(button), "homeworlds-cancel-choice", GUINT_TO_POINTER(1));
+  g_signal_connect(button, "clicked", G_CALLBACK(homeworlds_view_cancel_selection_clicked), view);
+  gtk_box_append(GTK_BOX(view->candidate_box), button);
+}
+
+static void homeworlds_view_append_cancel_button_if_available(HomeworldsView *view) {
+  g_return_if_fail(view != NULL);
+
+  if (homeworlds_view_can_cancel_selection(view)) {
+    homeworlds_view_append_cancel_button(view);
+  }
+}
+
 static const char *homeworlds_view_visual_choice_text(const HomeworldsMoveBuilderState *state) {
   g_return_val_if_fail(state != NULL, "Click a highlighted board control.");
 
@@ -1686,6 +1739,7 @@ static void homeworlds_view_update_candidates(HomeworldsView *view) {
     gtk_label_set_wrap(GTK_LABEL(label), TRUE);
     gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
     gtk_box_append(GTK_BOX(view->candidate_box), label);
+    homeworlds_view_append_cancel_button_if_available(view);
     g_clear_pointer(&candidates.moves, g_free);
     return;
   }
@@ -1695,6 +1749,7 @@ static void homeworlds_view_update_candidates(HomeworldsView *view) {
     gtk_label_set_wrap(GTK_LABEL(label), TRUE);
     gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
     gtk_box_append(GTK_BOX(view->candidate_box), label);
+    homeworlds_view_append_cancel_button_if_available(view);
     g_clear_pointer(&candidates.moves, g_free);
     return;
   }
@@ -1719,6 +1774,7 @@ static void homeworlds_view_update_candidates(HomeworldsView *view) {
       gtk_label_set_xalign(GTK_LABEL(fallback), 0.0f);
       gtk_box_append(GTK_BOX(view->candidate_box), fallback);
     }
+    homeworlds_view_append_cancel_button_if_available(view);
     g_clear_pointer(&candidates.moves, g_free);
     return;
   }
@@ -1727,6 +1783,7 @@ static void homeworlds_view_update_candidates(HomeworldsView *view) {
     const HomeworldsMoveCandidate *candidate = &((const HomeworldsMoveCandidate *) candidates.moves)[i];
     homeworlds_view_append_candidate_button(view, candidate);
   }
+  homeworlds_view_append_cancel_button_if_available(view);
   g_clear_pointer(&candidates.moves, g_free);
 }
 

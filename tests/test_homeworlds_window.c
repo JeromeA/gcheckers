@@ -186,6 +186,25 @@ static GtkButton *test_homeworlds_find_selectable_system_button(GtkWidget *root)
   return NULL;
 }
 
+static GtkButton *test_homeworlds_find_cancel_choice_button(GtkWidget *root) {
+  g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
+
+  if (GTK_IS_BUTTON(root) &&
+      g_object_get_data(G_OBJECT(root), "homeworlds-cancel-choice") != NULL) {
+    return GTK_BUTTON(root);
+  }
+
+  for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
+       child = gtk_widget_get_next_sibling(child)) {
+    GtkButton *match = test_homeworlds_find_cancel_choice_button(child);
+    if (match != NULL) {
+      return match;
+    }
+  }
+
+  return NULL;
+}
+
 static GtkButton *test_homeworlds_find_bank_button_for_pyramid(GtkWidget *root, HomeworldsPyramid pyramid) {
   g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
   g_return_val_if_fail(homeworlds_pyramid_is_valid(pyramid), NULL);
@@ -571,6 +590,33 @@ static void test_homeworlds_view_action_buttons_use_plain_labels(void) {
   g_object_unref(model);
 }
 
+static void test_homeworlds_view_choice_list_has_cancel_button(void) {
+  HomeworldsPosition position = {0};
+  GGameModel *model = ggame_model_new(&homeworlds_game_backend);
+  HomeworldsView *view = homeworlds_view_new(model);
+  GtkWidget *root = homeworlds_view_get_widget(view);
+  GtkButton *button = NULL;
+
+  test_homeworlds_prepare_play_position(&position);
+  g_assert_true(ggame_model_set_position(model, &position));
+  g_assert_null(test_homeworlds_find_cancel_choice_button(root));
+
+  g_assert_true(homeworlds_view_apply_candidate_at(view, 0));
+  g_assert_true(homeworlds_view_has_partial_selection(view));
+
+  button = test_homeworlds_find_cancel_choice_button(root);
+  g_assert_nonnull(button);
+  g_assert_cmpstr(gtk_button_get_label(button), ==, "Cancel");
+
+  g_signal_emit_by_name(button, "clicked");
+  g_assert_false(homeworlds_view_has_partial_selection(view));
+  g_assert_null(test_homeworlds_find_cancel_choice_button(root));
+  g_assert_nonnull(test_homeworlds_find_selectable_ship_button(root));
+
+  homeworlds_view_free(view);
+  g_object_unref(model);
+}
+
 static void test_homeworlds_view_trade_targets_use_bank_buttons(void) {
   HomeworldsPosition position = {0};
   GGameModel *model = ggame_model_new(&homeworlds_game_backend);
@@ -698,6 +744,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/view/setup-bank-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/board-ship-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/action-button-labels", test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/view/choice-list-cancel", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/trade-bank-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/attack-board-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/move-board-bank-buttons", test_homeworlds_window_skip);
@@ -710,6 +757,8 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/view/setup-bank-buttons", test_homeworlds_view_setup_uses_board_bank_buttons);
     g_test_add_func("/homeworlds/view/board-ship-buttons", test_homeworlds_view_uses_board_ship_buttons);
     g_test_add_func("/homeworlds/view/action-button-labels", test_homeworlds_view_action_buttons_use_plain_labels);
+    g_test_add_func("/homeworlds/view/choice-list-cancel",
+                    test_homeworlds_view_choice_list_has_cancel_button);
     g_test_add_func("/homeworlds/view/trade-bank-buttons", test_homeworlds_view_trade_targets_use_bank_buttons);
     g_test_add_func("/homeworlds/view/attack-board-buttons", test_homeworlds_view_attack_targets_use_board_buttons);
     g_test_add_func("/homeworlds/view/move-board-bank-buttons",

@@ -534,8 +534,9 @@ the top, and places each homeworld's own ships beside its stars from that player
 selection, the bank piles on the board are real `GtkButton`s that feed the staged builder directly, so start stars,
 start ships, trade colors, and discovery stars do not require a long side-panel button list. During normal turns,
 selectable ships, capture targets, and existing-system move targets are also overlaid as board buttons; the side panel
-only keeps non-board choices such as pass or follow-up actions. The Homeworlds board host also syncs its last-move
-label from SGF current-node changes so timeline navigation and direct play report the same move. Human interaction
+only keeps non-board choices such as pass or follow-up actions, with a `Cancel` button whenever those choices belong to
+an in-progress move. The Homeworlds board host also syncs its last-move label from SGF current-node changes so timeline
+navigation and direct play report the same move. Human interaction
 advances
 `homeworlds_move_builder` one visible choice at a time and sends each completed `HomeworldsMove` to the generic window
 move handler. In the app, that appends SGF nodes through `GGameSgfController`; standalone view tests can still install
