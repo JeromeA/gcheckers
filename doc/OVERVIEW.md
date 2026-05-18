@@ -508,7 +508,8 @@ Rules covered: setup, build, trade, attack, move, discover, sacrifice, catastrop
 cleanup, end-of-turn homeworld loss detection for either side, static evaluation, terminal scoring, hashing, compact
 move formatting/parsing, and whole-position SGF snapshots in `homeworlds_sgf_position.c`. Move notation uses pyramid
 letters and sizes directly, such as `Y2B1g3`, `H1 g1+`, `G3 y2>G2 G3 y!`, and `pass`. Static evaluation counts ship
-material and repeats the largest own ship at each player's homeworld.
+material and repeats the largest own ship at each player's homeworld. Sacrifice-granted actions reuse the normal action
+application code but bypass local color-access checks because the sacrificed ship supplies the action color.
 Collaborates with: `homeworlds_move_builder.c`, `homeworlds_backend.c`, `homeworlds_sgf_position.c`,
 `homeworlds_view.c`, `tests/test_homeworlds_game.c`, and `tests/test_homeworlds_backend.c`.
 
@@ -519,8 +520,10 @@ Role: expose incremental legal choices without enumerating the full legal move s
 of the position plus the partial move under construction, and advances through setup-star selection, setup-ship
 selection, source-ship selection, action choice, and target-specific substages for trade, attack, and move/discover.
 Sacrifices are modeled as a prefix step that fixes the remaining action color and count, after which the builder loops
-back through source-ship selection for each granted action. Candidate data can still use transient slot indexes for UI
-selection, but committed move steps are converted to symbolic references before they are applied or saved to SGF.
+back through source-ship selection for each granted action. Choosing a ship for a sacrificed action immediately starts
+that forced action instead of showing the normal action picker again. Candidate data can still use transient slot
+indexes for UI selection, but committed move steps are converted to symbolic references before they are applied or saved
+to SGF.
 Physically interchangeable choices, such as identical bank stars for discovery or identical enemy ships for capture,
 are deduplicated before they become user-visible choices.
 Collaborates with: `homeworlds_game.c`, `homeworlds_backend.c`, `homeworlds_view.c`, and

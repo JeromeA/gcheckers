@@ -347,7 +347,9 @@ static gboolean homeworlds_position_apply_setup_move(HomeworldsPosition *positio
   return TRUE;
 }
 
-static gboolean homeworlds_position_apply_build(HomeworldsPosition *position, const HomeworldsTurnStep *step) {
+static gboolean homeworlds_position_apply_build(HomeworldsPosition *position,
+                                                const HomeworldsTurnStep *step,
+                                                gboolean require_access) {
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(step != NULL, FALSE);
 
@@ -366,7 +368,7 @@ static gboolean homeworlds_position_apply_build(HomeworldsPosition *position, co
   }
 
   HomeworldsSystem *system = &position->systems[system_index];
-  if (!homeworlds_system_has_access_to_color(system, position->turn, HOMEWORLDS_COLOR_GREEN)) {
+  if (require_access && !homeworlds_system_has_access_to_color(system, position->turn, HOMEWORLDS_COLOR_GREEN)) {
     return FALSE;
   }
   if (!homeworlds_system_find_smallest_bank_ship(position, homeworlds_pyramid_color(source), &built)) {
@@ -380,7 +382,9 @@ static gboolean homeworlds_position_apply_build(HomeworldsPosition *position, co
   return homeworlds_system_add_ship(system, position->turn, built);
 }
 
-static gboolean homeworlds_position_apply_trade(HomeworldsPosition *position, const HomeworldsTurnStep *step) {
+static gboolean homeworlds_position_apply_trade(HomeworldsPosition *position,
+                                                const HomeworldsTurnStep *step,
+                                                gboolean require_access) {
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(step != NULL, FALSE);
 
@@ -401,7 +405,7 @@ static gboolean homeworlds_position_apply_trade(HomeworldsPosition *position, co
   }
 
   HomeworldsSystem *system = &position->systems[system_index];
-  if (!homeworlds_system_has_access_to_color(system, position->turn, HOMEWORLDS_COLOR_BLUE)) {
+  if (require_access && !homeworlds_system_has_access_to_color(system, position->turn, HOMEWORLDS_COLOR_BLUE)) {
     return FALSE;
   }
   if (homeworlds_pyramid_color(source) == step->target_color) {
@@ -419,7 +423,9 @@ static gboolean homeworlds_position_apply_trade(HomeworldsPosition *position, co
   return TRUE;
 }
 
-static gboolean homeworlds_position_apply_attack(HomeworldsPosition *position, const HomeworldsTurnStep *step) {
+static gboolean homeworlds_position_apply_attack(HomeworldsPosition *position,
+                                                 const HomeworldsTurnStep *step,
+                                                 gboolean require_access) {
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(step != NULL, FALSE);
 
@@ -444,7 +450,7 @@ static gboolean homeworlds_position_apply_attack(HomeworldsPosition *position, c
 
   system = &position->systems[system_index];
   target = position->systems[system_index].ships[opponent][target_slot];
-  if (!homeworlds_system_has_access_to_color(system, position->turn, HOMEWORLDS_COLOR_RED)) {
+  if (require_access && !homeworlds_system_has_access_to_color(system, position->turn, HOMEWORLDS_COLOR_RED)) {
     return FALSE;
   }
   if (homeworlds_pyramid_size(attacker) < homeworlds_pyramid_size(target)) {
@@ -482,7 +488,8 @@ static gboolean homeworlds_position_move_ship_between_systems(HomeworldsPosition
 }
 
 static gboolean homeworlds_position_apply_move_or_discover(HomeworldsPosition *position,
-                                                           const HomeworldsTurnStep *step) {
+                                                           const HomeworldsTurnStep *step,
+                                                           gboolean require_access) {
   guint from_system_index = 0;
   guint ship_slot = 0;
   guint target_system_index = 0;
@@ -501,7 +508,7 @@ static gboolean homeworlds_position_apply_move_or_discover(HomeworldsPosition *p
   }
 
   HomeworldsSystem *from_system = &position->systems[from_system_index];
-  if (!homeworlds_system_has_access_to_color(from_system, position->turn, HOMEWORLDS_COLOR_YELLOW)) {
+  if (require_access && !homeworlds_system_has_access_to_color(from_system, position->turn, HOMEWORLDS_COLOR_YELLOW)) {
     return FALSE;
   }
 
@@ -577,7 +584,9 @@ static gboolean homeworlds_position_apply_sacrifice(HomeworldsPosition *position
   return TRUE;
 }
 
-gboolean homeworlds_position_apply_turn_step(HomeworldsPosition *position, const HomeworldsTurnStep *step) {
+static gboolean homeworlds_position_apply_turn_step_with_access(HomeworldsPosition *position,
+                                                                const HomeworldsTurnStep *step,
+                                                                gboolean require_access) {
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(step != NULL, FALSE);
 
@@ -585,14 +594,14 @@ gboolean homeworlds_position_apply_turn_step(HomeworldsPosition *position, const
     case HOMEWORLDS_STEP_PASS:
       return TRUE;
     case HOMEWORLDS_STEP_BUILD:
-      return homeworlds_position_apply_build(position, step);
+      return homeworlds_position_apply_build(position, step, require_access);
     case HOMEWORLDS_STEP_TRADE:
-      return homeworlds_position_apply_trade(position, step);
+      return homeworlds_position_apply_trade(position, step, require_access);
     case HOMEWORLDS_STEP_ATTACK:
-      return homeworlds_position_apply_attack(position, step);
+      return homeworlds_position_apply_attack(position, step, require_access);
     case HOMEWORLDS_STEP_MOVE:
     case HOMEWORLDS_STEP_DISCOVER:
-      return homeworlds_position_apply_move_or_discover(position, step);
+      return homeworlds_position_apply_move_or_discover(position, step, require_access);
     case HOMEWORLDS_STEP_SACRIFICE:
       return homeworlds_position_apply_sacrifice(position, step);
     case HOMEWORLDS_STEP_CATASTROPHE: {
@@ -604,6 +613,29 @@ gboolean homeworlds_position_apply_turn_step(HomeworldsPosition *position, const
       return homeworlds_position_apply_catastrophe(position, system_index, (HomeworldsColor) step->target_color);
     }
     case HOMEWORLDS_STEP_NONE:
+    default:
+      return FALSE;
+  }
+}
+
+gboolean homeworlds_position_apply_turn_step(HomeworldsPosition *position, const HomeworldsTurnStep *step) {
+  return homeworlds_position_apply_turn_step_with_access(position, step, TRUE);
+}
+
+gboolean homeworlds_position_apply_forced_action_step(HomeworldsPosition *position, const HomeworldsTurnStep *step) {
+  g_return_val_if_fail(step != NULL, FALSE);
+
+  switch ((HomeworldsStepKind) step->kind) {
+    case HOMEWORLDS_STEP_BUILD:
+    case HOMEWORLDS_STEP_TRADE:
+    case HOMEWORLDS_STEP_ATTACK:
+    case HOMEWORLDS_STEP_MOVE:
+    case HOMEWORLDS_STEP_DISCOVER:
+      return homeworlds_position_apply_turn_step_with_access(position, step, FALSE);
+    case HOMEWORLDS_STEP_NONE:
+    case HOMEWORLDS_STEP_PASS:
+    case HOMEWORLDS_STEP_SACRIFICE:
+    case HOMEWORLDS_STEP_CATASTROPHE:
     default:
       return FALSE;
   }
@@ -666,6 +698,7 @@ gboolean homeworlds_position_apply_move(HomeworldsPosition *position, const Home
 
   for (guint i = 0; i < move->step_count; ++i) {
     const HomeworldsTurnStep *step = &move->steps[i];
+    gboolean require_access = TRUE;
 
     if (step->kind == HOMEWORLDS_STEP_CATASTROPHE) {
       if (!homeworlds_position_apply_turn_step(position, step)) {
@@ -734,9 +767,10 @@ gboolean homeworlds_position_apply_move(HomeworldsPosition *position, const Home
         return FALSE;
       }
       pending_sacrifice_actions--;
+      require_access = FALSE;
     }
 
-    if (!homeworlds_position_apply_turn_step(position, step)) {
+    if (!homeworlds_position_apply_turn_step_with_access(position, step, require_access)) {
       return FALSE;
     }
   }

@@ -279,6 +279,45 @@ static void test_sacrifice_grants_multiple_actions(void) {
   assert(position.systems[0].ships[0][1] == homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_LARGE));
 }
 
+static void test_sacrifice_actions_ignore_local_color_access(void) {
+  HomeworldsPosition position = {0};
+  HomeworldsMove move = {0};
+  HomeworldsPyramid blue_small = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL);
+  HomeworldsPyramid red_small = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL);
+  HomeworldsPyramid red_medium = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_MEDIUM);
+
+  test_prepare_basic_position(&position);
+  assert(test_system_add_ship(&position, 0, 0, blue_small));
+  assert(test_bank_remove(&position, blue_small));
+  assert(test_system_add_star(&position, 2, red_medium));
+  assert(test_bank_remove(&position, red_medium));
+  assert(test_system_add_ship(&position, 2, 0, red_small));
+  assert(test_bank_remove(&position, red_small));
+
+  move.kind = HOMEWORLDS_MOVE_KIND_TURN;
+  move.step_count = 4;
+  move.steps[0] = (HomeworldsTurnStep){
+    .kind = HOMEWORLDS_STEP_SACRIFICE,
+    .actor = test_ship_ref(test_homeworld_ref(0), HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE),
+  };
+  move.steps[1] = (HomeworldsTurnStep){
+    .kind = HOMEWORLDS_STEP_BUILD,
+    .actor = test_ship_ref(test_star_ref(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_MEDIUM, 0),
+                           HOMEWORLDS_COLOR_RED,
+                           HOMEWORLDS_SIZE_SMALL),
+  };
+  move.steps[2] = (HomeworldsTurnStep){
+    .kind = HOMEWORLDS_STEP_PASS,
+  };
+  move.steps[3] = (HomeworldsTurnStep){
+    .kind = HOMEWORLDS_STEP_PASS,
+  };
+
+  assert(homeworlds_position_apply_move(&position, &move));
+  assert(homeworlds_system_ship_count_for_side(&position.systems[2], 0) == 2);
+  assert(position.turn == 1);
+}
+
 static void test_catastrophe_removes_matching_color_and_collapses_star_system(void) {
   HomeworldsPosition position = {0};
 
@@ -372,6 +411,7 @@ int main(void) {
   test_attack_requires_size_and_changes_owner();
   test_move_and_discover_follow_connectivity();
   test_sacrifice_grants_multiple_actions();
+  test_sacrifice_actions_ignore_local_color_access();
   test_catastrophe_removes_matching_color_and_collapses_star_system();
   test_ship_catastrophe_returns_orphaned_stars_to_bank();
   test_symbolic_catastrophe_move_does_not_finish_turn();

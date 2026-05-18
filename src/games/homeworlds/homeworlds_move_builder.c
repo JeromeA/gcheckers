@@ -159,14 +159,33 @@ static gboolean homeworlds_builder_finish_or_continue(HomeworldsMoveBuilderState
   return TRUE;
 }
 
-static gboolean homeworlds_builder_commit_action(HomeworldsMoveBuilderState *state, const HomeworldsTurnStep *step) {
+static HomeworldsStepKind homeworlds_builder_action_for_color(HomeworldsColor color) {
+  switch (color) {
+    case HOMEWORLDS_COLOR_GREEN:
+      return HOMEWORLDS_STEP_BUILD;
+    case HOMEWORLDS_COLOR_BLUE:
+      return HOMEWORLDS_STEP_TRADE;
+    case HOMEWORLDS_COLOR_RED:
+      return HOMEWORLDS_STEP_ATTACK;
+    case HOMEWORLDS_COLOR_YELLOW:
+      return HOMEWORLDS_STEP_MOVE;
+    default:
+      g_debug("Unsupported Homeworlds sacrifice color");
+      return HOMEWORLDS_STEP_NONE;
+  }
+}
+
+static gboolean homeworlds_builder_commit_action(HomeworldsMoveBuilderState *state,
+                                                 const HomeworldsTurnStep *step,
+                                                 gboolean require_access) {
   g_return_val_if_fail(state != NULL, FALSE);
   g_return_val_if_fail(step != NULL, FALSE);
 
   if (!homeworlds_builder_append_step(state, step)) {
     return FALSE;
   }
-  if (!homeworlds_position_apply_turn_step(&state->working_position, step)) {
+  if (require_access ? !homeworlds_position_apply_turn_step(&state->working_position, step)
+                     : !homeworlds_position_apply_forced_action_step(&state->working_position, step)) {
     state->move.step_count--;
     return FALSE;
   }
@@ -194,6 +213,63 @@ static gboolean homeworlds_builder_apply_prefix_step(HomeworldsMoveBuilderState 
     return FALSE;
   }
   return TRUE;
+}
+
+static gboolean homeworlds_builder_start_selected_action(HomeworldsMoveBuilderState *state, HomeworldsStepKind action) {
+  guint selected_ship_slot = 0;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+
+  if (!homeworlds_builder_find_selected_ship_slot(state, &selected_ship_slot)) {
+    return FALSE;
+  }
+
+  HomeworldsTurnStep step = {
+    .kind = action,
+  };
+  if (!homeworlds_builder_selected_ship_ref(state, &step.actor)) {
+    return FALSE;
+  }
+
+  if (action == HOMEWORLDS_STEP_BUILD) {
+    gboolean require_access = state->pending_actions_remaining == 0;
+
+    homeworlds_builder_consume_pending_action(state);
+    return homeworlds_builder_commit_action(state, &step, require_access);
+  }
+  if (action == HOMEWORLDS_STEP_SACRIFICE) {
+    HomeworldsPyramid ship = state->working_position.systems[state->selected_system_index]
+                                 .ships[state->working_position.turn][selected_ship_slot];
+
+    if (!homeworlds_pyramid_is_valid(ship)) {
+      return FALSE;
+    }
+
+    state->pending_actions_remaining = homeworlds_pyramid_size(ship);
+    state->forced_action_color = homeworlds_pyramid_color(ship);
+    if (!homeworlds_builder_apply_prefix_step(state, &step)) {
+      return FALSE;
+    }
+    state->stage = HOMEWORLDS_BUILDER_STAGE_SELECT_SHIP;
+    return TRUE;
+  }
+  if (action == HOMEWORLDS_STEP_TRADE) {
+    state->pending_action_kind = HOMEWORLDS_STEP_TRADE;
+    state->stage = HOMEWORLDS_BUILDER_STAGE_SELECT_TRADE_COLOR;
+    return TRUE;
+  }
+  if (action == HOMEWORLDS_STEP_ATTACK) {
+    state->pending_action_kind = HOMEWORLDS_STEP_ATTACK;
+    state->stage = HOMEWORLDS_BUILDER_STAGE_SELECT_ATTACK_TARGET;
+    return TRUE;
+  }
+  if (action == HOMEWORLDS_STEP_MOVE) {
+    state->pending_action_kind = HOMEWORLDS_STEP_MOVE;
+    state->stage = HOMEWORLDS_BUILDER_STAGE_SELECT_MOVE_TARGET;
+    return TRUE;
+  }
+
+  return FALSE;
 }
 
 static guint homeworlds_builder_bank_count(const HomeworldsPosition *position, HomeworldsPyramid pyramid) {
@@ -364,33 +440,12 @@ static GameBackendMoveList homeworlds_builder_list_actions(const HomeworldsMoveB
 
   if (state->pending_actions_remaining > 0) {
     HomeworldsColor forced_color = (HomeworldsColor) state->forced_action_color;
+    HomeworldsStepKind forced_action = homeworlds_builder_action_for_color(forced_color);
 
-    if (forced_color == HOMEWORLDS_COLOR_GREEN &&
-        homeworlds_system_has_access_to_color(system, side, HOMEWORLDS_COLOR_GREEN)) {
+    if (forced_action != HOMEWORLDS_STEP_NONE) {
       HomeworldsMoveCandidate candidate = {
         .data.kind = HOMEWORLDS_CANDIDATE_ACTION,
-        .data.target_color = HOMEWORLDS_STEP_BUILD,
-      };
-      homeworlds_candidate_buffer_append(&buffer, &candidate);
-    } else if (forced_color == HOMEWORLDS_COLOR_BLUE &&
-               homeworlds_system_has_access_to_color(system, side, HOMEWORLDS_COLOR_BLUE)) {
-      HomeworldsMoveCandidate candidate = {
-        .data.kind = HOMEWORLDS_CANDIDATE_ACTION,
-        .data.target_color = HOMEWORLDS_STEP_TRADE,
-      };
-      homeworlds_candidate_buffer_append(&buffer, &candidate);
-    } else if (forced_color == HOMEWORLDS_COLOR_RED &&
-               homeworlds_system_has_access_to_color(system, side, HOMEWORLDS_COLOR_RED)) {
-      HomeworldsMoveCandidate candidate = {
-        .data.kind = HOMEWORLDS_CANDIDATE_ACTION,
-        .data.target_color = HOMEWORLDS_STEP_ATTACK,
-      };
-      homeworlds_candidate_buffer_append(&buffer, &candidate);
-    } else if (forced_color == HOMEWORLDS_COLOR_YELLOW &&
-               homeworlds_system_has_access_to_color(system, side, HOMEWORLDS_COLOR_YELLOW)) {
-      HomeworldsMoveCandidate candidate = {
-        .data.kind = HOMEWORLDS_CANDIDATE_ACTION,
-        .data.target_color = HOMEWORLDS_STEP_MOVE,
+        .data.target_color = forced_action,
       };
       homeworlds_candidate_buffer_append(&buffer, &candidate);
     }
@@ -690,7 +745,7 @@ gboolean homeworlds_move_builder_step(GameBackendMoveBuilder *builder, const Hom
       if (candidate->data.kind == HOMEWORLDS_CANDIDATE_ACTION &&
           candidate->data.target_color == HOMEWORLDS_STEP_PASS) {
         HomeworldsTurnStep step = {.kind = HOMEWORLDS_STEP_PASS};
-        return homeworlds_builder_commit_action(state, &step);
+        return homeworlds_builder_commit_action(state, &step, TRUE);
       }
       if (candidate->data.kind != HOMEWORLDS_CANDIDATE_SELECT_SHIP ||
           candidate->data.system_index >= HOMEWORLDS_SYSTEM_SLOT_COUNT ||
@@ -715,60 +770,19 @@ gboolean homeworlds_move_builder_step(GameBackendMoveBuilder *builder, const Hom
       }
       state->selected_system_index = candidate->data.system_index;
       state->selected_ship_pyramid = candidate->data.pyramid;
+      if (state->pending_actions_remaining > 0) {
+        HomeworldsStepKind forced_action =
+            homeworlds_builder_action_for_color((HomeworldsColor) state->forced_action_color);
+
+        return homeworlds_builder_start_selected_action(state, forced_action);
+      }
       state->stage = HOMEWORLDS_BUILDER_STAGE_SELECT_ACTION;
       return TRUE;
-    case HOMEWORLDS_BUILDER_STAGE_SELECT_ACTION: {
-      guint selected_ship_slot = 0;
-      if (!homeworlds_builder_find_selected_ship_slot(state, &selected_ship_slot)) {
-        return FALSE;
-      }
-
-      HomeworldsTurnStep step = {
-        .kind = candidate->data.target_color,
-      };
-      if (!homeworlds_builder_selected_ship_ref(state, &step.actor)) {
-        return FALSE;
-      }
-
+    case HOMEWORLDS_BUILDER_STAGE_SELECT_ACTION:
       if (candidate->data.kind != HOMEWORLDS_CANDIDATE_ACTION) {
         return FALSE;
       }
-      if (candidate->data.target_color == HOMEWORLDS_STEP_BUILD) {
-        homeworlds_builder_consume_pending_action(state);
-        return homeworlds_builder_commit_action(state, &step);
-      }
-      if (candidate->data.target_color == HOMEWORLDS_STEP_SACRIFICE) {
-        HomeworldsPyramid ship = state->working_position.systems[state->selected_system_index]
-                                     .ships[state->working_position.turn][selected_ship_slot];
-        if (!homeworlds_pyramid_is_valid(ship)) {
-          return FALSE;
-        }
-
-        state->pending_actions_remaining = homeworlds_pyramid_size(ship);
-        state->forced_action_color = homeworlds_pyramid_color(ship);
-        if (!homeworlds_builder_apply_prefix_step(state, &step)) {
-          return FALSE;
-        }
-        state->stage = HOMEWORLDS_BUILDER_STAGE_SELECT_SHIP;
-        return TRUE;
-      }
-      if (candidate->data.target_color == HOMEWORLDS_STEP_TRADE) {
-        state->pending_action_kind = HOMEWORLDS_STEP_TRADE;
-        state->stage = HOMEWORLDS_BUILDER_STAGE_SELECT_TRADE_COLOR;
-        return TRUE;
-      }
-      if (candidate->data.target_color == HOMEWORLDS_STEP_ATTACK) {
-        state->pending_action_kind = HOMEWORLDS_STEP_ATTACK;
-        state->stage = HOMEWORLDS_BUILDER_STAGE_SELECT_ATTACK_TARGET;
-        return TRUE;
-      }
-      if (candidate->data.target_color == HOMEWORLDS_STEP_MOVE) {
-        state->pending_action_kind = HOMEWORLDS_STEP_MOVE;
-        state->stage = HOMEWORLDS_BUILDER_STAGE_SELECT_MOVE_TARGET;
-        return TRUE;
-      }
-      return FALSE;
-    }
+      return homeworlds_builder_start_selected_action(state, (HomeworldsStepKind) candidate->data.target_color);
     case HOMEWORLDS_BUILDER_STAGE_SELECT_TRADE_COLOR: {
       guint selected_ship_slot = 0;
       if (!homeworlds_builder_find_selected_ship_slot(state, &selected_ship_slot)) {
@@ -786,8 +800,10 @@ gboolean homeworlds_move_builder_step(GameBackendMoveBuilder *builder, const Hom
       if (candidate->data.kind != HOMEWORLDS_CANDIDATE_TRADE_COLOR) {
         return FALSE;
       }
+      gboolean require_access = state->pending_actions_remaining == 0;
+
       homeworlds_builder_consume_pending_action(state);
-      return homeworlds_builder_commit_action(state, &step);
+      return homeworlds_builder_commit_action(state, &step, require_access);
     }
     case HOMEWORLDS_BUILDER_STAGE_SELECT_ATTACK_TARGET: {
       guint selected_ship_slot = 0;
@@ -813,8 +829,10 @@ gboolean homeworlds_move_builder_step(GameBackendMoveBuilder *builder, const Hom
       if (candidate->data.kind != HOMEWORLDS_CANDIDATE_ATTACK_TARGET) {
         return FALSE;
       }
+      gboolean require_access = state->pending_actions_remaining == 0;
+
       homeworlds_builder_consume_pending_action(state);
-      return homeworlds_builder_commit_action(state, &step);
+      return homeworlds_builder_commit_action(state, &step, require_access);
     }
     case HOMEWORLDS_BUILDER_STAGE_SELECT_MOVE_TARGET: {
       guint selected_ship_slot = 0;
@@ -842,8 +860,10 @@ gboolean homeworlds_move_builder_step(GameBackendMoveBuilder *builder, const Hom
       if (candidate->data.kind != HOMEWORLDS_CANDIDATE_MOVE_TARGET) {
         return FALSE;
       }
+      gboolean require_access = state->pending_actions_remaining == 0;
+
       homeworlds_builder_consume_pending_action(state);
-      return homeworlds_builder_commit_action(state, &step);
+      return homeworlds_builder_commit_action(state, &step, require_access);
     }
     case HOMEWORLDS_BUILDER_STAGE_COMPLETE:
     default:

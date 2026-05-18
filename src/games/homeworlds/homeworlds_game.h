@@ -17,6 +17,7 @@ guint homeworlds_position_turn(const HomeworldsPosition *position);
 gboolean homeworlds_position_apply_move(HomeworldsPosition *position, const HomeworldsMove *move);
 gboolean homeworlds_position_apply_catastrophe(HomeworldsPosition *position, guint system_index, HomeworldsColor color);
 gboolean homeworlds_position_apply_turn_step(HomeworldsPosition *position, const HomeworldsTurnStep *step);
+gboolean homeworlds_position_apply_forced_action_step(HomeworldsPosition *position, const HomeworldsTurnStep *step);
 void homeworlds_position_finish_turn(HomeworldsPosition *position);
 gboolean homeworlds_position_system_ref_for_index(const HomeworldsPosition *position,
                                                   guint system_index,

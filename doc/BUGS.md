@@ -131,6 +131,19 @@ choices.
 The fix reads candidate-list storage with the candidate element type directly. The Homeworlds move report test exercises
 the resulting backend `good_moves()` walk from a playable position.
 
+## Homeworlds sacrifice follow-ups still required local color access
+
+After a sacrifice, choosing a ship for one of the granted actions should immediately execute that sacrificed color's
+action or ask only for its target. The chosen ship does not need local access to that color.
+
+The staged builder returned to the normal action-selection stage after each sacrifice ship choice, and the rules engine
+used the ordinary action applicators that check local red/yellow/green/blue access. A green sacrifice could therefore
+reject a build from a ship in a system with no green access, even though the sacrifice itself grants the green action.
+
+The fix maps the sacrificed color to its action as soon as a follow-up ship is selected, skips the action picker, and
+applies sacrifice-granted actions through a forced-action path that bypasses local color-access checks while preserving
+all target, size, bank, and connectivity validation.
+
 ## Puzzle attempt timing started only after the first move
 
 Puzzle attempt timing should include the time spent looking at the opened puzzle before choosing the first move.
