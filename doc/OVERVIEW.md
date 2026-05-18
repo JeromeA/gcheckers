@@ -503,11 +503,12 @@ the players' homeworlds), two star slots per system, and fourteen ship slots per
 `homeworlds_types.h` own pyramid encoding/decoding and low-level slot semantics so the representation can change in
 one place later if needed. `HomeworldsMove` does not store physical slot indexes or an acting side; it stores the same
 symbolic system and ship references used by notation (`H1`, `G3'`, `g2`, etc.), and the rules engine resolves those
-references against the current position at apply time.
+references against the current position at apply time. Build steps are canonicalized further: they store only the
+source system plus the build color in `target_color`, because the exact source ship size does not change the move.
 Rules covered: setup, build, trade, attack, move, discover, sacrifice, catastrophe resolution, empty-system
 cleanup, end-of-turn homeworld loss detection for either side, static evaluation, terminal scoring, hashing, compact
 move formatting/parsing, and whole-position SGF snapshots in `homeworlds_sgf_position.c`. Move notation uses pyramid
-letters and sizes directly, such as `Y2B1g3`, `H1 g1+`, `G3 y2>G2 G3 y!`, and `pass`. Static evaluation counts ship
+letters and sizes directly, such as `Y2B1g3`, `H1 g+`, `G3 y2>G2 G3 y!`, and `pass`. Static evaluation counts ship
 material and repeats the largest own ship at each player's homeworld. Sacrifice-granted actions reuse the normal action
 application code but bypass local color-access checks because the sacrificed ship supplies the action color.
 Collaborates with: `homeworlds_move_builder.c`, `homeworlds_backend.c`, `homeworlds_sgf_position.c`,
@@ -523,7 +524,8 @@ Sacrifices are modeled as a prefix step that fixes the remaining action color an
 back through source-ship selection for each granted action. Choosing a ship for a sacrificed action immediately starts
 that forced action instead of showing the normal action picker again. Candidate data can still use transient slot
 indexes for UI selection, but committed move steps are converted to symbolic references before they are applied or saved
-to SGF.
+to SGF. Committed build steps are converted to system-plus-color form so two same-color source ships produce the same
+internal move and notation.
 Physically interchangeable choices, such as identical bank stars for discovery or identical enemy ships for capture,
 are deduplicated before they become user-visible choices.
 Collaborates with: `homeworlds_game.c`, `homeworlds_backend.c`, `homeworlds_view.c`, and
@@ -549,7 +551,9 @@ selectable ships, capture targets, and existing-system move targets are also ove
 only keeps non-board choices such as pass or follow-up actions, with a `Cancel` button whenever those choices belong to
 an in-progress move. During play, the side panel also reports the backend `good_moves()` list followed by the remaining
 legal moves collected from the staged builder, capped and marked when optional catastrophe chains make the list too
-large for the UI. The Homeworlds board host also syncs its last-move label from SGF current-node changes so timeline
+large for the UI. The report caps both stored unique moves and explored complete branches so canonical duplicates
+cannot make the UI spend unbounded time enumerating equivalent lines. The Homeworlds board host also syncs its
+last-move label from SGF current-node changes so timeline
 navigation and direct play report the same move. Human interaction
 advances
 `homeworlds_move_builder` one visible choice at a time and sends each completed `HomeworldsMove` to the generic window

@@ -29,6 +29,7 @@ inside a scroller when the systems cannot fit.
 - [x] (2026-05-18) Made Homeworlds good-move generation force profitable catastrophes at the earliest staged step.
 - [x] (2026-05-18) Added a Homeworlds side-panel move report for `good_moves()` and remaining legal moves.
 - [x] (2026-05-18) Fixed sacrifice-granted actions so the sacrificed color drives the action after ship selection.
+- [x] (2026-05-18) Canonicalized build moves to store and format only the system plus build color.
 
 ## Surprises & Discoveries
 
@@ -78,6 +79,12 @@ inside a scroller when the systems cannot fit.
   width shrink back whenever the measured rows fit.
   Date/Author: 2026-05-18 Codex.
 
+- Decision: Represent build moves as source system plus build color, not source ship pyramid.
+  Rationale: In Homeworlds, any same-color ship at the system grants the same build action and always builds the
+  smallest available bank ship of that color. Storing a ship size made `H1 g1+` and `H1 g3+` look distinct even though
+  they apply the same move.
+  Date/Author: 2026-05-18 Codex.
+
 ## Outcomes & Retrospective
 
 Removed the cairo connection-line pass from `homeworlds_view_draw()` while keeping reachability row placement intact.
@@ -96,6 +103,9 @@ The side panel now exposes `good_moves()` followed by the remaining legal moves 
 explicit cap marker when optional catastrophe sequences would make the report too large for interactive use.
 Sacrifice follow-up choices now ask only for the ship and any target needed by the sacrificed color. The selected
 ship's local system no longer needs access to that color, because the sacrifice provides the action.
+Build moves now use color-only notation such as `H1 g+`; internally they store `actor.system`, leave `actor.ship`
+empty, and put the source/build color in `target_color`. This removes duplicate same-color build moves from generated
+move lists and SGF output.
 System internals now render as one row ordered player 2 ships, stars, then player 1 ships, matching each owner's
 right-hand side from their own perspective.
 Catastrophe application now runs orphan-star cleanup after all successful catastrophes, not only star-destroying

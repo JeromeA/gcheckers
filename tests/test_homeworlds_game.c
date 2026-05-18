@@ -156,9 +156,10 @@ static void test_build_uses_smallest_available_ship(void) {
   move = test_single_step_move(0,
                                (HomeworldsTurnStep){
                                    .kind = HOMEWORLDS_STEP_BUILD,
-                                   .actor = test_ship_ref(test_homeworld_ref(0),
-                                                          HOMEWORLDS_COLOR_GREEN,
-                                                          HOMEWORLDS_SIZE_LARGE),
+                                   .actor = {
+                                     .system = test_homeworld_ref(0),
+                                   },
+                                   .target_color = HOMEWORLDS_COLOR_GREEN,
                                });
   assert(homeworlds_position_apply_move(&position, &move));
   assert(homeworlds_system_ship_count_for_side(&position.systems[0], 0) == 2);
@@ -302,9 +303,10 @@ static void test_sacrifice_actions_ignore_local_color_access(void) {
   };
   move.steps[1] = (HomeworldsTurnStep){
     .kind = HOMEWORLDS_STEP_BUILD,
-    .actor = test_ship_ref(test_star_ref(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_MEDIUM, 0),
-                           HOMEWORLDS_COLOR_RED,
-                           HOMEWORLDS_SIZE_SMALL),
+    .actor = {
+      .system = test_star_ref(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_MEDIUM, 0),
+    },
+    .target_color = HOMEWORLDS_COLOR_RED,
   };
   move.steps[2] = (HomeworldsTurnStep){
     .kind = HOMEWORLDS_STEP_PASS,

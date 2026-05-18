@@ -48,6 +48,7 @@ typedef struct {
 #define HOMEWORLDS_VIEW_MIN_BOARD_VIEWPORT_WIDTH 420
 #define HOMEWORLDS_VIEW_SYSTEM_PIECE_MAX (HOMEWORLDS_STAR_SLOT_COUNT + (2 * HOMEWORLDS_SHIP_SLOT_COUNT))
 #define HOMEWORLDS_VIEW_MOVE_REPORT_MAX_MOVES 512
+#define HOMEWORLDS_VIEW_MOVE_REPORT_MAX_LEAVES 4096
 
 typedef enum {
   HOMEWORLDS_VIEW_SYSTEM_ROW_TOP = 0,
@@ -90,6 +91,7 @@ typedef struct {
   HomeworldsMove *moves;
   gsize count;
   gsize capacity;
+  gsize leaves_seen;
   gboolean truncated;
 } HomeworldsViewMoveBuffer;
 
@@ -1889,6 +1891,12 @@ static gboolean homeworlds_view_move_buffer_append(HomeworldsViewMoveBuffer *buf
   g_return_val_if_fail(buffer != NULL, FALSE);
   g_return_val_if_fail(move != NULL, FALSE);
 
+  if (buffer->leaves_seen >= HOMEWORLDS_VIEW_MOVE_REPORT_MAX_LEAVES) {
+    buffer->truncated = TRUE;
+    return TRUE;
+  }
+  buffer->leaves_seen++;
+
   if (buffer->count >= HOMEWORLDS_VIEW_MOVE_REPORT_MAX_MOVES) {
     buffer->truncated = TRUE;
     return TRUE;
@@ -2145,6 +2153,7 @@ static void homeworlds_view_update_move_report(HomeworldsView *view) {
   g_autofree char *good_title = NULL;
   g_autofree char *other_title = NULL;
   g_autoptr(GString) text = NULL;
+  gboolean good_moves_truncated = FALSE;
   gboolean all_moves_truncated = FALSE;
 
   g_return_if_fail(view != NULL);
@@ -2160,10 +2169,12 @@ static void homeworlds_view_update_move_report(HomeworldsView *view) {
     return;
   }
 
-  good_moves = homeworlds_game_backend.list_good_moves(position, 0);
+  good_moves = homeworlds_backend_list_good_moves_limited(position,
+                                                          HOMEWORLDS_VIEW_MOVE_REPORT_MAX_LEAVES,
+                                                          &good_moves_truncated);
   all_moves = homeworlds_view_list_all_moves(position, &all_moves_truncated);
   text = g_string_new(NULL);
-  good_title = g_strdup_printf("good_moves() (%zu)", good_moves.count);
+  good_title = g_strdup_printf("good_moves() (%zu%s)", good_moves.count, good_moves_truncated ? "+" : "");
   other_title = g_strdup_printf("all possible moves minus good_moves() (%zu%s total before filtering)",
                                 all_moves.count,
                                 all_moves_truncated ? "+" : "");

@@ -217,10 +217,16 @@ static gboolean homeworlds_builder_apply_prefix_step(HomeworldsMoveBuilderState 
 
 static gboolean homeworlds_builder_start_selected_action(HomeworldsMoveBuilderState *state, HomeworldsStepKind action) {
   guint selected_ship_slot = 0;
+  HomeworldsPyramid selected_ship = 0;
 
   g_return_val_if_fail(state != NULL, FALSE);
 
   if (!homeworlds_builder_find_selected_ship_slot(state, &selected_ship_slot)) {
+    return FALSE;
+  }
+  selected_ship = state->working_position.systems[state->selected_system_index]
+                      .ships[state->working_position.turn][selected_ship_slot];
+  if (!homeworlds_pyramid_is_valid(selected_ship)) {
     return FALSE;
   }
 
@@ -234,19 +240,14 @@ static gboolean homeworlds_builder_start_selected_action(HomeworldsMoveBuilderSt
   if (action == HOMEWORLDS_STEP_BUILD) {
     gboolean require_access = state->pending_actions_remaining == 0;
 
+    step.actor.ship = 0;
+    step.target_color = homeworlds_pyramid_color(selected_ship);
     homeworlds_builder_consume_pending_action(state);
     return homeworlds_builder_commit_action(state, &step, require_access);
   }
   if (action == HOMEWORLDS_STEP_SACRIFICE) {
-    HomeworldsPyramid ship = state->working_position.systems[state->selected_system_index]
-                                 .ships[state->working_position.turn][selected_ship_slot];
-
-    if (!homeworlds_pyramid_is_valid(ship)) {
-      return FALSE;
-    }
-
-    state->pending_actions_remaining = homeworlds_pyramid_size(ship);
-    state->forced_action_color = homeworlds_pyramid_color(ship);
+    state->pending_actions_remaining = homeworlds_pyramid_size(selected_ship);
+    state->forced_action_color = homeworlds_pyramid_color(selected_ship);
     if (!homeworlds_builder_apply_prefix_step(state, &step)) {
       return FALSE;
     }

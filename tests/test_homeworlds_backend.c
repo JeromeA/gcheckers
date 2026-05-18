@@ -212,15 +212,37 @@ static void test_backend_move_codec_roundtrips_setup_and_turn(void) {
       },
     },
   };
+  HomeworldsMove build = {
+    .kind = HOMEWORLDS_MOVE_KIND_TURN,
+    .step_count = 1,
+    .steps = {
+      {
+        .kind = HOMEWORLDS_STEP_BUILD,
+        .actor = {
+          .system = test_homeworld_ref(0),
+        },
+        .target_color = HOMEWORLDS_COLOR_GREEN,
+      },
+    },
+  };
   char notation[128] = {0};
   HomeworldsMove parsed = {0};
 
   test_backend_move_roundtrips(&setup);
   test_backend_move_roundtrips(&turn);
+  test_backend_move_roundtrips(&build);
   assert(homeworlds_move_format(&setup, notation, sizeof(notation)));
   assert(strcmp(notation, "R1B2g3") == 0);
   assert(homeworlds_move_format(&turn, notation, sizeof(notation)));
   assert(strcmp(notation, "H1 g3-/H1 r3=g") == 0);
+  assert(homeworlds_move_format(&build, notation, sizeof(notation)));
+  assert(strcmp(notation, "H1 g+") == 0);
+  assert(homeworlds_move_parse("H1 g+", &parsed));
+  assert(parsed.steps[0].kind == HOMEWORLDS_STEP_BUILD);
+  assert(parsed.steps[0].actor.ship == 0);
+  assert(parsed.steps[0].target_color == HOMEWORLDS_COLOR_GREEN);
+  assert(homeworlds_move_format(&parsed, notation, sizeof(notation)));
+  assert(strcmp(notation, "H1 g+") == 0);
   assert(homeworlds_move_parse("Y2B1g3", &parsed));
   assert(homeworlds_move_format(&parsed, notation, sizeof(notation)));
   assert(strcmp(notation, "Y2B1g3") == 0);
@@ -381,6 +403,10 @@ static void test_backend_move_builder_completes_turn(void) {
   assert(backend->move_builder_build_move(&builder, &move));
   assert(move.step_count == 1);
   assert(move.steps[0].kind == HOMEWORLDS_STEP_BUILD);
+  assert(move.steps[0].actor.system.kind == HOMEWORLDS_SYSTEM_REF_HOMEWORLD);
+  assert(move.steps[0].actor.system.homeworld_side == 0);
+  assert(move.steps[0].actor.ship == 0);
+  assert(move.steps[0].target_color == HOMEWORLDS_COLOR_GREEN);
   backend->move_builder_clear(&builder);
 }
 
@@ -431,6 +457,8 @@ static void test_backend_move_builder_sacrifice_build_skips_action_choice(void) 
   assert(state->pending_actions_remaining == 2);
   assert(state->move.step_count == 2);
   assert(state->move.steps[1].kind == HOMEWORLDS_STEP_BUILD);
+  assert(state->move.steps[1].actor.ship == 0);
+  assert(state->move.steps[1].target_color == HOMEWORLDS_COLOR_RED);
   assert(homeworlds_system_ship_count_for_side(&state->working_position.systems[2], 0) == 2);
   backend->move_builder_clear(&builder);
 }
@@ -570,7 +598,36 @@ static void test_backend_good_moves_first_turn_always_builds(void) {
     assert(move->kind == HOMEWORLDS_MOVE_KIND_TURN);
     assert(move->step_count == 1);
     assert(move->steps[0].kind == HOMEWORLDS_STEP_BUILD);
+    assert(move->steps[0].actor.ship == 0);
+    assert(move->steps[0].target_color <= HOMEWORLDS_COLOR_BLUE);
   }
+  backend->move_list_free(&good_moves);
+}
+
+static void test_backend_good_moves_deduplicate_builds_by_color(void) {
+  const GameBackend *backend = &homeworlds_game_backend;
+  HomeworldsPosition position = {0};
+  GameBackendMoveList good_moves = {0};
+  guint green_homeworld_builds = 0;
+
+  test_prepare_position(&position);
+  position.systems[0].ships[0][1] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL);
+
+  good_moves = backend->list_good_moves(&position, 0);
+  assert(good_moves.count > 0);
+  for (gsize i = 0; i < good_moves.count; ++i) {
+    const HomeworldsMove *move = backend->move_list_get(&good_moves, i);
+    char notation[128] = {0};
+
+    assert(move != NULL);
+    assert(homeworlds_move_format(move, notation, sizeof(notation)));
+    assert(strstr(notation, "g1+") == NULL);
+    assert(strstr(notation, "g3+") == NULL);
+    if (strcmp(notation, "H1 g+") == 0) {
+      green_homeworld_builds++;
+    }
+  }
+  assert(green_homeworld_builds == 1);
   backend->move_list_free(&good_moves);
 }
 
@@ -889,7 +946,7 @@ static void test_backend_good_moves_trigger_new_profitable_catastrophe_immediate
         move->steps[0].kind != HOMEWORLDS_STEP_BUILD ||
         move->steps[0].actor.system.kind != HOMEWORLDS_SYSTEM_REF_HOMEWORLD ||
         move->steps[0].actor.system.homeworld_side != 0 ||
-        move->steps[0].actor.ship != homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE)) {
+        move->steps[0].target_color != HOMEWORLDS_COLOR_GREEN) {
       continue;
     }
 
@@ -1016,6 +1073,7 @@ int main(void) {
   test_backend_good_moves_are_subset_and_ordered();
   test_backend_good_moves_follow_setup_policy_without_truncation();
   test_backend_good_moves_first_turn_always_builds();
+  test_backend_good_moves_deduplicate_builds_by_color();
   test_backend_good_moves_never_pass();
   test_backend_good_moves_return_empty_when_only_pass_is_available();
   test_backend_good_moves_skip_attack_without_targets();

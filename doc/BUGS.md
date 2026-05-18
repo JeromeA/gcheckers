@@ -550,3 +550,14 @@ left empty scrollable space. The content width calculation had an unconditional 
 were not guaranteed to emit a drawing-area resize. The fix uses the scrolled window adjustment page size as the
 viewport, recalculates on adjustment changes, and shrinks the drawing area back to the viewport width whenever the row
 contents fit.
+
+## Homeworlds build moves duplicated same-color source ships
+
+Building in Homeworlds is determined by the system and the color of an available source ship. The source ship size does
+not change the built piece, because the action always takes the smallest available bank ship of that color.
+
+Build moves were stored and formatted with the full source ship pyramid, so same-color ships produced redundant moves
+such as `H1 g1+` and `H1 g3+` even though they applied the same build.
+
+The fix canonicalizes build steps to store only the source system and build color. Build notation is now color-only,
+for example `H1 g+`, and generated move lists deduplicate those equivalent choices.

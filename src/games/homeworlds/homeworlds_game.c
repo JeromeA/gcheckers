@@ -354,31 +354,38 @@ static gboolean homeworlds_position_apply_build(HomeworldsPosition *position,
   g_return_val_if_fail(step != NULL, FALSE);
 
   guint system_index = 0;
-  guint ship_slot = 0;
-  HomeworldsPyramid source = 0;
   HomeworldsPyramid built = 0;
+  HomeworldsSystem *system = NULL;
+  gboolean has_source_color_ship = FALSE;
 
-  if (!homeworlds_position_resolve_ship_ref(position,
-                                            &step->actor,
-                                            position->turn,
-                                            &system_index,
-                                            &ship_slot,
-                                            &source)) {
+  if (step->target_color > HOMEWORLDS_COLOR_BLUE ||
+      !homeworlds_position_resolve_system_ref(position, &step->actor.system, &system_index)) {
     return FALSE;
   }
 
-  HomeworldsSystem *system = &position->systems[system_index];
+  system = &position->systems[system_index];
+  for (guint ship_slot = 0; ship_slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++ship_slot) {
+    HomeworldsPyramid ship = system->ships[position->turn][ship_slot];
+
+    if (homeworlds_pyramid_is_valid(ship) &&
+        homeworlds_pyramid_color(ship) == (HomeworldsColor) step->target_color) {
+      has_source_color_ship = TRUE;
+      break;
+    }
+  }
+  if (!has_source_color_ship) {
+    return FALSE;
+  }
   if (require_access && !homeworlds_system_has_access_to_color(system, position->turn, HOMEWORLDS_COLOR_GREEN)) {
     return FALSE;
   }
-  if (!homeworlds_system_find_smallest_bank_ship(position, homeworlds_pyramid_color(source), &built)) {
+  if (!homeworlds_system_find_smallest_bank_ship(position, (HomeworldsColor) step->target_color, &built)) {
     return FALSE;
   }
   if (!homeworlds_bank_take(position, built)) {
     return FALSE;
   }
 
-  (void)ship_slot;
   return homeworlds_system_add_ship(system, position->turn, built);
 }
 
@@ -1164,15 +1171,19 @@ static gboolean homeworlds_move_append_turn_step(GString *text, const Homeworlds
     return FALSE;
   }
   g_string_append_c(text, ' ');
-  if (!homeworlds_move_append_pyramid(text, step->actor.ship, FALSE)) {
-    return FALSE;
-  }
 
   switch ((HomeworldsStepKind)step->kind) {
     case HOMEWORLDS_STEP_BUILD:
+      if (step->target_color > HOMEWORLDS_COLOR_BLUE) {
+        return FALSE;
+      }
+      g_string_append_c(text, homeworlds_move_color_letter((HomeworldsColor)step->target_color, FALSE));
       g_string_append_c(text, '+');
       return TRUE;
     case HOMEWORLDS_STEP_TRADE:
+      if (!homeworlds_move_append_pyramid(text, step->actor.ship, FALSE)) {
+        return FALSE;
+      }
       if (step->target_color > HOMEWORLDS_COLOR_BLUE) {
         return FALSE;
       }
@@ -1180,13 +1191,22 @@ static gboolean homeworlds_move_append_turn_step(GString *text, const Homeworlds
       g_string_append_c(text, homeworlds_move_color_letter((HomeworldsColor)step->target_color, FALSE));
       return TRUE;
     case HOMEWORLDS_STEP_ATTACK:
+      if (!homeworlds_move_append_pyramid(text, step->actor.ship, FALSE)) {
+        return FALSE;
+      }
       g_string_append_c(text, 'x');
       return homeworlds_move_append_pyramid(text, step->target_ship.ship, FALSE);
     case HOMEWORLDS_STEP_MOVE:
     case HOMEWORLDS_STEP_DISCOVER:
+      if (!homeworlds_move_append_pyramid(text, step->actor.ship, FALSE)) {
+        return FALSE;
+      }
       g_string_append_c(text, '>');
       return homeworlds_move_append_system_ref(text, &step->target_system);
     case HOMEWORLDS_STEP_SACRIFICE:
+      if (!homeworlds_move_append_pyramid(text, step->actor.ship, FALSE)) {
+        return FALSE;
+      }
       g_string_append_c(text, '-');
       return TRUE;
     case HOMEWORLDS_STEP_NONE:
@@ -1313,16 +1333,18 @@ static gboolean homeworlds_move_parse_turn_step(const char **cursor, HomeworldsT
     *cursor += 2;
     return TRUE;
   }
+  if (homeworlds_move_color_from_letter(**cursor, FALSE, &color) && (*cursor)[1] == '+') {
+    out_step->kind = HOMEWORLDS_STEP_BUILD;
+    out_step->target_color = color;
+    *cursor += 2;
+    return TRUE;
+  }
 
   if (!homeworlds_move_parse_pyramid(cursor, FALSE, &out_step->actor.ship)) {
     return FALSE;
   }
 
   switch (**cursor) {
-    case '+':
-      out_step->kind = HOMEWORLDS_STEP_BUILD;
-      (*cursor)++;
-      return TRUE;
     case '=':
       (*cursor)++;
       if (!homeworlds_move_color_from_letter(**cursor, FALSE, &color)) {
