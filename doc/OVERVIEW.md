@@ -555,7 +555,9 @@ full legal move list, so the
 shared SGF controller validates completed moves by applying them to a copied position before appending the node.
 `homeworlds_backend.c` walks the same staged builder to feed the shared alpha-beta search with backend-good moves. That
 AI candidate path rejects pass moves, applies Homeworlds-specific opening and safety heuristics, and lets dead-end
-choices such as attacks with no target naturally produce no completed move.
+choices such as attacks with no target naturally produce no completed move. It also forces profitable catastrophes as
+soon as they are available in the staged walk, including catastrophes made available by an earlier step in the same
+turn.
 Collaborates with: `GGameAppProfile`, `GGameWindow`, `GGameModel`, `GGameSgfController`, `homeworlds_game.c`,
 `homeworlds_move_builder.c`, `homeworlds_backend.c`, and `tests/test_homeworlds_window.c`.
 
