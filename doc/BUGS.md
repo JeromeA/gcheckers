@@ -519,3 +519,9 @@ enough that the pane remains resizable.
 The pane was still capped at roughly the board height because the shared window had a square-board splitter guard that
 limited the main split position to the paned height. That guard is now only applied to square-grid board profiles, so
 Homeworlds can use the full available window width and leave the SGF drawer narrow when desired.
+
+After widening the board and then narrowing it again, the Homeworlds drawing area kept the old wide content width and
+left empty scrollable space. The content width calculation had an unconditional fallback minimum, and viewport changes
+were not guaranteed to emit a drawing-area resize. The fix uses the scrolled window adjustment page size as the
+viewport, recalculates on adjustment changes, and shrinks the drawing area back to the viewport width whenever the row
+contents fit.

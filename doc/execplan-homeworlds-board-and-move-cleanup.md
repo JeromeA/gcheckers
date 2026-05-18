@@ -24,6 +24,7 @@ inside a scroller when the systems cannot fit.
 - [x] (2026-05-18) Gave the scrolled board a practical minimum viewport and widened the Homeworlds default board panel.
 - [x] (2026-05-18) Split default board-panel width from minimum width so the Homeworlds paned handle remains movable.
 - [x] (2026-05-18) Exempted non-square-grid board hosts from the shared square-board splitter height clamp.
+- [x] (2026-05-18) Made the board content width shrink back to the viewport width when rows fit.
 
 ## Surprises & Discoveries
 
@@ -67,6 +68,12 @@ inside a scroller when the systems cannot fit.
   drawer from being reduced on wide windows.
   Date/Author: 2026-05-18 Codex.
 
+- Decision: Drive Homeworlds board content width from the scrolled-window adjustment page size.
+  Rationale: The drawing area may not resize when only the viewport changes, especially if its content width was
+  previously expanded. The horizontal adjustment's page size is the actual viewport width, so using it lets the content
+  width shrink back whenever the measured rows fit.
+  Date/Author: 2026-05-18 Codex.
+
 ## Outcomes & Retrospective
 
 Removed the cairo connection-line pass from `homeworlds_view_draw()` while keeping reachability row placement intact.
@@ -75,7 +82,8 @@ and after the systems. The usable row width reserves the right-side bank footpri
 drawing area's content width inside a horizontal scroller. The board scroller also keeps a minimum practical viewport,
 and the Homeworlds default board panel width accounts for the board plus the Homeworlds side controls without becoming
 the splitter's hard minimum. The shared square-board splitter clamp now only runs for square-grid profiles, so the
-Homeworlds board panel can take the full width of a wide window while its drawing area remains scrollable.
+Homeworlds board panel can take the full width of a wide window while its drawing area remains scrollable. When rows
+fit the viewport, the drawing area now tracks the viewport exactly instead of keeping a stale wider scrollable area.
 System internals now render as one row ordered player 2 ships, stars, then player 1 ships, matching each owner's
 right-hand side from their own perspective.
 Catastrophe application now runs orphan-star cleanup after all successful catastrophes, not only star-destroying

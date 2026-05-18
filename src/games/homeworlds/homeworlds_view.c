@@ -104,6 +104,8 @@ struct _HomeworldsView {
   HomeworldsViewMoveAppliedFunc move_applied;
   gpointer move_applied_data;
   gulong model_state_changed_handler_id;
+  GtkAdjustment *board_hadjustment;
+  gulong board_hadjustment_changed_handler_id;
 };
 
 static void homeworlds_view_update_from_current_builder(HomeworldsView *view);
@@ -772,7 +774,7 @@ static double homeworlds_view_row_center_for_index(double left,
 }
 
 double homeworlds_view_calculate_board_content_width(const HomeworldsPosition *position, double viewport_width) {
-  double required_width = MAX(viewport_width, (double)HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH);
+  double required_width = viewport_width;
 
   g_return_val_if_fail(position != NULL, (double)HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH);
   g_return_val_if_fail(viewport_width > 0.0, (double)HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH);
@@ -1233,8 +1235,14 @@ static void homeworlds_view_board_size(HomeworldsView *view, int *out_width, int
   height = gtk_widget_get_height(view->drawing_area);
   content_width = gtk_drawing_area_get_content_width(GTK_DRAWING_AREA(view->drawing_area));
   content_height = gtk_drawing_area_get_content_height(GTK_DRAWING_AREA(view->drawing_area));
-  *out_width = MAX(MAX(width, content_width), HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH);
-  *out_height = MAX(MAX(height, content_height), HOMEWORLDS_VIEW_FALLBACK_BOARD_HEIGHT);
+  *out_width = MAX(width, content_width);
+  *out_height = MAX(height, content_height);
+  if (*out_width <= 1) {
+    *out_width = HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH;
+  }
+  if (*out_height <= 1) {
+    *out_height = HOMEWORLDS_VIEW_FALLBACK_BOARD_HEIGHT;
+  }
 }
 
 static int homeworlds_view_board_viewport_width(HomeworldsView *view) {
@@ -1242,6 +1250,12 @@ static int homeworlds_view_board_viewport_width(HomeworldsView *view) {
 
   g_return_val_if_fail(view != NULL, HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH);
 
+  if (view->board_hadjustment != NULL) {
+    double page_size = gtk_adjustment_get_page_size(view->board_hadjustment);
+    if (page_size > 1.0) {
+      return (int)ceil(page_size);
+    }
+  }
   if (view->board_scroller != NULL) {
     width = gtk_widget_get_width(view->board_scroller);
   }
@@ -1468,6 +1482,16 @@ static void homeworlds_view_board_resized(GtkDrawingArea * /*drawing_area*/,
 
   homeworlds_view_update_board_content_width(view);
   homeworlds_view_update_board_choice_buttons(view);
+}
+
+static void homeworlds_view_board_viewport_changed(GtkAdjustment * /*adjustment*/, gpointer user_data) {
+  HomeworldsView *view = user_data;
+
+  g_return_if_fail(view != NULL);
+
+  homeworlds_view_update_board_content_width(view);
+  homeworlds_view_update_board_choice_buttons(view);
+  gtk_widget_queue_draw(view->drawing_area);
 }
 
 static void homeworlds_view_draw_starfield(cairo_t *cr, int width, int height) {
@@ -2054,6 +2078,12 @@ HomeworldsView *homeworlds_view_new(GGameModel *model) {
   gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(view->drawing_area), homeworlds_view_draw, view, NULL);
   g_signal_connect(view->drawing_area, "resize", G_CALLBACK(homeworlds_view_board_resized), view);
   gtk_overlay_set_child(GTK_OVERLAY(view->board_overlay), view->drawing_area);
+  view->board_hadjustment =
+      g_object_ref(gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(view->board_scroller)));
+  view->board_hadjustment_changed_handler_id = g_signal_connect(view->board_hadjustment,
+                                                                "changed",
+                                                                G_CALLBACK(homeworlds_view_board_viewport_changed),
+                                                                view);
 
   view->board_choice_layer = gtk_fixed_new();
   gtk_widget_set_hexpand(view->board_choice_layer, TRUE);
@@ -2157,6 +2187,11 @@ void homeworlds_view_free(HomeworldsView *view) {
     g_signal_handler_disconnect(view->model, view->model_state_changed_handler_id);
     view->model_state_changed_handler_id = 0;
   }
+  if (view->board_hadjustment != NULL && view->board_hadjustment_changed_handler_id != 0) {
+    g_signal_handler_disconnect(view->board_hadjustment, view->board_hadjustment_changed_handler_id);
+    view->board_hadjustment_changed_handler_id = 0;
+  }
+  g_clear_object(&view->board_hadjustment);
   if (view->builder_ready) {
     homeworlds_move_builder_clear(&view->builder);
   }

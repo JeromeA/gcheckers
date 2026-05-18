@@ -477,6 +477,14 @@ static void test_homeworlds_view_board_content_width_expands_for_wide_rows(void)
   g_assert_cmpfloat(content_width, >, 900.0);
 }
 
+static void test_homeworlds_view_board_content_width_matches_viewport_when_rows_fit(void) {
+  HomeworldsPosition position = {0};
+
+  test_homeworlds_prepare_compact_row_position(&position);
+
+  g_assert_cmpfloat(homeworlds_view_calculate_board_content_width(&position, 900.0), ==, 900.0);
+}
+
 static void test_homeworlds_view_board_is_horizontally_scrollable(void) {
   HomeworldsPosition position = {0};
   GGameModel *model = ggame_model_new(&homeworlds_game_backend);
@@ -604,6 +612,34 @@ static void test_homeworlds_window_main_split_can_exceed_height(void) {
   gtk_window_destroy(GTK_WINDOW(window));
   g_object_unref(model);
   g_object_unref(app);
+}
+
+static void test_homeworlds_view_board_content_width_tracks_viewport(void) {
+  GGameModel *model = ggame_model_new(&homeworlds_game_backend);
+  HomeworldsView *view = homeworlds_view_new(model);
+  GtkWidget *root = homeworlds_view_get_widget(view);
+  GtkWidget *board = NULL;
+  GtkWidget *board_scroller = NULL;
+  GtkAdjustment *hadjustment = NULL;
+
+  board = test_homeworlds_find_widget_named(root, "homeworlds-board");
+  board_scroller = test_homeworlds_find_widget_named(root, "homeworlds-board-scroller");
+
+  g_assert_nonnull(board);
+  g_assert_true(GTK_IS_DRAWING_AREA(board));
+  g_assert_nonnull(board_scroller);
+  g_assert_true(GTK_IS_SCROLLED_WINDOW(board_scroller));
+  hadjustment = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(board_scroller));
+  g_assert_nonnull(hadjustment);
+
+  gtk_adjustment_configure(hadjustment, 0.0, 0.0, 1200.0, 1.0, 100.0, 1200.0);
+  g_assert_cmpint(gtk_drawing_area_get_content_width(GTK_DRAWING_AREA(board)), ==, 1200);
+
+  gtk_adjustment_configure(hadjustment, 0.0, 0.0, 700.0, 1.0, 100.0, 700.0);
+  g_assert_cmpint(gtk_drawing_area_get_content_width(GTK_DRAWING_AREA(board)), ==, 700);
+
+  homeworlds_view_free(view);
+  g_object_unref(model);
 }
 
 static void test_homeworlds_window_defaults_to_fast_computer(void) {
@@ -963,6 +999,8 @@ int main(int argc, char **argv) {
                   test_homeworlds_view_row_layout_accounts_for_system_width);
   g_test_add_func("/homeworlds/view/board-width-expands-for-wide-rows",
                   test_homeworlds_view_board_content_width_expands_for_wide_rows);
+  g_test_add_func("/homeworlds/view/board-width-matches-viewport-when-rows-fit",
+                  test_homeworlds_view_board_content_width_matches_viewport_when_rows_fit);
   g_test_add_func("/homeworlds/view/piece-metrics", test_homeworlds_view_piece_metrics_keep_pyramids_tall);
   if (!gtk_init_check()) {
     g_test_add_func("/homeworlds/window/replaces-skeleton", test_homeworlds_window_skip);
@@ -978,6 +1016,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/view/move-board-bank-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/advances-setup", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/board-scrollable", test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/view/board-content-width-tracks-viewport", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/window/catastrophe-prefix-records-single-sgf-move",
                     test_homeworlds_window_skip);
   } else {
@@ -998,6 +1037,8 @@ int main(int argc, char **argv) {
                     test_homeworlds_view_move_targets_use_board_and_bank_buttons);
     g_test_add_func("/homeworlds/view/advances-setup", test_homeworlds_view_advances_setup);
     g_test_add_func("/homeworlds/view/board-scrollable", test_homeworlds_view_board_is_horizontally_scrollable);
+    g_test_add_func("/homeworlds/view/board-content-width-tracks-viewport",
+                    test_homeworlds_view_board_content_width_tracks_viewport);
     g_test_add_func("/homeworlds/window/catastrophe-prefix-records-single-sgf-move",
                     test_homeworlds_window_catastrophe_prefix_records_single_sgf_move);
   }
