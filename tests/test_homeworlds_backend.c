@@ -834,6 +834,91 @@ static void test_backend_good_moves_skip_unsafe_build_catastrophe(void) {
   backend->move_list_free(&good_moves);
 }
 
+static void test_backend_good_moves_skip_unfavorable_move_catastrophe(void) {
+  const GameBackend *backend = &homeworlds_game_backend;
+  HomeworldsPosition position = {0};
+  GameBackendMoveList good_moves = {0};
+  gboolean saw_safe_move = FALSE;
+
+  homeworlds_position_init(&position);
+  position.phase = HOMEWORLDS_PHASE_PLAY;
+  position.turn = 0;
+  memset(position.systems, 0, sizeof(position.systems));
+  position.systems[0] = (HomeworldsSystem){
+    .stars = {
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL),
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_MEDIUM),
+    },
+    .ships = {
+      [0] = {
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_MEDIUM),
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL),
+      },
+    },
+  };
+  position.systems[1] = (HomeworldsSystem){
+    .stars = {
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL),
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE),
+    },
+    .ships = {
+      [1] = {
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE),
+      },
+    },
+  };
+  position.systems[2] = (HomeworldsSystem){
+    .stars = {
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE),
+    },
+    .ships = {
+      [0] = {
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE),
+      },
+      [1] = {
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL),
+      },
+    },
+  };
+  position.systems[3] = (HomeworldsSystem){
+    .stars = {
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE),
+    },
+    .ships = {
+      [1] = {
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL),
+      },
+    },
+  };
+
+  good_moves = backend->list_good_moves(&position, 0);
+  assert(good_moves.count > 0);
+  for (gsize i = 0; i < good_moves.count; ++i) {
+    const HomeworldsMove *move = backend->move_list_get(&good_moves, i);
+
+    assert(move != NULL);
+    for (guint step_index = 0; step_index < move->step_count; ++step_index) {
+      const HomeworldsTurnStep *step = &move->steps[step_index];
+
+      if ((step->kind != HOMEWORLDS_STEP_MOVE && step->kind != HOMEWORLDS_STEP_DISCOVER) ||
+          step->actor.system.kind != HOMEWORLDS_SYSTEM_REF_HOMEWORLD ||
+          step->actor.system.homeworld_side != 0 ||
+          step->actor.ship != homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_MEDIUM)) {
+        continue;
+      }
+      assert(step->target_system.kind != HOMEWORLDS_SYSTEM_REF_STAR ||
+             step->target_system.star != homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE) ||
+             step->target_system.duplicate_index != 0);
+      saw_safe_move = saw_safe_move ||
+                      (step->target_system.kind == HOMEWORLDS_SYSTEM_REF_STAR &&
+                       step->target_system.star == homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN,
+                                                                           HOMEWORLDS_SIZE_LARGE));
+    }
+  }
+  assert(saw_safe_move);
+  backend->move_list_free(&good_moves);
+}
+
 static void test_backend_good_moves_start_with_profitable_catastrophe(void) {
   const GameBackend *backend = &homeworlds_game_backend;
   HomeworldsPosition position = {0};
@@ -1079,6 +1164,7 @@ int main(void) {
   test_backend_good_moves_skip_attack_without_targets();
   test_backend_good_moves_keep_last_homeworld_ship();
   test_backend_good_moves_skip_unsafe_build_catastrophe();
+  test_backend_good_moves_skip_unfavorable_move_catastrophe();
   test_backend_good_moves_start_with_profitable_catastrophe();
   test_backend_good_moves_trigger_new_profitable_catastrophe_immediately();
   test_backend_moving_last_ship_out_of_homeworld_loses_immediately();

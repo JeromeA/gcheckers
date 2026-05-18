@@ -561,3 +561,15 @@ such as `H1 g1+` and `H1 g3+` even though they applied the same build.
 
 The fix canonicalizes build steps to store only the source system and build color. Build notation is now color-only,
 for example `H1 g+`, and generated move lists deduplicate those equivalent choices.
+
+## Homeworlds AI could move into unfavorable catastrophes
+
+The Homeworlds AI should avoid moves that immediately create a catastrophe where the moving player owns more ship pips
+than the opponent.
+
+The good-move filter rejected some unsafe builds but did not inspect move/discover destinations after the staged move
+builder applied them. A ship could therefore move into a system where the next catastrophe would mostly destroy its own
+side's material.
+
+The fix checks every completed move/discover step against the post-step destination system and rejects AI candidate
+moves that leave an unfavorable catastrophe there.

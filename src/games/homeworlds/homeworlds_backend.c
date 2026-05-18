@@ -343,6 +343,81 @@ static gboolean homeworlds_backend_build_would_overpopulate_without_targets(cons
   return homeworlds_system_color_count(system, homeworlds_pyramid_color(built)) >= 3;
 }
 
+static guint homeworlds_backend_system_ship_pips_for_color(const HomeworldsSystem *system,
+                                                           HomeworldsColor color,
+                                                           guint side) {
+  guint pips = 0;
+
+  g_return_val_if_fail(system != NULL, 0);
+  g_return_val_if_fail(color <= HOMEWORLDS_COLOR_BLUE, 0);
+  g_return_val_if_fail(side < 2, 0);
+
+  for (guint slot = 0; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
+    HomeworldsPyramid ship = system->ships[side][slot];
+
+    if (!homeworlds_pyramid_is_valid(ship) || homeworlds_pyramid_color(ship) != color) {
+      continue;
+    }
+    pips += homeworlds_pyramid_size(ship);
+  }
+
+  return pips;
+}
+
+static gboolean homeworlds_backend_system_has_unfavorable_catastrophe(const HomeworldsSystem *system, guint side) {
+  guint opponent = 0;
+
+  g_return_val_if_fail(system != NULL, FALSE);
+  g_return_val_if_fail(side < 2, FALSE);
+
+  opponent = side == 0 ? 1 : 0;
+  for (guint color = HOMEWORLDS_COLOR_RED; color <= HOMEWORLDS_COLOR_BLUE; ++color) {
+    guint own_pips = 0;
+    guint opponent_pips = 0;
+
+    if (homeworlds_system_color_count(system, (HomeworldsColor) color) < 4) {
+      continue;
+    }
+
+    own_pips = homeworlds_backend_system_ship_pips_for_color(system, (HomeworldsColor) color, side);
+    opponent_pips = homeworlds_backend_system_ship_pips_for_color(system, (HomeworldsColor) color, opponent);
+    if (own_pips > opponent_pips) {
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
+static gboolean homeworlds_backend_move_enters_unfavorable_catastrophe(const HomeworldsMoveBuilderState *state,
+                                                                       const HomeworldsMove *move) {
+  guint side = 0;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(move != NULL, FALSE);
+
+  side = state->working_position.turn;
+  for (guint step_index = 0; step_index < move->step_count; ++step_index) {
+    const HomeworldsTurnStep *step = &move->steps[step_index];
+    guint target_system_index = 0;
+
+    if (step->kind != HOMEWORLDS_STEP_MOVE && step->kind != HOMEWORLDS_STEP_DISCOVER) {
+      continue;
+    }
+    if (!homeworlds_position_resolve_system_ref(&state->working_position,
+                                                &step->target_system,
+                                                &target_system_index)) {
+      continue;
+    }
+    if (homeworlds_backend_system_has_unfavorable_catastrophe(&state->working_position.systems[target_system_index],
+                                                              side)) {
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
 static gboolean homeworlds_backend_move_is_good(const HomeworldsMoveBuilderState *state, const HomeworldsMove *move) {
   g_return_val_if_fail(state != NULL, FALSE);
   g_return_val_if_fail(move != NULL, FALSE);
@@ -360,6 +435,10 @@ static gboolean homeworlds_backend_move_is_good(const HomeworldsMoveBuilderState
     if (move->steps[i].kind == HOMEWORLDS_STEP_PASS) {
       return FALSE;
     }
+  }
+
+  if (homeworlds_backend_move_enters_unfavorable_catastrophe(state, move)) {
+    return FALSE;
   }
 
   return TRUE;
@@ -393,27 +472,6 @@ static gboolean homeworlds_backend_candidate_is_good(const HomeworldsMoveBuilder
   }
 
   return TRUE;
-}
-
-static guint homeworlds_backend_system_ship_pips_for_color(const HomeworldsSystem *system,
-                                                           HomeworldsColor color,
-                                                           guint side) {
-  guint pips = 0;
-
-  g_return_val_if_fail(system != NULL, 0);
-  g_return_val_if_fail(color <= HOMEWORLDS_COLOR_BLUE, 0);
-  g_return_val_if_fail(side < 2, 0);
-
-  for (guint slot = 0; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
-    HomeworldsPyramid ship = system->ships[side][slot];
-
-    if (!homeworlds_pyramid_is_valid(ship) || homeworlds_pyramid_color(ship) != color) {
-      continue;
-    }
-    pips += homeworlds_pyramid_size(ship);
-  }
-
-  return pips;
 }
 
 static guint homeworlds_backend_collect_profitable_catastrophes(const HomeworldsMoveBuilderState *state,
