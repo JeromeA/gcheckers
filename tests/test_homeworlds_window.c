@@ -17,6 +17,18 @@ static void test_homeworlds_window_skip(void) {
 
 static GtkApplication *test_homeworlds_app = NULL;
 
+static void test_homeworlds_drain_main_context(guint max_iterations) {
+  g_return_if_fail(max_iterations > 0);
+
+  for (guint i = 0; i < max_iterations; ++i) {
+    if (!g_main_context_iteration(NULL, FALSE)) {
+      return;
+    }
+  }
+
+  g_debug("Main context still busy after %u iterations\n", max_iterations);
+}
+
 static GtkWidget *test_homeworlds_find_widget_named(GtkWidget *root, const char *name) {
   g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
   g_return_val_if_fail(name != NULL, NULL);
@@ -342,6 +354,28 @@ static void test_homeworlds_prepare_play_position(HomeworldsPosition *position) 
   g_assert_true(homeworlds_position_apply_move(position, &player_2));
 }
 
+static void test_homeworlds_prepare_compact_row_position(HomeworldsPosition *position) {
+  g_return_if_fail(position != NULL);
+
+  homeworlds_position_init(position);
+  position->phase = HOMEWORLDS_PHASE_PLAY;
+  position->turn = 0;
+  position->systems[0].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL);
+  position->systems[0].ships[0][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE);
+  position->systems[1].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL);
+  position->systems[1].ships[1][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE);
+}
+
+static void test_homeworlds_make_wide_system(HomeworldsSystem *system, HomeworldsColor star_color) {
+  g_return_if_fail(system != NULL);
+  g_return_if_fail(star_color <= HOMEWORLDS_COLOR_BLUE);
+
+  system->stars[0] = homeworlds_pyramid_make(star_color, HOMEWORLDS_SIZE_LARGE);
+  for (guint slot = 0; slot < 6; ++slot) {
+    system->ships[0][slot] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE);
+  }
+}
+
 static void test_homeworlds_view_homeworld_layout_uses_player_perspective(void) {
   HomeworldsViewHomeworldLayout player_1 = {0};
   HomeworldsViewHomeworldLayout player_2 = {0};
@@ -409,6 +443,75 @@ static void test_homeworlds_view_system_layout_groups_by_reachability(void) {
   g_assert_cmpfloat(compact_c_x, <, 628.0);
 }
 
+static void test_homeworlds_view_row_layout_accounts_for_system_width(void) {
+  HomeworldsPosition position = {0};
+  double wide_x = 0.0;
+  double wide_y = 0.0;
+  double narrow_x = 0.0;
+  double narrow_y = 0.0;
+
+  test_homeworlds_prepare_compact_row_position(&position);
+  test_homeworlds_make_wide_system(&position.systems[2], HOMEWORLDS_COLOR_RED);
+  position.systems[3].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL);
+  position.systems[3].ships[0][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL);
+
+  g_assert_true(homeworlds_view_calculate_system_center(&position, 2, 1000.0, 600.0, &wide_x, &wide_y));
+  g_assert_true(homeworlds_view_calculate_system_center(&position, 3, 1000.0, 600.0, &narrow_x, &narrow_y));
+
+  g_assert_cmpfloat(wide_y, ==, narrow_y);
+  g_assert_cmpfloat(narrow_x, >, wide_x);
+  g_assert_cmpfloat(narrow_x - wide_x, >, 240.0);
+}
+
+static void test_homeworlds_view_board_content_width_expands_for_wide_rows(void) {
+  HomeworldsPosition position = {0};
+  double content_width = 0.0;
+
+  test_homeworlds_prepare_compact_row_position(&position);
+  for (guint system_index = 2; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
+    test_homeworlds_make_wide_system(&position.systems[system_index],
+                                     (HomeworldsColor)(system_index % (HOMEWORLDS_COLOR_BLUE + 1)));
+  }
+
+  content_width = homeworlds_view_calculate_board_content_width(&position, 900.0);
+  g_assert_cmpfloat(content_width, >, 900.0);
+}
+
+static void test_homeworlds_view_board_is_horizontally_scrollable(void) {
+  HomeworldsPosition position = {0};
+  GGameModel *model = ggame_model_new(&homeworlds_game_backend);
+  HomeworldsView *view = homeworlds_view_new(model);
+  GtkWidget *root = homeworlds_view_get_widget(view);
+  GtkWidget *board = test_homeworlds_find_widget_named(root, "homeworlds-board");
+  GtkWidget *board_scroller = test_homeworlds_find_widget_named(root, "homeworlds-board-scroller");
+  const GGameAppProfile *profile = ggame_app_profile_get_by_kind(GGAME_APP_KIND_HOMEWORLDS);
+  GtkPolicyType horizontal_policy = GTK_POLICY_NEVER;
+  GtkPolicyType vertical_policy = GTK_POLICY_NEVER;
+
+  g_assert_nonnull(profile);
+  g_assert_cmpint(profile->layout.default_board_panel_width, >=, 900);
+  g_assert_cmpint(profile->layout.minimum_board_panel_width, >=, 700);
+  g_assert_cmpint(profile->layout.minimum_board_panel_width, <, profile->layout.default_board_panel_width);
+  g_assert_nonnull(board);
+  g_assert_nonnull(board_scroller);
+  g_assert_true(GTK_IS_SCROLLED_WINDOW(board_scroller));
+  gtk_scrolled_window_get_policy(GTK_SCROLLED_WINDOW(board_scroller), &horizontal_policy, &vertical_policy);
+  g_assert_cmpuint(horizontal_policy, ==, GTK_POLICY_AUTOMATIC);
+  g_assert_cmpuint(vertical_policy, ==, GTK_POLICY_AUTOMATIC);
+  g_assert_cmpint(gtk_scrolled_window_get_min_content_width(GTK_SCROLLED_WINDOW(board_scroller)), >=, 400);
+
+  test_homeworlds_prepare_compact_row_position(&position);
+  for (guint system_index = 2; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
+    test_homeworlds_make_wide_system(&position.systems[system_index],
+                                     (HomeworldsColor)(system_index % (HOMEWORLDS_COLOR_BLUE + 1)));
+  }
+  g_assert_true(ggame_model_set_position(model, &position));
+  g_assert_cmpint(gtk_drawing_area_get_content_width(GTK_DRAWING_AREA(board)), >, 900);
+
+  homeworlds_view_free(view);
+  g_object_unref(model);
+}
+
 static void test_homeworlds_view_piece_metrics_keep_pyramids_tall(void) {
   HomeworldsViewPyramidMetrics small = {0};
   HomeworldsViewPyramidMetrics medium = {0};
@@ -443,19 +546,60 @@ static void test_homeworlds_window_replaces_skeleton(void) {
   GGameModel *model = NULL;
   GGameWindow *window = NULL;
   GtkWidget *root = NULL;
+  GtkWidget *board_panel = NULL;
+  const GGameAppProfile *profile = ggame_app_profile_get_by_kind(GGAME_APP_KIND_HOMEWORLDS);
+  gint board_panel_width_request = -1;
 
   window = test_homeworlds_create_window(&app, &model);
   root = GTK_WIDGET(window);
+  board_panel = g_object_get_data(G_OBJECT(window), "board-panel");
 
+  g_assert_nonnull(profile);
   g_assert_nonnull(ggame_window_get_sgf_controller(window));
   g_assert_nonnull(test_homeworlds_find_widget_named(root, "homeworlds-view"));
   g_assert_nonnull(test_homeworlds_find_widget_named(root, "homeworlds-board"));
   g_assert_nonnull(test_homeworlds_find_widget_named(root, "homeworlds-board-bank"));
+  g_assert_nonnull(board_panel);
+  gtk_widget_get_size_request(board_panel, &board_panel_width_request, NULL);
+  g_assert_cmpint(board_panel_width_request, ==, profile->layout.minimum_board_panel_width);
+  g_assert_cmpint(board_panel_width_request, <, profile->layout.default_board_panel_width);
   g_assert_nonnull(test_homeworlds_find_widget_for_action(root, "app.new-game"));
   g_assert_nonnull(test_homeworlds_find_widget_for_action(root, "win.game-force-move"));
   g_assert_nonnull(test_homeworlds_find_widget_for_action(root, "win.navigation-step-forward"));
   g_assert_nonnull(test_homeworlds_find_widget_for_action(root, "win.navigation-step-backward"));
   g_assert_nonnull(test_homeworlds_find_widget_for_action(root, "win.navigation-rewind"));
+
+  gtk_window_destroy(GTK_WINDOW(window));
+  g_object_unref(model);
+  g_object_unref(app);
+}
+
+static void test_homeworlds_window_main_split_can_exceed_height(void) {
+  GtkApplication *app = NULL;
+  GGameModel *model = NULL;
+  GGameWindow *window = NULL;
+  GtkWidget *main_paned = NULL;
+  gint height = 0;
+  gint target_position = 1400;
+
+  window = test_homeworlds_create_window(&app, &model);
+  main_paned = g_object_get_data(G_OBJECT(window), "main-paned");
+
+  g_assert_nonnull(main_paned);
+  g_assert_true(GTK_IS_PANED(main_paned));
+
+  gtk_window_set_default_size(GTK_WINDOW(window), 2000, 700);
+  gtk_window_present(GTK_WINDOW(window));
+  test_homeworlds_drain_main_context(64);
+
+  height = gtk_widget_get_height(main_paned);
+  g_assert_cmpint(height, >, 0);
+  g_assert_cmpint(target_position, >, height);
+
+  gtk_paned_set_position(GTK_PANED(main_paned), target_position);
+  test_homeworlds_drain_main_context(64);
+
+  g_assert_cmpint(gtk_paned_get_position(GTK_PANED(main_paned)), >=, target_position);
 
   gtk_window_destroy(GTK_WINDOW(window));
   g_object_unref(model);
@@ -815,9 +959,14 @@ int main(int argc, char **argv) {
 
   g_test_add_func("/homeworlds/view/homeworld-layout", test_homeworlds_view_homeworld_layout_uses_player_perspective);
   g_test_add_func("/homeworlds/view/system-layout", test_homeworlds_view_system_layout_groups_by_reachability);
+  g_test_add_func("/homeworlds/view/width-aware-row-layout",
+                  test_homeworlds_view_row_layout_accounts_for_system_width);
+  g_test_add_func("/homeworlds/view/board-width-expands-for-wide-rows",
+                  test_homeworlds_view_board_content_width_expands_for_wide_rows);
   g_test_add_func("/homeworlds/view/piece-metrics", test_homeworlds_view_piece_metrics_keep_pyramids_tall);
   if (!gtk_init_check()) {
     g_test_add_func("/homeworlds/window/replaces-skeleton", test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/window/main-split-can-exceed-height", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/window/defaults-to-fast-computer", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/window/setup-recorded-in-sgf", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/setup-bank-buttons", test_homeworlds_window_skip);
@@ -828,10 +977,13 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/view/attack-board-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/move-board-bank-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/advances-setup", test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/view/board-scrollable", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/window/catastrophe-prefix-records-single-sgf-move",
                     test_homeworlds_window_skip);
   } else {
     g_test_add_func("/homeworlds/window/replaces-skeleton", test_homeworlds_window_replaces_skeleton);
+    g_test_add_func("/homeworlds/window/main-split-can-exceed-height",
+                    test_homeworlds_window_main_split_can_exceed_height);
     g_test_add_func("/homeworlds/window/defaults-to-fast-computer", test_homeworlds_window_defaults_to_fast_computer);
     g_test_add_func("/homeworlds/window/setup-recorded-in-sgf",
                     test_homeworlds_window_setup_moves_are_recorded_in_sgf);
@@ -845,6 +997,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/view/move-board-bank-buttons",
                     test_homeworlds_view_move_targets_use_board_and_bank_buttons);
     g_test_add_func("/homeworlds/view/advances-setup", test_homeworlds_view_advances_setup);
+    g_test_add_func("/homeworlds/view/board-scrollable", test_homeworlds_view_board_is_horizontally_scrollable);
     g_test_add_func("/homeworlds/window/catastrophe-prefix-records-single-sgf-move",
                     test_homeworlds_window_catastrophe_prefix_records_single_sgf_move);
   }

@@ -498,3 +498,24 @@ The catastrophe buttons submitted a complete one-step move immediately. Because 
 the turn, the next action appended a second SGF node by the same player. The fix stages manual catastrophes into the
 Homeworlds move builder, updates the builder's working position, and appends the SGF node only when the turn later
 completes.
+
+## Homeworlds row layout ignored system widths
+
+Rows with multiple Homeworlds systems placed centers at equal fractions of the row. That put two systems at one-third
+and two-thirds even when one system was much wider than the other, so the empty spaces around and between systems were
+visually uneven and could collapse when the row was crowded.
+
+The fix measures each rendered system box first, distributes the remaining row width equally across the empty spaces
+before, between, and after systems, and expands the board content width when a row plus the bank footprint cannot fit
+in the current viewport. The Homeworlds board now lives in a scrolled window so expanded layouts get scrollbars.
+
+The first scroller version let GTK collapse the board viewport because the scrolled window hid the drawing area's
+natural width from the surrounding panes. Since the Homeworlds host also has its own side controls, the board itself
+could start almost invisible. The next fix made the Homeworlds default board-panel width large enough for launch, but
+the shared window used that default as the pane's minimum size, so the splitter could not move. The fix separates the
+profile's startup/default board width from its minimum board width and keeps the Homeworlds scroller minimum small
+enough that the pane remains resizable.
+
+The pane was still capped at roughly the board height because the shared window had a square-board splitter guard that
+limited the main split position to the paned height. That guard is now only applied to square-grid board profiles, so
+Homeworlds can use the full available window width and leave the SGF drawer narrow when desired.

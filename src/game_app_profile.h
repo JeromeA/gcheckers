@@ -40,6 +40,7 @@ typedef struct {
 
 typedef struct {
   gint default_board_panel_width;
+  gint minimum_board_panel_width;
   gint default_navigation_panel_width;
   gint default_analysis_panel_width;
   gboolean show_navigation_drawer_by_default;

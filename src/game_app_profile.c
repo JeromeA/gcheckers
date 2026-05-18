@@ -61,7 +61,8 @@ static const GGameAppProfile homeworlds_app_profile = {
       },
   .layout =
       {
-          .default_board_panel_width = 500,
+          .default_board_panel_width = 960,
+          .minimum_board_panel_width = 760,
           .default_navigation_panel_width = 300,
           .default_analysis_panel_width = 300,
           .show_navigation_drawer_by_default = TRUE,

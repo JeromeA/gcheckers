@@ -835,6 +835,11 @@ static gboolean ggame_window_constrain_main_split_cb(GtkWidget * /*widget*/,
   if (!self->main_paned || !GTK_IS_PANED(self->main_paned)) {
     return G_SOURCE_CONTINUE;
   }
+  if (self->profile == NULL ||
+      self->profile->backend == NULL ||
+      !self->profile->backend->supports_square_grid_board) {
+    return G_SOURCE_CONTINUE;
+  }
 
   int height = gtk_widget_get_height(self->main_paned);
   int position = gtk_paned_get_position(GTK_PANED(self->main_paned));
@@ -993,9 +998,14 @@ static void ggame_window_apply_saved_panel_widths(GGameWindow *self) {
   g_return_if_fail(extra_width != NULL);
 
   gint board_width = MAX(1, *board_panel_width);
+  gint board_min_width = board_width;
   gint navigation_width = MAX(1, *navigation_panel_width);
   gint analysis_width = MAX(1, *analysis_panel_width);
   gint drawer_width = 0;
+
+  if (self->profile != NULL && self->profile->layout.minimum_board_panel_width > 0) {
+    board_min_width = MIN(board_width, self->profile->layout.minimum_board_panel_width);
+  }
 
   if (self->show_navigation_drawer) {
     drawer_width += navigation_width;
@@ -1020,7 +1030,7 @@ static void ggame_window_apply_saved_panel_widths(GGameWindow *self) {
     gtk_paned_set_position(GTK_PANED(self->drawer_split), navigation_width);
   }
   if (self->board_panel != NULL) {
-    gtk_widget_set_size_request(self->board_panel, board_width, -1);
+    gtk_widget_set_size_request(self->board_panel, board_min_width, -1);
   }
   if (self->drawer_host != NULL) {
     gtk_widget_set_size_request(self->drawer_host,
@@ -3728,6 +3738,7 @@ static void ggame_window_init(GGameWindow *self) {
   gtk_widget_set_vexpand(paned, TRUE);
   gtk_box_append(GTK_BOX(content), paned);
   self->main_paned = paned;
+  g_object_set_data(G_OBJECT(self), "main-paned", paned);
   self->paned_tick_id = gtk_widget_add_tick_callback(paned,
                                                       ggame_window_constrain_main_split_cb,
                                                       self,

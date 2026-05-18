@@ -4,6 +4,7 @@
 #include "homeworlds_move_builder.h"
 #include "../../sgf_move_props.h"
 
+#include <math.h>
 #include <string.h>
 
 typedef struct {
@@ -42,6 +43,9 @@ typedef struct {
 #define HOMEWORLDS_VIEW_BANK_INNER_MARGIN 8
 #define HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH 880
 #define HOMEWORLDS_VIEW_FALLBACK_BOARD_HEIGHT 620
+#define HOMEWORLDS_VIEW_ROW_MARGIN 54.0
+#define HOMEWORLDS_VIEW_ROW_MIN_EMPTY_GAP 24.0
+#define HOMEWORLDS_VIEW_MIN_BOARD_VIEWPORT_WIDTH 420
 #define HOMEWORLDS_VIEW_SYSTEM_PIECE_MAX (HOMEWORLDS_STAR_SLOT_COUNT + (2 * HOMEWORLDS_SHIP_SLOT_COUNT))
 
 typedef enum {
@@ -77,9 +81,14 @@ typedef struct {
   double height;
 } HomeworldsViewPieceRow;
 
+typedef struct {
+  double width;
+} HomeworldsViewRowSystem;
+
 struct _HomeworldsView {
   GGameModel *model;
   GtkWidget *root;
+  GtkWidget *board_scroller;
   GtkWidget *board_overlay;
   GtkWidget *drawing_area;
   GtkWidget *board_choice_layer;
@@ -98,9 +107,15 @@ struct _HomeworldsView {
 };
 
 static void homeworlds_view_update_from_current_builder(HomeworldsView *view);
+static void homeworlds_view_update_board_content_width(HomeworldsView *view);
 static void homeworlds_view_update_board_bank(HomeworldsView *view);
 static void homeworlds_view_update_board_choice_buttons(HomeworldsView *view);
 static void homeworlds_view_candidate_clicked(GtkButton *button, gpointer user_data);
+static gboolean homeworlds_view_calculate_system_layout(const HomeworldsSystem *system,
+                                                        guint system_index,
+                                                        double center_x,
+                                                        double center_y,
+                                                        HomeworldsViewSystemLayout *out_layout);
 
 static const HomeworldsColorStyle homeworlds_view_color_styles[] = {
   [HOMEWORLDS_COLOR_RED] = {0.86, 0.18, 0.16, "red", "R"},
@@ -605,29 +620,202 @@ static double homeworlds_view_bank_reserved_width(void) {
 static void homeworlds_view_row_x_bounds(double width,
                                          double *out_left,
                                          double *out_right) {
-  double margin = MAX(54.0, width * 0.07);
   double bank_reserved_width = homeworlds_view_bank_reserved_width();
-  double left = margin;
-  double right = width - bank_reserved_width - margin;
+  double left = HOMEWORLDS_VIEW_ROW_MARGIN;
+  double right = width - bank_reserved_width - HOMEWORLDS_VIEW_ROW_MARGIN;
 
   g_return_if_fail(width > 0.0);
   g_return_if_fail(out_left != NULL);
   g_return_if_fail(out_right != NULL);
 
-  if (right <= left + 120.0) {
-    left = width * 0.10;
-    right = width * 0.90;
+  if (right <= left) {
+    right = left;
   }
 
   *out_left = left;
   *out_right = right;
 }
 
-static double homeworlds_view_row_slot_x(double left, double right, guint row_index, guint row_count) {
-  g_return_val_if_fail(row_count > 0, (left + right) / 2.0);
-  g_return_val_if_fail(row_index < row_count, (left + right) / 2.0);
+static gboolean homeworlds_view_measure_system_width(const HomeworldsPosition *position,
+                                                     guint system_index,
+                                                     double *out_width) {
+  HomeworldsViewSystemLayout layout = {0};
 
-  return left + ((right - left) * ((double)row_index + 1.0) / ((double)row_count + 1.0));
+  g_return_val_if_fail(position != NULL, FALSE);
+  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
+  g_return_val_if_fail(out_width != NULL, FALSE);
+
+  if (system_index >= 2 && homeworlds_system_is_empty(&position->systems[system_index])) {
+    return FALSE;
+  }
+  if (!homeworlds_view_calculate_system_layout(&position->systems[system_index],
+                                               system_index,
+                                               0.0,
+                                               0.0,
+                                               &layout)) {
+    return FALSE;
+  }
+
+  *out_width = layout.box_width;
+  return TRUE;
+}
+
+static gboolean homeworlds_view_collect_target_row(const HomeworldsPosition *position,
+                                                   guint target_system_index,
+                                                   HomeworldsViewRowSystem *systems,
+                                                   guint max_systems,
+                                                   guint *out_count,
+                                                   guint *out_target_index,
+                                                   double *out_total_width) {
+  HomeworldsViewSystemRow row = HOMEWORLDS_VIEW_SYSTEM_ROW_MIDDLE;
+  guint count = 0;
+  guint target_index = HOMEWORLDS_INVALID_INDEX;
+  double total_width = 0.0;
+
+  g_return_val_if_fail(position != NULL, FALSE);
+  g_return_val_if_fail(target_system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
+  g_return_val_if_fail(systems != NULL, FALSE);
+  g_return_val_if_fail(max_systems > 0, FALSE);
+  g_return_val_if_fail(out_count != NULL, FALSE);
+  g_return_val_if_fail(out_target_index != NULL, FALSE);
+  g_return_val_if_fail(out_total_width != NULL, FALSE);
+
+  if (target_system_index < 2) {
+    double width = 0.0;
+
+    if (!homeworlds_view_measure_system_width(position, target_system_index, &width)) {
+      return FALSE;
+    }
+
+    systems[0] = (HomeworldsViewRowSystem){
+      .width = width,
+    };
+    *out_count = 1;
+    *out_target_index = 0;
+    *out_total_width = width;
+    return TRUE;
+  }
+  if (homeworlds_system_is_empty(&position->systems[target_system_index])) {
+    return FALSE;
+  }
+
+  row = homeworlds_view_system_row(position, target_system_index);
+  for (guint i = 2; i < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++i) {
+    double width = 0.0;
+
+    if (homeworlds_system_is_empty(&position->systems[i]) ||
+        homeworlds_view_system_row(position, i) != row) {
+      continue;
+    }
+    if (!homeworlds_view_measure_system_width(position, i, &width)) {
+      return FALSE;
+    }
+    g_return_val_if_fail(count < max_systems, FALSE);
+
+    if (i == target_system_index) {
+      target_index = count;
+    }
+    systems[count++] = (HomeworldsViewRowSystem){
+      .width = width,
+    };
+    total_width += width;
+  }
+
+  if (target_index == HOMEWORLDS_INVALID_INDEX) {
+    return FALSE;
+  }
+
+  *out_count = count;
+  *out_target_index = target_index;
+  *out_total_width = total_width;
+  return TRUE;
+}
+
+static double homeworlds_view_row_required_width(double total_system_width, guint system_count) {
+  g_return_val_if_fail(system_count > 0, 0.0);
+
+  return total_system_width + (HOMEWORLDS_VIEW_ROW_MIN_EMPTY_GAP * (double)(system_count + 1));
+}
+
+static double homeworlds_view_board_width_for_row(double required_row_width) {
+  return (2.0 * HOMEWORLDS_VIEW_ROW_MARGIN) + homeworlds_view_bank_reserved_width() + required_row_width;
+}
+
+static double homeworlds_view_row_center_for_index(double left,
+                                                   double right,
+                                                   const HomeworldsViewRowSystem *systems,
+                                                   guint system_count,
+                                                   guint target_index,
+                                                   double total_system_width) {
+  double available_width = right - left;
+  double empty_gap = 0.0;
+  double cursor = left;
+
+  g_return_val_if_fail(systems != NULL, (left + right) / 2.0);
+  g_return_val_if_fail(system_count > 0, (left + right) / 2.0);
+  g_return_val_if_fail(target_index < system_count, (left + right) / 2.0);
+
+  empty_gap = (available_width - total_system_width) / (double)(system_count + 1);
+  if (empty_gap < 0.0) {
+    empty_gap = 0.0;
+  }
+  cursor += empty_gap;
+
+  for (guint i = 0; i < system_count; ++i) {
+    if (i == target_index) {
+      return cursor + (systems[i].width / 2.0);
+    }
+    cursor += systems[i].width + empty_gap;
+  }
+
+  return (left + right) / 2.0;
+}
+
+double homeworlds_view_calculate_board_content_width(const HomeworldsPosition *position, double viewport_width) {
+  double required_width = MAX(viewport_width, (double)HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH);
+
+  g_return_val_if_fail(position != NULL, (double)HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH);
+  g_return_val_if_fail(viewport_width > 0.0, (double)HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH);
+
+  for (guint system_index = 0; system_index < 2; ++system_index) {
+    double system_width = 0.0;
+
+    if (!homeworlds_view_measure_system_width(position, system_index, &system_width)) {
+      continue;
+    }
+    required_width = MAX(required_width,
+                         homeworlds_view_board_width_for_row(homeworlds_view_row_required_width(system_width, 1)));
+  }
+
+  for (guint row_value = HOMEWORLDS_VIEW_SYSTEM_ROW_TOP;
+       row_value <= HOMEWORLDS_VIEW_SYSTEM_ROW_BOTTOM;
+       ++row_value) {
+    HomeworldsViewSystemRow row = (HomeworldsViewSystemRow)row_value;
+    guint system_count = 0;
+    double total_width = 0.0;
+
+    for (guint system_index = 2; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
+      double system_width = 0.0;
+
+      if (homeworlds_system_is_empty(&position->systems[system_index]) ||
+          homeworlds_view_system_row(position, system_index) != row) {
+        continue;
+      }
+      if (!homeworlds_view_measure_system_width(position, system_index, &system_width)) {
+        continue;
+      }
+      total_width += system_width;
+      system_count++;
+    }
+
+    if (system_count > 0) {
+      required_width = MAX(required_width,
+                           homeworlds_view_board_width_for_row(
+                               homeworlds_view_row_required_width(total_width, system_count)));
+    }
+  }
+
+  return ceil(required_width);
 }
 
 gboolean homeworlds_view_calculate_system_center(const HomeworldsPosition *position,
@@ -643,8 +831,10 @@ gboolean homeworlds_view_calculate_system_center(const HomeworldsPosition *posit
   double player_1_y = 0.0;
   double player_2_y = 0.0;
   HomeworldsViewSystemRow row = HOMEWORLDS_VIEW_SYSTEM_ROW_MIDDLE;
+  HomeworldsViewRowSystem row_systems[HOMEWORLDS_SYSTEM_SLOT_COUNT] = {0};
   guint row_count = 0;
-  guint row_index = 0;
+  guint row_index = HOMEWORLDS_INVALID_INDEX;
+  double total_row_width = 0.0;
   double row_left = 0.0;
   double row_right = 0.0;
 
@@ -666,12 +856,40 @@ gboolean homeworlds_view_calculate_system_center(const HomeworldsPosition *posit
   homeworlds_view_row_x_bounds(width, &row_left, &row_right);
 
   if (system_index == 0) {
-    *out_x = homeworlds_view_row_slot_x(row_left, row_right, 0, 1);
+    if (!homeworlds_view_collect_target_row(position,
+                                            system_index,
+                                            row_systems,
+                                            G_N_ELEMENTS(row_systems),
+                                            &row_count,
+                                            &row_index,
+                                            &total_row_width)) {
+      return FALSE;
+    }
+    *out_x = homeworlds_view_row_center_for_index(row_left,
+                                                  row_right,
+                                                  row_systems,
+                                                  row_count,
+                                                  row_index,
+                                                  total_row_width);
     *out_y = player_1_y;
     return TRUE;
   }
   if (system_index == 1) {
-    *out_x = homeworlds_view_row_slot_x(row_left, row_right, 0, 1);
+    if (!homeworlds_view_collect_target_row(position,
+                                            system_index,
+                                            row_systems,
+                                            G_N_ELEMENTS(row_systems),
+                                            &row_count,
+                                            &row_index,
+                                            &total_row_width)) {
+      return FALSE;
+    }
+    *out_x = homeworlds_view_row_center_for_index(row_left,
+                                                  row_right,
+                                                  row_systems,
+                                                  row_count,
+                                                  row_index,
+                                                  total_row_width);
     *out_y = player_2_y;
     return TRUE;
   }
@@ -680,20 +898,24 @@ gboolean homeworlds_view_calculate_system_center(const HomeworldsPosition *posit
   }
 
   row = homeworlds_view_system_row(position, system_index);
-  for (guint i = 2; i < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++i) {
-    if (homeworlds_system_is_empty(&position->systems[i]) ||
-        homeworlds_view_system_row(position, i) != row) {
-      continue;
-    }
-    if (i < system_index) {
-      row_index++;
-    }
-    row_count++;
+  if (!homeworlds_view_collect_target_row(position,
+                                          system_index,
+                                          row_systems,
+                                          G_N_ELEMENTS(row_systems),
+                                          &row_count,
+                                          &row_index,
+                                          &total_row_width)) {
+    return FALSE;
   }
 
   *out_y = row == HOMEWORLDS_VIEW_SYSTEM_ROW_TOP ? top_y :
            row == HOMEWORLDS_VIEW_SYSTEM_ROW_BOTTOM ? bottom_y : middle_y;
-  *out_x = homeworlds_view_row_slot_x(row_left, row_right, row_index, row_count);
+  *out_x = homeworlds_view_row_center_for_index(row_left,
+                                                row_right,
+                                                row_systems,
+                                                row_count,
+                                                row_index,
+                                                total_row_width);
   return TRUE;
 }
 
@@ -1000,6 +1222,8 @@ static void homeworlds_view_draw_system(cairo_t *cr,
 static void homeworlds_view_board_size(HomeworldsView *view, int *out_width, int *out_height) {
   int width = 0;
   int height = 0;
+  int content_width = 0;
+  int content_height = 0;
 
   g_return_if_fail(view != NULL);
   g_return_if_fail(out_width != NULL);
@@ -1007,8 +1231,45 @@ static void homeworlds_view_board_size(HomeworldsView *view, int *out_width, int
 
   width = gtk_widget_get_width(view->drawing_area);
   height = gtk_widget_get_height(view->drawing_area);
-  *out_width = width > 1 ? width : HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH;
-  *out_height = height > 1 ? height : HOMEWORLDS_VIEW_FALLBACK_BOARD_HEIGHT;
+  content_width = gtk_drawing_area_get_content_width(GTK_DRAWING_AREA(view->drawing_area));
+  content_height = gtk_drawing_area_get_content_height(GTK_DRAWING_AREA(view->drawing_area));
+  *out_width = MAX(MAX(width, content_width), HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH);
+  *out_height = MAX(MAX(height, content_height), HOMEWORLDS_VIEW_FALLBACK_BOARD_HEIGHT);
+}
+
+static int homeworlds_view_board_viewport_width(HomeworldsView *view) {
+  int width = 0;
+
+  g_return_val_if_fail(view != NULL, HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH);
+
+  if (view->board_scroller != NULL) {
+    width = gtk_widget_get_width(view->board_scroller);
+  }
+  if (width <= 1 && view->board_overlay != NULL) {
+    width = gtk_widget_get_width(view->board_overlay);
+  }
+
+  return width > 1 ? width : HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH;
+}
+
+static void homeworlds_view_update_board_content_width(HomeworldsView *view) {
+  const HomeworldsPosition *position = NULL;
+  int viewport_width = 0;
+  int content_width = 0;
+
+  g_return_if_fail(view != NULL);
+  g_return_if_fail(GTK_IS_DRAWING_AREA(view->drawing_area));
+
+  position = homeworlds_view_position(view);
+  if (position == NULL) {
+    return;
+  }
+
+  viewport_width = homeworlds_view_board_viewport_width(view);
+  content_width = (int)homeworlds_view_calculate_board_content_width(position, (double)viewport_width);
+  if (content_width != gtk_drawing_area_get_content_width(GTK_DRAWING_AREA(view->drawing_area))) {
+    gtk_drawing_area_set_content_width(GTK_DRAWING_AREA(view->drawing_area), content_width);
+  }
 }
 
 static const HomeworldsMoveCandidate *homeworlds_view_find_ship_candidate(const GameBackendMoveList *candidates,
@@ -1205,6 +1466,7 @@ static void homeworlds_view_board_resized(GtkDrawingArea * /*drawing_area*/,
 
   g_return_if_fail(view != NULL);
 
+  homeworlds_view_update_board_content_width(view);
   homeworlds_view_update_board_choice_buttons(view);
 }
 
@@ -1730,6 +1992,7 @@ static void homeworlds_view_update_from_current_builder(HomeworldsView *view) {
 
   homeworlds_view_update_candidates(view);
   homeworlds_view_update_catastrophes(view);
+  homeworlds_view_update_board_content_width(view);
   homeworlds_view_update_board_bank(view);
   homeworlds_view_update_board_choice_buttons(view);
   gtk_widget_queue_draw(view->drawing_area);
@@ -1747,7 +2010,7 @@ HomeworldsView *homeworlds_view_new(GGameModel *model) {
   HomeworldsView *view = NULL;
   GtkWidget *bank_frame = NULL;
   GtkWidget *side_panel = NULL;
-  GtkWidget *scroller = NULL;
+  GtkWidget *side_scroller = NULL;
   GtkWidget *heading = NULL;
   GtkWidget *section = NULL;
 
@@ -1766,10 +2029,21 @@ HomeworldsView *homeworlds_view_new(GGameModel *model) {
   gtk_widget_set_vexpand(view->root, TRUE);
   gtk_widget_set_name(view->root, "homeworlds-view");
 
+  view->board_scroller = gtk_scrolled_window_new();
+  gtk_widget_set_name(view->board_scroller, "homeworlds-board-scroller");
+  gtk_widget_set_hexpand(view->board_scroller, TRUE);
+  gtk_widget_set_vexpand(view->board_scroller, TRUE);
+  gtk_scrolled_window_set_min_content_width(GTK_SCROLLED_WINDOW(view->board_scroller),
+                                            HOMEWORLDS_VIEW_MIN_BOARD_VIEWPORT_WIDTH);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(view->board_scroller),
+                                 GTK_POLICY_AUTOMATIC,
+                                 GTK_POLICY_AUTOMATIC);
+  gtk_box_append(GTK_BOX(view->root), view->board_scroller);
+
   view->board_overlay = gtk_overlay_new();
   gtk_widget_set_hexpand(view->board_overlay, TRUE);
   gtk_widget_set_vexpand(view->board_overlay, TRUE);
-  gtk_box_append(GTK_BOX(view->root), view->board_overlay);
+  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(view->board_scroller), view->board_overlay);
 
   view->drawing_area = gtk_drawing_area_new();
   gtk_widget_set_name(view->drawing_area, "homeworlds-board");
@@ -1803,17 +2077,17 @@ HomeworldsView *homeworlds_view_new(GGameModel *model) {
   gtk_widget_set_margin_end(view->board_bank_box, HOMEWORLDS_VIEW_BANK_INNER_MARGIN);
   gtk_frame_set_child(GTK_FRAME(bank_frame), view->board_bank_box);
 
-  scroller = gtk_scrolled_window_new();
-  gtk_widget_set_size_request(scroller, 280, -1);
-  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroller), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
-  gtk_box_append(GTK_BOX(view->root), scroller);
+  side_scroller = gtk_scrolled_window_new();
+  gtk_widget_set_size_request(side_scroller, 280, -1);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(side_scroller), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+  gtk_box_append(GTK_BOX(view->root), side_scroller);
 
   side_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
   gtk_widget_set_margin_top(side_panel, 12);
   gtk_widget_set_margin_bottom(side_panel, 12);
   gtk_widget_set_margin_start(side_panel, 12);
   gtk_widget_set_margin_end(side_panel, 12);
-  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroller), side_panel);
+  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(side_scroller), side_panel);
 
   heading = gtk_label_new("Homeworlds");
   gtk_widget_add_css_class(heading, "title-2");
@@ -1902,6 +2176,7 @@ void homeworlds_view_refresh(HomeworldsView *view) {
   homeworlds_view_rebuild_builder(view);
   homeworlds_view_update_candidates(view);
   homeworlds_view_update_catastrophes(view);
+  homeworlds_view_update_board_content_width(view);
   homeworlds_view_update_board_bank(view);
   homeworlds_view_update_board_choice_buttons(view);
   gtk_widget_queue_draw(view->drawing_area);

@@ -47,7 +47,10 @@ boop and Homeworlds.
 Shared pane and computer-depth defaults also come from the active profile. Checkers keeps the historical `500/300/300`
 board, navigation, and analysis widths with both drawers visible by default, while boop starts with a wider `760` board
 pane and the analysis drawer hidden by default so its square board host can reach the same practical size as the old
-standalone `gboop` window. Homeworlds keeps AI-player support but starts with computer depth `0` because its move
+standalone `gboop` window. Homeworlds starts with a wider `960` board pane because the custom board host contains both
+the scrollable board viewport and Homeworlds action controls, but its profile uses a smaller board-pane minimum so the
+splitter can still move. The shared square-board height clamp only applies to square-grid profiles, so Homeworlds can
+use the full horizontal split while its own board viewport scrolls. It starts with computer depth `0` because its move
 search is expensive. Even with its hidden default, boop now enables the shared `Analysis` actions and populates the
 drawer on demand.
 The analysis pane owns its own `Analysis depth` slider; analysis no longer reuses the player `Computer depth`
@@ -137,7 +140,8 @@ handling; status/error responses trigger an error dialog and close the wizard. S
 step that lists checkers games as `table_id` + `player_one vs player_two`.
 Import fetch flow for BoardGameArena uses a dedicated libcurl client: GET home page, extract `requestToken`, then
 POST `loginUserWithPassword.html` with username/password/remember/request token and logs the HTTP/body result.
-Default panel widths target about `500/300/300` pixels at the default window width (`1100x700`).
+Default panel widths come from the active profile, with `500/300/300` as the checkers baseline. Profiles can also set a
+smaller minimum board-panel width when the startup/default board width should not become the paned handle's hard limit.
 Lifecycle: sinks and retains an owned `PlayerControlsPanel` reference, removes it from its current `GtkBox` parent
 during dispose via `ggame_widget_remove_from_parent()`, and then clears its references.
 during dispose, cancels any pending auto-move idle source, and then clears its references.
@@ -527,8 +531,9 @@ Collaborates with: `homeworlds_game.c`, `homeworlds_backend.c`, `homeworlds_view
 Module: Homeworlds board host, staged GTK view/controller, and backend-owned AI candidate policy.
 Role: let `ghomeworlds` use the shared `GGameWindow` while replacing only the square board presentation.
 `homeworlds_view.c` renders a starfield board with dynamic system boxes sized around their contents, reachability-row
-placement between the two homeworlds, bank-aware row width distribution, homeworld labels, pipped square stars, tall
-pipped ship pyramids, overlaid
+placement between the two homeworlds, measured-width row packing that reserves the bank footprint and expands inside a
+horizontal scroller when needed, a fixed minimum board viewport, homeworld labels, pipped square stars, tall pipped
+ship pyramids, overlaid
 clickable bank piles, staged legal-choice buttons, and catastrophe buttons that stage normal symbolic steps into the
 current move so SGF, model state, and the last-move label stay synchronized. Homeworld rendering keeps player 1 at the
 bottom, player 2 at
