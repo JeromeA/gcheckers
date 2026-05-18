@@ -544,7 +544,9 @@ selection, the bank piles on the board are real `GtkButton`s that feed the stage
 start ships, trade colors, and discovery stars do not require a long side-panel button list. During normal turns,
 selectable ships, capture targets, and existing-system move targets are also overlaid as board buttons; the side panel
 only keeps non-board choices such as pass or follow-up actions, with a `Cancel` button whenever those choices belong to
-an in-progress move. The Homeworlds board host also syncs its last-move label from SGF current-node changes so timeline
+an in-progress move. During play, the side panel also reports the backend `good_moves()` list followed by the remaining
+legal moves collected from the staged builder, capped and marked when optional catastrophe chains make the list too
+large for the UI. The Homeworlds board host also syncs its last-move label from SGF current-node changes so timeline
 navigation and direct play report the same move. Human interaction
 advances
 `homeworlds_move_builder` one visible choice at a time and sends each completed `HomeworldsMove` to the generic window

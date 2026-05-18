@@ -535,7 +535,7 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(const Homeworlds
 
   candidates = homeworlds_move_builder_list_candidates(&builder);
   for (gsize i = 0; i < candidates.count; ++i) {
-    const HomeworldsMoveCandidate *candidate = homeworlds_backend_move_list_get(&candidates, i);
+    const HomeworldsMoveCandidate *candidate = &((const HomeworldsMoveCandidate *) candidates.moves)[i];
     HomeworldsMoveBuilderState child_state = *state;
     GameBackendMoveBuilder child = {
       .builder_state = &child_state,

@@ -27,6 +27,7 @@ inside a scroller when the systems cannot fit.
 - [x] (2026-05-18) Made the board content width shrink back to the viewport width when rows fit.
 - [x] (2026-05-18) Tightened the bank UI: centered it vertically, removed color/count labels, and compacted size piles.
 - [x] (2026-05-18) Made Homeworlds good-move generation force profitable catastrophes at the earliest staged step.
+- [x] (2026-05-18) Added a Homeworlds side-panel move report for `good_moves()` and remaining legal moves.
 
 ## Surprises & Discoveries
 
@@ -90,6 +91,8 @@ The bank overlay is vertically centered, uses compact variable-width pyramid but
 row labels, and keeps its title inside the panel like system labels.
 Good-move generation now treats profitable catastrophes as forced prefix steps during the staged builder walk, so
 alpha-beta only sees lines that trigger them immediately after they become available.
+The side panel now exposes `good_moves()` followed by the remaining legal moves from the staged builder, with an
+explicit cap marker when optional catastrophe sequences would make the report too large for interactive use.
 System internals now render as one row ordered player 2 ships, stars, then player 1 ships, matching each owner's
 right-hand side from their own perspective.
 Catastrophe application now runs orphan-star cleanup after all successful catastrophes, not only star-destroying

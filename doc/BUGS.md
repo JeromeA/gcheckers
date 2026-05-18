@@ -119,6 +119,18 @@ single-node progress/report text, and left every other node without saved analys
 The fix reuses the shared full-game analysis entry point from the puzzle button, so puzzle Analyze now produces the
 same status updates and per-node reports as a normal full-game analysis run.
 
+## Homeworlds good-move generation read staged candidates with the move accessor
+
+The Homeworlds backend should walk staged `HomeworldsMoveCandidate` choices and only build `HomeworldsMove` values at
+complete leaves.
+
+The recursive good-move generator reused the backend move-list accessor on a candidate list. That accessor is sized for
+`HomeworldsMove`, not `HomeworldsMoveCandidate`, so later candidate reads could use the wrong offset and skip or mangle
+choices.
+
+The fix reads candidate-list storage with the candidate element type directly. The Homeworlds move report test exercises
+the resulting backend `good_moves()` walk from a playable position.
+
 ## Puzzle attempt timing started only after the first move
 
 Puzzle attempt timing should include the time spent looking at the opened puzzle before choosing the first move.

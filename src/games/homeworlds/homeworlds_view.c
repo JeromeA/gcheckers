@@ -1,5 +1,6 @@
 #include "homeworlds_view.h"
 
+#include "homeworlds_backend.h"
 #include "homeworlds_game.h"
 #include "homeworlds_move_builder.h"
 #include "../../sgf_move_props.h"
@@ -46,6 +47,7 @@ typedef struct {
 #define HOMEWORLDS_VIEW_ROW_MIN_EMPTY_GAP 24.0
 #define HOMEWORLDS_VIEW_MIN_BOARD_VIEWPORT_WIDTH 420
 #define HOMEWORLDS_VIEW_SYSTEM_PIECE_MAX (HOMEWORLDS_STAR_SLOT_COUNT + (2 * HOMEWORLDS_SHIP_SLOT_COUNT))
+#define HOMEWORLDS_VIEW_MOVE_REPORT_MAX_MOVES 512
 
 typedef enum {
   HOMEWORLDS_VIEW_SYSTEM_ROW_TOP = 0,
@@ -84,6 +86,18 @@ typedef struct {
   double width;
 } HomeworldsViewRowSystem;
 
+typedef struct {
+  HomeworldsMove *moves;
+  gsize count;
+  gsize capacity;
+  gboolean truncated;
+} HomeworldsViewMoveBuffer;
+
+typedef struct {
+  guint system_index;
+  HomeworldsColor color;
+} HomeworldsViewCatastropheChoice;
+
 struct _HomeworldsView {
   GGameModel *model;
   GtkWidget *root;
@@ -96,6 +110,7 @@ struct _HomeworldsView {
   GtkWidget *candidate_box;
   GtkWidget *catastrophe_box;
   GtkWidget *last_move_label;
+  GtkWidget *move_report_label;
   GameBackendMoveBuilder builder;
   gboolean builder_ready;
   HomeworldsViewMoveHandler move_handler;
@@ -111,6 +126,7 @@ static void homeworlds_view_update_from_current_builder(HomeworldsView *view);
 static void homeworlds_view_update_board_content_width(HomeworldsView *view);
 static void homeworlds_view_update_board_bank(HomeworldsView *view);
 static void homeworlds_view_update_board_choice_buttons(HomeworldsView *view);
+static void homeworlds_view_update_move_report(HomeworldsView *view);
 static void homeworlds_view_candidate_clicked(GtkButton *button, gpointer user_data);
 static gboolean homeworlds_view_calculate_system_layout(const HomeworldsSystem *system,
                                                         guint system_index,
@@ -1857,6 +1873,309 @@ static gboolean homeworlds_view_find_bank_candidate(HomeworldsView *view,
   return found;
 }
 
+static gboolean homeworlds_view_moves_equal(const HomeworldsMove *left, const HomeworldsMove *right) {
+  char left_text[128] = {0};
+  char right_text[128] = {0};
+
+  g_return_val_if_fail(left != NULL, FALSE);
+  g_return_val_if_fail(right != NULL, FALSE);
+
+  return homeworlds_move_format(left, left_text, sizeof(left_text)) &&
+         homeworlds_move_format(right, right_text, sizeof(right_text)) &&
+         strcmp(left_text, right_text) == 0;
+}
+
+static gboolean homeworlds_view_move_buffer_append(HomeworldsViewMoveBuffer *buffer, const HomeworldsMove *move) {
+  g_return_val_if_fail(buffer != NULL, FALSE);
+  g_return_val_if_fail(move != NULL, FALSE);
+
+  if (buffer->count >= HOMEWORLDS_VIEW_MOVE_REPORT_MAX_MOVES) {
+    buffer->truncated = TRUE;
+    return TRUE;
+  }
+
+  for (gsize i = 0; i < buffer->count; ++i) {
+    if (homeworlds_view_moves_equal(&buffer->moves[i], move)) {
+      return TRUE;
+    }
+  }
+
+  if (buffer->count == buffer->capacity) {
+    gsize next_capacity = buffer->capacity == 0 ? 16 : buffer->capacity * 2;
+    HomeworldsMove *next_moves = g_realloc_n(buffer->moves, next_capacity, sizeof(*next_moves));
+    g_return_val_if_fail(next_moves != NULL, FALSE);
+    buffer->moves = next_moves;
+    buffer->capacity = next_capacity;
+  }
+
+  buffer->moves[buffer->count++] = *move;
+  return TRUE;
+}
+
+static guint homeworlds_view_collect_catastrophe_choices(const HomeworldsMoveBuilderState *state,
+                                                         HomeworldsViewCatastropheChoice *out_choices,
+                                                         guint max_choices) {
+  guint count = 0;
+
+  g_return_val_if_fail(state != NULL, 0);
+  g_return_val_if_fail(out_choices != NULL || max_choices == 0, 0);
+
+  if (state->working_position.phase != HOMEWORLDS_PHASE_PLAY ||
+      state->move.step_count >= HOMEWORLDS_MAX_MOVE_STEPS ||
+      state->stage == HOMEWORLDS_BUILDER_STAGE_SETUP_FIRST_STAR ||
+      state->stage == HOMEWORLDS_BUILDER_STAGE_SETUP_SECOND_STAR ||
+      state->stage == HOMEWORLDS_BUILDER_STAGE_SETUP_SHIP) {
+    return 0;
+  }
+
+  for (guint system_index = 0; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
+    const HomeworldsSystem *system = &state->working_position.systems[system_index];
+
+    for (guint color = HOMEWORLDS_COLOR_RED; color <= HOMEWORLDS_COLOR_BLUE; ++color) {
+      if (homeworlds_system_color_count(system, (HomeworldsColor) color) < 4) {
+        continue;
+      }
+      if (count < max_choices) {
+        out_choices[count] = (HomeworldsViewCatastropheChoice){
+          .system_index = system_index,
+          .color = (HomeworldsColor) color,
+        };
+      }
+      count++;
+    }
+  }
+
+  return MIN(count, max_choices);
+}
+
+static gboolean homeworlds_view_apply_catastrophe_choice(HomeworldsMoveBuilderState *state,
+                                                         const HomeworldsViewCatastropheChoice *choice) {
+  GameBackendMoveBuilder builder = {0};
+  HomeworldsTurnStep step = {
+    .kind = HOMEWORLDS_STEP_CATASTROPHE,
+    .target_color = choice->color,
+  };
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(choice != NULL, FALSE);
+  g_return_val_if_fail(choice->system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
+
+  builder.builder_state = state;
+  builder.builder_state_size = sizeof(*state);
+  if (state->stage != HOMEWORLDS_BUILDER_STAGE_COMPLETE) {
+    return homeworlds_move_builder_apply_catastrophe(&builder, choice->system_index, choice->color);
+  }
+
+  if (state->move.step_count >= HOMEWORLDS_MAX_MOVE_STEPS ||
+      !homeworlds_position_system_ref_for_index(&state->working_position, choice->system_index, &step.target_system)) {
+    return FALSE;
+  }
+
+  state->move.steps[state->move.step_count++] = step;
+  if (!homeworlds_position_apply_turn_step(&state->working_position, &step)) {
+    state->move.step_count--;
+    return FALSE;
+  }
+  return TRUE;
+}
+
+static gboolean homeworlds_view_collect_all_moves_recursive(const HomeworldsMoveBuilderState *state,
+                                                            HomeworldsViewMoveBuffer *buffer) {
+  GameBackendMoveBuilder builder = {0};
+  GameBackendMoveList candidates = {0};
+  HomeworldsViewCatastropheChoice catastrophes[HOMEWORLDS_SYSTEM_SLOT_COUNT * 4] = {0};
+  guint catastrophe_count = 0;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(buffer != NULL, FALSE);
+
+  if (buffer->truncated) {
+    return TRUE;
+  }
+
+  builder.builder_state = (gpointer) state;
+  builder.builder_state_size = sizeof(*state);
+  if (state->move.step_count >= HOMEWORLDS_MAX_MOVE_STEPS &&
+      !homeworlds_move_builder_is_complete(&builder)) {
+    buffer->truncated = TRUE;
+    return TRUE;
+  }
+
+  if (homeworlds_move_builder_is_complete(&builder)) {
+    HomeworldsMove move = {0};
+
+    if (!homeworlds_move_builder_build_move(&builder, &move) ||
+        !homeworlds_view_move_buffer_append(buffer, &move)) {
+      return FALSE;
+    }
+  }
+
+  catastrophe_count = homeworlds_view_collect_catastrophe_choices(state, catastrophes, G_N_ELEMENTS(catastrophes));
+  for (guint i = 0; i < catastrophe_count; ++i) {
+    HomeworldsMoveBuilderState child_state = *state;
+
+    if (!homeworlds_view_apply_catastrophe_choice(&child_state, &catastrophes[i])) {
+      continue;
+    }
+    if (!homeworlds_view_collect_all_moves_recursive(&child_state, buffer)) {
+      return FALSE;
+    }
+    if (buffer->truncated) {
+      return TRUE;
+    }
+  }
+
+  if (homeworlds_move_builder_is_complete(&builder)) {
+    return TRUE;
+  }
+
+  candidates = homeworlds_move_builder_list_candidates(&builder);
+  for (guint pass = 0; pass < 2; ++pass) {
+    gboolean want_pass = pass == 0;
+
+    for (gsize i = 0; i < candidates.count; ++i) {
+      const HomeworldsMoveCandidate *candidate = &((const HomeworldsMoveCandidate *) candidates.moves)[i];
+      HomeworldsMoveBuilderState child_state = *state;
+      GameBackendMoveBuilder child = {
+        .builder_state = &child_state,
+        .builder_state_size = sizeof(child_state),
+      };
+      gboolean is_pass = candidate->data.kind == HOMEWORLDS_CANDIDATE_ACTION &&
+                         candidate->data.target_color == HOMEWORLDS_STEP_PASS;
+
+      if (is_pass != want_pass) {
+        continue;
+      }
+
+      if (!homeworlds_move_builder_step(&child, candidate)) {
+        continue;
+      }
+      if (!homeworlds_view_collect_all_moves_recursive(&child_state, buffer)) {
+        homeworlds_game_backend.move_list_free(&candidates);
+        return FALSE;
+      }
+      if (buffer->truncated) {
+        break;
+      }
+    }
+    if (buffer->truncated) {
+      break;
+    }
+  }
+
+  homeworlds_game_backend.move_list_free(&candidates);
+  return TRUE;
+}
+
+static GameBackendMoveList homeworlds_view_list_all_moves(const HomeworldsPosition *position, gboolean *out_truncated) {
+  GameBackendMoveBuilder builder = {0};
+  HomeworldsViewMoveBuffer buffer = {0};
+
+  g_return_val_if_fail(position != NULL, (GameBackendMoveList){0});
+  g_return_val_if_fail(out_truncated != NULL, (GameBackendMoveList){0});
+
+  *out_truncated = FALSE;
+  if (!homeworlds_move_builder_init(position, &builder)) {
+    return (GameBackendMoveList){0};
+  }
+  if (!homeworlds_view_collect_all_moves_recursive(builder.builder_state, &buffer)) {
+    homeworlds_move_builder_clear(&builder);
+    g_free(buffer.moves);
+    return (GameBackendMoveList){0};
+  }
+
+  homeworlds_move_builder_clear(&builder);
+  *out_truncated = buffer.truncated;
+  return (GameBackendMoveList){
+    .moves = buffer.moves,
+    .count = buffer.count,
+  };
+}
+
+static gboolean homeworlds_view_move_list_contains(const GameBackendMoveList *moves, const HomeworldsMove *move) {
+  g_return_val_if_fail(moves != NULL, FALSE);
+  g_return_val_if_fail(move != NULL, FALSE);
+
+  for (gsize i = 0; i < moves->count; ++i) {
+    const HomeworldsMove *candidate = homeworlds_game_backend.move_list_get(moves, i);
+
+    if (candidate != NULL && homeworlds_view_moves_equal(candidate, move)) {
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
+static void homeworlds_view_append_move_list_text(GString *text,
+                                                  const GameBackendMoveList *moves,
+                                                  const char *title,
+                                                  const GameBackendMoveList *exclude) {
+  guint displayed = 0;
+
+  g_return_if_fail(text != NULL);
+  g_return_if_fail(moves != NULL);
+  g_return_if_fail(title != NULL);
+
+  g_string_append_printf(text, "%s:\n", title);
+  for (gsize i = 0; i < moves->count; ++i) {
+    const HomeworldsMove *move = homeworlds_game_backend.move_list_get(moves, i);
+    char notation[128] = {0};
+
+    if (move == NULL || (exclude != NULL && homeworlds_view_move_list_contains(exclude, move))) {
+      continue;
+    }
+    if (!homeworlds_move_format(move, notation, sizeof(notation))) {
+      continue;
+    }
+
+    displayed++;
+    g_string_append_printf(text, "%u. %s\n", displayed, notation);
+  }
+
+  if (displayed == 0) {
+    g_string_append(text, "None\n");
+  }
+}
+
+static void homeworlds_view_update_move_report(HomeworldsView *view) {
+  const HomeworldsPosition *position = NULL;
+  GameBackendMoveList good_moves = {0};
+  GameBackendMoveList all_moves = {0};
+  g_autofree char *good_title = NULL;
+  g_autofree char *other_title = NULL;
+  g_autoptr(GString) text = NULL;
+  gboolean all_moves_truncated = FALSE;
+
+  g_return_if_fail(view != NULL);
+  g_return_if_fail(GTK_IS_LABEL(view->move_report_label));
+
+  position = ggame_model_peek_position(view->model);
+  if (position == NULL || position->phase == HOMEWORLDS_PHASE_FINISHED) {
+    gtk_label_set_text(GTK_LABEL(view->move_report_label), "No moves.");
+    return;
+  }
+  if (position->phase != HOMEWORLDS_PHASE_PLAY) {
+    gtk_label_set_text(GTK_LABEL(view->move_report_label), "Move report is available during play.");
+    return;
+  }
+
+  good_moves = homeworlds_game_backend.list_good_moves(position, 0);
+  all_moves = homeworlds_view_list_all_moves(position, &all_moves_truncated);
+  text = g_string_new(NULL);
+  good_title = g_strdup_printf("good_moves() (%zu)", good_moves.count);
+  other_title = g_strdup_printf("all possible moves minus good_moves() (%zu%s total before filtering)",
+                                all_moves.count,
+                                all_moves_truncated ? "+" : "");
+  homeworlds_view_append_move_list_text(text, &good_moves, good_title, NULL);
+  g_string_append_c(text, '\n');
+  homeworlds_view_append_move_list_text(text, &all_moves, other_title, &good_moves);
+  gtk_label_set_text(GTK_LABEL(view->move_report_label), text->str);
+
+  homeworlds_game_backend.move_list_free(&good_moves);
+  g_free(all_moves.moves);
+}
+
 static GtkWidget *homeworlds_view_create_bank_button(HomeworldsView *view, HomeworldsPyramid pyramid, guint count) {
   HomeworldsMoveCandidate candidate = {0};
   HomeworldsBankButtonIcon *icon_data = NULL;
@@ -2175,6 +2494,18 @@ HomeworldsView *homeworlds_view_new(GGameModel *model) {
   gtk_label_set_xalign(GTK_LABEL(view->last_move_label), 0.0f);
   gtk_box_append(GTK_BOX(side_panel), view->last_move_label);
 
+  section = gtk_label_new("Move report");
+  gtk_widget_add_css_class(section, "heading");
+  gtk_label_set_xalign(GTK_LABEL(section), 0.0f);
+  gtk_box_append(GTK_BOX(side_panel), section);
+
+  view->move_report_label = gtk_label_new("");
+  gtk_widget_set_name(view->move_report_label, "homeworlds-move-report");
+  gtk_label_set_selectable(GTK_LABEL(view->move_report_label), TRUE);
+  gtk_label_set_wrap(GTK_LABEL(view->move_report_label), TRUE);
+  gtk_label_set_xalign(GTK_LABEL(view->move_report_label), 0.0f);
+  gtk_box_append(GTK_BOX(side_panel), view->move_report_label);
+
   homeworlds_view_refresh(view);
   return view;
 }
@@ -2231,6 +2562,7 @@ void homeworlds_view_refresh(HomeworldsView *view) {
   homeworlds_view_rebuild_builder(view);
   homeworlds_view_update_candidates(view);
   homeworlds_view_update_catastrophes(view);
+  homeworlds_view_update_move_report(view);
   homeworlds_view_update_board_content_width(view);
   homeworlds_view_update_board_bank(view);
   homeworlds_view_update_board_choice_buttons(view);

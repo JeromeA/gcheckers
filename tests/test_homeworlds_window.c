@@ -1050,6 +1050,29 @@ static void test_homeworlds_view_advances_setup(void) {
   g_object_unref(model);
 }
 
+static void test_homeworlds_view_move_report_lists_good_and_other_moves(void) {
+  GGameModel *model = ggame_model_new(&homeworlds_game_backend);
+  HomeworldsView *view = homeworlds_view_new(model);
+  GtkWidget *root = homeworlds_view_get_widget(view);
+  GtkWidget *move_report = NULL;
+  HomeworldsPosition position = {0};
+  const char *text = NULL;
+
+  test_homeworlds_prepare_play_position(&position);
+  g_assert_true(ggame_model_set_position(model, &position));
+  move_report = test_homeworlds_find_widget_named(root, "homeworlds-move-report");
+  g_assert_nonnull(move_report);
+  g_assert_true(GTK_IS_LABEL(move_report));
+
+  text = gtk_label_get_text(GTK_LABEL(move_report));
+  g_assert_nonnull(strstr(text, "good_moves()"));
+  g_assert_nonnull(strstr(text, "all possible moves minus good_moves()"));
+  g_assert_nonnull(strstr(text, "pass"));
+
+  homeworlds_view_free(view);
+  g_object_unref(model);
+}
+
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   const GGameAppProfile *profile = ggame_app_profile_get_by_kind(GGAME_APP_KIND_HOMEWORLDS);
@@ -1081,6 +1104,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/view/attack-board-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/move-board-bank-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/advances-setup", test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/view/move-report", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/board-scrollable", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/board-content-width-tracks-viewport", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/window/catastrophe-prefix-records-single-sgf-move",
@@ -1103,6 +1127,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/view/move-board-bank-buttons",
                     test_homeworlds_view_move_targets_use_board_and_bank_buttons);
     g_test_add_func("/homeworlds/view/advances-setup", test_homeworlds_view_advances_setup);
+    g_test_add_func("/homeworlds/view/move-report", test_homeworlds_view_move_report_lists_good_and_other_moves);
     g_test_add_func("/homeworlds/view/board-scrollable", test_homeworlds_view_board_is_horizontally_scrollable);
     g_test_add_func("/homeworlds/view/board-content-width-tracks-viewport",
                     test_homeworlds_view_board_content_width_tracks_viewport);
