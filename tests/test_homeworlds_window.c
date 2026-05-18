@@ -138,6 +138,24 @@ static guint test_homeworlds_count_widgets_with_data(GtkWidget *root, const char
   return count;
 }
 
+static guint test_homeworlds_count_labels_with_text(GtkWidget *root, const char *text) {
+  guint count = 0;
+
+  g_return_val_if_fail(GTK_IS_WIDGET(root), 0);
+  g_return_val_if_fail(text != NULL, 0);
+
+  if (GTK_IS_LABEL(root) && g_strcmp0(gtk_label_get_text(GTK_LABEL(root)), text) == 0) {
+    count++;
+  }
+
+  for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
+       child = gtk_widget_get_next_sibling(child)) {
+    count += test_homeworlds_count_labels_with_text(child, text);
+  }
+
+  return count;
+}
+
 static GtkButton *test_homeworlds_find_selectable_bank_button(GtkWidget *root) {
   g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
 
@@ -802,6 +820,53 @@ static void test_homeworlds_view_setup_uses_board_bank_buttons(void) {
   g_object_unref(model);
 }
 
+static void test_homeworlds_view_bank_layout_is_compact_and_centered(void) {
+  GGameModel *model = ggame_model_new(&homeworlds_game_backend);
+  HomeworldsView *view = homeworlds_view_new(model);
+  GtkWidget *root = homeworlds_view_get_widget(view);
+  GtkWidget *bank = test_homeworlds_find_widget_named(root, "homeworlds-board-bank");
+  GtkWidget *title = test_homeworlds_find_widget_named(root, "homeworlds-bank-title");
+  GtkWidget *grid = test_homeworlds_find_widget_named(root, "homeworlds-bank-grid");
+  GtkWidget *first_grid_child = NULL;
+  GtkWidget *small_button = NULL;
+  GtkWidget *large_button = NULL;
+  HomeworldsPyramid red_small = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL);
+  HomeworldsPyramid red_large = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE);
+  int small_width = 0;
+  int large_width = 0;
+
+  g_assert_nonnull(bank);
+  g_assert_cmpuint(gtk_widget_get_valign(bank), ==, GTK_ALIGN_CENTER);
+  g_assert_nonnull(title);
+  g_assert_true(gtk_widget_has_css_class(title, "homeworlds-bank-title"));
+  g_assert_nonnull(grid);
+  g_assert_true(GTK_IS_GRID(grid));
+  g_assert_cmpuint(gtk_grid_get_column_spacing(GTK_GRID(grid)), ==, 7);
+  g_assert_cmpuint(test_homeworlds_count_labels_with_text(bank, "R"), ==, 0);
+  g_assert_cmpuint(test_homeworlds_count_labels_with_text(bank, "V"), ==, 0);
+  g_assert_cmpuint(test_homeworlds_count_labels_with_text(bank, "B"), ==, 0);
+  g_assert_cmpuint(test_homeworlds_count_labels_with_text(bank, "Y"), ==, 0);
+  g_assert_cmpuint(test_homeworlds_count_labels_with_text(bank, "x1"), ==, 0);
+  g_assert_cmpuint(test_homeworlds_count_labels_with_text(bank, "x2"), ==, 0);
+  g_assert_cmpuint(test_homeworlds_count_labels_with_text(bank, "x3"), ==, 0);
+  first_grid_child = gtk_grid_get_child_at(GTK_GRID(grid), 0, 0);
+  g_assert_nonnull(first_grid_child);
+  g_assert_cmpuint(GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(first_grid_child), "homeworlds-bank-pyramid")),
+                   ==,
+                   red_small);
+
+  small_button = GTK_WIDGET(test_homeworlds_find_bank_button_for_pyramid(root, red_small));
+  large_button = GTK_WIDGET(test_homeworlds_find_bank_button_for_pyramid(root, red_large));
+  g_assert_nonnull(small_button);
+  g_assert_nonnull(large_button);
+  gtk_widget_get_size_request(small_button, &small_width, NULL);
+  gtk_widget_get_size_request(large_button, &large_width, NULL);
+  g_assert_cmpint(small_width, <, large_width);
+
+  homeworlds_view_free(view);
+  g_object_unref(model);
+}
+
 static void test_homeworlds_view_uses_board_ship_buttons(void) {
   GGameModel *model = ggame_model_new(&homeworlds_game_backend);
   HomeworldsView *view = homeworlds_view_new(model);
@@ -1008,6 +1073,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/window/defaults-to-fast-computer", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/window/setup-recorded-in-sgf", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/setup-bank-buttons", test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/view/bank-layout", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/board-ship-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/action-button-labels", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/choice-list-cancel", test_homeworlds_window_skip);
@@ -1027,6 +1093,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/window/setup-recorded-in-sgf",
                     test_homeworlds_window_setup_moves_are_recorded_in_sgf);
     g_test_add_func("/homeworlds/view/setup-bank-buttons", test_homeworlds_view_setup_uses_board_bank_buttons);
+    g_test_add_func("/homeworlds/view/bank-layout", test_homeworlds_view_bank_layout_is_compact_and_centered);
     g_test_add_func("/homeworlds/view/board-ship-buttons", test_homeworlds_view_uses_board_ship_buttons);
     g_test_add_func("/homeworlds/view/action-button-labels", test_homeworlds_view_action_buttons_use_plain_labels);
     g_test_add_func("/homeworlds/view/choice-list-cancel",

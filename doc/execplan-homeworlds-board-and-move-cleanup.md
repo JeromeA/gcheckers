@@ -25,6 +25,7 @@ inside a scroller when the systems cannot fit.
 - [x] (2026-05-18) Split default board-panel width from minimum width so the Homeworlds paned handle remains movable.
 - [x] (2026-05-18) Exempted non-square-grid board hosts from the shared square-board splitter height clamp.
 - [x] (2026-05-18) Made the board content width shrink back to the viewport width when rows fit.
+- [x] (2026-05-18) Tightened the bank UI: centered it vertically, removed color/count labels, and compacted size piles.
 
 ## Surprises & Discoveries
 
@@ -84,6 +85,8 @@ and the Homeworlds default board panel width accounts for the board plus the Hom
 the splitter's hard minimum. The shared square-board splitter clamp now only runs for square-grid profiles, so the
 Homeworlds board panel can take the full width of a wide window while its drawing area remains scrollable. When rows
 fit the viewport, the drawing area now tracks the viewport exactly instead of keeping a stale wider scrollable area.
+The bank overlay is vertically centered, uses compact variable-width pyramid buttons without count overlays or color
+row labels, and keeps its title inside the panel like system labels.
 System internals now render as one row ordered player 2 ships, stars, then player 1 ships, matching each owner's
 right-hand side from their own perspective.
 Catastrophe application now runs orphan-star cleanup after all successful catastrophes, not only star-destroying

@@ -534,7 +534,8 @@ Role: let `ghomeworlds` use the shared `GGameWindow` while replacing only the sq
 placement between the two homeworlds, measured-width row packing that reserves the bank footprint and expands inside a
 horizontal scroller only when needed, viewport-tracking drawing-area width, a fixed minimum board viewport, homeworld
 labels, pipped square stars, tall pipped ship pyramids, overlaid
-clickable bank piles, staged legal-choice buttons, and catastrophe buttons that stage normal symbolic steps into the
+clickable compact bank piles with an in-panel title, staged legal-choice buttons, and catastrophe buttons that stage
+normal symbolic steps into the
 current move so SGF, model state, and the last-move label stay synchronized. Homeworld rendering keeps player 1 at the
 bottom, player 2 at
 the top, and lays out every system in one horizontal row with player 2 ships left of the stars and player 1 ships right

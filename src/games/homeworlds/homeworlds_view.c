@@ -34,10 +34,9 @@ typedef struct {
 #define HOMEWORLDS_VIEW_SYSTEM_LABEL_HEIGHT 32.0
 #define HOMEWORLDS_VIEW_SYSTEM_CORNER_RADIUS 16.0
 #define HOMEWORLDS_VIEW_PIECE_BUTTON_PAD 5.0
-#define HOMEWORLDS_VIEW_BANK_BUTTON_WIDTH 68
-#define HOMEWORLDS_VIEW_BANK_BUTTON_HEIGHT 92
-#define HOMEWORLDS_VIEW_BANK_LABEL_WIDTH 22
-#define HOMEWORLDS_VIEW_BANK_GRID_COLUMN_SPACING 4
+#define HOMEWORLDS_VIEW_BANK_BUTTON_PAD 3.0
+#define HOMEWORLDS_VIEW_BANK_STACK_OFFSET 3.0
+#define HOMEWORLDS_VIEW_BANK_GRID_COLUMN_SPACING 7
 #define HOMEWORLDS_VIEW_BANK_GRID_ROW_SPACING 4
 #define HOMEWORLDS_VIEW_BANK_MARGIN 18
 #define HOMEWORLDS_VIEW_BANK_INNER_MARGIN 8
@@ -166,6 +165,26 @@ double homeworlds_view_pip_radius(void) {
   g_return_val_if_fail(homeworlds_view_pyramid_metrics(HOMEWORLDS_SIZE_MEDIUM, &metrics), 0.0);
 
   return metrics.height * HOMEWORLDS_VIEW_PIP_REFERENCE_RATIO;
+}
+
+static double homeworlds_view_bank_button_width(HomeworldsSize size) {
+  HomeworldsViewPyramidMetrics metrics = {0};
+
+  g_return_val_if_fail(homeworlds_view_pyramid_metrics(size, &metrics), 0.0);
+
+  return ceil(metrics.base +
+              (2.0 * HOMEWORLDS_VIEW_BANK_STACK_OFFSET) +
+              (2.0 * HOMEWORLDS_VIEW_BANK_BUTTON_PAD));
+}
+
+static double homeworlds_view_bank_button_height(HomeworldsSize size) {
+  HomeworldsViewPyramidMetrics metrics = {0};
+
+  g_return_val_if_fail(homeworlds_view_pyramid_metrics(size, &metrics), 0.0);
+
+  return ceil(metrics.height +
+              (2.0 * HOMEWORLDS_VIEW_BANK_STACK_OFFSET) +
+              (2.0 * HOMEWORLDS_VIEW_BANK_BUTTON_PAD));
 }
 
 static const HomeworldsMoveBuilderState *homeworlds_view_builder_state(const HomeworldsView *view) {
@@ -493,7 +512,7 @@ static void homeworlds_view_draw_bank_button_icon(GtkDrawingArea * /*drawing_are
 
   visible_count = MIN(icon->count, 3);
   for (guint i = 0; i < visible_count; ++i) {
-    double offset = ((double) i - (((double) visible_count - 1.0) / 2.0)) * 3.0;
+    double offset = ((double) i - (((double) visible_count - 1.0) / 2.0)) * HOMEWORLDS_VIEW_BANK_STACK_OFFSET;
     homeworlds_view_draw_pyramid(cr,
                                  ((double) width / 2.0) + offset,
                                  ((double) height / 2.0) + offset,
@@ -612,11 +631,16 @@ static void homeworlds_view_row_y_positions(double height,
 }
 
 static double homeworlds_view_bank_reserved_width(void) {
+  double button_width = 0.0;
+
+  for (HomeworldsSize size = HOMEWORLDS_SIZE_SMALL; size <= HOMEWORLDS_SIZE_LARGE; size++) {
+    button_width += homeworlds_view_bank_button_width(size);
+  }
+
   return HOMEWORLDS_VIEW_BANK_MARGIN +
          (2.0 * HOMEWORLDS_VIEW_BANK_INNER_MARGIN) +
-         HOMEWORLDS_VIEW_BANK_LABEL_WIDTH +
-         (3.0 * HOMEWORLDS_VIEW_BANK_BUTTON_WIDTH) +
-         (3.0 * HOMEWORLDS_VIEW_BANK_GRID_COLUMN_SPACING);
+         button_width +
+         (2.0 * HOMEWORLDS_VIEW_BANK_GRID_COLUMN_SPACING);
 }
 
 static void homeworlds_view_row_x_bounds(double width,
@@ -1838,20 +1862,22 @@ static GtkWidget *homeworlds_view_create_bank_button(HomeworldsView *view, Homew
   HomeworldsBankButtonIcon *icon_data = NULL;
   GtkWidget *button = NULL;
   GtkWidget *icon = NULL;
-  GtkWidget *overlay = NULL;
-  GtkWidget *count_label = NULL;
   char *tooltip = NULL;
   char *count_text = NULL;
   gboolean selectable = FALSE;
+  int button_width = 0;
+  int button_height = 0;
 
   g_return_val_if_fail(view != NULL, NULL);
   g_return_val_if_fail(homeworlds_pyramid_is_valid(pyramid), NULL);
   g_return_val_if_fail(count > 0, NULL);
 
+  button_width = (int)homeworlds_view_bank_button_width(homeworlds_pyramid_size(pyramid));
+  button_height = (int)homeworlds_view_bank_button_height(homeworlds_pyramid_size(pyramid));
   selectable = homeworlds_view_find_bank_candidate(view, pyramid, &candidate);
   button = gtk_button_new();
   gtk_widget_add_css_class(button, selectable ? "homeworlds-bank-choice" : "flat");
-  gtk_widget_set_size_request(button, HOMEWORLDS_VIEW_BANK_BUTTON_WIDTH, HOMEWORLDS_VIEW_BANK_BUTTON_HEIGHT);
+  gtk_widget_set_size_request(button, button_width, button_height);
   gtk_widget_set_can_focus(button, selectable);
   gtk_widget_set_sensitive(button, selectable);
   g_object_set_data(G_OBJECT(button), "homeworlds-board-bank-choice", GUINT_TO_POINTER(1));
@@ -1869,20 +1895,11 @@ static GtkWidget *homeworlds_view_create_bank_button(HomeworldsView *view, Homew
   icon_data->pyramid = pyramid;
   icon_data->count = count;
   icon = gtk_drawing_area_new();
-  gtk_drawing_area_set_content_width(GTK_DRAWING_AREA(icon), 58);
-  gtk_drawing_area_set_content_height(GTK_DRAWING_AREA(icon), 86);
+  gtk_drawing_area_set_content_width(GTK_DRAWING_AREA(icon), button_width);
+  gtk_drawing_area_set_content_height(GTK_DRAWING_AREA(icon), button_height);
   gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(icon), homeworlds_view_draw_bank_button_icon, icon_data, g_free);
 
-  overlay = gtk_overlay_new();
-  gtk_overlay_set_child(GTK_OVERLAY(overlay), icon);
-  count_text = g_strdup_printf("x%u", count);
-  count_label = gtk_label_new(count_text);
-  g_free(count_text);
-  gtk_widget_add_css_class(count_label, "caption");
-  gtk_widget_set_halign(count_label, GTK_ALIGN_END);
-  gtk_widget_set_valign(count_label, GTK_ALIGN_END);
-  gtk_overlay_add_overlay(GTK_OVERLAY(overlay), count_label);
-  gtk_button_set_child(GTK_BUTTON(button), overlay);
+  gtk_button_set_child(GTK_BUTTON(button), icon);
 
   if (selectable) {
     g_object_set_data_full(G_OBJECT(button),
@@ -1897,6 +1914,7 @@ static GtkWidget *homeworlds_view_create_bank_button(HomeworldsView *view, Homew
 
 static void homeworlds_view_update_board_bank(HomeworldsView *view) {
   const HomeworldsPosition *position = NULL;
+  GtkWidget *title = NULL;
   GtkWidget *grid = NULL;
   guint counts[4][4] = {{0}};
 
@@ -1917,16 +1935,19 @@ static void homeworlds_view_update_board_bank(HomeworldsView *view) {
     counts[homeworlds_pyramid_color(pyramid)][homeworlds_pyramid_size(pyramid)]++;
   }
 
+  title = gtk_label_new("Bank");
+  gtk_widget_set_name(title, "homeworlds-bank-title");
+  gtk_widget_add_css_class(title, "homeworlds-bank-title");
+  gtk_label_set_xalign(GTK_LABEL(title), 0.0f);
+  gtk_box_append(GTK_BOX(view->board_bank_box), title);
+
   grid = gtk_grid_new();
+  gtk_widget_set_name(grid, "homeworlds-bank-grid");
   gtk_grid_set_row_spacing(GTK_GRID(grid), HOMEWORLDS_VIEW_BANK_GRID_ROW_SPACING);
   gtk_grid_set_column_spacing(GTK_GRID(grid), HOMEWORLDS_VIEW_BANK_GRID_COLUMN_SPACING);
   gtk_box_append(GTK_BOX(view->board_bank_box), grid);
 
   for (guint color = HOMEWORLDS_COLOR_RED; color <= HOMEWORLDS_COLOR_BLUE; ++color) {
-    GtkWidget *label = gtk_label_new(homeworlds_view_color_styles[color].short_name);
-    gtk_widget_set_size_request(label, HOMEWORLDS_VIEW_BANK_LABEL_WIDTH, -1);
-    gtk_grid_attach(GTK_GRID(grid), label, 0, (int) color, 1, 1);
-
     for (HomeworldsSize size = HOMEWORLDS_SIZE_SMALL; size <= HOMEWORLDS_SIZE_LARGE; size++) {
       HomeworldsPyramid pyramid = homeworlds_pyramid_make((HomeworldsColor) color, size);
       if (counts[color][size] == 0) {
@@ -1934,7 +1955,7 @@ static void homeworlds_view_update_board_bank(HomeworldsView *view) {
       }
 
       GtkWidget *button = homeworlds_view_create_bank_button(view, pyramid, counts[color][size]);
-      gtk_grid_attach(GTK_GRID(grid), button, (int) size, (int) color, 1, 1);
+      gtk_grid_attach(GTK_GRID(grid), button, (int) size - 1, (int) color, 1, 1);
     }
   }
 }
@@ -2092,11 +2113,10 @@ HomeworldsView *homeworlds_view_new(GGameModel *model) {
   gtk_widget_set_valign(view->board_choice_layer, GTK_ALIGN_FILL);
   gtk_overlay_add_overlay(GTK_OVERLAY(view->board_overlay), view->board_choice_layer);
 
-  bank_frame = gtk_frame_new("Bank");
+  bank_frame = gtk_frame_new(NULL);
   gtk_widget_set_name(bank_frame, "homeworlds-board-bank");
   gtk_widget_set_halign(bank_frame, GTK_ALIGN_END);
-  gtk_widget_set_valign(bank_frame, GTK_ALIGN_START);
-  gtk_widget_set_margin_top(bank_frame, HOMEWORLDS_VIEW_BANK_MARGIN);
+  gtk_widget_set_valign(bank_frame, GTK_ALIGN_CENTER);
   gtk_widget_set_margin_end(bank_frame, HOMEWORLDS_VIEW_BANK_MARGIN);
   gtk_overlay_add_overlay(GTK_OVERLAY(view->board_overlay), bank_frame);
 

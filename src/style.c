@@ -145,6 +145,11 @@ static const char *ggame_style_css =
     "  background-color: rgba(220, 220, 220, 0.14);"
     "  border-color: rgba(245, 245, 245, 0.95);"
     "}"
+    ".homeworlds-bank-title {"
+    "  color: rgba(245, 245, 230, 0.92);"
+    "  font-size: 12px;"
+    "  font-weight: 700;"
+    "}"
     "scale { padding: 0; }";
 
 void ggame_style_init(void) {
