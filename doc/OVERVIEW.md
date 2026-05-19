@@ -35,6 +35,8 @@ an optional profile-owned board host around the board. For boop, that board host
 highlight, promotion confirmation button, and boop color styling while keeping the same shared shell. For Homeworlds,
 the board host replaces the square `BoardView` presentation with the system graph, bank piles, staged-choice controls,
 and catastrophe controls while still routing completed moves through the shared SGF controller.
+During Homeworlds multi-step actions, the source ship remains highlighted while the user chooses a trade color,
+capture target, or move destination; build completes immediately and has no second selection step.
 Collaborates with: `ggame_style_init()` for CSS, model signals for refresh, profile feature flags to enable/disable
 actions, and SGF navigation signals to synchronize analysis and board-host state. Computer turns are routed by control
 mode with alpha-beta depth configured from the shared `Computer depth` slider (`0..16`). Uses a three-pane layout: board
@@ -237,7 +239,8 @@ Collaborates with: `src/create_puzzles_runner.c`, `src/ai_search.c`, `src/puzzle
 ## `ggame_style_init()` (`src/style.c`)
 Module: `ggame_style_init()` (style helper, not a class).
 Role: installs application CSS once per process using `g_once_init_enter/leave`, including SGF disc colors and the
-colored puzzle-picker square styles, plus transparent Homeworlds board/bank choice hitboxes with visible borders.
+colored puzzle-picker square styles, plus transparent Homeworlds board/bank choice hitboxes and active-ship highlights
+with visible borders.
 Owns: CSS string and `GtkCssProvider` setup.
 Collaborates with: `GdkDisplay`/`GtkStyleContext` and is invoked by `GGameWindow`.
 

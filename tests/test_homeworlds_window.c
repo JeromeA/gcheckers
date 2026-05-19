@@ -154,6 +154,10 @@ static guint test_homeworlds_count_widgets_with_data(GtkWidget *root, const char
   return count;
 }
 
+static guint test_homeworlds_count_active_ship_highlights(GtkWidget *root) {
+  return test_homeworlds_count_widgets_with_data(root, "homeworlds-board-active-ship");
+}
+
 static guint test_homeworlds_count_labels_with_text(GtkWidget *root, const char *text) {
   guint count = 0;
 
@@ -1095,6 +1099,28 @@ static void test_homeworlds_view_choice_list_has_cancel_button(void) {
   g_object_unref(model);
 }
 
+static void test_homeworlds_view_build_has_no_second_step_highlight(void) {
+  HomeworldsPosition position = {0};
+  GGameModel *model = ggame_model_new(&homeworlds_game_backend);
+  HomeworldsView *view = homeworlds_view_new(model);
+  GtkWidget *root = homeworlds_view_get_widget(view);
+  GtkButton *button = NULL;
+
+  test_homeworlds_prepare_play_position(&position);
+  g_assert_true(ggame_model_set_position(model, &position));
+
+  g_assert_true(homeworlds_view_apply_candidate_at(view, 0));
+  button = test_homeworlds_find_non_visual_action_button(root, HOMEWORLDS_STEP_BUILD);
+  g_assert_nonnull(button);
+  g_signal_emit_by_name(button, "clicked");
+
+  g_assert_false(homeworlds_view_has_partial_selection(view));
+  g_assert_cmpuint(test_homeworlds_count_active_ship_highlights(root), ==, 0);
+
+  homeworlds_view_free(view);
+  g_object_unref(model);
+}
+
 static void test_homeworlds_view_trade_targets_use_bank_buttons(void) {
   HomeworldsPosition position = {0};
   GGameModel *model = ggame_model_new(&homeworlds_game_backend);
@@ -1111,6 +1137,7 @@ static void test_homeworlds_view_trade_targets_use_bank_buttons(void) {
   g_assert_nonnull(button);
   g_signal_emit_by_name(button, "clicked");
 
+  g_assert_cmpuint(test_homeworlds_count_active_ship_highlights(root), ==, 1);
   g_assert_cmpuint(test_homeworlds_count_non_visual_candidate_buttons(root, HOMEWORLDS_CANDIDATE_TRADE_COLOR), ==, 0);
   button = test_homeworlds_find_bank_button_for_pyramid(root, blue_large);
   g_assert_nonnull(button);
@@ -1118,6 +1145,7 @@ static void test_homeworlds_view_trade_targets_use_bank_buttons(void) {
   g_assert_true(gtk_widget_has_css_class(GTK_WIDGET(button), "homeworlds-bank-choice"));
   g_signal_emit_by_name(button, "clicked");
   g_assert_false(homeworlds_view_has_partial_selection(view));
+  g_assert_cmpuint(test_homeworlds_count_active_ship_highlights(root), ==, 0);
 
   homeworlds_view_free(view);
   g_object_unref(model);
@@ -1139,12 +1167,14 @@ static void test_homeworlds_view_attack_targets_use_board_buttons(void) {
   g_assert_nonnull(button);
   g_signal_emit_by_name(button, "clicked");
 
+  g_assert_cmpuint(test_homeworlds_count_active_ship_highlights(root), ==, 1);
   g_assert_cmpuint(test_homeworlds_count_non_visual_candidate_buttons(root, HOMEWORLDS_CANDIDATE_ATTACK_TARGET), ==, 0);
   button = test_homeworlds_find_selectable_ship_button(root);
   g_assert_nonnull(button);
   g_assert_true(gtk_widget_has_css_class(GTK_WIDGET(button), "homeworlds-board-choice"));
   g_signal_emit_by_name(button, "clicked");
   g_assert_false(homeworlds_view_has_partial_selection(view));
+  g_assert_cmpuint(test_homeworlds_count_active_ship_highlights(root), ==, 0);
 
   homeworlds_view_free(view);
   g_object_unref(model);
@@ -1168,6 +1198,7 @@ static void test_homeworlds_view_move_targets_use_board_and_bank_buttons(void) {
   g_assert_nonnull(button);
   g_signal_emit_by_name(button, "clicked");
 
+  g_assert_cmpuint(test_homeworlds_count_active_ship_highlights(root), ==, 1);
   g_assert_cmpuint(test_homeworlds_count_non_visual_candidate_buttons(root, HOMEWORLDS_CANDIDATE_MOVE_TARGET), ==, 0);
   button = test_homeworlds_find_selectable_system_button(root);
   g_assert_nonnull(button);
@@ -1254,6 +1285,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/view/board-ship-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/action-button-labels", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/choice-list-cancel", test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/view/build-no-second-step-highlight", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/trade-bank-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/attack-board-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/move-board-bank-buttons", test_homeworlds_window_skip);
@@ -1278,6 +1310,8 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/view/action-button-labels", test_homeworlds_view_action_buttons_use_plain_labels);
     g_test_add_func("/homeworlds/view/choice-list-cancel",
                     test_homeworlds_view_choice_list_has_cancel_button);
+    g_test_add_func("/homeworlds/view/build-no-second-step-highlight",
+                    test_homeworlds_view_build_has_no_second_step_highlight);
     g_test_add_func("/homeworlds/view/trade-bank-buttons", test_homeworlds_view_trade_targets_use_bank_buttons);
     g_test_add_func("/homeworlds/view/attack-board-buttons", test_homeworlds_view_attack_targets_use_board_buttons);
     g_test_add_func("/homeworlds/view/move-board-bank-buttons",

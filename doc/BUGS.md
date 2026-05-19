@@ -634,3 +634,15 @@ catastrophe.
 
 The fix checks the staged child state after each pending green-sacrifice build and prunes that AI branch when the build
 turns the target system from safe into an unfavorable catastrophe.
+
+## Homeworlds action source ships lost their visual highlight
+
+After a Homeworlds player selected a ship and then chose move, trade, or capture, the UI should keep the source ship
+marked while the second-step destination, bank color, or target ship is being selected.
+
+The board overlay only created highlight widgets for current clickable choices. Once the move builder advanced to a
+trade color, capture target, or move destination stage, the source ship was no longer a candidate, so only the target
+choices stayed visually marked.
+
+The fix adds a non-interactive active-ship overlay for second-step action stages. Build still creates no active-ship
+marker because it completes immediately without a second choice.

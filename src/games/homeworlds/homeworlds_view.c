@@ -1417,6 +1417,60 @@ static const HomeworldsMoveCandidate *homeworlds_view_find_move_target_candidate
   return NULL;
 }
 
+static gboolean homeworlds_view_stage_highlights_selected_ship(const HomeworldsMoveBuilderState *state) {
+  g_return_val_if_fail(state != NULL, FALSE);
+
+  switch ((HomeworldsBuilderStage) state->stage) {
+    case HOMEWORLDS_BUILDER_STAGE_SELECT_TRADE_COLOR:
+    case HOMEWORLDS_BUILDER_STAGE_SELECT_ATTACK_TARGET:
+    case HOMEWORLDS_BUILDER_STAGE_SELECT_MOVE_TARGET:
+      return homeworlds_pyramid_is_valid(state->selected_ship_pyramid) &&
+             state->selected_system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT;
+    case HOMEWORLDS_BUILDER_STAGE_SETUP_FIRST_STAR:
+    case HOMEWORLDS_BUILDER_STAGE_SETUP_SECOND_STAR:
+    case HOMEWORLDS_BUILDER_STAGE_SETUP_SHIP:
+    case HOMEWORLDS_BUILDER_STAGE_SELECT_SHIP:
+    case HOMEWORLDS_BUILDER_STAGE_SELECT_ACTION:
+    case HOMEWORLDS_BUILDER_STAGE_COMPLETE:
+    default:
+      return FALSE;
+  }
+}
+
+static gboolean homeworlds_view_piece_is_selected_ship(const HomeworldsMoveBuilderState *state,
+                                                       const HomeworldsViewPieceLayout *piece) {
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(piece != NULL, FALSE);
+
+  return piece->is_ship &&
+         piece->side == state->working_position.turn &&
+         piece->pyramid == state->selected_ship_pyramid;
+}
+
+static void homeworlds_view_append_active_ship_highlight(HomeworldsView *view,
+                                                         const HomeworldsViewPieceLayout *piece) {
+  GtkWidget *highlight = NULL;
+  double x = 0.0;
+  double y = 0.0;
+
+  g_return_if_fail(view != NULL);
+  g_return_if_fail(GTK_IS_FIXED(view->board_choice_layer));
+  g_return_if_fail(piece != NULL);
+
+  highlight = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  gtk_widget_add_css_class(highlight, "homeworlds-board-active-ship");
+  gtk_widget_set_can_focus(highlight, FALSE);
+  gtk_widget_set_can_target(highlight, FALSE);
+  g_object_set_data(G_OBJECT(highlight), "homeworlds-board-active-ship", GUINT_TO_POINTER(1));
+
+  x = piece->x - (piece->width / 2.0) - HOMEWORLDS_VIEW_PIECE_BUTTON_PAD;
+  y = piece->y - (piece->height / 2.0) - HOMEWORLDS_VIEW_PIECE_BUTTON_PAD;
+  gtk_widget_set_size_request(highlight,
+                              (int)(piece->width + (2.0 * HOMEWORLDS_VIEW_PIECE_BUTTON_PAD) + 1.0),
+                              (int)(piece->height + (2.0 * HOMEWORLDS_VIEW_PIECE_BUTTON_PAD) + 1.0));
+  gtk_fixed_put(GTK_FIXED(view->board_choice_layer), highlight, x, y);
+}
+
 static GtkWidget *homeworlds_view_create_board_choice_button(HomeworldsView *view,
                                                              const HomeworldsMoveCandidate *candidate,
                                                              const char *data_key) {
@@ -1446,6 +1500,9 @@ static void homeworlds_view_update_board_choice_buttons(HomeworldsView *view) {
   const HomeworldsMoveBuilderState *state = NULL;
   const HomeworldsPosition *position = NULL;
   GameBackendMoveList candidates = {0};
+  gboolean uses_board_choices = FALSE;
+  gboolean highlights_selected_ship = FALSE;
+  gboolean highlighted_selected_ship = FALSE;
   int board_width = 0;
   int board_height = 0;
 
@@ -1454,7 +1511,13 @@ static void homeworlds_view_update_board_choice_buttons(HomeworldsView *view) {
 
   homeworlds_view_clear_fixed(view->board_choice_layer);
   state = homeworlds_view_builder_state(view);
-  if (state == NULL || !homeworlds_view_stage_uses_board_choices(view)) {
+  if (state == NULL) {
+    return;
+  }
+
+  uses_board_choices = homeworlds_view_stage_uses_board_choices(view);
+  highlights_selected_ship = homeworlds_view_stage_highlights_selected_ship(state);
+  if (!uses_board_choices && !highlights_selected_ship) {
     return;
   }
 
@@ -1498,6 +1561,14 @@ static void homeworlds_view_update_board_choice_buttons(HomeworldsView *view) {
 
       if (!piece->is_ship) {
         continue;
+      }
+
+      if (!highlighted_selected_ship &&
+          highlights_selected_ship &&
+          state->selected_system_index == system_index &&
+          homeworlds_view_piece_is_selected_ship(state, piece)) {
+        homeworlds_view_append_active_ship_highlight(view, piece);
+        highlighted_selected_ship = TRUE;
       }
 
       if (state->stage == HOMEWORLDS_BUILDER_STAGE_SELECT_SHIP) {
