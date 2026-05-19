@@ -271,24 +271,26 @@ static void test_backend_move_codec_roundtrips_setup_and_turn(void) {
   assert(homeworlds_move_format(&setup, notation, sizeof(notation)));
   assert(strcmp(notation, "R1B2g3") == 0);
   assert(homeworlds_move_format(&turn, notation, sizeof(notation)));
-  assert(strcmp(notation, "H1 g3-/H1 r3=g") == 0);
+  assert(strcmp(notation, "H1g3- H1r3=g") == 0);
   assert(homeworlds_move_format(&build, notation, sizeof(notation)));
-  assert(strcmp(notation, "H1 g+") == 0);
-  assert(homeworlds_move_parse("H1 g+", &parsed));
+  assert(strcmp(notation, "H1g+") == 0);
+  assert(homeworlds_move_parse("H1g+", &parsed));
   assert(parsed.steps[0].kind == HOMEWORLDS_STEP_BUILD);
   assert(parsed.steps[0].actor.ship == 0);
   assert(parsed.steps[0].target_color == HOMEWORLDS_COLOR_GREEN);
   assert(homeworlds_move_format(&parsed, notation, sizeof(notation)));
-  assert(strcmp(notation, "H1 g+") == 0);
+  assert(strcmp(notation, "H1g+") == 0);
   assert(homeworlds_move_parse("Y2B1g3", &parsed));
   assert(homeworlds_move_format(&parsed, notation, sizeof(notation)));
   assert(strcmp(notation, "Y2B1g3") == 0);
-  assert(homeworlds_move_parse("G3 y2>G2 G3 y!", &parsed));
+  assert(homeworlds_move_parse("G3y2>G2 G3y!", &parsed));
   assert(homeworlds_move_format(&parsed, notation, sizeof(notation)));
-  assert(strcmp(notation, "G3 y2>G2 G3 y!") == 0);
+  assert(strcmp(notation, "G3y2>G2 G3y!") == 0);
   assert(homeworlds_move_parse("pass", &parsed));
   assert(homeworlds_move_format(&parsed, notation, sizeof(notation)));
   assert(strcmp(notation, "pass") == 0);
+  assert(!homeworlds_move_parse("H1 g+", &parsed));
+  assert(!homeworlds_move_parse("H1g3-/H1r3=g", &parsed));
 }
 
 static void test_backend_sgf_snapshot_roundtrips_position(void) {
@@ -660,7 +662,7 @@ static void test_backend_good_moves_deduplicate_builds_by_color(void) {
     assert(homeworlds_move_format(move, notation, sizeof(notation)));
     assert(strstr(notation, "g1+") == NULL);
     assert(strstr(notation, "g3+") == NULL);
-    if (strcmp(notation, "H1 g+") == 0) {
+    if (strcmp(notation, "H1g+") == 0) {
       green_homeworld_builds++;
     }
   }

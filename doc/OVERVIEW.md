@@ -508,9 +508,10 @@ source system plus the build color in `target_color`, because the exact source s
 Rules covered: setup, build, trade, attack, move, discover, sacrifice, catastrophe resolution, empty-system
 cleanup, end-of-turn homeworld loss detection for either side, static evaluation, terminal scoring, hashing, compact
 move formatting/parsing, and whole-position SGF snapshots in `homeworlds_sgf_position.c`. Move notation uses pyramid
-letters and sizes directly, such as `Y2B1g3`, `H1 g+`, `G3 y2>G2 G3 y!`, and `pass`. Static evaluation counts ship
-material and repeats the largest own ship at each player's homeworld. Sacrifice-granted actions reuse the normal action
-application code but bypass local color-access checks because the sacrificed ship supplies the action color.
+letters and sizes directly, such as `Y2B1g3`, `H1g+`, `G3y2>G2 G3y!`, and `pass`; multi-step moves use spaces between
+complete steps and no internal slash separator. Static evaluation counts ship material and repeats the largest own ship
+at each player's homeworld. Sacrifice-granted actions reuse the normal action application code but bypass local
+color-access checks because the sacrificed ship supplies the action color.
 Collaborates with: `homeworlds_move_builder.c`, `homeworlds_backend.c`, `homeworlds_sgf_position.c`,
 `homeworlds_view.c`, `tests/test_homeworlds_game.c`, and `tests/test_homeworlds_backend.c`.
 

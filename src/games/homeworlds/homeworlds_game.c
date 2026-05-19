@@ -1144,7 +1144,7 @@ static void homeworlds_move_skip_spaces(const char **cursor) {
 }
 
 static gboolean homeworlds_move_at_separator(char character) {
-  return character == '\0' || character == '/' || g_ascii_isspace(character);
+  return character == '\0' || g_ascii_isspace(character);
 }
 
 static gboolean homeworlds_move_append_turn_step(GString *text, const HomeworldsTurnStep *step) {
@@ -1161,7 +1161,6 @@ static gboolean homeworlds_move_append_turn_step(GString *text, const Homeworlds
       return FALSE;
     }
 
-    g_string_append_c(text, ' ');
     g_string_append_c(text, homeworlds_move_color_letter((HomeworldsColor)step->target_color, FALSE));
     g_string_append_c(text, '!');
     return TRUE;
@@ -1170,7 +1169,6 @@ static gboolean homeworlds_move_append_turn_step(GString *text, const Homeworlds
   if (!homeworlds_move_append_system_ref(text, &step->actor.system)) {
     return FALSE;
   }
-  g_string_append_c(text, ' ');
 
   switch ((HomeworldsStepKind)step->kind) {
     case HOMEWORLDS_STEP_BUILD:
@@ -1240,12 +1238,7 @@ gboolean homeworlds_move_format(const HomeworldsMove *move, char *buffer, gsize 
              move->step_count <= HOMEWORLDS_MAX_MOVE_STEPS) {
     for (guint i = 0; i < move->step_count; ++i) {
       if (i > 0) {
-        const HomeworldsTurnStep *previous = &move->steps[i - 1];
-        const HomeworldsTurnStep *current = &move->steps[i];
-
-        g_string_append_c(text,
-                          previous->kind == HOMEWORLDS_STEP_CATASTROPHE ||
-                          current->kind == HOMEWORLDS_STEP_CATASTROPHE ? ' ' : '/');
+        g_string_append_c(text, ' ');
       }
       if (!homeworlds_move_append_turn_step(text, &move->steps[i])) {
         g_string_free(text, TRUE);
@@ -1323,7 +1316,6 @@ static gboolean homeworlds_move_parse_turn_step(const char **cursor, HomeworldsT
     return FALSE;
   }
   out_step->target_system = out_step->actor.system;
-  homeworlds_move_skip_spaces(cursor);
 
   HomeworldsColor color = HOMEWORLDS_COLOR_RED;
   if (homeworlds_move_color_from_letter(**cursor, FALSE, &color) && (*cursor)[1] == '!') {
@@ -1383,10 +1375,6 @@ static gboolean homeworlds_move_parse_turn(const char *notation, HomeworldsMove 
     HomeworldsTurnStep step = {0};
 
     homeworlds_move_skip_spaces(&cursor);
-    if (*cursor == '/') {
-      cursor++;
-      continue;
-    }
     if (*cursor == '\0') {
       break;
     }
@@ -1397,9 +1385,6 @@ static gboolean homeworlds_move_parse_turn(const char *notation, HomeworldsMove 
     }
 
     homeworlds_move_skip_spaces(&cursor);
-    if (*cursor == '/') {
-      cursor++;
-    }
   }
 
   return out_move->step_count > 0;

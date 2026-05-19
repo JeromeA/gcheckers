@@ -451,7 +451,7 @@ The catastrophe buttons mutated a copied position directly and then replaced the
 visually correct, but skipped the shared move handler, so no SGF node was appended and the last-move label displayed a
 generic `catastrophe` string instead of a replayable move.
 
-The fix represents catastrophes as normal symbolic `HomeworldsMove` steps such as `G3 y!`. The view now submits that
+The fix represents catastrophes as normal symbolic `HomeworldsMove` steps such as `G3y!`. The view now submits that
 move through the same completion path as other Homeworlds actions, while the rules engine allows catastrophe-only
 moves without advancing the turn.
 
@@ -557,10 +557,10 @@ Building in Homeworlds is determined by the system and the color of an available
 not change the built piece, because the action always takes the smallest available bank ship of that color.
 
 Build moves were stored and formatted with the full source ship pyramid, so same-color ships produced redundant moves
-such as `H1 g1+` and `H1 g3+` even though they applied the same build.
+such as `H1g1+` and `H1g3+` even though they applied the same build.
 
 The fix canonicalizes build steps to store only the source system and build color. Build notation is now color-only,
-for example `H1 g+`, and generated move lists deduplicate those equivalent choices.
+for example `H1g+`, and generated move lists deduplicate those equivalent choices.
 
 ## Homeworlds AI could move into unfavorable catastrophes
 
