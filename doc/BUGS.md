@@ -621,3 +621,16 @@ move, but it made beginning-of-turn catastrophes unnecessarily rigid.
 The fix records the profitable catastrophes available at the root as a final-move requirement and adds those
 catastrophes as optional branches during the staged walk. Newly created profitable catastrophes remain forced at the
 earliest step.
+
+## Homeworlds AI kept unsafe green sacrifices
+
+A green sacrifice grants build actions, but those builds should still respect the AI safety rule against creating an
+unfavorable catastrophe where the moving player would lose more ship pips than the opponent.
+
+The good-move walker filtered ordinary unsafe builds and unsafe move/discover destinations, but a forced build produced
+by a pending green sacrifice was applied while selecting the build source ship. That path bypassed the existing build
+candidate filter, so alpha-beta could keep sacrifice lines that immediately left the player exposed to a losing
+catastrophe.
+
+The fix checks the staged child state after each pending green-sacrifice build and prunes that AI branch when the build
+turns the target system from safe into an unfavorable catastrophe.

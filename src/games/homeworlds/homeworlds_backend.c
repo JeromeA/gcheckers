@@ -501,6 +501,43 @@ static gboolean homeworlds_backend_system_has_unfavorable_catastrophe(const Home
   return FALSE;
 }
 
+static gboolean homeworlds_backend_green_sacrifice_build_creates_unfavorable_catastrophe(
+    const HomeworldsMoveBuilderState *state,
+    const HomeworldsMoveCandidate *candidate,
+    const HomeworldsMoveBuilderState *child_state) {
+  const HomeworldsTurnStep *step = NULL;
+  guint side = 0;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(candidate != NULL, FALSE);
+  g_return_val_if_fail(child_state != NULL, FALSE);
+
+  if (state->stage != HOMEWORLDS_BUILDER_STAGE_SELECT_SHIP ||
+      state->pending_actions_remaining == 0 ||
+      state->forced_action_color != HOMEWORLDS_COLOR_GREEN ||
+      candidate->data.kind != HOMEWORLDS_CANDIDATE_SELECT_SHIP ||
+      candidate->data.system_index >= HOMEWORLDS_SYSTEM_SLOT_COUNT ||
+      child_state->move.step_count != state->move.step_count + 1) {
+    return FALSE;
+  }
+
+  step = &child_state->move.steps[child_state->move.step_count - 1];
+  if (step->kind != HOMEWORLDS_STEP_BUILD) {
+    return FALSE;
+  }
+
+  side = state->working_position.turn;
+  if (homeworlds_backend_system_has_unfavorable_catastrophe(
+          &state->working_position.systems[candidate->data.system_index],
+          side)) {
+    return FALSE;
+  }
+
+  return homeworlds_backend_system_has_unfavorable_catastrophe(
+      &child_state->working_position.systems[candidate->data.system_index],
+      side);
+}
+
 static gboolean homeworlds_backend_move_enters_unfavorable_catastrophe(const HomeworldsMoveBuilderState *state,
                                                                        const HomeworldsMove *move) {
   guint side = 0;
@@ -767,7 +804,8 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(const Homeworlds
     };
 
     if (candidate == NULL || !homeworlds_backend_candidate_is_good(state, candidate) ||
-        !homeworlds_move_builder_step(&child, candidate)) {
+        !homeworlds_move_builder_step(&child, candidate) ||
+        homeworlds_backend_green_sacrifice_build_creates_unfavorable_catastrophe(state, candidate, &child_state)) {
       continue;
     }
     if (!homeworlds_backend_collect_good_moves_recursive(&child_state, context, buffer)) {
