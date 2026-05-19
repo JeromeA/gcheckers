@@ -572,6 +572,8 @@ moving side would leave an unfavorable catastrophe available, rejects green-sacr
 catastrophe, and skips one-action sacrifices when that color action is already available at the selected system.
 Profitable catastrophes available at the start of a turn are required somewhere in the final move, while profitable
 catastrophes created by an earlier step are forced immediately in the staged walk.
+`doc/homeworlds-move-generation.md` describes how the legal builder, diagnostic move report, `good_moves()`, and
+generic alpha-beta search interact.
 Collaborates with: `GGameAppProfile`, `GGameWindow`, `GGameModel`, `GGameSgfController`, `homeworlds_game.c`,
 `homeworlds_move_builder.c`, `homeworlds_backend.c`, and `tests/test_homeworlds_window.c`.
 
