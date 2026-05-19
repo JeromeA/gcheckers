@@ -120,6 +120,22 @@ static HomeworldsView *test_homeworlds_get_window_view(GGameWindow *window) {
   return view;
 }
 
+static void test_homeworlds_remove_bank_piece(HomeworldsPosition *position, HomeworldsPyramid pyramid) {
+  g_return_if_fail(position != NULL);
+  g_return_if_fail(homeworlds_pyramid_is_valid(pyramid));
+
+  for (guint slot = 0; slot < HOMEWORLDS_BANK_SLOT_COUNT; ++slot) {
+    if (position->bank[slot] != pyramid) {
+      continue;
+    }
+
+    position->bank[slot] = 0;
+    return;
+  }
+
+  g_assert_not_reached();
+}
+
 static guint test_homeworlds_count_widgets_with_data(GtkWidget *root, const char *key) {
   guint count = 0;
 
@@ -196,6 +212,36 @@ static GtkButton *test_homeworlds_find_selectable_ship_button(GtkWidget *root) {
   return NULL;
 }
 
+static GtkButton *test_homeworlds_find_ship_button_for(GtkWidget *root,
+                                                       guint system_index,
+                                                       HomeworldsPyramid pyramid) {
+  g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
+  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, NULL);
+  g_return_val_if_fail(homeworlds_pyramid_is_valid(pyramid), NULL);
+
+  if (GTK_IS_BUTTON(root) &&
+      g_object_get_data(G_OBJECT(root), "homeworlds-board-ship-choice") != NULL) {
+    const HomeworldsMoveCandidate *candidate = g_object_get_data(G_OBJECT(root), "homeworlds-candidate");
+
+    if (candidate != NULL &&
+        candidate->data.kind == HOMEWORLDS_CANDIDATE_SELECT_SHIP &&
+        candidate->data.system_index == system_index &&
+        candidate->data.pyramid == pyramid) {
+      return GTK_BUTTON(root);
+    }
+  }
+
+  for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
+       child = gtk_widget_get_next_sibling(child)) {
+    GtkButton *match = test_homeworlds_find_ship_button_for(child, system_index, pyramid);
+    if (match != NULL) {
+      return match;
+    }
+  }
+
+  return NULL;
+}
+
 static GtkButton *test_homeworlds_find_selectable_system_button(GtkWidget *root) {
   g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
 
@@ -235,6 +281,25 @@ static GtkButton *test_homeworlds_find_cancel_choice_button(GtkWidget *root) {
   return NULL;
 }
 
+static GtkButton *test_homeworlds_find_finish_catastrophes_pass_button(GtkWidget *root) {
+  g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
+
+  if (GTK_IS_BUTTON(root) &&
+      g_object_get_data(G_OBJECT(root), "homeworlds-finish-catastrophes-pass") != NULL) {
+    return GTK_BUTTON(root);
+  }
+
+  for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
+       child = gtk_widget_get_next_sibling(child)) {
+    GtkButton *match = test_homeworlds_find_finish_catastrophes_pass_button(child);
+    if (match != NULL) {
+      return match;
+    }
+  }
+
+  return NULL;
+}
+
 static GtkButton *test_homeworlds_find_catastrophe_button(GtkWidget *root,
                                                           guint system_index,
                                                           HomeworldsColor color) {
@@ -243,8 +308,8 @@ static GtkButton *test_homeworlds_find_catastrophe_button(GtkWidget *root,
   g_return_val_if_fail(color <= HOMEWORLDS_COLOR_BLUE, NULL);
 
   if (GTK_IS_BUTTON(root) &&
-      GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(root), "homeworlds-system-index")) == system_index &&
-      GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(root), "homeworlds-color")) == color) {
+      GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(root), "homeworlds-system-index")) == system_index + 1 &&
+      GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(root), "homeworlds-color")) == color + 1) {
     return GTK_BUTTON(root);
   }
 
@@ -777,6 +842,95 @@ static void test_homeworlds_window_catastrophe_prefix_records_single_sgf_move(vo
   g_object_unref(app);
 }
 
+static void test_homeworlds_window_end_move_catastrophe_requires_choice(void) {
+  GtkApplication *app = NULL;
+  GGameModel *model = NULL;
+  GGameWindow *window = test_homeworlds_create_window(&app, &model);
+  HomeworldsView *view = test_homeworlds_get_window_view(window);
+  GtkWidget *root = GTK_WIDGET(window);
+  PlayerControlsPanel *panel = ggame_window_get_controls_panel(window);
+  GGameSgfController *controller = ggame_window_get_sgf_controller(window);
+  SgfTree *tree = ggame_sgf_controller_get_tree(controller);
+  HomeworldsPosition position = {0};
+  HomeworldsMove move = {0};
+  GtkButton *ship_button = NULL;
+  GtkButton *build_button = NULL;
+  GtkButton *catastrophe_button = NULL;
+  HomeworldsPyramid red_large = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE);
+  HomeworldsPyramid red_medium = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_MEDIUM);
+  HomeworldsPyramid green_small = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL);
+  HomeworldsPyramid blue_small = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL);
+  HomeworldsPyramid blue_large = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE);
+  HomeworldsPyramid yellow_large = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_LARGE);
+
+  g_assert_nonnull(view);
+  g_assert_nonnull(panel);
+  g_assert_nonnull(controller);
+  g_assert_nonnull(tree);
+
+  player_controls_panel_set_mode(panel, 1, PLAYER_CONTROL_MODE_USER);
+  homeworlds_position_init(&position);
+  position.phase = HOMEWORLDS_PHASE_PLAY;
+  position.turn = 0;
+  memset(position.systems, 0, sizeof(position.systems));
+  position.systems[0] = (HomeworldsSystem){
+    .stars = {
+      green_small,
+      red_medium,
+    },
+    .ships = {
+      [0] = {
+        red_large,
+        red_medium,
+      },
+    },
+  };
+  position.systems[1] = (HomeworldsSystem){
+    .stars = {
+      blue_small,
+      yellow_large,
+    },
+    .ships = {
+      [1] = {
+        blue_large,
+      },
+    },
+  };
+  test_homeworlds_remove_bank_piece(&position, green_small);
+  test_homeworlds_remove_bank_piece(&position, red_medium);
+  test_homeworlds_remove_bank_piece(&position, red_large);
+  test_homeworlds_remove_bank_piece(&position, red_medium);
+  test_homeworlds_remove_bank_piece(&position, blue_small);
+  test_homeworlds_remove_bank_piece(&position, yellow_large);
+  test_homeworlds_remove_bank_piece(&position, blue_large);
+  g_assert_true(ggame_model_set_position(model, &position));
+
+  ship_button = test_homeworlds_find_ship_button_for(root, 0, red_large);
+  g_assert_nonnull(ship_button);
+  g_signal_emit_by_name(ship_button, "clicked");
+  build_button = test_homeworlds_find_non_visual_action_button(root, HOMEWORLDS_STEP_BUILD);
+  g_assert_nonnull(build_button);
+  g_signal_emit_by_name(build_button, "clicked");
+
+  g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 0);
+  g_assert_nonnull(test_homeworlds_find_finish_catastrophes_pass_button(root));
+  catastrophe_button = test_homeworlds_find_catastrophe_button(root, 0, HOMEWORLDS_COLOR_RED);
+  g_assert_nonnull(catastrophe_button);
+  g_signal_emit_by_name(catastrophe_button, "clicked");
+
+  g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 1);
+  g_assert_true(ggame_sgf_controller_get_current_node_move(controller, &move));
+  g_assert_cmpuint(move.kind, ==, HOMEWORLDS_MOVE_KIND_TURN);
+  g_assert_cmpuint(move.step_count, ==, 2);
+  g_assert_cmpuint(move.steps[0].kind, ==, HOMEWORLDS_STEP_BUILD);
+  g_assert_cmpuint(move.steps[1].kind, ==, HOMEWORLDS_STEP_CATASTROPHE);
+  g_assert_cmpuint(move.steps[1].target_color, ==, HOMEWORLDS_COLOR_RED);
+
+  gtk_window_destroy(GTK_WINDOW(window));
+  g_object_unref(model);
+  g_object_unref(app);
+}
+
 static void test_homeworlds_view_setup_uses_board_bank_buttons(void) {
   GGameModel *model = ggame_model_new(&homeworlds_game_backend);
   HomeworldsView *view = homeworlds_view_new(model);
@@ -1109,6 +1263,8 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/view/board-content-width-tracks-viewport", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/window/catastrophe-prefix-records-single-sgf-move",
                     test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/window/end-move-catastrophe-requires-choice",
+                    test_homeworlds_window_skip);
   } else {
     g_test_add_func("/homeworlds/window/replaces-skeleton", test_homeworlds_window_replaces_skeleton);
     g_test_add_func("/homeworlds/window/main-split-can-exceed-height",
@@ -1133,6 +1289,8 @@ int main(int argc, char **argv) {
                     test_homeworlds_view_board_content_width_tracks_viewport);
     g_test_add_func("/homeworlds/window/catastrophe-prefix-records-single-sgf-move",
                     test_homeworlds_window_catastrophe_prefix_records_single_sgf_move);
+    g_test_add_func("/homeworlds/window/end-move-catastrophe-requires-choice",
+                    test_homeworlds_window_end_move_catastrophe_requires_choice);
   }
 
   result = g_test_run();

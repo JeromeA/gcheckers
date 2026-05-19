@@ -135,6 +135,8 @@ static gboolean homeworlds_view_calculate_system_layout(const HomeworldsSystem *
                                                         double center_x,
                                                         double center_y,
                                                         HomeworldsViewSystemLayout *out_layout);
+static gboolean homeworlds_view_apply_catastrophe_choice(HomeworldsMoveBuilderState *state,
+                                                         const HomeworldsViewCatastropheChoice *choice);
 
 static const HomeworldsColorStyle homeworlds_view_color_styles[] = {
   [HOMEWORLDS_COLOR_RED] = {0.86, 0.18, 0.16, "red", "R"},
@@ -225,11 +227,36 @@ static const HomeworldsPosition *homeworlds_view_position(const HomeworldsView *
   if (state != NULL && state->stage != HOMEWORLDS_BUILDER_STAGE_SETUP_FIRST_STAR &&
       state->stage != HOMEWORLDS_BUILDER_STAGE_SETUP_SECOND_STAR &&
       state->stage != HOMEWORLDS_BUILDER_STAGE_SETUP_SHIP &&
-      state->stage != HOMEWORLDS_BUILDER_STAGE_COMPLETE) {
+      (state->stage != HOMEWORLDS_BUILDER_STAGE_COMPLETE ||
+       (state->move.kind == HOMEWORLDS_MOVE_KIND_TURN && state->move.step_count > 0))) {
     return &state->working_position;
   }
 
   return ggame_model_peek_position(view->model);
+}
+
+static gboolean homeworlds_view_builder_has_catastrophe_choices(const HomeworldsMoveBuilderState *state) {
+  g_return_val_if_fail(state != NULL, FALSE);
+
+  if (state->working_position.phase != HOMEWORLDS_PHASE_PLAY ||
+      state->move.step_count >= HOMEWORLDS_MAX_MOVE_STEPS ||
+      state->stage == HOMEWORLDS_BUILDER_STAGE_SETUP_FIRST_STAR ||
+      state->stage == HOMEWORLDS_BUILDER_STAGE_SETUP_SECOND_STAR ||
+      state->stage == HOMEWORLDS_BUILDER_STAGE_SETUP_SHIP) {
+    return FALSE;
+  }
+
+  for (guint system_index = 0; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
+    const HomeworldsSystem *system = &state->working_position.systems[system_index];
+
+    for (guint color = HOMEWORLDS_COLOR_RED; color <= HOMEWORLDS_COLOR_BLUE; ++color) {
+      if (homeworlds_system_color_count(system, (HomeworldsColor) color) >= 4) {
+        return TRUE;
+      }
+    }
+  }
+
+  return FALSE;
 }
 
 static const char *homeworlds_view_color_name(HomeworldsColor color) {
@@ -1638,19 +1665,48 @@ static gboolean homeworlds_view_apply_completed_move(HomeworldsView *view, const
   return TRUE;
 }
 
-static gboolean homeworlds_view_complete_move_if_ready(HomeworldsView *view) {
+static gboolean homeworlds_view_apply_completed_builder_move(HomeworldsView *view) {
   HomeworldsMove move = {0};
+
+  g_return_val_if_fail(view != NULL, FALSE);
+  g_return_val_if_fail(view->builder_ready, FALSE);
+  g_return_val_if_fail(homeworlds_move_builder_is_complete(&view->builder), FALSE);
+
+  if (!homeworlds_move_builder_build_move(&view->builder, &move)) {
+    g_debug("Completed Homeworlds builder did not produce a move");
+    return FALSE;
+  }
+  return homeworlds_view_apply_completed_move(view, &move);
+}
+
+static gboolean homeworlds_view_complete_move_if_ready(HomeworldsView *view) {
+  const HomeworldsMoveBuilderState *state = NULL;
 
   g_return_val_if_fail(view != NULL, FALSE);
 
   if (!view->builder_ready || !homeworlds_move_builder_is_complete(&view->builder)) {
     return TRUE;
   }
-  if (!homeworlds_move_builder_build_move(&view->builder, &move)) {
-    g_debug("Completed Homeworlds builder did not produce a move");
-    return FALSE;
+  state = homeworlds_view_builder_state(view);
+  if (state != NULL && homeworlds_view_builder_has_catastrophe_choices(state)) {
+    return TRUE;
   }
-  return homeworlds_view_apply_completed_move(view, &move);
+  return homeworlds_view_apply_completed_builder_move(view);
+}
+
+static void homeworlds_view_pass_staged_catastrophes_clicked(GtkButton *button, gpointer user_data) {
+  HomeworldsView *view = user_data;
+
+  g_return_if_fail(GTK_IS_BUTTON(button));
+  g_return_if_fail(view != NULL);
+
+  if (!view->builder_ready ||
+      !homeworlds_move_builder_is_complete(&view->builder) ||
+      !homeworlds_view_apply_completed_builder_move(view)) {
+    homeworlds_view_refresh(view);
+    return;
+  }
+  homeworlds_view_refresh(view);
 }
 
 static void homeworlds_view_candidate_clicked(GtkButton *button, gpointer user_data) {
@@ -1675,7 +1731,13 @@ static void homeworlds_view_candidate_clicked(GtkButton *button, gpointer user_d
       homeworlds_view_refresh(view);
       return;
     }
-    homeworlds_view_refresh(view);
+    if (view->builder_ready &&
+        homeworlds_move_builder_is_complete(&view->builder) &&
+        homeworlds_view_builder_has_catastrophe_choices(homeworlds_view_builder_state(view))) {
+      homeworlds_view_update_from_current_builder(view);
+    } else {
+      homeworlds_view_refresh(view);
+    }
     return;
   }
 
@@ -1755,24 +1817,46 @@ static const char *homeworlds_view_visual_choice_text(const HomeworldsMoveBuilde
 
 static void homeworlds_view_catastrophe_clicked(GtkButton *button, gpointer user_data) {
   HomeworldsView *view = user_data;
-  guint system_index = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(button), "homeworlds-system-index"));
-  guint color = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(button), "homeworlds-color"));
+  guint stored_system_index = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(button), "homeworlds-system-index"));
+  guint stored_color = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(button), "homeworlds-color"));
+  guint system_index = stored_system_index - 1;
+  guint color = stored_color - 1;
+  HomeworldsMoveBuilderState *state = NULL;
+  HomeworldsViewCatastropheChoice choice = {
+    .system_index = system_index,
+    .color = (HomeworldsColor)color,
+  };
 
   g_return_if_fail(GTK_IS_BUTTON(button));
   g_return_if_fail(view != NULL);
+  g_return_if_fail(stored_system_index > 0);
+  g_return_if_fail(stored_color > 0);
 
   if (homeworlds_view_has_partial_selection(view)) {
     g_debug("Resolve or reset the partial Homeworlds move before applying a catastrophe");
     return;
   }
 
-  if (!view->builder_ready ||
-      !homeworlds_move_builder_apply_catastrophe(&view->builder, system_index, (HomeworldsColor) color)) {
+  if (!view->builder_ready || view->builder.builder_state == NULL) {
+    return;
+  }
+
+  state = view->builder.builder_state;
+  if (!homeworlds_view_apply_catastrophe_choice(state, &choice)) {
     g_debug("Homeworlds move builder rejected selected catastrophe");
     homeworlds_view_refresh(view);
     return;
   }
 
+  if (homeworlds_move_builder_is_complete(&view->builder) &&
+      !homeworlds_view_builder_has_catastrophe_choices(homeworlds_view_builder_state(view))) {
+    if (!homeworlds_view_apply_completed_builder_move(view)) {
+      homeworlds_view_refresh(view);
+      return;
+    }
+    homeworlds_view_refresh(view);
+    return;
+  }
   homeworlds_view_update_from_current_builder(view);
 }
 
@@ -1788,7 +1872,7 @@ static void homeworlds_view_update_catastrophes(HomeworldsView *view) {
     return;
   }
 
-  position = ggame_model_peek_position(view->model);
+  position = homeworlds_view_position(view);
   if (position == NULL) {
     return;
   }
@@ -1804,8 +1888,8 @@ static void homeworlds_view_update_catastrophes(HomeworldsView *view) {
                                     homeworlds_view_color_name((HomeworldsColor) color),
                                     system_index);
       GtkWidget *button = gtk_button_new_with_label(label);
-      g_object_set_data(G_OBJECT(button), "homeworlds-system-index", GUINT_TO_POINTER(system_index));
-      g_object_set_data(G_OBJECT(button), "homeworlds-color", GUINT_TO_POINTER(color));
+      g_object_set_data(G_OBJECT(button), "homeworlds-system-index", GUINT_TO_POINTER(system_index + 1));
+      g_object_set_data(G_OBJECT(button), "homeworlds-color", GUINT_TO_POINTER(color + 1));
       g_signal_connect(button, "clicked", G_CALLBACK(homeworlds_view_catastrophe_clicked), view);
       gtk_box_append(GTK_BOX(view->catastrophe_box), button);
       g_free(label);
@@ -2308,6 +2392,21 @@ static void homeworlds_view_update_candidates(HomeworldsView *view) {
 
   candidates = homeworlds_move_builder_list_candidates(&view->builder);
   if (state != NULL &&
+      state->stage == HOMEWORLDS_BUILDER_STAGE_COMPLETE &&
+      homeworlds_view_builder_has_catastrophe_choices(state)) {
+    GtkWidget *label = gtk_label_new("Catastrophe available. Trigger one or pass.");
+    GtkWidget *button = gtk_button_new_with_label("Pass");
+
+    gtk_label_set_wrap(GTK_LABEL(label), TRUE);
+    gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
+    gtk_box_append(GTK_BOX(view->candidate_box), label);
+    g_object_set_data(G_OBJECT(button), "homeworlds-finish-catastrophes-pass", GUINT_TO_POINTER(1));
+    g_signal_connect(button, "clicked", G_CALLBACK(homeworlds_view_pass_staged_catastrophes_clicked), view);
+    gtk_box_append(GTK_BOX(view->candidate_box), button);
+    g_clear_pointer(&candidates.moves, g_free);
+    return;
+  }
+  if (state != NULL &&
       state->stage != HOMEWORLDS_BUILDER_STAGE_SELECT_SHIP &&
       homeworlds_view_stage_uses_visual_choices(view)) {
     GtkWidget *label = gtk_label_new(homeworlds_view_visual_choice_text(state));
@@ -2639,7 +2738,13 @@ gboolean homeworlds_view_apply_candidate_at(HomeworldsView *view, gsize index) {
       homeworlds_view_refresh(view);
       return FALSE;
     }
-    homeworlds_view_refresh(view);
+    if (view->builder_ready &&
+        homeworlds_move_builder_is_complete(&view->builder) &&
+        homeworlds_view_builder_has_catastrophe_choices(homeworlds_view_builder_state(view))) {
+      homeworlds_view_update_from_current_builder(view);
+    } else {
+      homeworlds_view_refresh(view);
+    }
     return TRUE;
   }
 

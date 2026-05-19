@@ -558,8 +558,10 @@ navigation and direct play report the same move. Human interaction
 advances
 `homeworlds_move_builder` one visible choice at a time and sends each completed `HomeworldsMove` to the generic window
 move handler. Manual catastrophes update the builder's working position and are emitted as part of the same multi-step
-move once the turn completes. In the app, completed moves append SGF nodes through `GGameSgfController`; standalone
-view tests can still install no handler and apply directly to `GGameModel`. Homeworlds intentionally does not expose a
+move once the turn completes. When a primary action leaves a catastrophe available, the staged move remains open so
+the user can trigger one or pass before a SGF node is emitted. In the app, completed moves append SGF nodes through
+`GGameSgfController`; standalone view tests can still install no handler and apply directly to `GGameModel`.
+Homeworlds intentionally does not expose a
 full legal move list, so the
 shared SGF controller validates completed moves by applying them to a copied position before appending the node.
 `homeworlds_backend.c` walks the same staged builder to feed the shared alpha-beta search with backend-good moves. That
@@ -808,7 +810,9 @@ Collaborates with: SGF layout (layout-updated signal), selection, scroller, and 
 
 ### SGF disc factory (`src/sgf_view_disc_factory.c`, `src/sgf_view_disc_factory.h`)
 Module: disc widget creation.
-Role: build SGF move buttons (including the virtual move zero dot) and wire the `node-clicked` signal.
+Role: build SGF move buttons (including the virtual move zero dot) and wire the `node-clicked` signal. Each button
+keeps the factory alive through its click-signal closure so deferred GTK widget cleanup cannot leave dangling factory
+user data behind.
 Collaborates with: `SgfView` and the SGF tree.
 
 ### SGF layout (`src/sgf_view_layout.c`, `src/sgf_view_layout.h`)

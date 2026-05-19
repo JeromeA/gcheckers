@@ -25,6 +25,12 @@ static void sgf_view_disc_factory_on_clicked(GtkButton *button, gpointer user_da
   g_signal_emit(self, sgf_view_disc_factory_signals[SIGNAL_NODE_CLICKED], 0, node);
 }
 
+static void sgf_view_disc_factory_unref_closure(gpointer data, GClosure * /*closure*/) {
+  g_return_if_fail(SGF_IS_VIEW_DISC_FACTORY(data));
+
+  g_object_unref(data);
+}
+
 static void sgf_view_disc_factory_class_init(SgfViewDiscFactoryClass *klass) {
   sgf_view_disc_factory_signals[SIGNAL_NODE_CLICKED] = g_signal_new("node-clicked",
                                                                     G_TYPE_FROM_CLASS(klass),
@@ -82,7 +88,12 @@ GtkWidget *sgf_view_disc_factory_build(SgfViewDiscFactory *self,
   }
 
   g_object_set_data(G_OBJECT(button), "sgf-node", (gpointer)node);
-  g_signal_connect(button, "clicked", G_CALLBACK(sgf_view_disc_factory_on_clicked), self);
+  g_signal_connect_data(button,
+                        "clicked",
+                        G_CALLBACK(sgf_view_disc_factory_on_clicked),
+                        g_object_ref(self),
+                        sgf_view_disc_factory_unref_closure,
+                        0);
 
   if (node_widgets) {
     g_hash_table_insert(node_widgets, (gpointer)node, button);

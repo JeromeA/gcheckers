@@ -583,3 +583,28 @@ The good-move filter did not distinguish small sacrifices from larger sacrifices
 such as sacrificing a `g1` on a green-accessible system just to build once.
 
 The fix rejects small-sacrifice candidates when the selected system already has access to the sacrificed ship's color.
+
+## Homeworlds UI completed moves before optional catastrophes
+
+After a primary action, any newly available catastrophe should still be triggerable as a free step in the same turn, or
+the user should be able to pass on triggering it.
+
+The Homeworlds view submitted a completed move as soon as the primary action finished. If that action created a
+catastrophe, the SGF node was already recorded and the turn advanced, so the catastrophe could not be added to the same
+move.
+
+The fix keeps the staged move builder alive when the post-action working position has catastrophes. The board shows the
+staged position, the catastrophe buttons append free steps to the same move, and an explicit pass button finalizes the
+move without adding an SGF `pass` step.
+
+## SGF disc buttons outlived their click-signal factory
+
+SGF disc buttons should not keep raw signal user data pointing at a factory object that can be finalized before GTK has
+finished disposing the buttons.
+
+The disc factory connected each button's `clicked` handler with the factory as unowned user data. Some GTK test runs
+entered the main loop after earlier SGF views had already released their factory, letting pending button/widget cleanup
+process a signal closure with a stale object pointer and abort on a GLib critical.
+
+The fix connects button handlers with a referenced factory and releases that reference when the signal closure is
+destroyed, so the factory stays alive for as long as any generated button can use it.

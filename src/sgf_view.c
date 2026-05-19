@@ -265,6 +265,10 @@ static void sgf_view_rebuild(SgfView *self) {
 static void sgf_view_dispose(GObject *object) {
   SgfView *self = SGF_VIEW(object);
 
+  if (self->disc_factory != NULL) {
+    g_signal_handlers_disconnect_by_data(self->disc_factory, self);
+  }
+
   gboolean root_removed = TRUE;
   if (self->root) {
     root_removed = ggame_widget_remove_from_parent(self->root);
@@ -349,14 +353,15 @@ static void sgf_view_init(SgfView *self) {
   self->scroller = sgf_view_scroller_new();
   self->styled_selected = NULL;
 
-  g_signal_connect(self->disc_factory,
-                   "node-clicked",
-                   G_CALLBACK(sgf_view_on_disc_node_clicked),
-                   self);
+  g_signal_connect_object(self->disc_factory,
+                          "node-clicked",
+                          G_CALLBACK(sgf_view_on_disc_node_clicked),
+                          self,
+                          0);
 
   GtkEventController *key_controller = gtk_event_controller_key_new();
   gtk_event_controller_set_propagation_phase(key_controller, GTK_PHASE_CAPTURE);
-  g_signal_connect(key_controller, "key-pressed", G_CALLBACK(sgf_view_on_key_pressed), self);
+  g_signal_connect_object(key_controller, "key-pressed", G_CALLBACK(sgf_view_on_key_pressed), self, 0);
   gtk_widget_add_controller(self->root, key_controller);
 }
 

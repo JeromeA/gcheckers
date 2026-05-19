@@ -3,7 +3,6 @@
 
 #include "sgf_tree.h"
 #include "sgf_view.h"
-#include "sgf_view_disc_factory.h"
 #include "sgf_view_link_renderer.h"
 #include "sgf_view_scroller.h"
 
@@ -374,6 +373,7 @@ static void test_sgf_view_link_angles(void) {
     GtkWidget *overlay = gtk_overlay_new();
     GtkWidget *lines_area = gtk_drawing_area_new();
     GtkWidget *grid = gtk_grid_new();
+    g_object_ref_sink(overlay);
     gtk_grid_set_row_spacing(GTK_GRID(grid), row_spacing);
     gtk_grid_set_column_spacing(GTK_GRID(grid), 8);
 
@@ -381,19 +381,17 @@ static void test_sgf_view_link_angles(void) {
     gtk_overlay_set_child(GTK_OVERLAY(overlay), lines_area);
     gtk_overlay_add_overlay(GTK_OVERLAY(overlay), grid);
 
-    SgfViewDiscFactory *factory = sgf_view_disc_factory_new();
-    GtkWidget *parent_disc =
-      sgf_view_disc_factory_build(factory, move_1, NULL, node_widgets, disc_stride);
-    GtkWidget *child_disc =
-      sgf_view_disc_factory_build(factory, move_2, NULL, node_widgets, disc_stride);
+    GtkWidget *parent_disc = gtk_drawing_area_new();
+    GtkWidget *child_disc = gtk_drawing_area_new();
+
+    gtk_widget_set_size_request(parent_disc, disc_stride, disc_stride);
+    gtk_widget_set_size_request(child_disc, disc_stride, disc_stride);
+    g_hash_table_insert(node_widgets, (gpointer)move_1, parent_disc);
+    g_hash_table_insert(node_widgets, (gpointer)move_2, child_disc);
     gtk_grid_attach(GTK_GRID(grid), parent_disc, 0, cases[i].parent_row, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), child_disc, 1, cases[i].child_row, 1, 1);
 
-    GtkWidget *window = gtk_window_new();
-    gtk_window_set_default_size(GTK_WINDOW(window), window_width, window_height);
-    gtk_window_set_child(GTK_WINDOW(window), overlay);
-    gtk_window_present(GTK_WINDOW(window));
-    sgf_view_wait(40);
+    gtk_widget_allocate(overlay, window_width, window_height, -1, NULL);
 
     double parent_x = 0.0;
     double parent_y = 0.0;
@@ -429,8 +427,7 @@ static void test_sgf_view_link_angles(void) {
 
     cairo_surface_destroy(surface);
     g_clear_object(&renderer);
-    g_clear_object(&factory);
-    gtk_window_destroy(GTK_WINDOW(window));
+    g_clear_object(&overlay);
     g_clear_object(&tree);
   }
 }
