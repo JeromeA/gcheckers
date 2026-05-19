@@ -90,6 +90,43 @@ static void test_assert_good_setup_policy(const HomeworldsMove *move, gboolean r
   assert(!seen_colors[ship_color]);
 }
 
+static gboolean test_step_is_catastrophe_at(const HomeworldsPosition *position,
+                                            const HomeworldsTurnStep *step,
+                                            guint system_index,
+                                            HomeworldsColor color) {
+  guint step_system_index = HOMEWORLDS_INVALID_INDEX;
+
+  assert(position != NULL);
+  assert(step != NULL);
+  assert(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT);
+  assert(color <= HOMEWORLDS_COLOR_BLUE);
+
+  return step->kind == HOMEWORLDS_STEP_CATASTROPHE &&
+         step->target_color == color &&
+         homeworlds_position_resolve_system_ref(position, &step->target_system, &step_system_index) &&
+         step_system_index == system_index;
+}
+
+static gboolean test_move_has_catastrophe_at(const HomeworldsPosition *position,
+                                             const HomeworldsMove *move,
+                                             guint system_index,
+                                             HomeworldsColor color) {
+  assert(position != NULL);
+  assert(move != NULL);
+
+  if (move->kind != HOMEWORLDS_MOVE_KIND_TURN) {
+    return FALSE;
+  }
+
+  for (guint i = 0; i < move->step_count; ++i) {
+    if (test_step_is_catastrophe_at(position, &move->steps[i], system_index, color)) {
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
 static void test_prepare_position(HomeworldsPosition *position) {
   HomeworldsMove p0 = test_setup_move(0,
                                       homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL),
@@ -967,10 +1004,11 @@ static void test_backend_good_moves_skip_redundant_small_sacrifice(void) {
   backend->move_list_free(&good_moves);
 }
 
-static void test_backend_good_moves_start_with_profitable_catastrophe(void) {
+static void test_backend_good_moves_trigger_initial_profitable_catastrophe_anywhere(void) {
   const GameBackend *backend = &homeworlds_game_backend;
   HomeworldsPosition position = {0};
   GameBackendMoveList good_moves = {0};
+  gboolean saw_late_catastrophe = FALSE;
 
   homeworlds_position_init(&position);
   position.phase = HOMEWORLDS_PHASE_PLAY;
@@ -1018,16 +1056,18 @@ static void test_backend_good_moves_start_with_profitable_catastrophe(void) {
   assert(good_moves.count > 0);
   for (gsize i = 0; i < good_moves.count; ++i) {
     const HomeworldsMove *move = backend->move_list_get(&good_moves, i);
-    guint system_index = HOMEWORLDS_INVALID_INDEX;
 
     assert(move != NULL);
     assert(move->kind == HOMEWORLDS_MOVE_KIND_TURN);
     assert(move->step_count > 0);
-    assert(move->steps[0].kind == HOMEWORLDS_STEP_CATASTROPHE);
-    assert(move->steps[0].target_color == HOMEWORLDS_COLOR_RED);
-    assert(homeworlds_position_resolve_system_ref(&position, &move->steps[0].target_system, &system_index));
-    assert(system_index == 2);
+    assert(test_move_has_catastrophe_at(&position, move, 2, HOMEWORLDS_COLOR_RED));
+    saw_late_catastrophe = saw_late_catastrophe ||
+                            !test_step_is_catastrophe_at(&position,
+                                                         &move->steps[0],
+                                                         2,
+                                                         HOMEWORLDS_COLOR_RED);
   }
+  assert(saw_late_catastrophe);
   backend->move_list_free(&good_moves);
 }
 
@@ -1214,7 +1254,7 @@ int main(void) {
   test_backend_good_moves_skip_unsafe_build_catastrophe();
   test_backend_good_moves_skip_unfavorable_move_catastrophe();
   test_backend_good_moves_skip_redundant_small_sacrifice();
-  test_backend_good_moves_start_with_profitable_catastrophe();
+  test_backend_good_moves_trigger_initial_profitable_catastrophe_anywhere();
   test_backend_good_moves_trigger_new_profitable_catastrophe_immediately();
   test_backend_moving_last_ship_out_of_homeworld_loses_immediately();
   test_backend_destroying_opponent_homeworld_wins_immediately();

@@ -608,3 +608,16 @@ process a signal closure with a stale object pointer and abort on a GLib critica
 
 The fix connects button handlers with a referenced factory and releases that reference when the signal closure is
 destroyed, so the factory stays alive for as long as any generated button can use it.
+
+## Homeworlds AI forced initial profitable catastrophes too early
+
+If a profitable catastrophe is already available at the start of a Homeworlds turn, the AI should require the resulting
+move to trigger it, but it does not have to be the first step of the move.
+
+The good-move walker used one rule for every staged position: whenever a profitable catastrophe was available, it only
+explored branches that triggered it immediately. That was still correct for catastrophes created during a multi-step
+move, but it made beginning-of-turn catastrophes unnecessarily rigid.
+
+The fix records the profitable catastrophes available at the root as a final-move requirement and adds those
+catastrophes as optional branches during the staged walk. Newly created profitable catastrophes remain forced at the
+earliest step.

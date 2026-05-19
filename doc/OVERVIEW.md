@@ -568,9 +568,9 @@ shared SGF controller validates completed moves by applying them to a copied pos
 AI candidate path rejects pass moves, applies Homeworlds-specific opening and safety heuristics, and lets dead-end
 choices such as attacks with no target naturally produce no completed move. It rejects moves into systems where the
 moving side would leave an unfavorable catastrophe available, and skips one-action sacrifices when that color action is
-already available at the selected system. It also forces profitable catastrophes as
-soon as they are available in the staged walk, including catastrophes made available by an earlier step in the same
-turn.
+already available at the selected system. Profitable catastrophes available at the start of a turn are required
+somewhere in the final move, while profitable catastrophes created by an earlier step are forced immediately in the
+staged walk.
 Collaborates with: `GGameAppProfile`, `GGameWindow`, `GGameModel`, `GGameSgfController`, `homeworlds_game.c`,
 `homeworlds_move_builder.c`, `homeworlds_backend.c`, and `tests/test_homeworlds_window.c`.
 
