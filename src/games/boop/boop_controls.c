@@ -522,7 +522,8 @@ static void gboop_controls_install_css(void) {
 GtkWidget *gboop_controls_create_board_host(GGameModel *model,
                                             BoardView *board_view,
                                             GGameAppMoveHandler /*move_handler*/,
-                                            gpointer /*move_handler_data*/) {
+                                            gpointer /*move_handler_data*/,
+                                            const GGameAppBoardHostOptions * /*options*/) {
   GBoopControlsState *state = NULL;
   GtkWidget *host = NULL;
   GtkWidget *board_frame = NULL;

@@ -374,6 +374,9 @@ static void ggame_application_startup(GApplication *app) {
   g_menu_append(puzzle_menu, "Play puzzles", "win.puzzle-play");
   g_menu_append(view_menu, "Show navigation drawer", "win.view-show-navigation-drawer");
   g_menu_append(view_menu, "Show analysis drawer", "win.view-show-analysis-drawer");
+  if (profile->ui.set_move_report_enabled != NULL) {
+    g_menu_append(view_menu, "Move report", "win.view-show-move-report");
+  }
   g_menu_append_submenu(menubar, "File", G_MENU_MODEL(file_menu));
   g_menu_append_submenu(menubar, "Game", G_MENU_MODEL(game_menu));
   g_menu_append_submenu(menubar, "Analysis", G_MENU_MODEL(analysis_menu));

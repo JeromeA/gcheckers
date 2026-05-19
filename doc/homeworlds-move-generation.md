@@ -27,7 +27,8 @@ set of pruning and forcing rules that keep alpha-beta focused on sensible moves.
 
 `homeworlds_view.c` has a separate diagnostic collector for the text panel. It recursively walks the builder to show a
 bounded list of legal moves, then displays `good_moves()` followed by "all possible moves minus good_moves()". This
-report is for inspection only. It is capped, deduplicated, and not used by the AI.
+report is for inspection only. It is capped, deduplicated, and not used by the AI. When `View` -> `Move report` is
+disabled, the text panel skips both the `good_moves()` call and the diagnostic collector.
 
 ## Legal Moves Versus AI Moves
 
@@ -136,4 +137,3 @@ child. If the child has more than one move, it returns the static evaluation of 
 move, that forced move is searched without consuming depth, so forced continuations can continue until a branch or
 terminal state. After all root moves are scored, `game_ai_search_choose_move()` chooses randomly among moves tied for
 the best score. It is not "first good move", and it is not uniformly random among all good moves.
-

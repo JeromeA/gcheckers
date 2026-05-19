@@ -646,3 +646,12 @@ choices stayed visually marked.
 
 The fix adds a non-interactive active-ship overlay for second-step action stages. Build still creates no active-ship
 marker because it completes immediately without a second choice.
+
+## Homeworlds sacrifice passes did not finish staged moves
+
+A pass step after a sacrifice is the canonical way to skip all remaining sacrifice actions. The staged move builder
+interpreted the same candidate as a top-level pass, leaving the pending action count unchanged. Recursive move reporting
+could therefore never complete lines such as `H1g3- pass pass pass`.
+
+The fix makes pass append every remaining sacrificed pass action whenever a sacrifice is active, and only treats pass
+as a top-level move when no sacrifice actions remain.

@@ -215,6 +215,40 @@ static gboolean homeworlds_builder_apply_prefix_step(HomeworldsMoveBuilderState 
   return TRUE;
 }
 
+static gboolean homeworlds_builder_commit_pass(HomeworldsMoveBuilderState *state) {
+  HomeworldsTurnStep step = {.kind = HOMEWORLDS_STEP_PASS};
+  guint original_pending_actions = 0;
+  guint original_step_count = 0;
+  guint passes_to_append = 1;
+  guint remaining_steps = 0;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+
+  original_pending_actions = state->pending_actions_remaining;
+  original_step_count = state->move.step_count;
+  if (state->pending_actions_remaining > 0) {
+    passes_to_append = state->pending_actions_remaining;
+  }
+
+  remaining_steps = HOMEWORLDS_MAX_MOVE_STEPS - state->move.step_count;
+  if (passes_to_append > remaining_steps) {
+    g_debug("Homeworlds pass completion exceeded maximum step count");
+    return FALSE;
+  }
+
+  for (guint i = 0; i < passes_to_append; ++i) {
+    if (!homeworlds_builder_append_step(state, &step) || !homeworlds_builder_apply_step_in_place(state, &step)) {
+      state->pending_actions_remaining = original_pending_actions;
+      state->move.step_count = original_step_count;
+      return FALSE;
+    }
+  }
+  if (original_pending_actions > 0) {
+    state->pending_actions_remaining = 0;
+  }
+  return homeworlds_builder_finish_or_continue(state);
+}
+
 static gboolean homeworlds_builder_start_selected_action(HomeworldsMoveBuilderState *state, HomeworldsStepKind action) {
   guint selected_ship_slot = 0;
   HomeworldsPyramid selected_ship = 0;
@@ -745,8 +779,7 @@ gboolean homeworlds_move_builder_step(GameBackendMoveBuilder *builder, const Hom
     case HOMEWORLDS_BUILDER_STAGE_SELECT_SHIP:
       if (candidate->data.kind == HOMEWORLDS_CANDIDATE_ACTION &&
           candidate->data.target_color == HOMEWORLDS_STEP_PASS) {
-        HomeworldsTurnStep step = {.kind = HOMEWORLDS_STEP_PASS};
-        return homeworlds_builder_commit_action(state, &step, TRUE);
+        return homeworlds_builder_commit_pass(state);
       }
       if (candidate->data.kind != HOMEWORLDS_CANDIDATE_SELECT_SHIP ||
           candidate->data.system_index >= HOMEWORLDS_SYSTEM_SLOT_COUNT ||

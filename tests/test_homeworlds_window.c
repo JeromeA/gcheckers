@@ -1,6 +1,7 @@
 #include <gtk/gtk.h>
 #include <string.h>
 
+#include "../src/application.h"
 #include "../src/game_app_profile.h"
 #include "../src/game_model.h"
 #include "../src/games/homeworlds/homeworlds_backend.h"
@@ -68,6 +69,44 @@ static GtkWidget *test_homeworlds_find_widget_for_action(GtkWidget *root, const 
   }
 
   return NULL;
+}
+
+static GMenuModel *test_homeworlds_find_submenu(GMenuModel *menu, const char *label) {
+  g_return_val_if_fail(G_IS_MENU_MODEL(menu), NULL);
+  g_return_val_if_fail(label != NULL, NULL);
+
+  gint items = g_menu_model_get_n_items(menu);
+  for (gint i = 0; i < items; i++) {
+    g_autoptr(GVariant) item_label = g_menu_model_get_item_attribute_value(menu, i, G_MENU_ATTRIBUTE_LABEL, NULL);
+
+    if (item_label != NULL && g_strcmp0(g_variant_get_string(item_label, NULL), label) == 0) {
+      return g_menu_model_get_item_link(menu, i, G_MENU_LINK_SUBMENU);
+    }
+  }
+
+  return NULL;
+}
+
+static gboolean test_homeworlds_menu_contains_item(GMenuModel *menu, const char *label) {
+  g_return_val_if_fail(G_IS_MENU_MODEL(menu), FALSE);
+  g_return_val_if_fail(label != NULL, FALSE);
+
+  gint items = g_menu_model_get_n_items(menu);
+  for (gint i = 0; i < items; i++) {
+    g_autoptr(GVariant) item_label = g_menu_model_get_item_attribute_value(menu, i, G_MENU_ATTRIBUTE_LABEL, NULL);
+    g_autoptr(GMenuModel) section = NULL;
+
+    if (item_label != NULL && g_strcmp0(g_variant_get_string(item_label, NULL), label) == 0) {
+      return TRUE;
+    }
+
+    section = g_menu_model_get_item_link(menu, i, G_MENU_LINK_SECTION);
+    if (section != NULL && test_homeworlds_menu_contains_item(section, label)) {
+      return TRUE;
+    }
+  }
+
+  return FALSE;
 }
 
 static GtkApplication *test_homeworlds_create_app(void) {
@@ -1253,9 +1292,146 @@ static void test_homeworlds_view_move_report_lists_good_and_other_moves(void) {
   g_assert_nonnull(strstr(text, "good_moves()"));
   g_assert_nonnull(strstr(text, "all possible moves minus good_moves()"));
   g_assert_nonnull(strstr(text, "pass"));
+  g_assert_nonnull(strstr(text, "H1g3- pass pass pass"));
 
   homeworlds_view_free(view);
   g_object_unref(model);
+}
+
+static void test_homeworlds_view_move_report_can_be_disabled(void) {
+  GGameModel *model = ggame_model_new(&homeworlds_game_backend);
+  HomeworldsView *view = homeworlds_view_new(model);
+  GtkWidget *root = homeworlds_view_get_widget(view);
+  GtkWidget *move_report = NULL;
+  HomeworldsPosition position = {0};
+  const char *text = NULL;
+
+  move_report = test_homeworlds_find_widget_named(root, "homeworlds-move-report");
+  g_assert_nonnull(move_report);
+  g_assert_true(GTK_IS_LABEL(move_report));
+
+  homeworlds_view_set_move_report_enabled(view, FALSE);
+  g_assert_false(homeworlds_view_get_move_report_enabled(view));
+  test_homeworlds_prepare_play_position(&position);
+  g_assert_true(ggame_model_set_position(model, &position));
+
+  text = gtk_label_get_text(GTK_LABEL(move_report));
+  g_assert_cmpstr(text, ==, "Move report disabled.");
+  g_assert_null(strstr(text, "good_moves()"));
+  g_assert_null(strstr(text, "H1g3- pass pass pass"));
+
+  homeworlds_view_set_move_report_enabled(view, TRUE);
+  g_assert_true(homeworlds_view_get_move_report_enabled(view));
+  text = gtk_label_get_text(GTK_LABEL(move_report));
+  g_assert_nonnull(strstr(text, "good_moves()"));
+  g_assert_nonnull(strstr(text, "H1g3- pass pass pass"));
+
+  homeworlds_view_free(view);
+  g_object_unref(model);
+}
+
+static void test_homeworlds_board_host_initial_move_report_state_is_applied(void) {
+  GGameModel *model = ggame_model_new(&homeworlds_game_backend);
+  GGameAppBoardHostOptions options = {
+    .move_report_enabled = FALSE,
+  };
+  GtkWidget *host = NULL;
+  HomeworldsView *view = NULL;
+  GtkWidget *move_report = NULL;
+  HomeworldsPosition position = {0};
+  const char *text = NULL;
+
+  test_homeworlds_prepare_play_position(&position);
+  g_assert_true(ggame_model_set_position(model, &position));
+
+  host = homeworlds_view_create_board_host(model, NULL, NULL, NULL, &options);
+  g_assert_nonnull(host);
+  g_object_ref_sink(host);
+
+  view = g_object_get_data(G_OBJECT(host), "homeworlds-view-state");
+  g_assert_nonnull(view);
+  g_assert_false(homeworlds_view_get_move_report_enabled(view));
+
+  move_report = test_homeworlds_find_widget_named(host, "homeworlds-move-report");
+  g_assert_nonnull(move_report);
+  g_assert_true(GTK_IS_LABEL(move_report));
+
+  text = gtk_label_get_text(GTK_LABEL(move_report));
+  g_assert_cmpstr(text, ==, "Move report disabled.");
+  g_assert_null(strstr(text, "good_moves()"));
+  g_assert_null(strstr(text, "H1g3- pass pass pass"));
+
+  g_object_unref(host);
+  g_object_unref(model);
+}
+
+static void test_homeworlds_window_move_report_action_toggles_view(void) {
+  GtkApplication *app = NULL;
+  GGameModel *model = NULL;
+  GGameWindow *window = test_homeworlds_create_window(&app, &model);
+  HomeworldsView *view = test_homeworlds_get_window_view(window);
+  GtkWidget *root = homeworlds_view_get_widget(view);
+  GtkWidget *move_report = NULL;
+  HomeworldsPosition position = {0};
+  GAction *action = NULL;
+  g_autoptr(GVariant) state = NULL;
+  const char *text = NULL;
+
+  test_homeworlds_prepare_play_position(&position);
+  g_assert_true(ggame_model_set_position(model, &position));
+
+  move_report = test_homeworlds_find_widget_named(root, "homeworlds-move-report");
+  g_assert_nonnull(move_report);
+  g_assert_true(GTK_IS_LABEL(move_report));
+  action = g_action_map_lookup_action(G_ACTION_MAP(window), "view-show-move-report");
+  g_assert_nonnull(action);
+  state = g_action_get_state(action);
+  g_assert_nonnull(state);
+  g_assert_true(g_variant_get_boolean(state));
+  g_assert_true(g_action_get_enabled(action));
+  g_assert_true(homeworlds_view_get_move_report_enabled(view));
+  g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(move_report)), "good_moves()"));
+
+  g_action_group_change_action_state(G_ACTION_GROUP(window),
+                                     "view-show-move-report",
+                                     g_variant_new_boolean(FALSE));
+  g_assert_false(homeworlds_view_get_move_report_enabled(view));
+  text = gtk_label_get_text(GTK_LABEL(move_report));
+  g_assert_cmpstr(text, ==, "Move report disabled.");
+
+  g_assert_true(ggame_model_set_position(model, &position));
+  text = gtk_label_get_text(GTK_LABEL(move_report));
+  g_assert_cmpstr(text, ==, "Move report disabled.");
+  g_assert_null(strstr(text, "good_moves()"));
+
+  g_action_group_change_action_state(G_ACTION_GROUP(window),
+                                     "view-show-move-report",
+                                     g_variant_new_boolean(TRUE));
+  g_assert_true(homeworlds_view_get_move_report_enabled(view));
+  text = gtk_label_get_text(GTK_LABEL(move_report));
+  g_assert_nonnull(strstr(text, "good_moves()"));
+  g_assert_nonnull(strstr(text, "H1g3- pass pass pass"));
+
+  gtk_window_destroy(GTK_WINDOW(window));
+  g_object_unref(model);
+  g_object_unref(app);
+}
+
+static void test_homeworlds_application_view_menu_has_move_report(void) {
+  g_autoptr(GGameApplication) app = ggame_application_new();
+  g_autoptr(GError) error = NULL;
+  GMenuModel *menubar = NULL;
+  g_autoptr(GMenuModel) view_menu = NULL;
+
+  g_assert_nonnull(app);
+  g_assert_true(g_application_register(G_APPLICATION(app), NULL, &error));
+  g_assert_no_error(error);
+
+  menubar = gtk_application_get_menubar(GTK_APPLICATION(app));
+  g_assert_nonnull(menubar);
+  view_menu = test_homeworlds_find_submenu(menubar, "View");
+  g_assert_nonnull(view_menu);
+  g_assert_true(test_homeworlds_menu_contains_item(view_menu, "Move report"));
 }
 
 int main(int argc, char **argv) {
@@ -1291,8 +1467,12 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/view/move-board-bank-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/advances-setup", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/move-report", test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/view/move-report-toggle", test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/view/move-report-initial-state", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/board-scrollable", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/board-content-width-tracks-viewport", test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/window/move-report-action", test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/window/view-menu-move-report", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/window/catastrophe-prefix-records-single-sgf-move",
                     test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/window/end-move-catastrophe-requires-choice",
@@ -1318,9 +1498,15 @@ int main(int argc, char **argv) {
                     test_homeworlds_view_move_targets_use_board_and_bank_buttons);
     g_test_add_func("/homeworlds/view/advances-setup", test_homeworlds_view_advances_setup);
     g_test_add_func("/homeworlds/view/move-report", test_homeworlds_view_move_report_lists_good_and_other_moves);
+    g_test_add_func("/homeworlds/view/move-report-toggle", test_homeworlds_view_move_report_can_be_disabled);
+    g_test_add_func("/homeworlds/view/move-report-initial-state",
+                    test_homeworlds_board_host_initial_move_report_state_is_applied);
     g_test_add_func("/homeworlds/view/board-scrollable", test_homeworlds_view_board_is_horizontally_scrollable);
     g_test_add_func("/homeworlds/view/board-content-width-tracks-viewport",
                     test_homeworlds_view_board_content_width_tracks_viewport);
+    g_test_add_func("/homeworlds/window/move-report-action", test_homeworlds_window_move_report_action_toggles_view);
+    g_test_add_func("/homeworlds/window/view-menu-move-report",
+                    test_homeworlds_application_view_menu_has_move_report);
     g_test_add_func("/homeworlds/window/catastrophe-prefix-records-single-sgf-move",
                     test_homeworlds_window_catastrophe_prefix_records_single_sgf_move);
     g_test_add_func("/homeworlds/window/end-move-catastrophe-requires-choice",

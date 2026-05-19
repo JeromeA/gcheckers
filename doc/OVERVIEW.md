@@ -23,7 +23,9 @@ Role: describe each branded target, including app ID, display strings, settings 
 defaults, and an optional board-host hook. Launchers select one of these profiles at startup, and
 `ggame_active_app_profile()`
 exposes the chosen profile to shared code. Profiles do not get a custom-window hook; the menu bar, toolbar, SGF
-controller, and drawer actions are always owned by the generic application window.
+controller, and drawer actions are always owned by the generic application window. Board-host creation receives shared
+options such as the initial move-report enabled state, so profile-owned hosts can avoid optional work before the first
+refresh.
 Collaborates with: `src/application.c`, `src/window.c`, `src/app_settings.c`, `src/file_dialog_history.c`, and
 `src/active_game_backend.h`.
 
@@ -93,10 +95,11 @@ the window.
 Puzzle entry forces a fixed attacker-at-bottom orientation, while puzzle exit restores only layout/drawer state and
 leaves the current board orientation unchanged.
 Adds an `Analysis` menubar submenu for current-position and whole-game analysis, plus a `View` submenu with
-independent toggles for the navigation drawer and analysis drawer; hiding both removes the entire right-side drawer
-split while preserving the board pane. The analysis drawer keeps the text report bound to the currently selected SGF
-node, and shows transient analysis progress in a separate status label under the graph instead of overwriting the
-report text. Full-game analysis status uses one shared formatter from the initial `0/n` state through later progress
+independent toggles for the navigation drawer and analysis drawer; Homeworlds also exposes a `Move report` toggle
+there. Hiding both drawers removes the entire right-side drawer split while preserving the board pane. The analysis
+drawer keeps the text report bound to the currently selected SGF node, and shows transient analysis progress in a
+separate status label under the graph instead of overwriting the report text. Full-game analysis status uses one shared
+formatter from the initial `0/n` state through later progress
 updates instead of switching from a separate startup string, includes the cumulative explored-node count in the status
 label, and refreshes on the same 100 ms throttle used by current-position analysis while a node is being searched.
 Panel width state is retained for the board, navigation drawer, and analysis drawer, and drawer show/hide transitions
@@ -526,10 +529,11 @@ of the position plus the partial move under construction, and advances through s
 selection, source-ship selection, action choice, and target-specific substages for trade, attack, and move/discover.
 Sacrifices are modeled as a prefix step that fixes the remaining action color and count, after which the builder loops
 back through source-ship selection for each granted action. Choosing a ship for a sacrificed action immediately starts
-that forced action instead of showing the normal action picker again. Candidate data can still use transient slot
-indexes for UI selection, but committed move steps are converted to symbolic references before they are applied or saved
-to SGF. Committed build steps are converted to system-plus-color form so two same-color source ships produce the same
-internal move and notation.
+that forced action instead of showing the normal action picker again. Passing while those actions remain appends passes
+for every remaining sacrificed action and completes the move; only a pass with no pending sacrifice is a top-level pass.
+Candidate data can still use transient slot indexes for UI selection, but committed move steps are converted to
+symbolic references before they are applied or saved to SGF. Committed build steps are converted to system-plus-color
+form so two same-color source ships produce the same internal move and notation.
 Physically interchangeable choices, such as identical bank stars for discovery or identical enemy ships for capture,
 are deduplicated before they become user-visible choices.
 Collaborates with: `homeworlds_game.c`, `homeworlds_backend.c`, `homeworlds_view.c`, and
@@ -556,7 +560,8 @@ only keeps non-board choices such as pass or follow-up actions, with a `Cancel` 
 an in-progress move. During play, the side panel also reports the backend `good_moves()` list followed by the remaining
 legal moves collected from the staged builder, capped and marked when optional catastrophe chains make the list too
 large for the UI. The report caps both stored unique moves and explored complete branches so canonical duplicates
-cannot make the UI spend unbounded time enumerating equivalent lines. The Homeworlds board host also syncs its
+cannot make the UI spend unbounded time enumerating equivalent lines. The `View` -> `Move report` action disables this
+report before either the backend-good or diagnostic move collectors run. The Homeworlds board host also syncs its
 last-move label from SGF current-node changes so timeline
 navigation and direct play report the same move. Human interaction
 advances
@@ -681,10 +686,11 @@ Role: define the GTK application type and activation flow that creates the main 
 (`app.new-game`, `app.import`, `app.quit`, `app.settings`), installs window game/SGF/navigation/analysis/puzzle/view
 actions, and publishes one shared menubar model (`File` -> `New game...`, `Import...`, `Load...`, `Save as...`,
 `Save position...`, `Settings`, `Quit`; `Game` -> `Force move` + navigation section; `Analysis` -> current-position
-and whole-game analysis; `Puzzle` -> `Play puzzles`; `View` -> drawer toggles) with keyboard accelerators. Both
-`gcheckers` and `gboop` are built from this same shell and diverge through `GGameAppProfile` feature flags and boop's
-optional board-host hook. Unsupported actions stay in the same shared shell but are disabled for profiles that do not
-support them. `src/ghomeworlds.c` selects the Homeworlds profile and opens the same shared shell with the Homeworlds
+and whole-game analysis; `Puzzle` -> `Play puzzles`; `View` -> drawer toggles plus profile-specific items such as the
+Homeworlds move report) with keyboard accelerators. Both `gcheckers` and `gboop` are built from this same shell and
+diverge through `GGameAppProfile` feature flags and boop's optional board-host hook. Unsupported actions stay in the
+same shared shell but are disabled for profiles that do not support them. `src/ghomeworlds.c` selects the Homeworlds
+profile and opens the same shared shell with the Homeworlds
 board-host hook.
 The active application ID, display strings, settings schema ID, and backend all come from `GGameAppProfile`, with the
 current profiles selecting `io.github.jeromea.gcheckers`, `io.github.jeromea.gboop`, or

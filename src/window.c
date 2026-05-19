@@ -69,6 +69,7 @@ struct _GGameWindow {
   gboolean puzzle_saved_show_analysis_drawer;
   gboolean show_navigation_drawer;
   gboolean show_analysis_drawer;
+  gboolean show_move_report;
   GGameWindowLayoutMode layout_mode;
   gboolean syncing_layout_default_size;
   gint board_panel_width;
@@ -167,6 +168,7 @@ static gboolean ggame_window_is_edit_mode(GGameWindow *self);
 static void ggame_window_set_action_enabled(GActionMap *map, const char *name, gboolean enabled);
 static void ggame_window_sync_mode_ui(GGameWindow *self);
 static void ggame_window_sync_drawer_ui(GGameWindow *self);
+static void ggame_window_sync_move_report_ui(GGameWindow *self);
 static void ggame_window_capture_panel_widths(GGameWindow *self);
 static gint ggame_window_current_extra_width(GGameWindow *self);
 static void ggame_window_apply_saved_panel_widths(GGameWindow *self);
@@ -887,6 +889,11 @@ static void ggame_window_sync_drawer_action_states(GGameWindow *self) {
   if (G_IS_SIMPLE_ACTION(action)) {
     g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_boolean(self->show_analysis_drawer));
   }
+
+  action = g_action_map_lookup_action(G_ACTION_MAP(self), "view-show-move-report");
+  if (G_IS_SIMPLE_ACTION(action)) {
+    g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_boolean(self->show_move_report));
+  }
 }
 
 static void ggame_window_sync_title(GGameWindow *self) {
@@ -1049,6 +1056,16 @@ static void ggame_window_sync_drawer_ui(GGameWindow *self) {
   ggame_window_sync_drawer_ui_with_capture(self, TRUE);
 }
 
+static void ggame_window_sync_move_report_ui(GGameWindow *self) {
+  g_return_if_fail(GGAME_IS_WINDOW(self));
+
+  if (self->profile == NULL || self->profile->ui.set_move_report_enabled == NULL || self->board_host == NULL) {
+    return;
+  }
+
+  self->profile->ui.set_move_report_enabled(self->board_host, self->show_move_report);
+}
+
 static void ggame_window_sync_drawer_ui_with_capture(GGameWindow *self, gboolean capture_current_layout) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
 
@@ -1147,6 +1164,19 @@ static void ggame_window_on_show_analysis_drawer_change_state(GSimpleAction *act
   ggame_window_sync_drawer_ui(self);
 }
 
+static void ggame_window_on_show_move_report_change_state(GSimpleAction *action,
+                                                          GVariant *value,
+                                                          gpointer user_data) {
+  GGameWindow *self = GGAME_WINDOW(user_data);
+  g_return_if_fail(GGAME_IS_WINDOW(self));
+  g_return_if_fail(G_IS_SIMPLE_ACTION(action));
+  g_return_if_fail(value != NULL);
+
+  self->show_move_report = g_variant_get_boolean(value);
+  g_simple_action_set_state(action, value);
+  ggame_window_sync_move_report_ui(self);
+}
+
 static void ggame_window_analysis_reset_runtime_state(GGameWindow *self) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
 
@@ -1241,6 +1271,11 @@ static void ggame_window_sync_mode_ui(GGameWindow *self) {
   ggame_window_set_action_enabled(G_ACTION_MAP(self),
                                   "view-show-analysis-drawer",
                                   allow_view_actions && supports_analysis);
+  ggame_window_set_action_enabled(G_ACTION_MAP(self),
+                                  "view-show-move-report",
+                                  allow_view_actions &&
+                                  self->profile != NULL &&
+                                  self->profile->ui.set_move_report_enabled != NULL);
 
   if (self->analysis_graph != NULL) {
     GtkWidget *graph_widget = analysis_graph_get_widget(self->analysis_graph);
@@ -3399,6 +3434,9 @@ static void ggame_window_set_model(GGameWindow *self, GGameModel *model) {
 static void ggame_window_rebuild_board_host(GGameWindow *self) {
   GtkWidget *host = NULL;
   GtkWidget *board_widget = NULL;
+  GGameAppBoardHostOptions host_options = {
+    .move_report_enabled = self->show_move_report,
+  };
 
   g_return_if_fail(GGAME_IS_WINDOW(self));
   g_return_if_fail(self->board_view != NULL);
@@ -3414,7 +3452,8 @@ static void ggame_window_rebuild_board_host(GGameWindow *self) {
     host = self->profile->ui.create_board_host(self->game_model,
                                                self->board_view,
                                                ggame_window_apply_player_move,
-                                               self);
+                                               self,
+                                               &host_options);
     g_return_if_fail(GTK_IS_WIDGET(host));
   } else {
     g_return_if_fail(ggame_window_uses_square_board(self));
@@ -3432,6 +3471,7 @@ static void ggame_window_rebuild_board_host(GGameWindow *self) {
 
   self->board_host = host;
   gtk_box_append(GTK_BOX(self->board_host_box), host);
+  ggame_window_sync_move_report_ui(self);
 }
 
 static gboolean ggame_window_unparent_controls_panel(GGameWindow *self) {
@@ -3635,6 +3675,14 @@ static void ggame_window_init(GGameWindow *self) {
           .parameter_type = NULL,
           .state = "true",
           .change_state = ggame_window_on_show_analysis_drawer_change_state,
+          .padding = {0},
+      },
+      {
+          .name = "view-show-move-report",
+          .activate = NULL,
+          .parameter_type = NULL,
+          .state = "true",
+          .change_state = ggame_window_on_show_move_report_change_state,
           .padding = {0},
       },
       {
@@ -3956,6 +4004,7 @@ static void ggame_window_init(GGameWindow *self) {
       layout != NULL ? layout->show_navigation_drawer_by_default : TRUE;
   self->show_analysis_drawer =
       layout != NULL ? layout->show_analysis_drawer_by_default : TRUE;
+  self->show_move_report = TRUE;
   self->layout_mode = GGAME_WINDOW_LAYOUT_MODE_NORMAL;
   self->puzzle_saved_show_navigation_drawer = self->show_navigation_drawer;
   self->puzzle_saved_show_analysis_drawer = self->show_analysis_drawer;

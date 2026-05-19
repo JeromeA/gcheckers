@@ -31,11 +31,17 @@ typedef struct {
 typedef gboolean (*GGameAppMoveHandler)(gconstpointer move, gpointer user_data);
 
 typedef struct {
+  gboolean move_report_enabled;
+} GGameAppBoardHostOptions;
+
+typedef struct {
   GtkWidget *(*create_board_host)(GGameModel *model,
                                   BoardView *board_view,
                                   GGameAppMoveHandler move_handler,
-                                  gpointer move_handler_data);
+                                  gpointer move_handler_data,
+                                  const GGameAppBoardHostOptions *options);
   void (*sync_board_host_node)(GtkWidget *board_host, const SgfNode *node);
+  void (*set_move_report_enabled)(GtkWidget *board_host, gboolean enabled);
 } GGameAppUiHooks;
 
 typedef struct {

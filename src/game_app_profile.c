@@ -58,6 +58,7 @@ static const GGameAppProfile homeworlds_app_profile = {
       {
           .create_board_host = homeworlds_view_create_board_host,
           .sync_board_host_node = homeworlds_view_sync_board_host_node,
+          .set_move_report_enabled = homeworlds_view_set_board_host_move_report_enabled,
       },
   .layout =
       {

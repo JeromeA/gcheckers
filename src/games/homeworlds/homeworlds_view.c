@@ -113,6 +113,7 @@ struct _HomeworldsView {
   GtkWidget *catastrophe_box;
   GtkWidget *last_move_label;
   GtkWidget *move_report_label;
+  gboolean move_report_enabled;
   GameBackendMoveBuilder builder;
   gboolean builder_ready;
   HomeworldsViewMoveHandler move_handler;
@@ -2314,6 +2315,11 @@ static void homeworlds_view_update_move_report(HomeworldsView *view) {
   g_return_if_fail(view != NULL);
   g_return_if_fail(GTK_IS_LABEL(view->move_report_label));
 
+  if (!view->move_report_enabled) {
+    gtk_label_set_text(GTK_LABEL(view->move_report_label), "Move report disabled.");
+    return;
+  }
+
   position = ggame_model_peek_position(view->model);
   if (position == NULL || position->phase == HOMEWORLDS_PHASE_FINISHED) {
     gtk_label_set_text(GTK_LABEL(view->move_report_label), "No moves.");
@@ -2551,7 +2557,7 @@ static void homeworlds_view_model_state_changed(GGameModel * /*model*/, gpointer
   homeworlds_view_refresh(view);
 }
 
-HomeworldsView *homeworlds_view_new(GGameModel *model) {
+static HomeworldsView *homeworlds_view_new_with_move_report(GGameModel *model, gboolean move_report_enabled) {
   HomeworldsView *view = NULL;
   GtkWidget *bank_frame = NULL;
   GtkWidget *side_panel = NULL;
@@ -2564,6 +2570,7 @@ HomeworldsView *homeworlds_view_new(GGameModel *model) {
   view = g_new0(HomeworldsView, 1);
   g_return_val_if_fail(view != NULL, NULL);
   view->model = g_object_ref(model);
+  view->move_report_enabled = move_report_enabled;
   view->model_state_changed_handler_id = g_signal_connect(view->model,
                                                           "state-changed",
                                                           G_CALLBACK(homeworlds_view_model_state_changed),
@@ -2691,16 +2698,26 @@ HomeworldsView *homeworlds_view_new(GGameModel *model) {
   return view;
 }
 
+HomeworldsView *homeworlds_view_new(GGameModel *model) {
+  return homeworlds_view_new_with_move_report(model, TRUE);
+}
+
 GtkWidget *homeworlds_view_create_board_host(GGameModel *model,
                                              BoardView * /*board_view*/,
                                              GGameAppMoveHandler move_handler,
-                                             gpointer move_handler_data) {
+                                             gpointer move_handler_data,
+                                             const GGameAppBoardHostOptions *options) {
   HomeworldsView *view = NULL;
   GtkWidget *widget = NULL;
+  gboolean move_report_enabled = TRUE;
 
   g_return_val_if_fail(GGAME_IS_MODEL(model), NULL);
 
-  view = homeworlds_view_new(model);
+  if (options != NULL) {
+    move_report_enabled = options->move_report_enabled;
+  }
+
+  view = homeworlds_view_new_with_move_report(model, move_report_enabled);
   g_return_val_if_fail(view != NULL, NULL);
   homeworlds_view_set_move_handler(view, (HomeworldsViewMoveHandler)move_handler, move_handler_data);
 
@@ -2777,6 +2794,23 @@ gboolean homeworlds_view_has_partial_selection(const HomeworldsView *view) {
     default:
       return TRUE;
   }
+}
+
+void homeworlds_view_set_move_report_enabled(HomeworldsView *view, gboolean enabled) {
+  g_return_if_fail(view != NULL);
+
+  if (view->move_report_enabled == enabled) {
+    return;
+  }
+
+  view->move_report_enabled = enabled;
+  homeworlds_view_update_move_report(view);
+}
+
+gboolean homeworlds_view_get_move_report_enabled(const HomeworldsView *view) {
+  g_return_val_if_fail(view != NULL, FALSE);
+
+  return view->move_report_enabled;
 }
 
 gboolean homeworlds_view_apply_candidate_at(HomeworldsView *view, gsize index) {
@@ -2871,6 +2905,19 @@ void homeworlds_view_sync_board_host_node(GtkWidget *board_host, const SgfNode *
   } else {
     gtk_label_set_text(GTK_LABEL(view->last_move_label), "Unknown");
   }
+}
+
+void homeworlds_view_set_board_host_move_report_enabled(GtkWidget *board_host, gboolean enabled) {
+  HomeworldsView *view = NULL;
+
+  g_return_if_fail(GTK_IS_WIDGET(board_host));
+
+  view = g_object_get_data(G_OBJECT(board_host), "homeworlds-view-state");
+  if (view == NULL) {
+    return;
+  }
+
+  homeworlds_view_set_move_report_enabled(view, enabled);
 }
 
 void homeworlds_view_set_move_applied_callback(HomeworldsView *view,

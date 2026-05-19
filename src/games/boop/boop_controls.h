@@ -14,7 +14,8 @@ G_BEGIN_DECLS
 GtkWidget *gboop_controls_create_board_host(GGameModel *model,
                                             BoardView *board_view,
                                             GGameAppMoveHandler move_handler,
-                                            gpointer move_handler_data);
+                                            gpointer move_handler_data,
+                                            const GGameAppBoardHostOptions *options);
 
 G_END_DECLS
 
