@@ -919,6 +919,54 @@ static void test_backend_good_moves_skip_unfavorable_move_catastrophe(void) {
   backend->move_list_free(&good_moves);
 }
 
+static void test_backend_good_moves_skip_redundant_small_sacrifice(void) {
+  const GameBackend *backend = &homeworlds_game_backend;
+  HomeworldsPosition position = {0};
+  GameBackendMoveList good_moves = {0};
+
+  homeworlds_position_init(&position);
+  position.phase = HOMEWORLDS_PHASE_PLAY;
+  position.turn = 0;
+  memset(position.systems, 0, sizeof(position.systems));
+  position.systems[0] = (HomeworldsSystem){
+    .stars = {
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL),
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_MEDIUM),
+    },
+    .ships = {
+      [0] = {
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL),
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_LARGE),
+      },
+    },
+  };
+  position.systems[1] = (HomeworldsSystem){
+    .stars = {
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL),
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_LARGE),
+    },
+    .ships = {
+      [1] = {
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE),
+      },
+    },
+  };
+
+  good_moves = backend->list_good_moves(&position, 0);
+  assert(good_moves.count > 0);
+  for (gsize i = 0; i < good_moves.count; ++i) {
+    const HomeworldsMove *move = backend->move_list_get(&good_moves, i);
+
+    assert(move != NULL);
+    assert(move->step_count == 0 ||
+           move->steps[0].kind != HOMEWORLDS_STEP_SACRIFICE ||
+           move->steps[0].actor.system.kind != HOMEWORLDS_SYSTEM_REF_HOMEWORLD ||
+           move->steps[0].actor.system.homeworld_side != 0 ||
+           move->steps[0].actor.ship != homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL));
+  }
+  backend->move_list_free(&good_moves);
+}
+
 static void test_backend_good_moves_start_with_profitable_catastrophe(void) {
   const GameBackend *backend = &homeworlds_game_backend;
   HomeworldsPosition position = {0};
@@ -1165,6 +1213,7 @@ int main(void) {
   test_backend_good_moves_keep_last_homeworld_ship();
   test_backend_good_moves_skip_unsafe_build_catastrophe();
   test_backend_good_moves_skip_unfavorable_move_catastrophe();
+  test_backend_good_moves_skip_redundant_small_sacrifice();
   test_backend_good_moves_start_with_profitable_catastrophe();
   test_backend_good_moves_trigger_new_profitable_catastrophe_immediately();
   test_backend_moving_last_ship_out_of_homeworld_loses_immediately();

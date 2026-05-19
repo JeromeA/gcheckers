@@ -573,3 +573,13 @@ side's material.
 
 The fix checks every completed move/discover step against the post-step destination system and rejects AI candidate
 moves that leave an unfavorable catastrophe there.
+
+## Homeworlds AI considered redundant small sacrifices
+
+A small sacrifice gives exactly one action. If the sacrificed ship's color action is already available in its system,
+the sacrifice only spends a ship to do something that could already be done directly.
+
+The good-move filter did not distinguish small sacrifices from larger sacrifices, so alpha-beta could consider lines
+such as sacrificing a `g1` on a green-accessible system just to build once.
+
+The fix rejects small-sacrifice candidates when the selected system already has access to the sacrificed ship's color.

@@ -343,6 +343,26 @@ static gboolean homeworlds_backend_build_would_overpopulate_without_targets(cons
   return homeworlds_system_color_count(system, homeworlds_pyramid_color(built)) >= 3;
 }
 
+static gboolean homeworlds_backend_small_sacrifice_duplicates_available_action(
+    const HomeworldsMoveBuilderState *state) {
+  const HomeworldsSystem *system = NULL;
+  guint side = 0;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(state->selected_system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
+
+  if (!homeworlds_pyramid_is_valid(state->selected_ship_pyramid) ||
+      homeworlds_pyramid_size(state->selected_ship_pyramid) != HOMEWORLDS_SIZE_SMALL) {
+    return FALSE;
+  }
+
+  side = state->working_position.turn;
+  system = &state->working_position.systems[state->selected_system_index];
+  return homeworlds_system_has_access_to_color(system,
+                                               side,
+                                               homeworlds_pyramid_color(state->selected_ship_pyramid));
+}
+
 static guint homeworlds_backend_system_ship_pips_for_color(const HomeworldsSystem *system,
                                                            HomeworldsColor color,
                                                            guint side) {
@@ -467,6 +487,10 @@ static gboolean homeworlds_backend_candidate_is_good(const HomeworldsMoveBuilder
     }
     if (candidate->data.target_color == HOMEWORLDS_STEP_BUILD &&
         homeworlds_backend_build_would_overpopulate_without_targets(state)) {
+      return FALSE;
+    }
+    if (candidate->data.target_color == HOMEWORLDS_STEP_SACRIFICE &&
+        homeworlds_backend_small_sacrifice_duplicates_available_action(state)) {
       return FALSE;
     }
   }
