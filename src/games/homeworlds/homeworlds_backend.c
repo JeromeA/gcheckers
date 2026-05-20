@@ -537,6 +537,123 @@ static gboolean homeworlds_backend_step_enters_unfavorable_catastrophe(
       side);
 }
 
+static gboolean homeworlds_backend_step_is_ship_move(const HomeworldsTurnStep *step) {
+  g_return_val_if_fail(step != NULL, FALSE);
+
+  return (step->kind == HOMEWORLDS_STEP_MOVE || step->kind == HOMEWORLDS_STEP_DISCOVER) &&
+         homeworlds_pyramid_is_valid(step->actor.ship);
+}
+
+static gboolean homeworlds_backend_find_yellow_sacrifice_move_origin(const HomeworldsMoveBuilderState *state,
+                                                                     const HomeworldsTurnStep *step,
+                                                                     HomeworldsSystemRef *out_origin_ref) {
+  HomeworldsSystemRef chain_system = {0};
+  gboolean found_origin = FALSE;
+  gboolean found_sacrifice = FALSE;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(step != NULL, FALSE);
+  g_return_val_if_fail(out_origin_ref != NULL, FALSE);
+
+  if (state->pending_actions_remaining == 0 ||
+      state->forced_action_color != HOMEWORLDS_COLOR_YELLOW ||
+      !homeworlds_backend_step_is_ship_move(step)) {
+    return FALSE;
+  }
+
+  chain_system = step->actor.system;
+  for (guint i = state->move.step_count; i > 0; --i) {
+    const guint step_index = i - 1;
+    const HomeworldsTurnStep *prior_step = &state->move.steps[step_index];
+
+    if (prior_step->kind == HOMEWORLDS_STEP_SACRIFICE &&
+        homeworlds_pyramid_is_valid(prior_step->actor.ship) &&
+        homeworlds_pyramid_color(prior_step->actor.ship) == HOMEWORLDS_COLOR_YELLOW) {
+      found_sacrifice = TRUE;
+      break;
+    }
+
+    if (!homeworlds_backend_step_is_ship_move(prior_step) ||
+        prior_step->actor.ship != step->actor.ship ||
+        !homeworlds_backend_system_refs_equal(&prior_step->target_system, &chain_system)) {
+      continue;
+    }
+
+    chain_system = prior_step->actor.system;
+    found_origin = TRUE;
+  }
+
+  if (!found_sacrifice || !found_origin) {
+    return FALSE;
+  }
+
+  *out_origin_ref = chain_system;
+  return TRUE;
+}
+
+static gboolean homeworlds_backend_system_for_ref_or_star(const HomeworldsPosition *position,
+                                                          const HomeworldsSystemRef *ref,
+                                                          HomeworldsSystem *out_system,
+                                                          guint *out_system_index) {
+  guint system_index = HOMEWORLDS_INVALID_INDEX;
+
+  g_return_val_if_fail(position != NULL, FALSE);
+  g_return_val_if_fail(ref != NULL, FALSE);
+  g_return_val_if_fail(out_system != NULL, FALSE);
+  g_return_val_if_fail(out_system_index != NULL, FALSE);
+
+  if (homeworlds_position_resolve_system_ref(position, ref, &system_index)) {
+    *out_system = position->systems[system_index];
+    *out_system_index = system_index;
+    return TRUE;
+  }
+
+  if (ref->kind != HOMEWORLDS_SYSTEM_REF_STAR ||
+      !homeworlds_pyramid_is_valid(ref->star)) {
+    return FALSE;
+  }
+
+  memset(out_system, 0, sizeof(*out_system));
+  out_system->stars[0] = ref->star;
+  *out_system_index = HOMEWORLDS_INVALID_INDEX;
+  return TRUE;
+}
+
+static gboolean homeworlds_backend_step_is_redundant_yellow_sacrifice_hop(
+    const HomeworldsMoveBuilderState *state,
+    const HomeworldsTurnStep *step) {
+  HomeworldsSystemRef origin_ref = {0};
+  HomeworldsSystem origin_system = {0};
+  HomeworldsSystem target_system = {0};
+  guint origin_system_index = HOMEWORLDS_INVALID_INDEX;
+  guint target_system_index = HOMEWORLDS_INVALID_INDEX;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(step != NULL, FALSE);
+
+  if (!homeworlds_backend_find_yellow_sacrifice_move_origin(state, step, &origin_ref)) {
+    return FALSE;
+  }
+
+  if (homeworlds_backend_system_refs_equal(&origin_ref, &step->target_system)) {
+    return TRUE;
+  }
+
+  if (!homeworlds_backend_system_for_ref_or_star(&state->working_position,
+                                                 &origin_ref,
+                                                 &origin_system,
+                                                 &origin_system_index) ||
+      !homeworlds_backend_system_for_ref_or_star(&state->working_position,
+                                                 &step->target_system,
+                                                 &target_system,
+                                                 &target_system_index)) {
+    return FALSE;
+  }
+
+  return target_system_index == origin_system_index ||
+         homeworlds_system_is_connected(&origin_system, &target_system);
+}
+
 static gboolean homeworlds_backend_child_state_is_good_after_step(
     const HomeworldsMoveBuilderState *state,
     const HomeworldsMoveBuilderState *child_state) {
@@ -553,7 +670,8 @@ static gboolean homeworlds_backend_child_state_is_good_after_step(
   return !homeworlds_backend_step_removes_last_homeworld_ship(state, step) &&
          !homeworlds_backend_step_is_redundant_small_sacrifice(state, step) &&
          !homeworlds_backend_step_creates_unfavorable_build_catastrophe(state, child_state, step) &&
-         !homeworlds_backend_step_enters_unfavorable_catastrophe(state, child_state, step);
+         !homeworlds_backend_step_enters_unfavorable_catastrophe(state, child_state, step) &&
+         !homeworlds_backend_step_is_redundant_yellow_sacrifice_hop(state, step);
 }
 
 static gboolean homeworlds_backend_move_has_pass(const HomeworldsMove *move) {

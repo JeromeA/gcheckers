@@ -77,7 +77,8 @@ every non-pass branch has been filtered away before a primary action is staged. 
 build unless pass is the only remaining fallback. After a choice appends an action step, the same policy is applied to
 ordinary actions and sacrifice-granted actions. The AI does not move or sacrifice the last ship at its own homeworld,
 rejects builds that create an unfavorable catastrophe, and rejects a small sacrifice when the sacrificed color's action
-was already available at that system.
+was already available at that system. During yellow sacrifices, it also rejects repeated hops by the same ship when the
+ship returns to its original source or reaches a destination the original source could already have reached directly.
 
 The catastrophe policy distinguishes profitable and unfavorable catastrophes from the moving side's perspective. A
 profitable catastrophe destroys more opponent ship pips than own ship pips. If such a catastrophe exists at the start

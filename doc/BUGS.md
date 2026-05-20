@@ -691,3 +691,17 @@ remaining homeworld ship away during the sacrifice.
 The fix applies action safety to the actual step appended by the staged builder instead of only to ordinary action
 candidates. Last-homeworld, redundant small-sacrifice, unsafe build-catastrophe, and unsafe move-destination checks now
 run through the same child-state policy path for normal actions and sacrifice-granted actions.
+
+## Homeworlds good moves kept redundant yellow sacrifice hops
+
+A multi-action yellow sacrifice can move the same ship through intermediate systems. Some of those routes are legal but
+do not improve the final position, such as moving a ship away and then back to its original system, or routing through
+intermediate systems before ending at a destination the original source could already reach in one hop.
+
+The good-move walker did not compare a yellow-sacrifice move chain against the ship's original source system, so
+alpha-beta considered redundant lines like `H2b1>B3 B3b1>H2` and `H2b1>B3 B3b1>B1 B1b1>Y3` when the final `Y3`
+destination was already reachable from the original `H2` system.
+
+The fix tracks repeated movement of the same ship during a pending yellow sacrifice. When a later hop returns to the
+origin or targets a system that was directly reachable from that origin at the start of the chain, `good_moves()`
+prunes that branch.

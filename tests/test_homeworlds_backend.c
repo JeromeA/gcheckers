@@ -151,6 +151,63 @@ static void test_apply_notation(HomeworldsPosition *position, const char *notati
   assert(homeworlds_position_apply_move(position, &move));
 }
 
+static void test_prepare_player_two_yellow_sacrifice_position(HomeworldsPosition *position) {
+  const char *prefix[] = {
+    "Y2G3r3",
+    "R2G1b3",
+    "H1r+",
+    "H2b+",
+    "H1r1>B1",
+    "H2b+",
+    "H1r+",
+    "H2b3=y",
+    "H1r3>Y1",
+  };
+
+  assert(position != NULL);
+
+  homeworlds_position_init(position);
+  for (guint i = 0; i < G_N_ELEMENTS(prefix); ++i) {
+    test_apply_notation(position, prefix[i]);
+  }
+  assert(position->phase == HOMEWORLDS_PHASE_PLAY);
+  assert(position->turn == 1);
+}
+
+static gboolean test_good_moves_contains_notation(const GameBackend *backend,
+                                                  const GameBackendMoveList *good_moves,
+                                                  const char *expected_notation) {
+  char notation[128] = {0};
+
+  assert(backend != NULL);
+  assert(good_moves != NULL);
+  assert(expected_notation != NULL);
+
+  for (gsize i = 0; i < good_moves->count; ++i) {
+    const HomeworldsMove *move = backend->move_list_get(good_moves, i);
+
+    assert(move != NULL);
+    assert(backend->format_move(move, notation, sizeof(notation)));
+    if (strcmp(notation, expected_notation) == 0) {
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
+static void test_assert_move_notation_is_legal(const HomeworldsPosition *position, const char *notation) {
+  HomeworldsPosition copy = {0};
+  HomeworldsMove move = {0};
+
+  assert(position != NULL);
+  assert(notation != NULL);
+
+  copy = *position;
+  assert(homeworlds_move_parse(notation, &move));
+  assert(homeworlds_position_apply_move(&copy, &move));
+}
+
 static const HomeworldsMoveCandidate *test_find_setup_candidate(const GameBackend *backend,
                                                                 const GameBackendMoveList *candidates,
                                                                 HomeworldsCandidateKind kind,
@@ -994,26 +1051,10 @@ static void test_backend_good_moves_keep_last_homeworld_ship(void) {
 
 static void test_backend_good_moves_keep_last_homeworld_ship_after_yellow_sacrifice(void) {
   const GameBackend *backend = &homeworlds_game_backend;
-  const char *prefix[] = {
-    "Y2G3r3",
-    "R2G1b3",
-    "H1r+",
-    "H2b+",
-    "H1r1>B1",
-    "H2b+",
-    "H1r+",
-    "H2b3=y",
-    "H1r3>Y1",
-  };
   HomeworldsPosition position = {0};
   GameBackendMoveList good_moves = {0};
 
-  homeworlds_position_init(&position);
-  for (guint i = 0; i < G_N_ELEMENTS(prefix); ++i) {
-    test_apply_notation(&position, prefix[i]);
-  }
-  assert(position.phase == HOMEWORLDS_PHASE_PLAY);
-  assert(position.turn == 1);
+  test_prepare_player_two_yellow_sacrifice_position(&position);
 
   good_moves = backend->list_good_moves(&position, 0);
   assert(good_moves.count > 0);
@@ -1024,6 +1065,28 @@ static void test_backend_good_moves_keep_last_homeworld_ship_after_yellow_sacrif
     assert(move != NULL);
     assert(backend->format_move(move, notation, sizeof(notation)));
     assert(strcmp(notation, "H2y3- H2b1>R3 H2b1>Y3 Y3b1>Y2") != 0);
+  }
+  backend->move_list_free(&good_moves);
+}
+
+static void test_backend_good_moves_skip_redundant_yellow_sacrifice_hops(void) {
+  const GameBackend *backend = &homeworlds_game_backend;
+  const char *bad_moves[] = {
+    "H2y3- H2b1>B3 B3b1>H2 H2b1>B3",
+    "H2y3- H2b1>B3 B3b1>B1 B1b1>Y3",
+  };
+  HomeworldsPosition position = {0};
+  GameBackendMoveList good_moves = {0};
+
+  test_prepare_player_two_yellow_sacrifice_position(&position);
+  for (guint i = 0; i < G_N_ELEMENTS(bad_moves); ++i) {
+    test_assert_move_notation_is_legal(&position, bad_moves[i]);
+  }
+
+  good_moves = backend->list_good_moves(&position, 0);
+  assert(good_moves.count > 0);
+  for (guint i = 0; i < G_N_ELEMENTS(bad_moves); ++i) {
+    assert(!test_good_moves_contains_notation(backend, &good_moves, bad_moves[i]));
   }
   backend->move_list_free(&good_moves);
 }
@@ -1522,6 +1585,7 @@ int main(void) {
   test_backend_good_moves_skip_attack_without_targets();
   test_backend_good_moves_keep_last_homeworld_ship();
   test_backend_good_moves_keep_last_homeworld_ship_after_yellow_sacrifice();
+  test_backend_good_moves_skip_redundant_yellow_sacrifice_hops();
   test_backend_good_moves_skip_unsafe_build_catastrophe();
   test_backend_good_moves_skip_unfavorable_move_catastrophe();
   test_backend_good_moves_skip_redundant_small_sacrifice();
