@@ -31,8 +31,9 @@ minus good_moves()". This report is for inspection only. It is capped, deduplica
 `View` -> `Move report` is disabled, the text panel skips both the `good_moves()` call and the diagnostic collector.
 
 `build/tools/homeworlds_profile_moves` applies `--moves` random `good_moves()` choices from the initial position using
-`--seed`, prints a non-GTK ASCII board snapshot, then prints that same shared report. The Makefile's default
-`callgrind-run` target profiles this command so move-report generation can be measured without starting GTK.
+`--seed`, or replays the first `--moves` main-line moves from an existing Homeworlds SGF with `--file`. It prints a
+non-GTK ASCII board snapshot, then prints that same shared report. The Makefile's default `callgrind-run` target
+profiles this command so move-report generation can be measured without starting GTK.
 
 ## Legal Moves Versus AI Moves
 

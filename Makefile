@@ -356,11 +356,14 @@ $(CREATE_PUZZLES_BIN) $(BOOP_CREATE_PUZZLES_BIN): src/create_puzzles.c src/creat
 		src/sgf_io.c src/sgf_tree.c src/sgf_move_props.c $(PUZZLE_CATALOG_SRCS) $(APP_PATHS_SRCS) \
 		$(SRCS) $(LDLIBS)
 
-$(HOMEWORLDS_PROFILE_MOVES_BIN): src/homeworlds_profile_moves.c $(HOMEWORLDS_ALL_SRCS) $(SGF_TREE_SRCS) \
+$(HOMEWORLDS_PROFILE_MOVES_BIN): src/homeworlds_profile_moves.c $(SRCS) $(SGF_TREE_SRCS) $(SGF_MOVE_PROPS_SRCS) \
+	src/sgf_io.c src/sgf_io.h src/sgf_move_props.h src/game_app_profile.h \
 	$(HOMEWORLDS_DIR)/homeworlds_backend.h $(HOMEWORLDS_DIR)/homeworlds_game.h \
-	$(HOMEWORLDS_DIR)/homeworlds_move_report.h $(HOMEWORLDS_DIR)/homeworlds_position_text.h
+	$(HOMEWORLDS_DIR)/homeworlds_move_report.h $(HOMEWORLDS_DIR)/homeworlds_position_text.h \
+	$(HOMEWORLDS_DIR)/homeworlds_sgf_position.h
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ src/homeworlds_profile_moves.c $(HOMEWORLDS_ALL_SRCS) $(SGF_TREE_SRCS) $(LDLIBS)
+	$(CC) $(CFLAGS) -o $@ src/homeworlds_profile_moves.c $(SRCS) $(SGF_TREE_SRCS) $(SGF_MOVE_PROPS_SRCS) \
+		src/sgf_io.c $(LDLIBS)
 
 test_create_puzzles_cli: $(TEST_CREATE_PUZZLES_CLI_BIN)
 $(TEST_CREATE_PUZZLES_CLI_BIN): tests/test_create_puzzles_cli.c src/create_puzzles_launcher.c \

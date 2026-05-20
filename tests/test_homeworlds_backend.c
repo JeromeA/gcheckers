@@ -316,8 +316,12 @@ static void test_backend_move_codec_roundtrips_setup_and_turn(void) {
   assert(homeworlds_move_parse("pass", &parsed));
   assert(homeworlds_move_format(&parsed, notation, sizeof(notation)));
   assert(strcmp(notation, "pass") == 0);
-  assert(!homeworlds_move_parse("H1 g+", &parsed));
-  assert(!homeworlds_move_parse("H1g3-/H1r3=g", &parsed));
+  assert(homeworlds_move_parse("H1 g+", &parsed));
+  assert(homeworlds_move_format(&parsed, notation, sizeof(notation)));
+  assert(strcmp(notation, "H1g+") == 0);
+  assert(homeworlds_move_parse("H1g3-/H1r3=g", &parsed));
+  assert(homeworlds_move_format(&parsed, notation, sizeof(notation)));
+  assert(strcmp(notation, "H1g3- H1r3=g") == 0);
 }
 
 static void test_backend_sgf_snapshot_roundtrips_position(void) {

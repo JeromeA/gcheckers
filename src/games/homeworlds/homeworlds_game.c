@@ -1143,8 +1143,17 @@ static void homeworlds_move_skip_spaces(const char **cursor) {
   }
 }
 
+static void homeworlds_move_skip_turn_step_separators(const char **cursor) {
+  g_return_if_fail(cursor != NULL);
+  g_return_if_fail(*cursor != NULL);
+
+  while (**cursor == '/' || g_ascii_isspace(**cursor)) {
+    (*cursor)++;
+  }
+}
+
 static gboolean homeworlds_move_at_separator(char character) {
-  return character == '\0' || g_ascii_isspace(character);
+  return character == '\0' || character == '/' || g_ascii_isspace(character);
 }
 
 static gboolean homeworlds_move_append_turn_step(GString *text, const HomeworldsTurnStep *step) {
@@ -1316,6 +1325,7 @@ static gboolean homeworlds_move_parse_turn_step(const char **cursor, HomeworldsT
     return FALSE;
   }
   out_step->target_system = out_step->actor.system;
+  homeworlds_move_skip_spaces(cursor);
 
   HomeworldsColor color = HOMEWORLDS_COLOR_RED;
   if (homeworlds_move_color_from_letter(**cursor, FALSE, &color) && (*cursor)[1] == '!') {
@@ -1335,10 +1345,12 @@ static gboolean homeworlds_move_parse_turn_step(const char **cursor, HomeworldsT
   if (!homeworlds_move_parse_pyramid(cursor, FALSE, &out_step->actor.ship)) {
     return FALSE;
   }
+  homeworlds_move_skip_spaces(cursor);
 
   switch (**cursor) {
     case '=':
       (*cursor)++;
+      homeworlds_move_skip_spaces(cursor);
       if (!homeworlds_move_color_from_letter(**cursor, FALSE, &color)) {
         return FALSE;
       }
@@ -1348,11 +1360,13 @@ static gboolean homeworlds_move_parse_turn_step(const char **cursor, HomeworldsT
       return TRUE;
     case 'x':
       (*cursor)++;
+      homeworlds_move_skip_spaces(cursor);
       out_step->kind = HOMEWORLDS_STEP_ATTACK;
       out_step->target_ship.system = out_step->actor.system;
       return homeworlds_move_parse_pyramid(cursor, FALSE, &out_step->target_ship.ship);
     case '>':
       (*cursor)++;
+      homeworlds_move_skip_spaces(cursor);
       out_step->kind = HOMEWORLDS_STEP_MOVE;
       return homeworlds_move_parse_system_ref(cursor, &out_step->target_system);
     case '-':
@@ -1374,7 +1388,7 @@ static gboolean homeworlds_move_parse_turn(const char *notation, HomeworldsMove 
   while (*cursor != '\0') {
     HomeworldsTurnStep step = {0};
 
-    homeworlds_move_skip_spaces(&cursor);
+    homeworlds_move_skip_turn_step_separators(&cursor);
     if (*cursor == '\0') {
       break;
     }
@@ -1384,7 +1398,7 @@ static gboolean homeworlds_move_parse_turn(const char *notation, HomeworldsMove 
       return FALSE;
     }
 
-    homeworlds_move_skip_spaces(&cursor);
+    homeworlds_move_skip_turn_step_separators(&cursor);
   }
 
   return out_move->step_count > 0;

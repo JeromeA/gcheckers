@@ -487,6 +487,17 @@ static void test_position_ascii_formats_empty_position(void) {
   g_free(text);
 }
 
+static void test_move_parse_accepts_legacy_step_spacing(void) {
+  HomeworldsMove move = {0};
+  char notation[128] = {0};
+
+  assert(homeworlds_move_parse("H2 g3-/B1 g+/H2 g+/B1 g+", &move));
+  assert(move.kind == HOMEWORLDS_MOVE_KIND_TURN);
+  assert(move.step_count == 4);
+  assert(homeworlds_move_format(&move, notation, sizeof(notation)));
+  assert(strcmp(notation, "H2g3- B1g+ H2g+ B1g+") == 0);
+}
+
 int main(void) {
   test_setup_and_loss_detection();
   test_setup_accepts_any_bank_pyramids();
@@ -502,5 +513,6 @@ int main(void) {
   test_static_evaluation_counts_largest_homeworld_ship_twice();
   test_position_ascii_formats_systems_by_reachability();
   test_position_ascii_formats_empty_position();
+  test_move_parse_accepts_legacy_step_spacing();
   return 0;
 }

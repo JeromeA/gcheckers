@@ -514,9 +514,10 @@ source system plus the build color in `target_color`, because the exact source s
 Rules covered: setup, build, trade, attack, move, discover, sacrifice, catastrophe resolution, empty-system
 cleanup, end-of-turn homeworld loss detection for either side, static evaluation, terminal scoring, hashing, compact
 move formatting/parsing, and whole-position SGF snapshots in `homeworlds_sgf_position.c`. Move notation uses pyramid
-letters and sizes directly, such as `Y2B1g3`, `H1g+`, `G3y2>G2 G3y!`, and `pass`; multi-step moves use spaces between
-complete steps and no internal slash separator. Static evaluation counts ship material and repeats the largest own ship
-at each player's homeworld. Sacrifice-granted actions reuse the normal action application code but bypass local
+letters and sizes directly, such as `Y2B1g3`, `H1g+`, `G3y2>G2 G3y!`, and `pass`; multi-step moves are formatted with
+spaces between complete steps and no internal slash separator, while the parser also accepts older saved `H1 g+` and
+slash-separated step notation. Static evaluation counts ship material and repeats the largest own ship at each
+player's homeworld. Sacrifice-granted actions reuse the normal action application code but bypass local
 color-access checks because the sacrificed ship supplies the action color.
 `homeworlds_position_text.c` formats a non-GTK ASCII board snapshot, with each system shown as player 2 ships,
 stars, and player 1 ships in the same top-to-bottom reachability order as the board.
@@ -569,7 +570,8 @@ catastrophe chains make the list too large for the UI. The report caps both stor
 branches so canonical duplicates cannot make the UI spend unbounded time enumerating equivalent lines. The `View` ->
 `Move report` action disables this report before either the backend-good or diagnostic move collectors run. The same
 non-UI report module is linked by `build/tools/homeworlds_profile_moves`, which applies `--moves` random good moves
-from a `--seed`, prints an ASCII board snapshot, and then prints the final report for profiling. The Homeworlds board
+from a `--seed` or replays the first moves of a Homeworlds SGF main line with `--file`, prints an ASCII board
+snapshot, and then prints the final report for profiling. The Homeworlds board
 host also syncs its
 last-move label from SGF current-node changes so timeline
 navigation and direct play report the same move. Human interaction
