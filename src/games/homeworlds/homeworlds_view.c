@@ -45,6 +45,7 @@ typedef struct {
 #define HOMEWORLDS_VIEW_ROW_MARGIN 54.0
 #define HOMEWORLDS_VIEW_ROW_MIN_EMPTY_GAP 24.0
 #define HOMEWORLDS_VIEW_MIN_BOARD_VIEWPORT_WIDTH 420
+#define HOMEWORLDS_VIEW_TEXT_PANEL_WIDTH 280
 #define HOMEWORLDS_VIEW_SYSTEM_PIECE_MAX (HOMEWORLDS_STAR_SLOT_COUNT + (2 * HOMEWORLDS_SHIP_SLOT_COUNT))
 typedef enum {
   HOMEWORLDS_VIEW_SYSTEM_ROW_TOP = 0,
@@ -2340,7 +2341,11 @@ static HomeworldsView *homeworlds_view_new_with_move_report(GGameModel *model, g
   gtk_frame_set_child(GTK_FRAME(bank_frame), view->board_bank_box);
 
   side_scroller = gtk_scrolled_window_new();
-  gtk_widget_set_size_request(side_scroller, 280, -1);
+  gtk_widget_set_name(side_scroller, "homeworlds-text-panel");
+  gtk_widget_set_size_request(side_scroller, HOMEWORLDS_VIEW_TEXT_PANEL_WIDTH, -1);
+  gtk_scrolled_window_set_min_content_width(GTK_SCROLLED_WINDOW(side_scroller), HOMEWORLDS_VIEW_TEXT_PANEL_WIDTH);
+  gtk_scrolled_window_set_max_content_width(GTK_SCROLLED_WINDOW(side_scroller), HOMEWORLDS_VIEW_TEXT_PANEL_WIDTH);
+  gtk_scrolled_window_set_propagate_natural_width(GTK_SCROLLED_WINDOW(side_scroller), FALSE);
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(side_scroller), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
   gtk_box_append(GTK_BOX(view->root), side_scroller);
 

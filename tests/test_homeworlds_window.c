@@ -657,6 +657,30 @@ static void test_homeworlds_view_board_is_horizontally_scrollable(void) {
   g_object_unref(model);
 }
 
+static void test_homeworlds_view_text_panel_has_fixed_width(void) {
+  GGameModel *model = ggame_model_new(&homeworlds_game_backend);
+  HomeworldsView *view = test_homeworlds_view_new_without_move_report(model);
+  GtkWidget *root = homeworlds_view_get_widget(view);
+  GtkWidget *text_panel = test_homeworlds_find_widget_named(root, "homeworlds-text-panel");
+  GtkPolicyType horizontal_policy = GTK_POLICY_AUTOMATIC;
+  GtkPolicyType vertical_policy = GTK_POLICY_NEVER;
+  gint width_request = -1;
+
+  g_assert_nonnull(text_panel);
+  g_assert_true(GTK_IS_SCROLLED_WINDOW(text_panel));
+  gtk_widget_get_size_request(text_panel, &width_request, NULL);
+  g_assert_cmpint(width_request, ==, 280);
+  g_assert_cmpint(gtk_scrolled_window_get_min_content_width(GTK_SCROLLED_WINDOW(text_panel)), ==, 280);
+  g_assert_cmpint(gtk_scrolled_window_get_max_content_width(GTK_SCROLLED_WINDOW(text_panel)), ==, 280);
+  g_assert_false(gtk_scrolled_window_get_propagate_natural_width(GTK_SCROLLED_WINDOW(text_panel)));
+  gtk_scrolled_window_get_policy(GTK_SCROLLED_WINDOW(text_panel), &horizontal_policy, &vertical_policy);
+  g_assert_cmpuint(horizontal_policy, ==, GTK_POLICY_NEVER);
+  g_assert_cmpuint(vertical_policy, ==, GTK_POLICY_AUTOMATIC);
+
+  homeworlds_view_free(view);
+  g_object_unref(model);
+}
+
 static void test_homeworlds_view_piece_metrics_keep_pyramids_tall(void) {
   HomeworldsViewPyramidMetrics small = {0};
   HomeworldsViewPyramidMetrics medium = {0};
@@ -1485,6 +1509,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/view/move-report-toggle", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/move-report-initial-state", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/board-scrollable", test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/view/text-panel-fixed-width", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/board-content-width-tracks-viewport", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/window/move-report-action", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/window/view-menu-move-report", test_homeworlds_window_skip);
@@ -1517,6 +1542,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/view/move-report-initial-state",
                     test_homeworlds_board_host_initial_move_report_state_is_applied);
     g_test_add_func("/homeworlds/view/board-scrollable", test_homeworlds_view_board_is_horizontally_scrollable);
+    g_test_add_func("/homeworlds/view/text-panel-fixed-width", test_homeworlds_view_text_panel_has_fixed_width);
     g_test_add_func("/homeworlds/view/board-content-width-tracks-viewport",
                     test_homeworlds_view_board_content_width_tracks_viewport);
     g_test_add_func("/homeworlds/window/move-report-action", test_homeworlds_window_move_report_action_toggles_view);
