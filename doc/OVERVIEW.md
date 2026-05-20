@@ -518,8 +518,11 @@ letters and sizes directly, such as `Y2B1g3`, `H1g+`, `G3y2>G2 G3y!`, and `pass`
 complete steps and no internal slash separator. Static evaluation counts ship material and repeats the largest own ship
 at each player's homeworld. Sacrifice-granted actions reuse the normal action application code but bypass local
 color-access checks because the sacrificed ship supplies the action color.
+`homeworlds_position_text.c` formats a non-GTK ASCII board snapshot, with each system shown as player 2 ships,
+stars, and player 1 ships in the same top-to-bottom reachability order as the board.
 Collaborates with: `homeworlds_move_builder.c`, `homeworlds_backend.c`, `homeworlds_sgf_position.c`,
-`homeworlds_view.c`, `tests/test_homeworlds_game.c`, and `tests/test_homeworlds_backend.c`.
+`homeworlds_view.c`, `homeworlds_position_text.c`, `tests/test_homeworlds_game.c`, and
+`tests/test_homeworlds_backend.c`.
 
 ## Homeworlds move builder (`src/games/homeworlds/homeworlds_move_builder.c`,
 `src/games/homeworlds/homeworlds_move_builder.h`)
@@ -566,7 +569,8 @@ catastrophe chains make the list too large for the UI. The report caps both stor
 branches so canonical duplicates cannot make the UI spend unbounded time enumerating equivalent lines. The `View` ->
 `Move report` action disables this report before either the backend-good or diagnostic move collectors run. The same
 non-UI report module is linked by `build/tools/homeworlds_profile_moves`, which applies `--moves` random good moves
-from a `--seed` and prints the final report for profiling. The Homeworlds board host also syncs its
+from a `--seed`, prints an ASCII board snapshot, and then prints the final report for profiling. The Homeworlds board
+host also syncs its
 last-move label from SGF current-node changes so timeline
 navigation and direct play report the same move. Human interaction
 advances

@@ -1,6 +1,7 @@
 #include "games/homeworlds/homeworlds_backend.h"
 #include "games/homeworlds/homeworlds_game.h"
 #include "games/homeworlds/homeworlds_move_report.h"
+#include "games/homeworlds/homeworlds_position_text.h"
 
 #include <stdio.h>
 
@@ -82,6 +83,7 @@ int main(int argc, char **argv) {
   g_autoptr(GOptionContext) context = NULL;
   g_autoptr(GError) error = NULL;
   GRand *random = NULL;
+  g_autofree char *board = NULL;
   g_autofree char *report = NULL;
   HomeworldsPosition position = {0};
   guint applied_moves = 0;
@@ -111,11 +113,23 @@ int main(int argc, char **argv) {
     applied_moves++;
   }
 
+  board = homeworlds_position_format_ascii(&position);
+  if (board == NULL) {
+    g_printerr("Failed to format current position.\n");
+    g_rand_free(random);
+    return 1;
+  }
+
   report = homeworlds_move_report_format(&position);
   if (report == NULL) {
     g_printerr("Failed to format move report.\n");
     g_rand_free(random);
     return 1;
+  }
+
+  g_print("\nCurrent position after %u generated moves:\n%s", applied_moves, board);
+  if (!g_str_has_suffix(board, "\n")) {
+    g_print("\n");
   }
 
   g_print("\nMove report after %u generated moves:\n%s", applied_moves, report);

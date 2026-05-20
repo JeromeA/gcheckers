@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "../src/games/homeworlds/homeworlds_game.h"
+#include "../src/games/homeworlds/homeworlds_position_text.h"
 
 static gboolean test_bank_remove(HomeworldsPosition *position, HomeworldsPyramid pyramid) {
   assert(position != NULL);
@@ -405,6 +406,87 @@ static void test_static_evaluation_counts_largest_homeworld_ship_twice(void) {
   assert(homeworlds_position_evaluate_static(&position) == 20);
 }
 
+static void test_position_ascii_formats_systems_by_reachability(void) {
+  HomeworldsPosition position = {0};
+  char *text = NULL;
+
+  homeworlds_position_init(&position);
+  position.phase = HOMEWORLDS_PHASE_PLAY;
+  position.turn = 0;
+  memset(position.systems, 0, sizeof(position.systems));
+
+  position.systems[1] = (HomeworldsSystem){
+    .stars = {
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL),
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_MEDIUM),
+    },
+    .ships = {
+      [1] = {
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE),
+      },
+    },
+  };
+  position.systems[2] = (HomeworldsSystem){
+    .stars = {
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE),
+    },
+    .ships = {
+      [0] = {
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL),
+      },
+    },
+  };
+  position.systems[3] = (HomeworldsSystem){
+    .stars = {
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_MEDIUM),
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_LARGE),
+    },
+  };
+  position.systems[4] = (HomeworldsSystem){
+    .stars = {
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL),
+    },
+    .ships = {
+      [0] = {
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_MEDIUM),
+      },
+    },
+  };
+  position.systems[0] = (HomeworldsSystem){
+    .stars = {
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_MEDIUM),
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE),
+    },
+    .ships = {
+      [0] = {
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE),
+      },
+    },
+  };
+
+  text = homeworlds_position_format_ascii(&position);
+  assert(text != NULL);
+  assert(strcmp(text,
+                "b3 Y1B2 -\n"
+                "- R3 r1\n"
+                "\n"
+                "- R2Y3 -\n"
+                "- R1 y2\n"
+                "- G2B3 g3\n") == 0);
+  g_free(text);
+}
+
+static void test_position_ascii_formats_empty_position(void) {
+  HomeworldsPosition position = {0};
+  char *text = NULL;
+
+  homeworlds_position_init(&position);
+  text = homeworlds_position_format_ascii(&position);
+  assert(text != NULL);
+  assert(strcmp(text, "No systems.\n") == 0);
+  g_free(text);
+}
+
 int main(void) {
   test_setup_and_loss_detection();
   test_setup_accepts_any_bank_pyramids();
@@ -418,5 +500,7 @@ int main(void) {
   test_ship_catastrophe_returns_orphaned_stars_to_bank();
   test_symbolic_catastrophe_move_does_not_finish_turn();
   test_static_evaluation_counts_largest_homeworld_ship_twice();
+  test_position_ascii_formats_systems_by_reachability();
+  test_position_ascii_formats_empty_position();
   return 0;
 }
