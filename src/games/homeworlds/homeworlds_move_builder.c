@@ -714,6 +714,36 @@ gboolean homeworlds_move_builder_apply_catastrophe(GameBackendMoveBuilder *build
   return TRUE;
 }
 
+gboolean homeworlds_move_builder_apply_catastrophe_step(GameBackendMoveBuilder *builder,
+                                                        guint system_index,
+                                                        HomeworldsColor color) {
+  HomeworldsMoveBuilderState *state = homeworlds_builder_state(builder);
+  HomeworldsTurnStep step = {
+    .kind = HOMEWORLDS_STEP_CATASTROPHE,
+    .target_color = color,
+  };
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
+  g_return_val_if_fail(color <= HOMEWORLDS_COLOR_BLUE, FALSE);
+
+  if (state->stage != HOMEWORLDS_BUILDER_STAGE_COMPLETE) {
+    return homeworlds_move_builder_apply_catastrophe(builder, system_index, color);
+  }
+
+  if (state->move.step_count >= HOMEWORLDS_MAX_MOVE_STEPS ||
+      !homeworlds_position_system_ref_for_index(&state->working_position, system_index, &step.target_system)) {
+    return FALSE;
+  }
+
+  state->move.steps[state->move.step_count++] = step;
+  if (!homeworlds_position_apply_turn_step(&state->working_position, &step)) {
+    state->move.step_count--;
+    return FALSE;
+  }
+  return TRUE;
+}
+
 GameBackendMoveList homeworlds_move_builder_list_candidates(const GameBackendMoveBuilder *builder) {
   const HomeworldsMoveBuilderState *state = homeworlds_builder_state_const(builder);
 

@@ -539,9 +539,10 @@ are deduplicated before they become user-visible choices.
 Collaborates with: `homeworlds_game.c`, `homeworlds_backend.c`, `homeworlds_view.c`, and
 `tests/test_homeworlds_backend.c`.
 
-## Homeworlds UI and AI candidates (`src/games/homeworlds/homeworlds_view.c`,
-`src/games/homeworlds/homeworlds_backend.c`)
-Module: Homeworlds board host, staged GTK view/controller, and backend-owned AI candidate policy.
+## Homeworlds UI, reports, and AI candidates (`src/games/homeworlds/homeworlds_view.c`,
+`src/games/homeworlds/homeworlds_move_report.c`, `src/games/homeworlds/homeworlds_backend.c`)
+Module: Homeworlds board host, staged GTK view/controller, shared move-report generator, and backend-owned AI
+candidate policy.
 Role: let `ghomeworlds` use the shared `GGameWindow` while replacing only the square board presentation.
 `homeworlds_view.c` renders a starfield board with dynamic system boxes sized around their contents, reachability-row
 placement between the two homeworlds, measured-width row packing that reserves the bank footprint and expands inside a
@@ -558,10 +559,12 @@ start ships, trade colors, and discovery stars do not require a long side-panel 
 selectable ships, capture targets, and existing-system move targets are also overlaid as board buttons; the side panel
 only keeps non-board choices such as pass or follow-up actions, with a `Cancel` button whenever those choices belong to
 an in-progress move. During play, the side panel also reports the backend `good_moves()` list followed by the remaining
-legal moves collected from the staged builder, capped and marked when optional catastrophe chains make the list too
-large for the UI. The report caps both stored unique moves and explored complete branches so canonical duplicates
-cannot make the UI spend unbounded time enumerating equivalent lines. The `View` -> `Move report` action disables this
-report before either the backend-good or diagnostic move collectors run. The Homeworlds board host also syncs its
+legal moves collected from the staged builder by `homeworlds_move_report.c`, capped and marked when optional
+catastrophe chains make the list too large for the UI. The report caps both stored unique moves and explored complete
+branches so canonical duplicates cannot make the UI spend unbounded time enumerating equivalent lines. The `View` ->
+`Move report` action disables this report before either the backend-good or diagnostic move collectors run. The same
+non-UI report module is linked by `build/tools/homeworlds_profile_moves`, which applies `--moves` random good moves
+from a `--seed` and prints the final report for profiling. The Homeworlds board host also syncs its
 last-move label from SGF current-node changes so timeline
 navigation and direct play report the same move. Human interaction
 advances
@@ -580,10 +583,11 @@ moving side would leave an unfavorable catastrophe available, rejects green-sacr
 catastrophe, and skips one-action sacrifices when that color action is already available at the selected system.
 Profitable catastrophes available at the start of a turn are required somewhere in the final move, while profitable
 catastrophes created by an earlier step are forced immediately in the staged walk.
-`doc/homeworlds-move-generation.md` describes how the legal builder, diagnostic move report, `good_moves()`, and
-generic alpha-beta search interact.
+`doc/homeworlds-move-generation.md` describes how the legal builder, diagnostic move report, profiling CLI,
+`good_moves()`, and generic alpha-beta search interact.
 Collaborates with: `GGameAppProfile`, `GGameWindow`, `GGameModel`, `GGameSgfController`, `homeworlds_game.c`,
-`homeworlds_move_builder.c`, `homeworlds_backend.c`, and `tests/test_homeworlds_window.c`.
+`homeworlds_move_builder.c`, `homeworlds_backend.c`, `tests/test_homeworlds_profile_moves.c`, and
+`tests/test_homeworlds_window.c`.
 
 ## Boop engine (`src/games/boop/boop_types.h`, `src/games/boop/boop_game.c`,
 `src/games/boop/boop_game.h`, `src/games/boop/boop_backend.c`, `src/games/boop/boop_backend.h`,

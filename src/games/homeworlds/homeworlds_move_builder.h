@@ -36,6 +36,9 @@ gboolean homeworlds_move_builder_step(GameBackendMoveBuilder *builder, const Hom
 gboolean homeworlds_move_builder_apply_catastrophe(GameBackendMoveBuilder *builder,
                                                    guint system_index,
                                                    HomeworldsColor color);
+gboolean homeworlds_move_builder_apply_catastrophe_step(GameBackendMoveBuilder *builder,
+                                                        guint system_index,
+                                                        HomeworldsColor color);
 gboolean homeworlds_move_builder_is_complete(const GameBackendMoveBuilder *builder);
 gboolean homeworlds_move_builder_build_move(const GameBackendMoveBuilder *builder, HomeworldsMove *out_move);
 

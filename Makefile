@@ -39,7 +39,8 @@ METAINFO_FILES := $(CHECKERS_METAINFO_FILE) $(BOOP_METAINFO_FILE) $(HOMEWORLDS_M
 ICON_FILES := $(CHECKERS_ICON_FILE) $(BOOP_ICON_FILE) $(HOMEWORLDS_ICON_FILE)
 FLATPAK_MANIFESTS := $(CHECKERS_FLATPAK_MANIFEST) $(BOOP_FLATPAK_MANIFEST) $(HOMEWORLDS_FLATPAK_MANIFEST)
 HOMEWORLDS_GAME_SRCS := $(HOMEWORLDS_DIR)/homeworlds_game.c $(HOMEWORLDS_DIR)/homeworlds_move_builder.c
-HOMEWORLDS_BACKEND_SRCS := $(HOMEWORLDS_DIR)/homeworlds_backend.c $(HOMEWORLDS_DIR)/homeworlds_sgf_position.c
+HOMEWORLDS_BACKEND_SRCS := $(HOMEWORLDS_DIR)/homeworlds_backend.c $(HOMEWORLDS_DIR)/homeworlds_sgf_position.c \
+	$(HOMEWORLDS_DIR)/homeworlds_move_report.c
 HOMEWORLDS_UI_SRCS := $(HOMEWORLDS_DIR)/homeworlds_view.c
 HOMEWORLDS_UI_STUB_SRCS := $(HOMEWORLDS_DIR)/homeworlds_view_stub.c
 HOMEWORLDS_ALL_SRCS := $(HOMEWORLDS_GAME_SRCS) $(HOMEWORLDS_BACKEND_SRCS)
@@ -121,6 +122,7 @@ HOMEWORLDS_APP_BIN := $(BIN_DIR)/$(HOMEWORLDS_APP_BIN_NAME)
 APP_BINS := $(CHECKERS_APP_BIN) $(BOOP_APP_BIN) $(HOMEWORLDS_APP_BIN)
 CREATE_PUZZLES_BIN := $(TOOLS_DIR)/checkers_create_puzzles
 BOOP_CREATE_PUZZLES_BIN := $(TOOLS_DIR)/boop_create_puzzles
+HOMEWORLDS_PROFILE_MOVES_BIN := $(TOOLS_DIR)/homeworlds_profile_moves
 CREATE_PUZZLES_BINS := $(CREATE_PUZZLES_BIN) $(BOOP_CREATE_PUZZLES_BIN)
 TEST_GAME_BIN := $(TESTS_DIR)/test_game
 TEST_GAME_PRINT_BIN := $(TESTS_DIR)/test_game_print
@@ -128,6 +130,7 @@ TEST_GAME_BACKEND_BIN := $(TESTS_DIR)/test_game_backend
 TEST_GAME_MODEL_BIN := $(TESTS_DIR)/test_game_model
 TEST_HOMEWORLDS_GAME_BIN := $(TESTS_DIR)/test_homeworlds_game
 TEST_HOMEWORLDS_BACKEND_BIN := $(TESTS_DIR)/test_homeworlds_backend
+TEST_HOMEWORLDS_PROFILE_MOVES_BIN := $(TESTS_DIR)/test_homeworlds_profile_moves
 TEST_HOMEWORLDS_WINDOW_BIN := $(TESTS_DIR)/test_homeworlds_window
 TEST_BOOP_GAME_BIN := $(TESTS_DIR)/test_boop_game
 TEST_BOOP_BACKEND_BIN := $(TESTS_DIR)/test_boop_backend
@@ -161,10 +164,11 @@ TEST_PUZZLE_PROGRESS_BIN := $(TESTS_DIR)/test_puzzle_progress
 TEST_PUZZLE_PROGRESS_REPORT_SERVER_BIN := $(TESTS_DIR)/test_puzzle_progress_report_server
 CALLGRIND_OUT := $(CALLGRIND_DIR)/callgrind.out
 CALLGRIND_ANNOTATION := $(CALLGRIND_DIR)/callgrind.annotated
-PROFILE_BIN ?= $(BOOP_CREATE_PUZZLES_BIN)
-PROFILE_CMD = $(PROFILE_BIN) puzzles/boop/game-0003.sgf --depth 2
+PROFILE_BIN ?= $(HOMEWORLDS_PROFILE_MOVES_BIN)
+PROFILE_CMD = $(PROFILE_BIN) --moves 10 --seed 1
 TEST_BINS := $(TEST_GAME_BIN) $(TEST_GAME_PRINT_BIN) $(TEST_GAME_BACKEND_BIN) $(TEST_GAME_MODEL_BIN) \
-	$(TEST_HOMEWORLDS_GAME_BIN) $(TEST_HOMEWORLDS_BACKEND_BIN) $(TEST_HOMEWORLDS_WINDOW_BIN) \
+	$(TEST_HOMEWORLDS_GAME_BIN) $(TEST_HOMEWORLDS_BACKEND_BIN) $(TEST_HOMEWORLDS_PROFILE_MOVES_BIN) \
+	$(TEST_HOMEWORLDS_WINDOW_BIN) \
 	$(TEST_BOOP_GAME_BIN) $(TEST_BOOP_BACKEND_BIN) $(TEST_BOARD_BIN) $(TEST_BOARD_GEOMETRY_BIN) \
 	$(TEST_MOVE_GEN_BIN) $(TEST_CREATE_PUZZLES_CLI_BIN) $(TEST_CREATE_PUZZLES_CHECK_BIN) \
 	$(TEST_CREATE_PUZZLES_RUNNER_BIN) $(TEST_CHECKERS_MODEL_BIN) $(TEST_AI_SEARCH_BIN) \
@@ -187,9 +191,11 @@ TEST_NO_PROFILE_BINS := $(filter-out $(TEST_PROFILE_BINS),$(TEST_BINS))
 
 .PHONY: all clean test coverage install install-checkers install-boop install-homeworlds install-schemas \
 	validate-desktop-metadata \
-	gcheckers gboop ghomeworlds all-checkers all-boop all-homeworlds create_puzzles libgame.a \
+	gcheckers gboop ghomeworlds all-checkers all-boop all-homeworlds create_puzzles homeworlds_profile_moves \
+	libgame.a \
 test_game test_game_print test_game_backend test_game_model test_homeworlds_game test_homeworlds_backend \
-	test_homeworlds_window test_boop_game test_boop_backend test_board test_board_geometry test_move_gen \
+	test_homeworlds_profile_moves test_homeworlds_window test_boop_game test_boop_backend test_board \
+	test_board_geometry test_move_gen \
 	test_create_puzzles_cli \
 	test_create_puzzles_check test_create_puzzles_runner \
 	test_checkers_model test_ai_search test_ai_transposition_table test_bga_client \
@@ -200,7 +206,7 @@ test_game test_game_print test_game_backend test_game_model test_homeworlds_game
 	test_piece_palette test_puzzle_progress test_puzzle_progress_report_server callgrind-run \
 	callgrind-annotate
 
-all: $(GSETTINGS_SCHEMA_COMPILED) $(LIBGAME_A) $(CREATE_PUZZLES_BINS) $(APP_BINS)
+all: $(GSETTINGS_SCHEMA_COMPILED) $(LIBGAME_A) $(CREATE_PUZZLES_BINS) $(HOMEWORLDS_PROFILE_MOVES_BIN) $(APP_BINS)
 
 gcheckers all-checkers: $(CHECKERS_APP_BIN)
 gboop all-boop: $(BOOP_APP_BIN)
@@ -208,6 +214,7 @@ ghomeworlds all-homeworlds: $(HOMEWORLDS_APP_BIN)
 libgame.a: $(LIBGAME_A)
 
 create_puzzles: $(CREATE_PUZZLES_BINS)
+homeworlds_profile_moves: $(HOMEWORLDS_PROFILE_MOVES_BIN)
 
 $(LIBGAME_A): $(OBJS)
 	@mkdir -p $(dir $@)
@@ -264,6 +271,12 @@ $(TEST_HOMEWORLDS_BACKEND_BIN): tests/test_homeworlds_backend.c $(HOMEWORLDS_ALL
 	$(HOMEWORLDS_DIR)/homeworlds_move_builder.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_homeworlds_backend.c $(HOMEWORLDS_ALL_SRCS) $(SGF_TREE_SRCS) $(LDLIBS)
+
+test_homeworlds_profile_moves: $(TEST_HOMEWORLDS_PROFILE_MOVES_BIN)
+$(TEST_HOMEWORLDS_PROFILE_MOVES_BIN): tests/test_homeworlds_profile_moves.c $(HOMEWORLDS_PROFILE_MOVES_BIN)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -DHOMEWORLDS_PROFILE_MOVES_PATH=\"$(HOMEWORLDS_PROFILE_MOVES_BIN)\" -o $@ \
+		tests/test_homeworlds_profile_moves.c $(LDLIBS)
 
 test_homeworlds_window: $(TEST_HOMEWORLDS_WINDOW_BIN)
 $(TEST_HOMEWORLDS_WINDOW_BIN): tests/test_homeworlds_window.c $(HOMEWORLDS_UI_SRCS) \
@@ -340,6 +353,12 @@ $(CREATE_PUZZLES_BIN) $(BOOP_CREATE_PUZZLES_BIN): src/create_puzzles.c src/creat
 		$(CREATE_PUZZLES_PROGRESS_SRCS) $(CHECKERS_DIR)/puzzle_generation.c $(BOOP_CREATE_PUZZLES_SRCS) \
 		src/sgf_io.c src/sgf_tree.c src/sgf_move_props.c $(PUZZLE_CATALOG_SRCS) $(APP_PATHS_SRCS) \
 		$(SRCS) $(LDLIBS)
+
+$(HOMEWORLDS_PROFILE_MOVES_BIN): src/homeworlds_profile_moves.c $(HOMEWORLDS_ALL_SRCS) $(SGF_TREE_SRCS) \
+	$(HOMEWORLDS_DIR)/homeworlds_backend.h $(HOMEWORLDS_DIR)/homeworlds_game.h \
+	$(HOMEWORLDS_DIR)/homeworlds_move_report.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -o $@ src/homeworlds_profile_moves.c $(HOMEWORLDS_ALL_SRCS) $(SGF_TREE_SRCS) $(LDLIBS)
 
 test_create_puzzles_cli: $(TEST_CREATE_PUZZLES_CLI_BIN)
 $(TEST_CREATE_PUZZLES_CLI_BIN): tests/test_create_puzzles_cli.c src/create_puzzles_launcher.c \

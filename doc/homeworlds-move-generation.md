@@ -25,10 +25,14 @@ Homeworlds intentionally does not expose a full legal move list.
 walking. That means `good_moves()` is not the same thing as legal move generation: it is a legal-move traversal plus a
 set of pruning and forcing rules that keep alpha-beta focused on sensible moves.
 
-`homeworlds_view.c` has a separate diagnostic collector for the text panel. It recursively walks the builder to show a
-bounded list of legal moves, then displays `good_moves()` followed by "all possible moves minus good_moves()". This
-report is for inspection only. It is capped, deduplicated, and not used by the AI. When `View` -> `Move report` is
-disabled, the text panel skips both the `good_moves()` call and the diagnostic collector.
+`homeworlds_move_report.c` has a separate diagnostic collector for the text panel and profiling tools. It recursively
+walks the builder to show a bounded list of legal moves, then displays `good_moves()` followed by "all possible moves
+minus good_moves()". This report is for inspection only. It is capped, deduplicated, and not used by the AI. When
+`View` -> `Move report` is disabled, the text panel skips both the `good_moves()` call and the diagnostic collector.
+
+`build/tools/homeworlds_profile_moves` applies `--moves` random `good_moves()` choices from the initial position using
+`--seed`, then prints that same shared report. The Makefile's default `callgrind-run` target profiles this command so
+move-report generation can be measured without starting GTK.
 
 ## Legal Moves Versus AI Moves
 
