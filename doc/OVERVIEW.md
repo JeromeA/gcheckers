@@ -565,10 +565,9 @@ start ships, trade colors, and discovery stars do not require a long side-panel 
 selectable ships, capture targets, and existing-system move targets are also overlaid as board buttons; the side panel
 only keeps non-board choices such as pass or follow-up actions, with a `Cancel` button whenever those choices belong to
 an in-progress move. During play, the side panel also reports the backend `good_moves()` list followed by the remaining
-legal moves collected from the staged builder by `homeworlds_move_report.c`, capped and marked when optional
-catastrophe chains make the list too large for the UI. The report caps both stored unique moves and explored complete
-branches so canonical duplicates cannot make the UI spend unbounded time enumerating equivalent lines. The `View` ->
-`Move report` action disables this report before either the backend-good or diagnostic move collectors run. The same
+legal moves collected from the staged builder by `homeworlds_move_report.c`. The report deduplicates canonical moves
+but does not cap the backend-good or diagnostic collectors. The `View` -> `Move report` action disables this report
+before either collector runs. The same
 non-UI report module is linked by `build/tools/homeworlds_profile_moves`, which applies `--moves` random good moves
 from a `--seed` or replays the first moves of a Homeworlds SGF main line with `--file`, prints an ASCII board
 snapshot, and then prints the final report for profiling. The Homeworlds board

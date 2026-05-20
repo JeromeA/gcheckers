@@ -159,6 +159,17 @@ static HomeworldsView *test_homeworlds_get_window_view(GGameWindow *window) {
   return view;
 }
 
+static HomeworldsView *test_homeworlds_view_new_without_move_report(GGameModel *model) {
+  HomeworldsView *view = NULL;
+
+  g_return_val_if_fail(GGAME_IS_MODEL(model), NULL);
+
+  view = homeworlds_view_new(model);
+  g_return_val_if_fail(view != NULL, NULL);
+  homeworlds_view_set_move_report_enabled(view, FALSE);
+  return view;
+}
+
 static void test_homeworlds_remove_bank_piece(HomeworldsPosition *position, HomeworldsPyramid pyramid) {
   g_return_if_fail(position != NULL);
   g_return_if_fail(homeworlds_pyramid_is_valid(pyramid));
@@ -614,7 +625,7 @@ static void test_homeworlds_view_board_content_width_matches_viewport_when_rows_
 static void test_homeworlds_view_board_is_horizontally_scrollable(void) {
   HomeworldsPosition position = {0};
   GGameModel *model = ggame_model_new(&homeworlds_game_backend);
-  HomeworldsView *view = homeworlds_view_new(model);
+  HomeworldsView *view = test_homeworlds_view_new_without_move_report(model);
   GtkWidget *root = homeworlds_view_get_widget(view);
   GtkWidget *board = test_homeworlds_find_widget_named(root, "homeworlds-board");
   GtkWidget *board_scroller = test_homeworlds_find_widget_named(root, "homeworlds-board-scroller");
@@ -742,7 +753,7 @@ static void test_homeworlds_window_main_split_can_exceed_height(void) {
 
 static void test_homeworlds_view_board_content_width_tracks_viewport(void) {
   GGameModel *model = ggame_model_new(&homeworlds_game_backend);
-  HomeworldsView *view = homeworlds_view_new(model);
+  HomeworldsView *view = test_homeworlds_view_new_without_move_report(model);
   GtkWidget *root = homeworlds_view_get_widget(view);
   GtkWidget *board = NULL;
   GtkWidget *board_scroller = NULL;
@@ -797,6 +808,8 @@ static void test_homeworlds_window_setup_moves_are_recorded_in_sgf(void) {
   g_assert_nonnull(view);
   g_assert_nonnull(controller);
   g_assert_nonnull(tree);
+
+  homeworlds_view_set_move_report_enabled(view, FALSE);
 
   for (guint i = 0; i < 6; ++i) {
     g_assert_true(homeworlds_view_apply_candidate_at(view, 0));
@@ -855,6 +868,7 @@ static void test_homeworlds_window_catastrophe_prefix_records_single_sgf_move(vo
   g_assert_nonnull(controller);
   g_assert_nonnull(tree);
 
+  homeworlds_view_set_move_report_enabled(view, FALSE);
   player_controls_panel_set_mode(panel, 1, PLAYER_CONTROL_MODE_USER);
   test_homeworlds_prepare_play_position(&position);
   position.systems[2].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL);
@@ -911,6 +925,7 @@ static void test_homeworlds_window_end_move_catastrophe_requires_choice(void) {
   g_assert_nonnull(controller);
   g_assert_nonnull(tree);
 
+  homeworlds_view_set_move_report_enabled(view, FALSE);
   player_controls_panel_set_mode(panel, 1, PLAYER_CONTROL_MODE_USER);
   homeworlds_position_init(&position);
   position.phase = HOMEWORLDS_PHASE_PLAY;
@@ -976,7 +991,7 @@ static void test_homeworlds_window_end_move_catastrophe_requires_choice(void) {
 
 static void test_homeworlds_view_setup_uses_board_bank_buttons(void) {
   GGameModel *model = ggame_model_new(&homeworlds_game_backend);
-  HomeworldsView *view = homeworlds_view_new(model);
+  HomeworldsView *view = test_homeworlds_view_new_without_move_report(model);
   GtkWidget *root = homeworlds_view_get_widget(view);
   const HomeworldsPosition *position = NULL;
   HomeworldsPyramid large_star = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE);
@@ -1019,7 +1034,7 @@ static void test_homeworlds_view_setup_uses_board_bank_buttons(void) {
 
 static void test_homeworlds_view_bank_layout_is_compact_and_centered(void) {
   GGameModel *model = ggame_model_new(&homeworlds_game_backend);
-  HomeworldsView *view = homeworlds_view_new(model);
+  HomeworldsView *view = test_homeworlds_view_new_without_move_report(model);
   GtkWidget *root = homeworlds_view_get_widget(view);
   GtkWidget *bank = test_homeworlds_find_widget_named(root, "homeworlds-board-bank");
   GtkWidget *title = test_homeworlds_find_widget_named(root, "homeworlds-bank-title");
@@ -1066,7 +1081,7 @@ static void test_homeworlds_view_bank_layout_is_compact_and_centered(void) {
 
 static void test_homeworlds_view_uses_board_ship_buttons(void) {
   GGameModel *model = ggame_model_new(&homeworlds_game_backend);
-  HomeworldsView *view = homeworlds_view_new(model);
+  HomeworldsView *view = test_homeworlds_view_new_without_move_report(model);
   GtkWidget *root = homeworlds_view_get_widget(view);
   GtkButton *button = NULL;
 
@@ -1090,7 +1105,7 @@ static void test_homeworlds_view_uses_board_ship_buttons(void) {
 static void test_homeworlds_view_action_buttons_use_plain_labels(void) {
   HomeworldsPosition position = {0};
   GGameModel *model = ggame_model_new(&homeworlds_game_backend);
-  HomeworldsView *view = homeworlds_view_new(model);
+  HomeworldsView *view = test_homeworlds_view_new_without_move_report(model);
   GtkWidget *root = homeworlds_view_get_widget(view);
 
   test_homeworlds_prepare_play_position(&position);
@@ -1114,7 +1129,7 @@ static void test_homeworlds_view_action_buttons_use_plain_labels(void) {
 static void test_homeworlds_view_choice_list_has_cancel_button(void) {
   HomeworldsPosition position = {0};
   GGameModel *model = ggame_model_new(&homeworlds_game_backend);
-  HomeworldsView *view = homeworlds_view_new(model);
+  HomeworldsView *view = test_homeworlds_view_new_without_move_report(model);
   GtkWidget *root = homeworlds_view_get_widget(view);
   GtkButton *button = NULL;
 
@@ -1141,7 +1156,7 @@ static void test_homeworlds_view_choice_list_has_cancel_button(void) {
 static void test_homeworlds_view_build_has_no_second_step_highlight(void) {
   HomeworldsPosition position = {0};
   GGameModel *model = ggame_model_new(&homeworlds_game_backend);
-  HomeworldsView *view = homeworlds_view_new(model);
+  HomeworldsView *view = test_homeworlds_view_new_without_move_report(model);
   GtkWidget *root = homeworlds_view_get_widget(view);
   GtkButton *button = NULL;
 
@@ -1163,7 +1178,7 @@ static void test_homeworlds_view_build_has_no_second_step_highlight(void) {
 static void test_homeworlds_view_trade_targets_use_bank_buttons(void) {
   HomeworldsPosition position = {0};
   GGameModel *model = ggame_model_new(&homeworlds_game_backend);
-  HomeworldsView *view = homeworlds_view_new(model);
+  HomeworldsView *view = test_homeworlds_view_new_without_move_report(model);
   GtkWidget *root = homeworlds_view_get_widget(view);
   HomeworldsPyramid blue_large = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE);
   GtkButton *button = NULL;
@@ -1193,7 +1208,7 @@ static void test_homeworlds_view_trade_targets_use_bank_buttons(void) {
 static void test_homeworlds_view_attack_targets_use_board_buttons(void) {
   HomeworldsPosition position = {0};
   GGameModel *model = ggame_model_new(&homeworlds_game_backend);
-  HomeworldsView *view = homeworlds_view_new(model);
+  HomeworldsView *view = test_homeworlds_view_new_without_move_report(model);
   GtkWidget *root = homeworlds_view_get_widget(view);
   GtkButton *button = NULL;
 
@@ -1222,7 +1237,7 @@ static void test_homeworlds_view_attack_targets_use_board_buttons(void) {
 static void test_homeworlds_view_move_targets_use_board_and_bank_buttons(void) {
   HomeworldsPosition position = {0};
   GGameModel *model = ggame_model_new(&homeworlds_game_backend);
-  HomeworldsView *view = homeworlds_view_new(model);
+  HomeworldsView *view = test_homeworlds_view_new_without_move_report(model);
   GtkWidget *root = homeworlds_view_get_widget(view);
   HomeworldsPyramid blue_large = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE);
   GtkButton *button = NULL;
@@ -1254,7 +1269,7 @@ static void test_homeworlds_view_move_targets_use_board_and_bank_buttons(void) {
 
 static void test_homeworlds_view_advances_setup(void) {
   GGameModel *model = ggame_model_new(&homeworlds_game_backend);
-  HomeworldsView *view = homeworlds_view_new(model);
+  HomeworldsView *view = test_homeworlds_view_new_without_move_report(model);
   const HomeworldsPosition *position = NULL;
 
   for (guint i = 0; i < 6; ++i) {

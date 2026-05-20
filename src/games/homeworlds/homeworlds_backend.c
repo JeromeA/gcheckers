@@ -11,8 +11,6 @@ typedef struct {
   gsize count;
   gsize capacity;
   gsize leaves_seen;
-  gsize max_leaves;
-  gboolean truncated;
 } HomeworldsMoveBuffer;
 
 typedef struct {
@@ -223,10 +221,6 @@ static gboolean homeworlds_backend_move_buffer_append(HomeworldsMoveBuffer *buff
   g_return_val_if_fail(buffer != NULL, FALSE);
   g_return_val_if_fail(move != NULL, FALSE);
 
-  if (buffer->max_leaves > 0 && buffer->leaves_seen >= buffer->max_leaves) {
-    buffer->truncated = TRUE;
-    return TRUE;
-  }
   buffer->leaves_seen++;
 
   for (gsize i = 0; i < buffer->count; ++i) {
@@ -732,10 +726,6 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(const Homeworlds
   g_return_val_if_fail(context != NULL, FALSE);
   g_return_val_if_fail(buffer != NULL, FALSE);
 
-  if (buffer->truncated) {
-    return TRUE;
-  }
-
   builder.builder_state = (gpointer) state;
   builder.builder_state_size = sizeof(*state);
 
@@ -755,9 +745,6 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(const Homeworlds
       if (!homeworlds_backend_collect_good_moves_recursive(&child_state, context, buffer, allow_pass_move)) {
         return FALSE;
       }
-      if (buffer->truncated) {
-        break;
-      }
     }
 
     if (forced_catastrophe_seen) {
@@ -775,9 +762,6 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(const Homeworlds
     }
     if (!homeworlds_backend_collect_good_moves_recursive(&child_state, context, buffer, allow_pass_move)) {
       return FALSE;
-    }
-    if (buffer->truncated) {
-      return TRUE;
     }
   }
 
@@ -821,13 +805,9 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(const Homeworlds
       homeworlds_backend_move_list_free(&candidates);
       return FALSE;
     }
-    if (buffer->truncated) {
-      break;
-    }
   }
 
-  if (!buffer->truncated &&
-      pass_candidate != NULL &&
+  if (pass_candidate != NULL &&
       buffer->leaves_seen == good_leaves_before_candidates &&
       homeworlds_backend_state_can_use_pass_fallback(state)) {
     HomeworldsMoveBuilderState child_state = *state;
@@ -848,21 +828,15 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(const Homeworlds
   return TRUE;
 }
 
-GameBackendMoveList homeworlds_backend_list_good_moves_limited(const HomeworldsPosition *position,
-                                                               gsize max_leaves,
-                                                               gboolean *out_truncated) {
+static GameBackendMoveList homeworlds_backend_list_good_moves(gconstpointer position, guint /*depth_hint*/) {
+  const HomeworldsPosition *homeworlds_position = position;
   GameBackendMoveBuilder builder = {0};
   HomeworldsGoodMoveContext context = {0};
-  HomeworldsMoveBuffer buffer = {
-    .max_leaves = max_leaves,
-  };
+  HomeworldsMoveBuffer buffer = {0};
 
-  g_return_val_if_fail(position != NULL, (GameBackendMoveList){0});
+  g_return_val_if_fail(homeworlds_position != NULL, (GameBackendMoveList){0});
 
-  if (out_truncated != NULL) {
-    *out_truncated = FALSE;
-  }
-  if (!homeworlds_move_builder_init(position, &builder)) {
+  if (!homeworlds_move_builder_init(homeworlds_position, &builder)) {
     return (GameBackendMoveList){0};
   }
   context.root_catastrophe_count = homeworlds_backend_collect_profitable_catastrophes(
@@ -876,17 +850,10 @@ GameBackendMoveList homeworlds_backend_list_good_moves_limited(const HomeworldsP
   }
 
   homeworlds_move_builder_clear(&builder);
-  if (out_truncated != NULL) {
-    *out_truncated = buffer.truncated;
-  }
   return (GameBackendMoveList){
     .moves = buffer.moves,
     .count = buffer.count,
   };
-}
-
-static GameBackendMoveList homeworlds_backend_list_good_moves(gconstpointer position, guint /*depth_hint*/) {
-  return homeworlds_backend_list_good_moves_limited(position, 0, NULL);
 }
 
 static gboolean homeworlds_backend_apply_move(gpointer position, gconstpointer move) {

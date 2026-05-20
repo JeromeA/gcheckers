@@ -6,15 +6,10 @@
 
 #include <string.h>
 
-#define HOMEWORLDS_MOVE_REPORT_MAX_MOVES 512
-#define HOMEWORLDS_MOVE_REPORT_MAX_LEAVES 4096
-
 typedef struct {
   HomeworldsMove *moves;
   gsize count;
   gsize capacity;
-  gsize leaves_seen;
-  gboolean truncated;
 } HomeworldsMoveReportBuffer;
 
 typedef struct {
@@ -38,17 +33,6 @@ static gboolean homeworlds_move_report_buffer_append(HomeworldsMoveReportBuffer 
                                                      const HomeworldsMove *move) {
   g_return_val_if_fail(buffer != NULL, FALSE);
   g_return_val_if_fail(move != NULL, FALSE);
-
-  if (buffer->leaves_seen >= HOMEWORLDS_MOVE_REPORT_MAX_LEAVES) {
-    buffer->truncated = TRUE;
-    return TRUE;
-  }
-  buffer->leaves_seen++;
-
-  if (buffer->count >= HOMEWORLDS_MOVE_REPORT_MAX_MOVES) {
-    buffer->truncated = TRUE;
-    return TRUE;
-  }
 
   for (gsize i = 0; i < buffer->count; ++i) {
     if (homeworlds_move_report_moves_equal(&buffer->moves[i], move)) {
@@ -129,15 +113,10 @@ static gboolean homeworlds_move_report_collect_all_moves_recursive(const Homewor
   g_return_val_if_fail(state != NULL, FALSE);
   g_return_val_if_fail(buffer != NULL, FALSE);
 
-  if (buffer->truncated) {
-    return TRUE;
-  }
-
   builder.builder_state = (gpointer) state;
   builder.builder_state_size = sizeof(*state);
   if (state->move.step_count >= HOMEWORLDS_MAX_MOVE_STEPS &&
       !homeworlds_move_builder_is_complete(&builder)) {
-    buffer->truncated = TRUE;
     return TRUE;
   }
 
@@ -160,9 +139,6 @@ static gboolean homeworlds_move_report_collect_all_moves_recursive(const Homewor
     }
     if (!homeworlds_move_report_collect_all_moves_recursive(&child_state, buffer)) {
       return FALSE;
-    }
-    if (buffer->truncated) {
-      return TRUE;
     }
   }
 
@@ -195,12 +171,6 @@ static gboolean homeworlds_move_report_collect_all_moves_recursive(const Homewor
         homeworlds_game_backend.move_list_free(&candidates);
         return FALSE;
       }
-      if (buffer->truncated) {
-        break;
-      }
-    }
-    if (buffer->truncated) {
-      break;
     }
   }
 
@@ -208,15 +178,12 @@ static gboolean homeworlds_move_report_collect_all_moves_recursive(const Homewor
   return TRUE;
 }
 
-static GameBackendMoveList homeworlds_move_report_list_all_moves(const HomeworldsPosition *position,
-                                                                 gboolean *out_truncated) {
+static GameBackendMoveList homeworlds_move_report_list_all_moves(const HomeworldsPosition *position) {
   GameBackendMoveBuilder builder = {0};
   HomeworldsMoveReportBuffer buffer = {0};
 
   g_return_val_if_fail(position != NULL, (GameBackendMoveList){0});
-  g_return_val_if_fail(out_truncated != NULL, (GameBackendMoveList){0});
 
-  *out_truncated = FALSE;
   if (!homeworlds_move_builder_init(position, &builder)) {
     return (GameBackendMoveList){0};
   }
@@ -227,7 +194,6 @@ static GameBackendMoveList homeworlds_move_report_list_all_moves(const Homeworld
   }
 
   homeworlds_move_builder_clear(&builder);
-  *out_truncated = buffer.truncated;
   return (GameBackendMoveList){
     .moves = buffer.moves,
     .count = buffer.count,
@@ -287,8 +253,6 @@ char *homeworlds_move_report_format(const HomeworldsPosition *position) {
   GString *text = NULL;
   g_autofree char *good_title = NULL;
   g_autofree char *other_title = NULL;
-  gboolean good_moves_truncated = FALSE;
-  gboolean all_moves_truncated = FALSE;
 
   g_return_val_if_fail(position != NULL, NULL);
 
@@ -299,17 +263,13 @@ char *homeworlds_move_report_format(const HomeworldsPosition *position) {
     return g_strdup("Move report is available during play.");
   }
 
-  good_moves = homeworlds_backend_list_good_moves_limited(position,
-                                                          HOMEWORLDS_MOVE_REPORT_MAX_LEAVES,
-                                                          &good_moves_truncated);
-  all_moves = homeworlds_move_report_list_all_moves(position, &all_moves_truncated);
+  good_moves = homeworlds_game_backend.list_good_moves(position, 0);
+  all_moves = homeworlds_move_report_list_all_moves(position);
   text = g_string_new(NULL);
   g_return_val_if_fail(text != NULL, NULL);
 
-  good_title = g_strdup_printf("good_moves() (%zu%s)", good_moves.count, good_moves_truncated ? "+" : "");
-  other_title = g_strdup_printf("all possible moves minus good_moves() (%zu%s total before filtering)",
-                                all_moves.count,
-                                all_moves_truncated ? "+" : "");
+  good_title = g_strdup_printf("good_moves() (%zu)", good_moves.count);
+  other_title = g_strdup_printf("all possible moves minus good_moves() (%zu total before filtering)", all_moves.count);
   homeworlds_move_report_append_move_list_text(text, &good_moves, good_title, NULL);
   g_string_append_c(text, '\n');
   homeworlds_move_report_append_move_list_text(text, &all_moves, other_title, &good_moves);
