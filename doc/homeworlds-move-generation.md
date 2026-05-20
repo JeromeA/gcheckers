@@ -57,6 +57,8 @@ once rather than once per physical bank copy. Discovery choices list each reacha
 selection deduplicates identical same-side ships within a system, because selecting either identical ship has the same
 symbolic move. Build steps store only the source system and build color, not the size of the source ship, because
 `H1g1+` and `H1g3+` are the same build when both are green ships in `H1`.
+During a blue sacrifice, ship selection also skips any pyramid that was created by an earlier trade in that same
+system, so `H1r2=g H1g2=y` is represented canonically as `H1r2=y pass`.
 
 Collectors still guard against duplicates when they finish a move. `homeworlds_backend_move_buffer_append()` and the
 diagnostic view buffer compare moves through backend formatting/equality before appending. This is a safety net for
@@ -66,53 +68,44 @@ make the builder too complicated.
 
 ## Current Good-Move Policy
 
-The current Homeworlds `good_moves()` traversal applies policy at three points: before stepping a candidate, after
-stepping a child state, and when a complete move is ready to append.
+The current Homeworlds `good_moves()` traversal handles pass before stepping candidates, applies action safety after a
+builder choice appends a step, and checks whole-move obligations when a complete move is ready to append.
 
 Setup moves are filtered to prefer playable starts: three distinct colors across the two stars and starting ship, a
 large starting ship, two different homeworld star sizes, green included for player 1, and a different star-size
 combination for player 2.
 
-During play, pass is rejected for AI. The first move after setup must be a build. The AI does not move or sacrifice the
-last ship at its own homeworld. It avoids building the fourth pyramid of a color at a system with no opponent ships,
-because that creates a catastrophe with no tactical target. It rejects a small sacrifice when the sacrificed color's
-action was already available at that system, because a one-action sacrifice would only spend a ship to do something the
-ship could already do directly.
+During play, pass is rejected for AI while any non-pass good move remains, but kept as the top-level fallback when
+every non-pass branch has been filtered away before a primary action is staged. The first move after setup must be a
+build unless pass is the only remaining fallback. After a choice appends an action step, the same policy is applied to
+ordinary actions and sacrifice-granted actions. The AI does not move or sacrifice the last ship at its own homeworld,
+rejects builds that create an unfavorable catastrophe, and rejects a small sacrifice when the sacrificed color's action
+was already available at that system.
 
 The catastrophe policy distinguishes profitable and unfavorable catastrophes from the moving side's perspective. A
 profitable catastrophe destroys more opponent ship pips than own ship pips. If such a catastrophe exists at the start
 of the turn, the final good move must trigger one of those root catastrophes somewhere in the move, but it does not have
 to trigger it first. If a profitable catastrophe becomes available during the move, the traversal forces it at the
 earliest step before exploring ordinary continuations. An unfavorable catastrophe is the opposite: the moving side would
-lose more ship pips than the opponent. Good moves reject move/discover steps that enter such a system, and reject
-pending green-sacrifice builds that create such a situation.
+lose more ship pips than the opponent. Good moves reject move/discover steps that enter such a system, and reject build
+steps that create such a situation.
 
 Some actions do not need explicit policy. For instance, an attack action with no legal target simply has no target
 candidates in the builder, so that branch naturally fails to produce a completed move.
 
-## How To Make Good Moves Read Like Policy
+## Good Move Policy Shape
 
-The current implementation is already split into named helpers, but a cleaner shape would make the recursive traversal
-mostly policy-neutral and express the AI rules as a small sequence of predicates. A readable rewrite would keep the same
-three decision points and give each rule a direct name:
+The recursive traversal keeps policy in named predicates rather than hiding it in traversal mechanics. The important
+decision points are pass handling, child-state checks after an appended step, and completed-move checks:
 
 ```c
-if (!candidate_keeps_ai_turn_non_pass(state, candidate)) {
-  prune;
-}
-if (!candidate_respects_opening_policy(state, candidate)) {
-  prune;
-}
-if (!candidate_keeps_last_homeworld_ship(state, candidate)) {
-  prune;
-}
-if (!candidate_avoids_redundant_small_sacrifice(state, candidate)) {
-  prune;
+if (candidate_is_pass(candidate)) {
+  defer;
 }
 if (!child_forces_new_profitable_catastrophe(state, child)) {
   force_catastrophe_only;
 }
-if (!child_avoids_unfavorable_catastrophe(state, candidate, child)) {
+if (!child_state_is_good_after_step(state, child)) {
   prune;
 }
 if (!completed_move_satisfies_root_catastrophe_requirement(context, move)) {
@@ -120,9 +113,8 @@ if (!completed_move_satisfies_root_catastrophe_requirement(context, move)) {
 }
 ```
 
-The important part is not the exact helper names. The important part is to avoid hiding policy inside traversal
-mechanics. Candidate predicates should say why a visible choice is not useful for AI. Child-state predicates should say
-why the consequence of a choice is unsafe. Completed-move predicates should say what whole-turn obligation remains.
+The exact helper names are not important. Child-state predicates say why the consequence of a choice is unsafe.
+Completed-move predicates say what whole-turn obligation remains.
 
 ## Alpha-Beta Interaction
 

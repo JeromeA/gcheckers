@@ -71,6 +71,52 @@ static gboolean homeworlds_builder_find_selected_ship_slot(const HomeworldsMoveB
   return FALSE;
 }
 
+static gboolean homeworlds_builder_has_pending_blue_sacrifice(const HomeworldsMoveBuilderState *state) {
+  g_return_val_if_fail(state != NULL, FALSE);
+
+  return state->pending_actions_remaining > 0 &&
+         state->forced_action_color == HOMEWORLDS_COLOR_BLUE;
+}
+
+static gboolean homeworlds_builder_ship_was_trade_result(const HomeworldsMoveBuilderState *state,
+                                                         guint system_index,
+                                                         HomeworldsPyramid ship) {
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
+  g_return_val_if_fail(homeworlds_pyramid_is_valid(ship), FALSE);
+
+  if (!homeworlds_builder_has_pending_blue_sacrifice(state)) {
+    return FALSE;
+  }
+
+  for (guint i = 0; i < state->move.step_count; ++i) {
+    const HomeworldsTurnStep *step = &state->move.steps[i];
+    guint trade_system_index = HOMEWORLDS_INVALID_INDEX;
+    HomeworldsPyramid traded_ship = 0;
+
+    if (step->kind != HOMEWORLDS_STEP_TRADE ||
+        step->target_color > HOMEWORLDS_COLOR_BLUE ||
+        !homeworlds_pyramid_is_valid(step->actor.ship)) {
+      continue;
+    }
+
+    traded_ship = homeworlds_pyramid_make((HomeworldsColor) step->target_color,
+                                          homeworlds_pyramid_size(step->actor.ship));
+    if (traded_ship != ship ||
+        !homeworlds_position_resolve_system_ref(&state->working_position,
+                                                &step->actor.system,
+                                                &trade_system_index)) {
+      continue;
+    }
+
+    if (trade_system_index == system_index) {
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
 static gboolean homeworlds_builder_selected_ship_ref(const HomeworldsMoveBuilderState *state,
                                                      HomeworldsShipRef *out_ref) {
   g_return_val_if_fail(state != NULL, FALSE);
@@ -428,6 +474,9 @@ static GameBackendMoveList homeworlds_builder_list_selectable_ships(const Homewo
         continue;
       }
       if (seen_pyramids[pyramid]) {
+        continue;
+      }
+      if (homeworlds_builder_ship_was_trade_result(state, system_index, pyramid)) {
         continue;
       }
       seen_pyramids[pyramid] = TRUE;
@@ -815,6 +864,11 @@ gboolean homeworlds_move_builder_step(GameBackendMoveBuilder *builder, const Hom
           candidate->data.system_index >= HOMEWORLDS_SYSTEM_SLOT_COUNT ||
           candidate->data.ship_owner != state->working_position.turn ||
           !homeworlds_pyramid_is_valid(candidate->data.pyramid)) {
+        return FALSE;
+      }
+      if (homeworlds_builder_ship_was_trade_result(state,
+                                                   candidate->data.system_index,
+                                                   candidate->data.pyramid)) {
         return FALSE;
       }
       {

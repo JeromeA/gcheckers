@@ -534,6 +534,8 @@ for every remaining sacrificed action and completes the move; only a pass with n
 Candidate data can still use transient slot indexes for UI selection, but committed move steps are converted to
 symbolic references before they are applied or saved to SGF. Committed build steps are converted to system-plus-color
 form so two same-color source ships produce the same internal move and notation.
+During a multi-action blue sacrifice, ships created by earlier trade steps in that system are not offered as later
+trade actors; changing a ship through multiple colors is canonicalized as one direct trade followed by passes.
 Physically interchangeable choices, such as identical bank stars for discovery or identical enemy ships for capture,
 are deduplicated before they become user-visible choices.
 Collaborates with: `homeworlds_game.c`, `homeworlds_backend.c`, `homeworlds_view.c`, and
@@ -577,10 +579,13 @@ Homeworlds intentionally does not expose a
 full legal move list, so the
 shared SGF controller validates completed moves by applying them to a copied position before appending the node.
 `homeworlds_backend.c` walks the same staged builder to feed the shared alpha-beta search with backend-good moves. That
-AI candidate path rejects pass moves, applies Homeworlds-specific opening and safety heuristics, and lets dead-end
-choices such as attacks with no target naturally produce no completed move. It rejects moves into systems where the
-moving side would leave an unfavorable catastrophe available, rejects green-sacrifice builds that create an unfavorable
-catastrophe, and skips one-action sacrifices when that color action is already available at the selected system.
+AI path rejects pass moves while non-pass good moves remain, keeps pass as a top-level fallback when every non-pass
+branch is filtered away before a primary action is staged, applies Homeworlds-specific opening and safety heuristics,
+and lets dead-end choices such as attacks with no target naturally produce no completed move. When a builder choice
+appends a turn step, the AI applies the same safety checks to ordinary actions and sacrifice-granted actions: it keeps
+the last own homeworld ship in place, rejects moves into unfavorable catastrophes, rejects builds that create
+unfavorable catastrophes, and skips one-action sacrifices when that color action is already available at the selected
+system.
 Profitable catastrophes available at the start of a turn are required somewhere in the final move, while profitable
 catastrophes created by an earlier step are forced immediately in the staged walk.
 `doc/homeworlds-move-generation.md` describes how the legal builder, diagnostic move report, profiling CLI,

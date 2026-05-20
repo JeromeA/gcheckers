@@ -655,3 +655,39 @@ could therefore never complete lines such as `H1g3- pass pass pass`.
 
 The fix makes pass append every remaining sacrificed pass action whenever a sacrifice is active, and only treats pass
 as a top-level move when no sacrifice actions remain.
+
+## Homeworlds blue sacrifices generated chained recolors
+
+A multi-action blue sacrifice can trade the same physical ship through multiple colors, such as `H1r2=g H1g2=y`.
+That is legal but redundant, because it has the same final position as trading the ship directly to the final color and
+passing the remaining sacrifice action.
+
+The staged builder did not recognize that the later `g2` actor had just been created by the earlier trade, so move
+generation explored these equivalent chained recolors.
+
+The fix checks the already staged trade steps while listing and accepting blue-sacrifice ship choices. If a ship in the
+same system matches a pyramid produced by an earlier trade in the move, that ship is skipped for the remaining forced
+blue actions.
+
+## Homeworlds good moves removed the only legal pass
+
+The Homeworlds AI should avoid passing when it has any useful non-pass move, but a position can still leave pass as the
+only legal move after the good-move filters remove dead-end or redundant actions.
+
+`good_moves()` filtered pass before exploring the candidate tree and rejected completed moves containing a pass step.
+That made such positions report no good moves at all.
+
+The fix treats pass as a top-level fallback candidate. The good-move walker explores non-pass branches first; if none
+append a good move before a primary action is staged, it explores pass and allows the resulting pass move through final
+filtering.
+
+## Homeworlds good moves let yellow sacrifices empty a homeworld
+
+The Homeworlds AI should avoid moving or sacrificing the last ship at its own homeworld, because that immediately loses
+the game. The good-move walker enforced that rule while choosing an ordinary top-level action, but a yellow sacrifice
+skips that action-selection stage for its forced move actions. Those forced moves could therefore move the last
+remaining homeworld ship away during the sacrifice.
+
+The fix applies action safety to the actual step appended by the staged builder instead of only to ordinary action
+candidates. Last-homeworld, redundant small-sacrifice, unsafe build-catastrophe, and unsafe move-destination checks now
+run through the same child-state policy path for normal actions and sacrifice-granted actions.
