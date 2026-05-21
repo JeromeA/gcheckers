@@ -251,6 +251,19 @@ static void test_move_and_discover_follow_connectivity(void) {
                                                                            HOMEWORLDS_SIZE_LARGE));
 }
 
+static void test_empty_system_lookup_failure_sets_invalid_index(void) {
+  HomeworldsPosition position = {0};
+  guint system_index = 2;
+
+  homeworlds_position_init(&position);
+  for (guint i = 2; i < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++i) {
+    assert(test_system_add_star(&position, i, homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL)));
+  }
+
+  assert(!homeworlds_position_find_empty_system(&position, &system_index));
+  assert(system_index == HOMEWORLDS_INVALID_INDEX);
+}
+
 static void test_sacrifice_grants_multiple_actions(void) {
   HomeworldsPosition position = {0};
   HomeworldsMove move = {0};
@@ -505,6 +518,7 @@ int main(void) {
   test_trade_preserves_size();
   test_attack_requires_size_and_changes_owner();
   test_move_and_discover_follow_connectivity();
+  test_empty_system_lookup_failure_sets_invalid_index();
   test_sacrifice_grants_multiple_actions();
   test_sacrifice_actions_ignore_local_color_access();
   test_catastrophe_removes_matching_color_and_collapses_star_system();

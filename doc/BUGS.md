@@ -784,3 +784,11 @@ switch to a wider spacing mode.
 The fix gives every bank pile the same `homeworlds-bank-pile` base style with zero padding and a stable transparent
 border, then adds `homeworlds-bank-choice` only for the selectable outline. A realized-window regression now checks that
 the bank frame does not grow after the six setup selections.
+
+## Failed Homeworlds empty-system lookup left stale output
+
+`homeworlds_position_find_empty_system()` returned `FALSE` when every non-homeworld system slot was occupied, but left
+`out_system_index` unchanged. That made failure ambiguous for callers that reused an index variable.
+
+The fix initializes `out_system_index` to `HOMEWORLDS_INVALID_INDEX` before searching, so a failed lookup has the same
+sentinel convention as the rest of the Homeworlds code.

@@ -938,6 +938,8 @@ gboolean homeworlds_position_find_empty_system(const HomeworldsPosition *positio
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(out_system_index != NULL, FALSE);
 
+  *out_system_index = HOMEWORLDS_INVALID_INDEX;
+
   for (guint i = 2; i < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++i) {
     if (!homeworlds_system_is_empty(&position->systems[i])) {
       continue;
