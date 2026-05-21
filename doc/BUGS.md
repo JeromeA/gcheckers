@@ -804,3 +804,12 @@ precondition diagnostic as the variant-aware API.
 
 The fix adds the missing receiver precondition before reading the current variant, and the model test covers the null
 receiver path.
+
+## Failed Homeworlds multi-step moves could leave partial mutations
+
+`homeworlds_position_apply_move()` applied each turn step directly to the live position while validating a whole
+multi-step move. If a later step then made the move invalid, such as a second primary action without a sacrifice, the
+function returned `FALSE` after earlier steps had already changed the bank, ships, or systems.
+
+The fix applies setup and turn moves to a working copy first. The original position is replaced only after the entire
+move has validated and applied successfully, so rejected moves leave their input position unchanged.

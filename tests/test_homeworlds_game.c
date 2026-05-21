@@ -167,6 +167,34 @@ static void test_build_uses_smallest_available_ship(void) {
   assert(position.systems[0].ships[0][1] == homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL));
 }
 
+static void test_invalid_multi_step_move_leaves_position_unchanged(void) {
+  HomeworldsPosition position = {0};
+  HomeworldsMove move = {0};
+
+  test_prepare_basic_position(&position);
+  HomeworldsPosition before = position;
+
+  move.kind = HOMEWORLDS_MOVE_KIND_TURN;
+  move.step_count = 2;
+  move.steps[0] = (HomeworldsTurnStep){
+    .kind = HOMEWORLDS_STEP_BUILD,
+    .actor = {
+      .system = test_homeworld_ref(0),
+    },
+    .target_color = HOMEWORLDS_COLOR_GREEN,
+  };
+  move.steps[1] = (HomeworldsTurnStep){
+    .kind = HOMEWORLDS_STEP_BUILD,
+    .actor = {
+      .system = test_homeworld_ref(0),
+    },
+    .target_color = HOMEWORLDS_COLOR_GREEN,
+  };
+
+  assert(!homeworlds_position_apply_move(&position, &move));
+  assert(memcmp(&position, &before, sizeof(position)) == 0);
+}
+
 static void test_trade_preserves_size(void) {
   HomeworldsPosition position = {0};
   HomeworldsMove move = {0};
@@ -502,6 +530,7 @@ int main(void) {
   test_setup_and_loss_detection();
   test_setup_accepts_any_bank_pyramids();
   test_build_uses_smallest_available_ship();
+  test_invalid_multi_step_move_leaves_position_unchanged();
   test_trade_preserves_size();
   test_attack_requires_size_and_changes_owner();
   test_move_and_discover_follow_connectivity();

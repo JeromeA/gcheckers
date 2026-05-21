@@ -692,10 +692,17 @@ gboolean homeworlds_position_apply_move(HomeworldsPosition *position, const Home
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(move != NULL, FALSE);
 
+  HomeworldsPosition working = *position;
+
   if (move->kind == HOMEWORLDS_MOVE_KIND_SETUP) {
-    return homeworlds_position_apply_setup_move(position, move);
+    if (!homeworlds_position_apply_setup_move(&working, move)) {
+      return FALSE;
+    }
+
+    *position = working;
+    return TRUE;
   }
-  if (position->phase != HOMEWORLDS_PHASE_PLAY || move->kind != HOMEWORLDS_MOVE_KIND_TURN || move->step_count == 0) {
+  if (working.phase != HOMEWORLDS_PHASE_PLAY || move->kind != HOMEWORLDS_MOVE_KIND_TURN || move->step_count == 0) {
     return FALSE;
   }
 
@@ -708,7 +715,7 @@ gboolean homeworlds_position_apply_move(HomeworldsPosition *position, const Home
     gboolean require_access = TRUE;
 
     if (step->kind == HOMEWORLDS_STEP_CATASTROPHE) {
-      if (!homeworlds_position_apply_turn_step(position, step)) {
+      if (!homeworlds_position_apply_turn_step(&working, step)) {
         return FALSE;
       }
       continue;
@@ -730,9 +737,9 @@ gboolean homeworlds_position_apply_move(HomeworldsPosition *position, const Home
       guint system_index = 0;
       guint ship_slot = 0;
       HomeworldsPyramid ship = 0;
-      if (!homeworlds_position_resolve_ship_ref(position,
+      if (!homeworlds_position_resolve_ship_ref(&working,
                                                 &step->actor,
-                                                position->turn,
+                                                working.turn,
                                                 &system_index,
                                                 &ship_slot,
                                                 &ship)) {
@@ -777,7 +784,7 @@ gboolean homeworlds_position_apply_move(HomeworldsPosition *position, const Home
       require_access = FALSE;
     }
 
-    if (!homeworlds_position_apply_turn_step_with_access(position, step, require_access)) {
+    if (!homeworlds_position_apply_turn_step_with_access(&working, step, require_access)) {
       return FALSE;
     }
   }
@@ -787,8 +794,9 @@ gboolean homeworlds_position_apply_move(HomeworldsPosition *position, const Home
   }
 
   if (primary_action_done) {
-    homeworlds_position_finish_turn(position);
+    homeworlds_position_finish_turn(&working);
   }
+  *position = working;
   return TRUE;
 }
 
