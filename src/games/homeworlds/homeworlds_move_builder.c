@@ -604,7 +604,9 @@ static GameBackendMoveList homeworlds_builder_list_trade_colors(const Homeworlds
         .data.kind = HOMEWORLDS_CANDIDATE_TRADE_COLOR,
         .data.target_color = color,
       };
-      homeworlds_candidate_buffer_append(&buffer, &candidate);
+      if (!homeworlds_candidate_buffer_append(&buffer, &candidate)) {
+        return homeworlds_candidate_buffer_abort(&buffer);
+      }
       break;
     }
   }
@@ -646,7 +648,9 @@ static GameBackendMoveList homeworlds_builder_list_attack_targets(const Homeworl
       .data.target_ship_slot = slot,
       .data.pyramid = target,
     };
-    homeworlds_candidate_buffer_append(&buffer, &candidate);
+    if (!homeworlds_candidate_buffer_append(&buffer, &candidate)) {
+      return homeworlds_candidate_buffer_abort(&buffer);
+    }
   }
 
   return homeworlds_candidate_buffer_finish(&buffer);
@@ -673,7 +677,9 @@ static GameBackendMoveList homeworlds_builder_list_move_targets(const Homeworlds
       .data.kind = HOMEWORLDS_CANDIDATE_MOVE_TARGET,
       .data.target_system_index = system_index,
     };
-    homeworlds_candidate_buffer_append(&buffer, &candidate);
+    if (!homeworlds_candidate_buffer_append(&buffer, &candidate)) {
+      return homeworlds_candidate_buffer_abort(&buffer);
+    }
   }
 
   for (guint bank_slot = 0; bank_slot < HOMEWORLDS_BANK_SLOT_COUNT; ++bank_slot) {
@@ -696,7 +702,9 @@ static GameBackendMoveList homeworlds_builder_list_move_targets(const Homeworlds
       .data.target_system_index = HOMEWORLDS_INVALID_INDEX,
       .data.pyramid = star,
     };
-    homeworlds_candidate_buffer_append(&buffer, &candidate);
+    if (!homeworlds_candidate_buffer_append(&buffer, &candidate)) {
+      return homeworlds_candidate_buffer_abort(&buffer);
+    }
     seen_discovery_stars[star] = TRUE;
   }
 

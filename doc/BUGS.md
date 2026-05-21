@@ -918,3 +918,14 @@ empty turn moves, but it did not reject a malformed move whose `step_count` was 
 
 That could make the validation loop read beyond the move's `steps` storage. The fix rejects overlong step counts before
 iterating over the array.
+
+## Some Homeworlds candidate lists ignored append failures
+
+Homeworlds move-builder candidate lists should either contain every legal choice for that builder stage or fail
+cleanly.
+
+The trade-color, attack-target, and move-target list builders appended to the candidate buffer without checking the
+append result. If allocation failed while growing the buffer, the builder could return a truncated list and hide legal
+choices.
+
+The fix routes those paths through the same checked append-and-abort behavior used by the other candidate lists.

@@ -557,7 +557,8 @@ During a multi-action blue sacrifice, ships created by earlier trade steps in th
 trade actors; changing a ship through multiple colors is canonicalized as one direct trade followed by passes.
 Physically interchangeable choices, such as identical bank stars for discovery or identical enemy ships for capture,
 are deduplicated before they become user-visible choices. Action candidates are appended through one helper so normal
-and sacrifice-forced action lists use the same candidate shape and allocation-failure cleanup.
+and sacrifice-forced action lists use the same candidate shape, and all candidate-list builders abort cleanly on append
+failure instead of returning truncated choices.
 Collaborates with: `homeworlds_game.c`, `homeworlds_backend.c`, `homeworlds_view.c`, and
 `tests/test_homeworlds_backend.c`.
 
