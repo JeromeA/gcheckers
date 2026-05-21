@@ -890,3 +890,14 @@ move identity.
 That made report generation spend most of its time in move formatting when many generated moves collapsed to the same
 symbolic notation. The fix moves the structural comparator into the Homeworlds core API and lets both the backend and
 move report use it directly.
+
+## Homeworlds move report subtracted good moves with a nested scan
+
+The Homeworlds move report should use the same structural move identity for both deduplicating all generated moves and
+subtracting `good_moves()` from the remaining legal moves.
+
+After moving all-move generation into the core, the report still rendered "all possible moves minus good_moves()" by
+checking every all-move against every good move. That left report formatting quadratic in the two move-list sizes.
+
+The fix builds one temporary structural hash set from `good_moves()` and uses it while rendering the remaining legal
+moves, so the report keeps stable ordering without the nested scan.

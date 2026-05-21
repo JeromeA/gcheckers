@@ -609,6 +609,39 @@ static void test_move_equality_uses_structural_notation_identity(void) {
   assert(!homeworlds_moves_equal(&build, &different_build));
 }
 
+static void test_list_all_moves_deduplicates_symbolic_moves(void) {
+  HomeworldsPosition position = {0};
+  GameBackendMoveList moves = {0};
+  HomeworldsPyramid green_small = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL);
+  guint green_build_count = 0;
+
+  test_prepare_basic_position(&position);
+  assert(test_bank_remove(&position, green_small));
+  assert(test_system_add_ship(&position, 0, 0, green_small));
+
+  moves = homeworlds_position_list_all_moves(&position);
+  assert(moves.count > 0);
+  for (gsize i = 0; i < moves.count; ++i) {
+    const HomeworldsMove *move = homeworlds_move_list_get(&moves, i);
+    char notation[128] = {0};
+
+    assert(move != NULL);
+    assert(homeworlds_move_format(move, notation, sizeof(notation)));
+    if (strcmp(notation, "H1g+") == 0) {
+      green_build_count++;
+    }
+
+    for (gsize j = i + 1; j < moves.count; ++j) {
+      const HomeworldsMove *other = homeworlds_move_list_get(&moves, j);
+
+      assert(other != NULL);
+      assert(!homeworlds_moves_equal(move, other));
+    }
+  }
+  assert(green_build_count == 1);
+  homeworlds_move_list_free(&moves);
+}
+
 int main(void) {
   test_setup_and_loss_detection();
   test_setup_accepts_any_bank_pyramids();
@@ -631,5 +664,6 @@ int main(void) {
   test_move_parse_failure_leaves_output_unchanged();
   test_move_parse_accepts_legacy_step_spacing();
   test_move_equality_uses_structural_notation_identity();
+  test_list_all_moves_deduplicates_symbolic_moves();
   return 0;
 }

@@ -520,16 +520,16 @@ references against the current position at apply time. Failed system-reference r
 system plus the build color in `target_color`, because the exact source ship size does not change the move.
 Rules covered: setup, build, trade, attack, move, discover, sacrifice, catastrophe resolution, empty-system
 cleanup, end-of-turn homeworld loss detection for either side, static evaluation, terminal scoring, hashing, compact
-move formatting/parsing, structural move equality, and whole-position SGF snapshots in `homeworlds_sgf_position.c`.
-Move notation uses pyramid letters and sizes directly, such as `Y2B1g3`, `H1g+`, `G3y2>G2 G3y!`, and `pass`;
-multi-step moves are formatted with spaces between complete steps and no internal slash separator, while the parser also
-accepts older saved `H1 g+` and slash-separated step notation. The public parser only writes the output move after the
-whole notation succeeds. Static evaluation counts ship material and repeats the largest own ship at each player's
-homeworld. Applying a move is transactional: setup and turn moves are resolved against a working copy and only replace
-the original position after the full move succeeds. Sacrifice-granted actions reuse the normal action application code
-but bypass local color-access checks because the sacrificed ship supplies the action color. Bank lookup helpers return
-`0` as their output pyramid when no matching bank ship is available, and empty-system lookup returns
-`HOMEWORLDS_INVALID_INDEX` when no empty system slot is available.
+move formatting/parsing, structural move equality, ordered unique all-move generation, and whole-position SGF snapshots
+in `homeworlds_sgf_position.c`. Move notation uses pyramid letters and sizes directly, such as `Y2B1g3`, `H1g+`,
+`G3y2>G2 G3y!`, and `pass`; multi-step moves are formatted with spaces between complete steps and no internal slash
+separator, while the parser also accepts older saved `H1 g+` and slash-separated step notation. The public parser only
+writes the output move after the whole notation succeeds. Static evaluation counts ship material and repeats the largest
+own ship at each player's homeworld. Applying a move is transactional: setup and turn moves are resolved against a
+working copy and only replace the original position after the full move succeeds. Sacrifice-granted actions reuse the
+normal action application code but bypass local color-access checks because the sacrificed ship supplies the action
+color. Bank lookup helpers return `0` as their output pyramid when no matching bank ship is available, and empty-system
+lookup returns `HOMEWORLDS_INVALID_INDEX` when no empty system slot is available.
 `homeworlds_position_text.c` formats a non-GTK ASCII board snapshot, with each system shown as player 2 ships,
 stars, and player 1 ships in the same top-to-bottom reachability order as the board.
 Collaborates with: `homeworlds_move_builder.c`, `homeworlds_backend.c`, `homeworlds_sgf_position.c`,
@@ -583,10 +583,10 @@ has a fixed-width text area with horizontal scrolling externalized, overlay vert
 labels, width-constrained buttons, and only keeps non-board choices such as pass or follow-up actions, with a `Cancel`
 button whenever those choices belong to an in-progress move. Bank pile matching is split into setup, trade-color, and
 discovery predicates so the board button layer does not duplicate raw candidate-field tests. During play, the
-side panel also reports the backend `good_moves()` list followed by the remaining
-legal moves collected from the staged builder by `homeworlds_move_report.c`. The report deduplicates canonical moves
-but does not cap the backend-good or diagnostic collectors. The `View` -> `Move report` action disables this report
-before either collector runs. The same
+side panel also reports the backend `good_moves()` list followed by the remaining legal moves from the core
+all-move generator, subtracting the good moves with a structural hash set. The report deduplicates canonical moves but
+does not cap the backend-good or diagnostic collectors. The `View` -> `Move report` action disables this report before
+either collector runs. The same
 non-UI report module is linked by `build/tools/homeworlds_profile_moves`, which applies `--moves` random good moves
 from a `--seed` or replays the first moves of a Homeworlds SGF main line with `--file`, prints an ASCII board
 snapshot, and then prints the final report for profiling. The Homeworlds board
