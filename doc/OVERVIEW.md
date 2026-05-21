@@ -564,13 +564,13 @@ Collaborates with: `homeworlds_game.c`, `homeworlds_backend.c`, `homeworlds_view
 Module: Homeworlds board host, staged GTK view/controller, shared move-report generator, and backend-owned AI
 candidate policy.
 Role: let `ghomeworlds` use the shared `GGameWindow` while replacing only the square board presentation.
-`homeworlds_view.c` renders a starfield board with dynamic system boxes sized around their contents, reachability-row
-placement between the two homeworlds, measured-width row packing that reserves the bank footprint and expands inside a
-scroller only when needed, viewport-tracking drawing-area content size that expands width for crowded rows and height
-for vertically crowded row boxes, mapped-frame ticks that recheck startup allocation without replacing stable click
-targets, a fixed minimum board viewport, homeworld labels, pipped square stars, tall pipped ship pyramids, overlaid
-compact bank piles with a shared base button style, an in-panel title, staged legal-choice buttons, and catastrophe
-buttons that stage
+`homeworlds_view.c` renders a starfield board with dynamic system boxes sized around their contents,
+connectivity-aware reachability-row placement between the two homeworlds that only reserves empty vertical slots between
+disconnected row groups, measured-width row packing that reserves the bank footprint and expands inside a scroller only
+when needed, viewport-tracking drawing-area content size that expands width for crowded rows and height for vertically
+crowded row boxes, mapped-frame ticks that recheck startup allocation without replacing stable click targets, a fixed
+minimum board viewport, homeworld labels, pipped square stars, tall pipped ship pyramids, overlaid compact bank piles
+with a shared base button style, an in-panel title, staged legal-choice buttons, and catastrophe buttons that stage
 normal symbolic steps into the
 current move so SGF, model state, and the last-move label stay synchronized. Homeworld rendering keeps player 1 at the
 bottom, player 2 at

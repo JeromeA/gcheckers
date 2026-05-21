@@ -867,3 +867,16 @@ same homeworld showed the other actions and `Cancel` but no `Build`.
 
 The fix offers Build from every selected ship whose system has green access, and keeps duplicate symbolic build moves
 out of backend good-move output by deduplicating the completed move buffer.
+
+## Homeworlds board kept empty rows between connected systems
+
+The Homeworlds board should use empty vertical rows to show disconnected neighboring row groups, not merely because an
+intermediate star-size row is absent.
+
+A top-row system such as `Y1` and a bottom-row system such as `B3` are directly connected, so reserving the absent
+middle row left unnecessary space between them. The text formatter already skipped blank rows for connected groups, but
+the board used fixed fractions for player 2, top, middle, bottom, and player 1 rows.
+
+The fix assigns board-row fractions from the visible row groups and their connectivity. Connected neighboring groups
+use adjacent spacing, while disconnected groups reserve an extra empty slot; a real middle-row system still gets its own
+row.

@@ -573,6 +573,26 @@ static void test_homeworlds_prepare_compact_row_position(HomeworldsPosition *pos
   position->systems[1].ships[1][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE);
 }
 
+static void test_homeworlds_prepare_connected_sparse_row_position(HomeworldsPosition *position) {
+  g_return_if_fail(position != NULL);
+
+  homeworlds_position_init(position);
+  position->phase = HOMEWORLDS_PHASE_PLAY;
+  position->turn = 0;
+  position->systems[1].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_MEDIUM);
+  position->systems[1].stars[1] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_LARGE);
+  position->systems[1].ships[1][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE);
+  position->systems[1].ships[1][1] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL);
+  position->systems[2].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL);
+  position->systems[2].ships[1][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL);
+  position->systems[3].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE);
+  position->systems[3].ships[0][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL);
+  position->systems[0].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL);
+  position->systems[0].stars[1] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_MEDIUM);
+  position->systems[0].ships[0][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE);
+  position->systems[0].ships[0][1] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL);
+}
+
 static void test_homeworlds_make_wide_system(HomeworldsSystem *system, HomeworldsColor star_color) {
   g_return_if_fail(system != NULL);
   g_return_if_fail(star_color <= HOMEWORLDS_COLOR_BLUE);
@@ -648,6 +668,43 @@ static void test_homeworlds_view_system_layout_groups_by_reachability(void) {
   g_assert_cmpfloat(compact_b_y, ==, compact_c_y);
   g_assert_cmpfloat_with_epsilon(compact_b_x - compact_a_x, compact_c_x - compact_b_x, 0.001);
   g_assert_cmpfloat(compact_c_x, <, 628.0);
+}
+
+static void test_homeworlds_view_connected_sparse_rows_skip_empty_middle_gap(void) {
+  HomeworldsPosition position = {0};
+  double player_1_x = 0.0;
+  double player_1_y = 0.0;
+  double player_2_x = 0.0;
+  double player_2_y = 0.0;
+  double yellow_small_x = 0.0;
+  double yellow_small_y = 0.0;
+  double blue_large_x = 0.0;
+  double blue_large_y = 0.0;
+  double medium_x = 0.0;
+  double medium_y = 0.0;
+  double player_2_to_yellow = 0.0;
+  double yellow_to_blue = 0.0;
+  double blue_to_player_1 = 0.0;
+
+  test_homeworlds_prepare_connected_sparse_row_position(&position);
+
+  g_assert_true(homeworlds_view_calculate_system_center(&position, 0, 900.0, 600.0, &player_1_x, &player_1_y));
+  g_assert_true(homeworlds_view_calculate_system_center(&position, 1, 900.0, 600.0, &player_2_x, &player_2_y));
+  g_assert_true(homeworlds_view_calculate_system_center(&position, 2, 900.0, 600.0, &yellow_small_x, &yellow_small_y));
+  g_assert_true(homeworlds_view_calculate_system_center(&position, 3, 900.0, 600.0, &blue_large_x, &blue_large_y));
+
+  player_2_to_yellow = yellow_small_y - player_2_y;
+  yellow_to_blue = blue_large_y - yellow_small_y;
+  blue_to_player_1 = player_1_y - blue_large_y;
+  g_assert_cmpfloat_with_epsilon(player_2_to_yellow, yellow_to_blue, 0.001);
+  g_assert_cmpfloat_with_epsilon(yellow_to_blue, blue_to_player_1, 0.001);
+
+  position.systems[4].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_MEDIUM);
+  g_assert_true(homeworlds_view_calculate_system_center(&position, 2, 900.0, 600.0, &yellow_small_x, &yellow_small_y));
+  g_assert_true(homeworlds_view_calculate_system_center(&position, 3, 900.0, 600.0, &blue_large_x, &blue_large_y));
+  g_assert_true(homeworlds_view_calculate_system_center(&position, 4, 900.0, 600.0, &medium_x, &medium_y));
+  g_assert_cmpfloat(yellow_small_y, <, medium_y);
+  g_assert_cmpfloat(medium_y, <, blue_large_y);
 }
 
 static void test_homeworlds_view_row_layout_accounts_for_system_width(void) {
@@ -1760,6 +1817,8 @@ int main(int argc, char **argv) {
 
   g_test_add_func("/homeworlds/view/homeworld-layout", test_homeworlds_view_homeworld_layout_uses_player_perspective);
   g_test_add_func("/homeworlds/view/system-layout", test_homeworlds_view_system_layout_groups_by_reachability);
+  g_test_add_func("/homeworlds/view/connected-sparse-row-layout",
+                  test_homeworlds_view_connected_sparse_rows_skip_empty_middle_gap);
   g_test_add_func("/homeworlds/view/width-aware-row-layout",
                   test_homeworlds_view_row_layout_accounts_for_system_width);
   g_test_add_func("/homeworlds/view/board-width-expands-for-wide-rows",

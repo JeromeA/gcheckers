@@ -107,9 +107,17 @@ typedef struct {
 } HomeworldsViewBoardRowExtent;
 
 typedef struct {
+  guint systems[HOMEWORLDS_SYSTEM_SLOT_COUNT];
+  guint count;
+} HomeworldsViewBoardRowGroup;
+
+typedef struct {
   guint system_index;
   HomeworldsColor color;
 } HomeworldsViewCatastropheChoice;
+
+static HomeworldsViewBoardRow homeworlds_view_board_row_for_system(const HomeworldsPosition *position,
+                                                                   guint system_index);
 
 struct _HomeworldsView {
   GGameModel *model;
@@ -719,54 +727,130 @@ static HomeworldsViewSystemRow homeworlds_view_system_row(const HomeworldsPositi
   return HOMEWORLDS_VIEW_SYSTEM_ROW_MIDDLE;
 }
 
-static void homeworlds_view_row_y_fractions(gboolean has_non_home_system,
-                                            double *out_top,
-                                            double *out_middle,
-                                            double *out_bottom,
-                                            double *out_player_1,
-                                            double *out_player_2) {
+static void homeworlds_view_board_row_group_append(HomeworldsViewBoardRowGroup *group, guint system_index) {
+  g_return_if_fail(group != NULL);
+  g_return_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT);
+  g_return_if_fail(group->count < G_N_ELEMENTS(group->systems));
+
+  group->systems[group->count++] = system_index;
+}
+
+static void homeworlds_view_board_row_groups_init(const HomeworldsPosition *position,
+                                                  HomeworldsViewBoardRowGroup *rows) {
+  g_return_if_fail(position != NULL);
+  g_return_if_fail(rows != NULL);
+
+  for (guint row_index = 0; row_index < HOMEWORLDS_VIEW_BOARD_ROW_COUNT; ++row_index) {
+    rows[row_index].count = 0;
+  }
+
+  homeworlds_view_board_row_group_append(&rows[HOMEWORLDS_VIEW_BOARD_ROW_PLAYER_2], 1);
+  for (guint system_index = 2; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
+    HomeworldsViewBoardRow row = HOMEWORLDS_VIEW_BOARD_ROW_MIDDLE;
+
+    if (homeworlds_system_is_empty(&position->systems[system_index])) {
+      continue;
+    }
+
+    row = homeworlds_view_board_row_for_system(position, system_index);
+    homeworlds_view_board_row_group_append(&rows[row], system_index);
+  }
+  homeworlds_view_board_row_group_append(&rows[HOMEWORLDS_VIEW_BOARD_ROW_PLAYER_1], 0);
+}
+
+static gboolean homeworlds_view_board_rows_are_connected(const HomeworldsPosition *position,
+                                                         const HomeworldsViewBoardRowGroup *previous,
+                                                         const HomeworldsViewBoardRowGroup *current) {
+  g_return_val_if_fail(position != NULL, FALSE);
+  g_return_val_if_fail(previous != NULL, FALSE);
+  g_return_val_if_fail(current != NULL, FALSE);
+
+  for (guint previous_index = 0; previous_index < previous->count; ++previous_index) {
+    const HomeworldsSystem *previous_system = &position->systems[previous->systems[previous_index]];
+
+    for (guint current_index = 0; current_index < current->count; ++current_index) {
+      const HomeworldsSystem *current_system = &position->systems[current->systems[current_index]];
+
+      if (homeworlds_system_is_connected(previous_system, current_system)) {
+        return TRUE;
+      }
+    }
+  }
+
+  return FALSE;
+}
+
+static void homeworlds_view_default_row_y_fractions(gboolean has_non_home_system, double *fractions) {
   double player_1_y = has_non_home_system ? 0.84 : 0.72;
   double player_2_y = has_non_home_system ? 0.16 : 0.28;
   double band = player_1_y - player_2_y;
 
-  g_return_if_fail(out_top != NULL);
-  g_return_if_fail(out_middle != NULL);
-  g_return_if_fail(out_bottom != NULL);
-  g_return_if_fail(out_player_1 != NULL);
-  g_return_if_fail(out_player_2 != NULL);
+  g_return_if_fail(fractions != NULL);
 
-  *out_top = player_2_y + (band * 0.25);
-  *out_middle = player_2_y + (band * 0.50);
-  *out_bottom = player_2_y + (band * 0.75);
-  *out_player_1 = player_1_y;
-  *out_player_2 = player_2_y;
+  fractions[HOMEWORLDS_VIEW_BOARD_ROW_PLAYER_2] = player_2_y;
+  fractions[HOMEWORLDS_VIEW_BOARD_ROW_TOP] = player_2_y + (band * 0.25);
+  fractions[HOMEWORLDS_VIEW_BOARD_ROW_MIDDLE] = player_2_y + (band * 0.50);
+  fractions[HOMEWORLDS_VIEW_BOARD_ROW_BOTTOM] = player_2_y + (band * 0.75);
+  fractions[HOMEWORLDS_VIEW_BOARD_ROW_PLAYER_1] = player_1_y;
 }
 
-static void homeworlds_view_row_y_positions(double height,
-                                            gboolean has_non_home_system,
-                                            double *out_top,
-                                            double *out_middle,
-                                            double *out_bottom,
-                                            double *out_player_1,
-                                            double *out_player_2) {
-  g_return_if_fail(height > 0.0);
-  g_return_if_fail(out_top != NULL);
-  g_return_if_fail(out_middle != NULL);
-  g_return_if_fail(out_bottom != NULL);
-  g_return_if_fail(out_player_1 != NULL);
-  g_return_if_fail(out_player_2 != NULL);
+static void homeworlds_view_row_y_fractions(const HomeworldsPosition *position, double *fractions) {
+  gboolean has_non_home_system = FALSE;
+  double player_1_y = 0.0;
+  double player_2_y = 0.0;
+  double band = 0.0;
+  HomeworldsViewBoardRowGroup rows[HOMEWORLDS_VIEW_BOARD_ROW_COUNT] = {0};
+  double row_units[HOMEWORLDS_VIEW_BOARD_ROW_COUNT] = {0.0};
+  guint previous_row = HOMEWORLDS_VIEW_BOARD_ROW_COUNT;
+  double total_units = 0.0;
 
-  homeworlds_view_row_y_fractions(has_non_home_system,
-                                  out_top,
-                                  out_middle,
-                                  out_bottom,
-                                  out_player_1,
-                                  out_player_2);
-  *out_top *= height;
-  *out_middle *= height;
-  *out_bottom *= height;
-  *out_player_1 *= height;
-  *out_player_2 *= height;
+  g_return_if_fail(position != NULL);
+  g_return_if_fail(fractions != NULL);
+
+  has_non_home_system = homeworlds_view_position_has_non_home_system(position);
+  player_1_y = has_non_home_system ? 0.84 : 0.72;
+  player_2_y = has_non_home_system ? 0.16 : 0.28;
+  band = player_1_y - player_2_y;
+
+  homeworlds_view_default_row_y_fractions(has_non_home_system, fractions);
+  homeworlds_view_board_row_groups_init(position, rows);
+
+  for (guint row_index = 0; row_index < HOMEWORLDS_VIEW_BOARD_ROW_COUNT; ++row_index) {
+    if (rows[row_index].count == 0) {
+      continue;
+    }
+
+    if (previous_row != HOMEWORLDS_VIEW_BOARD_ROW_COUNT) {
+      HomeworldsViewBoardRow previous = (HomeworldsViewBoardRow)previous_row;
+
+      total_units += homeworlds_view_board_rows_are_connected(position, &rows[previous], &rows[row_index]) ? 1.0 : 2.0;
+    }
+    row_units[row_index] = total_units;
+    previous_row = row_index;
+  }
+
+  if (total_units <= 0.0) {
+    return;
+  }
+
+  for (guint row_index = 0; row_index < HOMEWORLDS_VIEW_BOARD_ROW_COUNT; ++row_index) {
+    if (rows[row_index].count == 0) {
+      continue;
+    }
+
+    fractions[row_index] = player_2_y + (band * row_units[row_index] / total_units);
+  }
+}
+
+static void homeworlds_view_row_y_positions(const HomeworldsPosition *position, double height, double *positions) {
+  g_return_if_fail(height > 0.0);
+  g_return_if_fail(position != NULL);
+  g_return_if_fail(positions != NULL);
+
+  homeworlds_view_row_y_fractions(position, positions);
+  for (guint row_index = 0; row_index < HOMEWORLDS_VIEW_BOARD_ROW_COUNT; ++row_index) {
+    positions[row_index] *= height;
+  }
 }
 
 static double homeworlds_view_bank_reserved_width(void) {
@@ -946,22 +1030,17 @@ static HomeworldsViewBoardRow homeworlds_view_board_row_for_system(const Homewor
   }
 }
 
-static void homeworlds_view_board_row_extents_init(HomeworldsViewBoardRowExtent *extents,
-                                                   gboolean has_non_home_system) {
-  double top = 0.0;
-  double middle = 0.0;
-  double bottom = 0.0;
-  double player_1 = 0.0;
-  double player_2 = 0.0;
+static void homeworlds_view_board_row_extents_init(const HomeworldsPosition *position,
+                                                   HomeworldsViewBoardRowExtent *extents) {
+  double fractions[HOMEWORLDS_VIEW_BOARD_ROW_COUNT] = {0.0};
 
+  g_return_if_fail(position != NULL);
   g_return_if_fail(extents != NULL);
 
-  homeworlds_view_row_y_fractions(has_non_home_system, &top, &middle, &bottom, &player_1, &player_2);
-  extents[HOMEWORLDS_VIEW_BOARD_ROW_PLAYER_2].fraction = player_2;
-  extents[HOMEWORLDS_VIEW_BOARD_ROW_TOP].fraction = top;
-  extents[HOMEWORLDS_VIEW_BOARD_ROW_MIDDLE].fraction = middle;
-  extents[HOMEWORLDS_VIEW_BOARD_ROW_BOTTOM].fraction = bottom;
-  extents[HOMEWORLDS_VIEW_BOARD_ROW_PLAYER_1].fraction = player_1;
+  homeworlds_view_row_y_fractions(position, fractions);
+  for (guint row_index = 0; row_index < HOMEWORLDS_VIEW_BOARD_ROW_COUNT; ++row_index) {
+    extents[row_index].fraction = fractions[row_index];
+  }
 }
 
 static double homeworlds_view_required_height_for_row_extents(const HomeworldsViewBoardRowExtent *extents,
@@ -1043,7 +1122,7 @@ gboolean homeworlds_view_calculate_board_content_size(const HomeworldsPosition *
   g_return_val_if_fail(out_width != NULL, FALSE);
   g_return_val_if_fail(out_height != NULL, FALSE);
 
-  homeworlds_view_board_row_extents_init(extents, homeworlds_view_position_has_non_home_system(position));
+  homeworlds_view_board_row_extents_init(position, extents);
   for (guint system_index = 0; system_index < 2; ++system_index) {
     const HomeworldsSystem *system = &position->systems[system_index];
     HomeworldsViewSystemLayout layout = {0};
@@ -1123,13 +1202,8 @@ gboolean homeworlds_view_calculate_system_center(const HomeworldsPosition *posit
                                                  double height,
                                                  double *out_x,
                                                  double *out_y) {
-  gboolean has_non_home_system = FALSE;
-  double top_y = 0.0;
-  double middle_y = 0.0;
-  double bottom_y = 0.0;
-  double player_1_y = 0.0;
-  double player_2_y = 0.0;
-  HomeworldsViewSystemRow row = HOMEWORLDS_VIEW_SYSTEM_ROW_MIDDLE;
+  double row_y[HOMEWORLDS_VIEW_BOARD_ROW_COUNT] = {0.0};
+  HomeworldsViewBoardRow board_row = HOMEWORLDS_VIEW_BOARD_ROW_MIDDLE;
   HomeworldsViewRowSystem row_systems[HOMEWORLDS_SYSTEM_SLOT_COUNT] = {0};
   guint row_count = 0;
   guint row_index = HOMEWORLDS_INVALID_INDEX;
@@ -1144,59 +1218,12 @@ gboolean homeworlds_view_calculate_system_center(const HomeworldsPosition *posit
   g_return_val_if_fail(out_x != NULL, FALSE);
   g_return_val_if_fail(out_y != NULL, FALSE);
 
-  has_non_home_system = homeworlds_view_position_has_non_home_system(position);
-  homeworlds_view_row_y_positions(height,
-                                  has_non_home_system,
-                                  &top_y,
-                                  &middle_y,
-                                  &bottom_y,
-                                  &player_1_y,
-                                  &player_2_y);
-  homeworlds_view_row_x_bounds(width, &row_left, &row_right);
-
-  if (system_index == 0) {
-    if (!homeworlds_view_collect_target_row(position,
-                                            system_index,
-                                            row_systems,
-                                            G_N_ELEMENTS(row_systems),
-                                            &row_count,
-                                            &row_index,
-                                            &total_row_width)) {
-      return FALSE;
-    }
-    *out_x = homeworlds_view_row_center_for_index(row_left,
-                                                  row_right,
-                                                  row_systems,
-                                                  row_count,
-                                                  row_index,
-                                                  total_row_width);
-    *out_y = player_1_y;
-    return TRUE;
-  }
-  if (system_index == 1) {
-    if (!homeworlds_view_collect_target_row(position,
-                                            system_index,
-                                            row_systems,
-                                            G_N_ELEMENTS(row_systems),
-                                            &row_count,
-                                            &row_index,
-                                            &total_row_width)) {
-      return FALSE;
-    }
-    *out_x = homeworlds_view_row_center_for_index(row_left,
-                                                  row_right,
-                                                  row_systems,
-                                                  row_count,
-                                                  row_index,
-                                                  total_row_width);
-    *out_y = player_2_y;
-    return TRUE;
-  }
-  if (homeworlds_system_is_empty(&position->systems[system_index])) {
+  if (system_index >= 2 && homeworlds_system_is_empty(&position->systems[system_index])) {
     return FALSE;
   }
 
-  row = homeworlds_view_system_row(position, system_index);
+  homeworlds_view_row_y_positions(position, height, row_y);
+  homeworlds_view_row_x_bounds(width, &row_left, &row_right);
   if (!homeworlds_view_collect_target_row(position,
                                           system_index,
                                           row_systems,
@@ -1207,8 +1234,8 @@ gboolean homeworlds_view_calculate_system_center(const HomeworldsPosition *posit
     return FALSE;
   }
 
-  *out_y = row == HOMEWORLDS_VIEW_SYSTEM_ROW_TOP ? top_y :
-           row == HOMEWORLDS_VIEW_SYSTEM_ROW_BOTTOM ? bottom_y : middle_y;
+  board_row = homeworlds_view_board_row_for_system(position, system_index);
+  *out_y = row_y[board_row];
   *out_x = homeworlds_view_row_center_for_index(row_left,
                                                 row_right,
                                                 row_systems,
