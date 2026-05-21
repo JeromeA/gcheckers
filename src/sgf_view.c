@@ -65,8 +65,18 @@ static void sgf_view_log_node_widgets_entry(gpointer key, gpointer value, gpoint
   (*index)++;
 }
 
+static gboolean sgf_view_should_log_node_widgets(void) {
+  const char *value = g_getenv("GCHECKERS_DEBUG_SGF_VIEW");
+
+  return value != NULL && value[0] != '\0' && g_strcmp0(value, "0") != 0;
+}
+
 static void sgf_view_log_node_widgets_snapshot(GHashTable *node_widgets) {
   g_return_if_fail(node_widgets != NULL);
+
+  if (!sgf_view_should_log_node_widgets()) {
+    return;
+  }
 
   guint index = 0;
   guint size = g_hash_table_size(node_widgets);

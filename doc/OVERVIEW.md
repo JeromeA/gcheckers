@@ -852,7 +852,8 @@ Class: `SgfView` (`GtkWidget`).
 Role: game-agnostic move tree UI that wires together layout, rendering, selection helpers, and selection resync calls.
 The SGF disc grid (`tree_box`) is measured directly by the overlay (via `gtk_overlay_set_measure_overlay`) so no manual
 size requests are applied to the overlay stack. It syncs selection after layout updates with debug logging when widgets
-are not ready, and annotates notify-driven resync attempts with the emitting object/property pair.
+are not ready, and annotates notify-driven resync attempts with the emitting object/property pair. Full node-widget
+mapping dumps are opt-in via `GCHECKERS_DEBUG_SGF_VIEW`.
 Collaborates with: SGF layout (layout-updated signal), selection, scroller, and disc factory helpers.
 
 ### SGF disc factory (`src/sgf_view_disc_factory.c`, `src/sgf_view_disc_factory.h`)
