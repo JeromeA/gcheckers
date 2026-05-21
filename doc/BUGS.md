@@ -854,3 +854,16 @@ calling `g_signal_emit()` with a NULL instance from an internal render idle befo
 
 The fix measures the bank widget's natural width directly with `gtk_widget_measure()`. That keeps the test focused on
 the compact layout contract and avoids leaving fragile renderer state behind for the following toplevel test.
+
+## Homeworlds Build action was hidden for non-canonical same-color ships
+
+The Homeworlds move builder should let the player choose any visible ship and then offer every legal action available
+from that ship's system.
+
+Build moves are stored as `system + color` rather than by physical source-ship slot, so the builder tried to avoid
+duplicate symbolic build moves by exposing Build from only the first same-color ship in a system. That backend
+deduplication leaked into the side panel: the move report could list `H1g+`, while selecting another green ship in the
+same homeworld showed the other actions and `Cancel` but no `Build`.
+
+The fix offers Build from every selected ship whose system has green access, and keeps duplicate symbolic build moves
+out of backend good-move output by deduplicating the completed move buffer.

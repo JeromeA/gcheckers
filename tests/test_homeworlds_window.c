@@ -1391,6 +1391,36 @@ static void test_homeworlds_view_action_buttons_use_plain_labels(void) {
   g_object_unref(model);
 }
 
+static void test_homeworlds_view_build_action_is_available_from_each_green_ship(void) {
+  HomeworldsPosition position = {0};
+  GGameModel *model = ggame_model_new(&homeworlds_game_backend);
+  HomeworldsView *view = test_homeworlds_view_new_without_move_report(model);
+  GtkWidget *root = homeworlds_view_get_widget(view);
+  HomeworldsPyramid green_small = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL);
+  HomeworldsPyramid green_large = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE);
+  GtkButton *button = NULL;
+
+  test_homeworlds_prepare_play_position(&position);
+  memset(position.systems[0].ships[0], 0, sizeof(position.systems[0].ships[0]));
+  position.systems[0].ships[0][0] = green_large;
+  position.systems[0].ships[0][1] = green_small;
+  g_assert_true(ggame_model_set_position(model, &position));
+
+  button = test_homeworlds_find_ship_button_for(root, 0, green_large);
+  g_assert_nonnull(button);
+  g_signal_emit_by_name(button, "clicked");
+  g_assert_nonnull(test_homeworlds_find_non_visual_action_button(root, HOMEWORLDS_STEP_BUILD));
+  homeworlds_view_reset_selection(view);
+
+  button = test_homeworlds_find_ship_button_for(root, 0, green_small);
+  g_assert_nonnull(button);
+  g_signal_emit_by_name(button, "clicked");
+  g_assert_nonnull(test_homeworlds_find_non_visual_action_button(root, HOMEWORLDS_STEP_BUILD));
+
+  homeworlds_view_free(view);
+  g_object_unref(model);
+}
+
 static void test_homeworlds_view_choice_list_has_cancel_button(void) {
   HomeworldsPosition position = {0};
   GGameModel *model = ggame_model_new(&homeworlds_game_backend);
@@ -1749,6 +1779,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/view/bank-layout-stays-compact-after-setup", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/board-ship-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/action-button-labels", test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/view/build-action-from-each-green-ship", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/choice-list-cancel", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/build-no-second-step-highlight", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/trade-bank-buttons", test_homeworlds_window_skip);
@@ -1780,6 +1811,8 @@ int main(int argc, char **argv) {
                     test_homeworlds_view_bank_layout_stays_compact_after_setup);
     g_test_add_func("/homeworlds/view/board-ship-buttons", test_homeworlds_view_uses_board_ship_buttons);
     g_test_add_func("/homeworlds/view/action-button-labels", test_homeworlds_view_action_buttons_use_plain_labels);
+    g_test_add_func("/homeworlds/view/build-action-from-each-green-ship",
+                    test_homeworlds_view_build_action_is_available_from_each_green_ship);
     g_test_add_func("/homeworlds/view/choice-list-cancel",
                     test_homeworlds_view_choice_list_has_cancel_button);
     g_test_add_func("/homeworlds/view/build-no-second-step-highlight",

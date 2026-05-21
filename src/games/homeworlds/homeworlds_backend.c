@@ -8,7 +8,6 @@
 #include <string.h>
 
 typedef struct {
-  const HomeworldsPosition *root_position;
   HomeworldsMove *moves;
   GHashTable *seen_moves;
   gsize count;
@@ -390,7 +389,6 @@ static void homeworlds_backend_move_buffer_clear(HomeworldsMoveBuffer *buffer) {
 
   g_clear_pointer(&buffer->seen_moves, g_hash_table_unref);
   g_clear_pointer(&buffer->moves, g_free);
-  buffer->root_position = NULL;
   buffer->count = 0;
   buffer->capacity = 0;
   buffer->leaves_seen = 0;
@@ -402,35 +400,16 @@ static void homeworlds_backend_move_buffer_clear_seen_moves(HomeworldsMoveBuffer
   g_clear_pointer(&buffer->seen_moves, g_hash_table_unref);
 }
 
-static void homeworlds_backend_move_buffer_log_duplicate(const HomeworldsMoveBuffer *buffer,
-                                                         const HomeworldsMove *move) {
-  g_autofree char *position_text = NULL;
-  char move_text[128] = {0};
-
-  g_return_if_fail(buffer != NULL);
-  g_return_if_fail(move != NULL);
-
-  if (!homeworlds_move_format(move, move_text, sizeof(move_text))) {
-    g_strlcpy(move_text, "<invalid move>", sizeof(move_text));
-  }
-  if (buffer->root_position != NULL) {
-    position_text = homeworlds_position_format_ascii(buffer->root_position);
-  }
-
-  g_warning("Homeworlds good-move generation produced duplicate move '%s' at leaf %" G_GSIZE_FORMAT
-            " after %" G_GSIZE_FORMAT " appended moves. Position before generation:\n%s",
-            move_text,
-            buffer->leaves_seen,
-            buffer->count,
-            position_text != NULL ? position_text : "<unavailable>");
-}
-
 static gboolean homeworlds_backend_move_buffer_note_seen_move(HomeworldsMoveBuffer *buffer,
-                                                              const HomeworldsMove *move) {
+                                                              const HomeworldsMove *move,
+                                                              gboolean *out_duplicate) {
   HomeworldsMove *key = NULL;
 
   g_return_val_if_fail(buffer != NULL, FALSE);
   g_return_val_if_fail(move != NULL, FALSE);
+  g_return_val_if_fail(out_duplicate != NULL, FALSE);
+
+  *out_duplicate = FALSE;
 
   if (buffer->seen_moves == NULL) {
     buffer->seen_moves = g_hash_table_new_full(homeworlds_backend_move_hash,
@@ -441,7 +420,7 @@ static gboolean homeworlds_backend_move_buffer_note_seen_move(HomeworldsMoveBuff
   }
 
   if (g_hash_table_contains(buffer->seen_moves, move)) {
-    homeworlds_backend_move_buffer_log_duplicate(buffer, move);
+    *out_duplicate = TRUE;
     return TRUE;
   }
 
@@ -452,12 +431,17 @@ static gboolean homeworlds_backend_move_buffer_note_seen_move(HomeworldsMoveBuff
 }
 
 static gboolean homeworlds_backend_move_buffer_append(HomeworldsMoveBuffer *buffer, const HomeworldsMove *move) {
+  gboolean duplicate = FALSE;
+
   g_return_val_if_fail(buffer != NULL, FALSE);
   g_return_val_if_fail(move != NULL, FALSE);
 
   buffer->leaves_seen++;
-  if (!homeworlds_backend_move_buffer_note_seen_move(buffer, move)) {
+  if (!homeworlds_backend_move_buffer_note_seen_move(buffer, move, &duplicate)) {
     return FALSE;
+  }
+  if (duplicate) {
+    return TRUE;
   }
 
   if (buffer->count == buffer->capacity) {
@@ -1190,9 +1174,7 @@ static GameBackendMoveList homeworlds_backend_list_good_moves(gconstpointer posi
   const HomeworldsPosition *homeworlds_position = position;
   GameBackendMoveBuilder builder = {0};
   HomeworldsGoodMoveContext context = {0};
-  HomeworldsMoveBuffer buffer = {
-    .root_position = homeworlds_position,
-  };
+  HomeworldsMoveBuffer buffer = {0};
 
   g_return_val_if_fail(homeworlds_position != NULL, (GameBackendMoveList){0});
 
