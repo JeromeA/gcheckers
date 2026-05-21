@@ -27,6 +27,24 @@ static gboolean homeworlds_candidate_buffer_append(HomeworldsCandidateBuffer *bu
   return TRUE;
 }
 
+static GameBackendMoveList homeworlds_candidate_buffer_abort(HomeworldsCandidateBuffer *buffer) {
+  g_return_val_if_fail(buffer != NULL, (GameBackendMoveList){0});
+
+  g_free(buffer->items);
+  *buffer = (HomeworldsCandidateBuffer){0};
+  return (GameBackendMoveList){0};
+}
+
+static gboolean homeworlds_candidate_buffer_append_action(HomeworldsCandidateBuffer *buffer,
+                                                          HomeworldsStepKind action) {
+  HomeworldsMoveCandidate candidate = {
+    .data.kind = HOMEWORLDS_CANDIDATE_ACTION,
+    .data.target_color = action,
+  };
+
+  return homeworlds_candidate_buffer_append(buffer, &candidate);
+}
+
 static GameBackendMoveList homeworlds_candidate_buffer_finish(HomeworldsCandidateBuffer *buffer) {
   g_return_val_if_fail(buffer != NULL, (GameBackendMoveList){0});
 
@@ -538,13 +556,8 @@ static GameBackendMoveList homeworlds_builder_list_selectable_ships(const Homewo
     }
   }
 
-  HomeworldsMoveCandidate pass_candidate = {
-    .data.kind = HOMEWORLDS_CANDIDATE_ACTION,
-    .data.target_color = HOMEWORLDS_STEP_PASS,
-  };
-  if (!homeworlds_candidate_buffer_append(&buffer, &pass_candidate)) {
-    g_free(buffer.items);
-    return (GameBackendMoveList){0};
+  if (!homeworlds_candidate_buffer_append_action(&buffer, HOMEWORLDS_STEP_PASS)) {
+    return homeworlds_candidate_buffer_abort(&buffer);
   }
 
   return homeworlds_candidate_buffer_finish(&buffer);
@@ -570,52 +583,39 @@ static GameBackendMoveList homeworlds_builder_list_actions(const HomeworldsMoveB
     HomeworldsColor forced_color = (HomeworldsColor) state->forced_action_color;
     HomeworldsStepKind forced_action = homeworlds_builder_action_for_color(forced_color);
 
-    if (forced_action != HOMEWORLDS_STEP_NONE) {
-      HomeworldsMoveCandidate candidate = {
-        .data.kind = HOMEWORLDS_CANDIDATE_ACTION,
-        .data.target_color = forced_action,
-      };
-      homeworlds_candidate_buffer_append(&buffer, &candidate);
+    if (forced_action != HOMEWORLDS_STEP_NONE &&
+        !homeworlds_candidate_buffer_append_action(&buffer, forced_action)) {
+      return homeworlds_candidate_buffer_abort(&buffer);
     }
 
     return homeworlds_candidate_buffer_finish(&buffer);
   }
 
   if (homeworlds_system_has_access_to_color(system, side, HOMEWORLDS_COLOR_RED)) {
-    HomeworldsMoveCandidate attack = {
-      .data.kind = HOMEWORLDS_CANDIDATE_ACTION,
-      .data.target_color = HOMEWORLDS_STEP_ATTACK,
-    };
-    homeworlds_candidate_buffer_append(&buffer, &attack);
+    if (!homeworlds_candidate_buffer_append_action(&buffer, HOMEWORLDS_STEP_ATTACK)) {
+      return homeworlds_candidate_buffer_abort(&buffer);
+    }
   }
   if (homeworlds_system_has_access_to_color(system, side, HOMEWORLDS_COLOR_YELLOW)) {
-    HomeworldsMoveCandidate move = {
-      .data.kind = HOMEWORLDS_CANDIDATE_ACTION,
-      .data.target_color = HOMEWORLDS_STEP_MOVE,
-    };
-    homeworlds_candidate_buffer_append(&buffer, &move);
+    if (!homeworlds_candidate_buffer_append_action(&buffer, HOMEWORLDS_STEP_MOVE)) {
+      return homeworlds_candidate_buffer_abort(&buffer);
+    }
   }
   if (homeworlds_system_has_access_to_color(system, side, HOMEWORLDS_COLOR_GREEN) &&
       homeworlds_builder_ship_is_canonical_build_source(state, state->selected_system_index, selected_ship_slot)) {
-    HomeworldsMoveCandidate build = {
-      .data.kind = HOMEWORLDS_CANDIDATE_ACTION,
-      .data.target_color = HOMEWORLDS_STEP_BUILD,
-    };
-    homeworlds_candidate_buffer_append(&buffer, &build);
+    if (!homeworlds_candidate_buffer_append_action(&buffer, HOMEWORLDS_STEP_BUILD)) {
+      return homeworlds_candidate_buffer_abort(&buffer);
+    }
   }
   if (homeworlds_system_has_access_to_color(system, side, HOMEWORLDS_COLOR_BLUE)) {
-    HomeworldsMoveCandidate trade = {
-      .data.kind = HOMEWORLDS_CANDIDATE_ACTION,
-      .data.target_color = HOMEWORLDS_STEP_TRADE,
-    };
-    homeworlds_candidate_buffer_append(&buffer, &trade);
+    if (!homeworlds_candidate_buffer_append_action(&buffer, HOMEWORLDS_STEP_TRADE)) {
+      return homeworlds_candidate_buffer_abort(&buffer);
+    }
   }
 
-  HomeworldsMoveCandidate sacrifice = {
-    .data.kind = HOMEWORLDS_CANDIDATE_ACTION,
-    .data.target_color = HOMEWORLDS_STEP_SACRIFICE,
-  };
-  homeworlds_candidate_buffer_append(&buffer, &sacrifice);
+  if (!homeworlds_candidate_buffer_append_action(&buffer, HOMEWORLDS_STEP_SACRIFICE)) {
+    return homeworlds_candidate_buffer_abort(&buffer);
+  }
   return homeworlds_candidate_buffer_finish(&buffer);
 }
 
