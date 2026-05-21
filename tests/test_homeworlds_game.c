@@ -515,6 +515,21 @@ static void test_position_ascii_formats_empty_position(void) {
   g_free(text);
 }
 
+static void test_move_parse_failure_leaves_output_unchanged(void) {
+  HomeworldsMove move = {
+    .kind = HOMEWORLDS_MOVE_KIND_SETUP,
+    .setup_stars = {
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL),
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_MEDIUM),
+    },
+    .setup_ship = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE),
+  };
+  HomeworldsMove before = move;
+
+  assert(!homeworlds_move_parse("H1g+ @", &move));
+  assert(memcmp(&move, &before, sizeof(move)) == 0);
+}
+
 static void test_move_parse_accepts_legacy_step_spacing(void) {
   HomeworldsMove move = {0};
   char notation[128] = {0};
@@ -542,6 +557,7 @@ int main(void) {
   test_static_evaluation_counts_largest_homeworld_ship_twice();
   test_position_ascii_formats_systems_by_reachability();
   test_position_ascii_formats_empty_position();
+  test_move_parse_failure_leaves_output_unchanged();
   test_move_parse_accepts_legacy_step_spacing();
   return 0;
 }

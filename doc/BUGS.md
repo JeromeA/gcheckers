@@ -813,3 +813,10 @@ function returned `FALSE` after earlier steps had already changed the bank, ship
 
 The fix applies setup and turn moves to a working copy first. The original position is replaced only after the entire
 move has validated and applied successfully, so rejected moves leave their input position unchanged.
+
+## Failed Homeworlds move parses cleared or partially rewrote the caller output
+
+`homeworlds_move_parse()` wrote directly into the caller's `HomeworldsMove` while trying setup and turn notation. A
+failed parse could therefore clear a previous value or leave a partial turn move behind.
+
+The fix parses into a local scratch move and copies it to the caller only after the whole notation string succeeds.
