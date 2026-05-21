@@ -3,6 +3,7 @@
 #include "active_game_backend.h"
 #include "sgf_move_props.h"
 
+#include <errno.h>
 #include <string.h>
 
 /*
@@ -175,9 +176,14 @@ static gboolean sgf_io_parse_uint(const char *text, guint *out_value) {
   g_return_val_if_fail(text != NULL, FALSE);
   g_return_val_if_fail(out_value != NULL, FALSE);
 
+  if (!g_ascii_isdigit(text[0])) {
+    return FALSE;
+  }
+
   char *end_ptr = NULL;
+  errno = 0;
   guint64 value = g_ascii_strtoull(text, &end_ptr, 10);
-  if (end_ptr == text || (end_ptr != NULL && *end_ptr != '\0') || value > G_MAXUINT) {
+  if (errno == ERANGE || end_ptr == text || (end_ptr != NULL && *end_ptr != '\0') || value > G_MAXUINT) {
     return FALSE;
   }
 
@@ -189,9 +195,14 @@ static gboolean sgf_io_parse_uint64(const char *text, guint64 *out_value) {
   g_return_val_if_fail(text != NULL, FALSE);
   g_return_val_if_fail(out_value != NULL, FALSE);
 
+  if (!g_ascii_isdigit(text[0])) {
+    return FALSE;
+  }
+
   char *end_ptr = NULL;
+  errno = 0;
   guint64 value = g_ascii_strtoull(text, &end_ptr, 10);
-  if (end_ptr == text || (end_ptr != NULL && *end_ptr != '\0')) {
+  if (errno == ERANGE || end_ptr == text || (end_ptr != NULL && *end_ptr != '\0')) {
     return FALSE;
   }
 
@@ -204,8 +215,10 @@ static gboolean sgf_io_parse_int(const char *text, gint *out_value) {
   g_return_val_if_fail(out_value != NULL, FALSE);
 
   char *end_ptr = NULL;
+  errno = 0;
   gint64 value = g_ascii_strtoll(text, &end_ptr, 10);
-  if (end_ptr == text || (end_ptr != NULL && *end_ptr != '\0') || value < G_MININT || value > G_MAXINT) {
+  if (errno == ERANGE || end_ptr == text || (end_ptr != NULL && *end_ptr != '\0') ||
+      value < G_MININT || value > G_MAXINT) {
     return FALSE;
   }
 

@@ -504,6 +504,17 @@ static void test_sgf_io_load_legacy_analysis_move_properties(void) {
   g_assert_true(entry->nodes == 0);
 }
 
+static void test_sgf_io_rejects_negative_analysis_stats(void) {
+  const char *content =
+      "(;FF[4]CA[UTF-8]AP[gcheckers]GM[40]GCAS[nodes=-1;tt_probes=0;tt_hits=0;tt_cutoffs=0])";
+
+  g_autoptr(SgfTree) loaded = NULL;
+  g_autoptr(GError) error = NULL;
+  gboolean ok = sgf_io_load_data(content, &loaded, &error);
+  g_assert_false(ok);
+  g_assert_error(error, g_quark_from_static_string("sgf-io-error"), 2);
+}
+
 static const SgfNode *test_sgf_io_append_boop_move(SgfTree *tree, SgfColor color, const BoopMove *move) {
   g_return_val_if_fail(SGF_IS_TREE(tree), NULL);
   g_return_val_if_fail(move != NULL, NULL);
@@ -638,6 +649,7 @@ int main(int argc, char **argv) {
       g_test_add_func("/sgf-io/ruleset-missing", test_sgf_io_rejects_missing_ruleset_property);
       g_test_add_func("/sgf-io/analysis-roundtrip", test_sgf_io_roundtrip_node_analysis_properties);
       g_test_add_func("/sgf-io/load-legacy-analysis-move", test_sgf_io_load_legacy_analysis_move_properties);
+      g_test_add_func("/sgf-io/reject-negative-analysis-stats", test_sgf_io_rejects_negative_analysis_stats);
       g_test_add_func("/sgf-io/load-setup-and-pl", test_sgf_io_load_setup_and_player_to_play_properties);
       break;
     case GGAME_APP_KIND_BOOP:

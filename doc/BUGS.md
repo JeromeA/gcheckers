@@ -954,3 +954,11 @@ than a fixed-size backend move buffer. `sgf_io_sync_analysis_properties()` forma
 buffer, so longer move labels were silently truncated in saved SGF data.
 
 The fix formats each `GCAN` value dynamically, preserving the full analysis move text through save/load roundtrips.
+
+## SGF analysis counters accepted negative text
+
+SGF analysis counters such as `GCAS[nodes=...]` are unsigned values. The parser delegated to `g_ascii_strtoull()`
+without first rejecting signed text, so values like `nodes=-1` could be accepted as unsigned data depending on the C
+library conversion behavior.
+
+The fix requires unsigned SGF numeric fields to start with a digit and rejects range errors from the conversion.
