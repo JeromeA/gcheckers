@@ -726,3 +726,15 @@ star, the setup prompt could widen the panel before later setup stages shrank it
 The fix makes the text panel explicitly non-expanding, allows horizontal scrolling only as a containment fallback, and
 constrains side-panel labels and buttons to wrap inside the fixed panel width. The fixed-width test now realizes the
 view and checks the allocated panel width across the first setup choices.
+
+## Homeworlds board kept fallback width at startup
+
+The Homeworlds board content width should match the board viewport when the position fits. At startup, the board was
+initialized before the scroller had a real allocation, so the drawing area could keep the fallback width and show excess
+empty space until a later window resize forced a viewport-based recalculation.
+
+The fix makes the board start with an intentionally tiny content width and avoids replacing it with the fallback width
+before GTK has allocated the scroller. Once the scroller maps, the board schedules a frame tick that keeps
+recalculating until the allocated scroller width, overlay width, and drawing-area content width agree, so startup
+allocation is applied before user scrollbar interaction. A realized-window test now checks that the initial board
+content width matches the startup viewport and that the overlaid bank starts inside that viewport.

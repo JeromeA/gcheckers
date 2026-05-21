@@ -558,8 +558,9 @@ candidate policy.
 Role: let `ghomeworlds` use the shared `GGameWindow` while replacing only the square board presentation.
 `homeworlds_view.c` renders a starfield board with dynamic system boxes sized around their contents, reachability-row
 placement between the two homeworlds, measured-width row packing that reserves the bank footprint and expands inside a
-horizontal scroller only when needed, viewport-tracking drawing-area width, a fixed minimum board viewport, homeworld
-labels, pipped square stars, tall pipped ship pyramids, overlaid
+horizontal scroller only when needed, viewport-tracking drawing-area width that rechecks the allocated board scroller
+width on mapped-frame ticks until startup allocation converges, a fixed minimum board viewport, homeworld labels,
+pipped square stars, tall pipped ship pyramids, overlaid
 clickable compact bank piles with an in-panel title, staged legal-choice buttons, and catastrophe buttons that stage
 normal symbolic steps into the
 current move so SGF, model state, and the last-move label stay synchronized. Homeworld rendering keeps player 1 at the

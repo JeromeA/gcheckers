@@ -669,10 +669,15 @@ static void test_homeworlds_view_text_panel_has_fixed_width(void) {
   GGameWindow *window = NULL;
   HomeworldsView *window_view = NULL;
   GtkWidget *window_text_panel = NULL;
+  GtkWidget *window_board = NULL;
+  GtkWidget *window_board_scroller = NULL;
+  GtkWidget *window_bank = NULL;
+  graphene_rect_t bank_bounds = {0};
   GtkPolicyType horizontal_policy = GTK_POLICY_AUTOMATIC;
   GtkPolicyType vertical_policy = GTK_POLICY_NEVER;
   gint width_request = -1;
   gint allocated_width = 0;
+  gint board_viewport_width = 0;
 
   g_assert_nonnull(text_panel);
   g_assert_true(GTK_IS_SCROLLED_WINDOW(text_panel));
@@ -691,13 +696,27 @@ static void test_homeworlds_view_text_panel_has_fixed_width(void) {
   window = test_homeworlds_create_window(&app, &window_model);
   window_view = test_homeworlds_get_window_view(window);
   window_text_panel = test_homeworlds_find_widget_named(GTK_WIDGET(window), "homeworlds-text-panel");
+  window_board = test_homeworlds_find_widget_named(GTK_WIDGET(window), "homeworlds-board");
+  window_board_scroller = test_homeworlds_find_widget_named(GTK_WIDGET(window), "homeworlds-board-scroller");
+  window_bank = test_homeworlds_find_widget_named(GTK_WIDGET(window), "homeworlds-board-bank");
   g_assert_nonnull(window_view);
   g_assert_nonnull(window_text_panel);
+  g_assert_nonnull(window_board);
+  g_assert_true(GTK_IS_DRAWING_AREA(window_board));
+  g_assert_nonnull(window_board_scroller);
+  g_assert_true(GTK_IS_SCROLLED_WINDOW(window_board_scroller));
+  g_assert_nonnull(window_bank);
   homeworlds_view_set_move_report_enabled(window_view, FALSE);
   gtk_window_set_default_size(GTK_WINDOW(window), 1200, 700);
   gtk_window_present(GTK_WINDOW(window));
   test_homeworlds_drain_main_context(64);
 
+  board_viewport_width = gtk_widget_get_width(window_board_scroller);
+  g_assert_cmpint(board_viewport_width, >, 0);
+  g_assert_cmpint(gtk_drawing_area_get_content_width(GTK_DRAWING_AREA(window_board)), ==, board_viewport_width);
+  g_assert_true(gtk_widget_compute_bounds(window_bank, window_board_scroller, &bank_bounds));
+  g_assert_cmpfloat(bank_bounds.origin.x, >=, 0.0);
+  g_assert_cmpfloat(bank_bounds.origin.x + bank_bounds.size.width, <=, (double)board_viewport_width + 1.0);
   allocated_width = gtk_widget_get_width(window_text_panel);
   g_assert_cmpint(allocated_width, >, 0);
   for (guint step = 0; step < 3; step++) {

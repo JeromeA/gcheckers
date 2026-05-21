@@ -47,6 +47,7 @@ typedef struct {
 #define HOMEWORLDS_VIEW_MIN_BOARD_VIEWPORT_WIDTH 420
 #define HOMEWORLDS_VIEW_TEXT_PANEL_WIDTH 280
 #define HOMEWORLDS_VIEW_TEXT_PANEL_LABEL_WIDTH_CHARS 28
+#define HOMEWORLDS_VIEW_INITIAL_BOARD_WIDTH 1
 #define HOMEWORLDS_VIEW_SYSTEM_PIECE_MAX (HOMEWORLDS_STAR_SLOT_COUNT + (2 * HOMEWORLDS_SHIP_SLOT_COUNT))
 typedef enum {
   HOMEWORLDS_VIEW_SYSTEM_ROW_TOP = 0,
@@ -113,6 +114,7 @@ struct _HomeworldsView {
   gulong model_state_changed_handler_id;
   GtkAdjustment *board_hadjustment;
   gulong board_hadjustment_changed_handler_id;
+  guint board_layout_settle_tick_id;
 };
 
 static void homeworlds_view_update_from_current_builder(HomeworldsView *view);
@@ -120,6 +122,7 @@ static void homeworlds_view_update_board_content_width(HomeworldsView *view);
 static void homeworlds_view_update_board_bank(HomeworldsView *view);
 static void homeworlds_view_update_board_choice_buttons(HomeworldsView *view);
 static void homeworlds_view_update_move_report(HomeworldsView *view);
+static void homeworlds_view_schedule_board_layout_settle(HomeworldsView *view);
 static void homeworlds_view_candidate_clicked(GtkButton *button, gpointer user_data);
 static gboolean homeworlds_view_calculate_system_layout(const HomeworldsSystem *system,
                                                         guint system_index,
@@ -1350,22 +1353,28 @@ static void homeworlds_view_board_size(HomeworldsView *view, int *out_width, int
 static int homeworlds_view_board_viewport_width(HomeworldsView *view) {
   int width = 0;
 
-  g_return_val_if_fail(view != NULL, HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH);
+  g_return_val_if_fail(view != NULL, HOMEWORLDS_VIEW_INITIAL_BOARD_WIDTH);
 
+  if (view->board_scroller != NULL) {
+    width = gtk_widget_get_width(view->board_scroller);
+    if (width > 1) {
+      return width;
+    }
+  }
+  if (view->board_overlay != NULL) {
+    width = gtk_widget_get_width(view->board_overlay);
+    if (width > 1) {
+      return width;
+    }
+  }
   if (view->board_hadjustment != NULL) {
     double page_size = gtk_adjustment_get_page_size(view->board_hadjustment);
     if (page_size > 1.0) {
       return (int)ceil(page_size);
     }
   }
-  if (view->board_scroller != NULL) {
-    width = gtk_widget_get_width(view->board_scroller);
-  }
-  if (width <= 1 && view->board_overlay != NULL) {
-    width = gtk_widget_get_width(view->board_overlay);
-  }
 
-  return width > 1 ? width : HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH;
+  return HOMEWORLDS_VIEW_INITIAL_BOARD_WIDTH;
 }
 
 static void homeworlds_view_update_board_content_width(HomeworldsView *view) {
@@ -1383,9 +1392,81 @@ static void homeworlds_view_update_board_content_width(HomeworldsView *view) {
 
   viewport_width = homeworlds_view_board_viewport_width(view);
   content_width = (int)homeworlds_view_calculate_board_content_width(position, (double)viewport_width);
+  if (viewport_width <= HOMEWORLDS_VIEW_INITIAL_BOARD_WIDTH &&
+      content_width <= HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH) {
+    return;
+  }
   if (content_width != gtk_drawing_area_get_content_width(GTK_DRAWING_AREA(view->drawing_area))) {
     gtk_drawing_area_set_content_width(GTK_DRAWING_AREA(view->drawing_area), content_width);
   }
+}
+
+static gboolean homeworlds_view_board_layout_matches_viewport(HomeworldsView *view) {
+  const HomeworldsPosition *position = NULL;
+  int viewport_width = 0;
+  int expected_content_width = 0;
+  int content_width = 0;
+  int allocated_content_width = 0;
+  int allocated_overlay_width = 0;
+
+  g_return_val_if_fail(view != NULL, FALSE);
+
+  if (!GTK_IS_SCROLLED_WINDOW(view->board_scroller) ||
+      !GTK_IS_WIDGET(view->board_overlay) ||
+      !GTK_IS_DRAWING_AREA(view->drawing_area)) {
+    return FALSE;
+  }
+
+  viewport_width = gtk_widget_get_width(view->board_scroller);
+  if (viewport_width <= 1) {
+    return FALSE;
+  }
+
+  position = homeworlds_view_position(view);
+  if (position == NULL) {
+    return FALSE;
+  }
+
+  expected_content_width = (int)homeworlds_view_calculate_board_content_width(position, (double)viewport_width);
+  content_width = gtk_drawing_area_get_content_width(GTK_DRAWING_AREA(view->drawing_area));
+  allocated_content_width = gtk_widget_get_width(view->drawing_area);
+  allocated_overlay_width = gtk_widget_get_width(view->board_overlay);
+  return ABS(content_width - expected_content_width) <= 1 &&
+         ABS(allocated_content_width - expected_content_width) <= 1 &&
+         ABS(allocated_overlay_width - expected_content_width) <= 1;
+}
+
+static gboolean homeworlds_view_board_layout_settle_tick(GtkWidget * /*widget*/,
+                                                         GdkFrameClock * /*frame_clock*/,
+                                                         gpointer user_data) {
+  HomeworldsView *view = user_data;
+
+  g_return_val_if_fail(view != NULL, G_SOURCE_REMOVE);
+
+  homeworlds_view_update_board_content_width(view);
+  gtk_widget_queue_resize(view->board_overlay);
+  gtk_widget_queue_resize(view->drawing_area);
+  homeworlds_view_update_board_choice_buttons(view);
+  gtk_widget_queue_draw(view->drawing_area);
+
+  if (!homeworlds_view_board_layout_matches_viewport(view)) {
+    return G_SOURCE_CONTINUE;
+  }
+
+  view->board_layout_settle_tick_id = 0;
+  return G_SOURCE_REMOVE;
+}
+
+static void homeworlds_view_schedule_board_layout_settle(HomeworldsView *view) {
+  g_return_if_fail(view != NULL);
+  g_return_if_fail(GTK_IS_WIDGET(view->board_scroller));
+
+  if (view->board_layout_settle_tick_id != 0) {
+    return;
+  }
+
+  view->board_layout_settle_tick_id =
+      gtk_widget_add_tick_callback(view->board_scroller, homeworlds_view_board_layout_settle_tick, view, NULL);
 }
 
 static const HomeworldsMoveCandidate *homeworlds_view_find_ship_candidate(const GameBackendMoveList *candidates,
@@ -1655,6 +1736,7 @@ static void homeworlds_view_board_resized(GtkDrawingArea * /*drawing_area*/,
 
   homeworlds_view_update_board_content_width(view);
   homeworlds_view_update_board_choice_buttons(view);
+  homeworlds_view_schedule_board_layout_settle(view);
 }
 
 static void homeworlds_view_board_viewport_changed(GtkAdjustment * /*adjustment*/, gpointer user_data) {
@@ -1664,7 +1746,17 @@ static void homeworlds_view_board_viewport_changed(GtkAdjustment * /*adjustment*
 
   homeworlds_view_update_board_content_width(view);
   homeworlds_view_update_board_choice_buttons(view);
+  homeworlds_view_schedule_board_layout_settle(view);
   gtk_widget_queue_draw(view->drawing_area);
+}
+
+static void homeworlds_view_board_scroller_mapped(GtkWidget *widget, gpointer user_data) {
+  HomeworldsView *view = user_data;
+
+  g_return_if_fail(GTK_IS_WIDGET(widget));
+  g_return_if_fail(view != NULL);
+
+  homeworlds_view_schedule_board_layout_settle(view);
 }
 
 static void homeworlds_view_draw_starfield(cairo_t *cr, int width, int height) {
@@ -2326,6 +2418,7 @@ static HomeworldsView *homeworlds_view_new_with_move_report(GGameModel *model, g
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(view->board_scroller),
                                  GTK_POLICY_AUTOMATIC,
                                  GTK_POLICY_AUTOMATIC);
+  g_signal_connect_after(view->board_scroller, "map", G_CALLBACK(homeworlds_view_board_scroller_mapped), view);
   gtk_box_append(GTK_BOX(view->root), view->board_scroller);
 
   view->board_overlay = gtk_overlay_new();
@@ -2337,7 +2430,7 @@ static HomeworldsView *homeworlds_view_new_with_move_report(GGameModel *model, g
   gtk_widget_set_name(view->drawing_area, "homeworlds-board");
   gtk_widget_set_hexpand(view->drawing_area, TRUE);
   gtk_widget_set_vexpand(view->drawing_area, TRUE);
-  gtk_drawing_area_set_content_width(GTK_DRAWING_AREA(view->drawing_area), 880);
+  gtk_drawing_area_set_content_width(GTK_DRAWING_AREA(view->drawing_area), HOMEWORLDS_VIEW_INITIAL_BOARD_WIDTH);
   gtk_drawing_area_set_content_height(GTK_DRAWING_AREA(view->drawing_area), 620);
   gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(view->drawing_area), homeworlds_view_draw, view, NULL);
   g_signal_connect(view->drawing_area, "resize", G_CALLBACK(homeworlds_view_board_resized), view);
@@ -2474,6 +2567,10 @@ void homeworlds_view_free(HomeworldsView *view) {
     return;
   }
 
+  if (view->board_layout_settle_tick_id != 0 && GTK_IS_WIDGET(view->board_scroller)) {
+    gtk_widget_remove_tick_callback(view->board_scroller, view->board_layout_settle_tick_id);
+    view->board_layout_settle_tick_id = 0;
+  }
   if (view->model != NULL && view->model_state_changed_handler_id != 0) {
     g_signal_handler_disconnect(view->model, view->model_state_changed_handler_id);
     view->model_state_changed_handler_id = 0;
