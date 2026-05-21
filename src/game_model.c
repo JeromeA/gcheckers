@@ -178,6 +178,8 @@ void ggame_model_reset(GGameModel *self, const GameBackendVariant *variant_or_nu
 }
 
 gboolean ggame_model_set_position(GGameModel *self, gconstpointer position) {
+  g_return_val_if_fail(GGAME_IS_MODEL(self), FALSE);
+
   return ggame_model_set_position_variant(self, position, self->variant);
 }
 

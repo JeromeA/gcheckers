@@ -784,3 +784,12 @@ switch to a wider spacing mode.
 The fix gives every bank pile the same `homeworlds-bank-pile` base style with zero padding and a stable transparent
 border, then adds `homeworlds-bank-choice` only for the selectable outline. A realized-window regression now checks that
 the bank frame does not grow after the six setup selections.
+
+## Generic model position replacement dereferenced null receivers
+
+`ggame_model_set_position()` delegated to `ggame_model_set_position_variant()` but read `self->variant` before the
+delegate could validate `self`. Invalid callers therefore crashed instead of getting the same `FALSE` result and GLib
+precondition diagnostic as the variant-aware API.
+
+The fix adds the missing receiver precondition before reading the current variant, and the model test covers the null
+receiver path.

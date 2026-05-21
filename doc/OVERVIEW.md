@@ -702,7 +702,8 @@ variant when one exists, exposes generic move listing, application, whole-positi
 replacement plus variant changes, and now backs the shared square-grid UI directly. `GCheckersModel` still mirrors it
 for checkers-only compatibility paths such as puzzles, analysis, and setup-root SGF helpers. Construction accepts
 either a full move-list backend or a move-builder backend; boop and checkers support both, while builder-only games
-can still apply moves through direct backend validation.
+can still apply moves through direct backend validation. Whole-position replacement validates the model receiver before
+reading the current variant used by the replacement helper.
 Collaborates with: `src/game_backend.h`, `src/games/checkers/checkers_backend.c`,
 `src/games/checkers/checkers_model.c`, `src/window.c`, and `tests/test_game_model.c`.
 
