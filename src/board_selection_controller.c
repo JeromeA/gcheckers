@@ -158,6 +158,20 @@ static gboolean board_selection_controller_candidate_get_path(const GameBackend 
   return backend->square_grid_move_get_path(candidate, out_length, out_indices, max_indices);
 }
 
+static gboolean board_selection_controller_path_length_fits(const char *source, guint length, gsize max_length) {
+  g_return_val_if_fail(source != NULL, FALSE);
+
+  if ((gsize)length <= max_length) {
+    return TRUE;
+  }
+
+  g_debug("%s returned board selection path length %u larger than capacity %" G_GSIZE_FORMAT,
+          source,
+          length,
+          max_length);
+  return FALSE;
+}
+
 static gboolean board_selection_controller_candidate_matches_click(BoardSelectionController *self,
                                                                    const GameBackend *backend,
                                                                    gconstpointer candidate,
@@ -170,6 +184,10 @@ static gboolean board_selection_controller_candidate_matches_click(BoardSelectio
   g_return_val_if_fail(candidate != NULL, FALSE);
 
   if (!board_selection_controller_candidate_get_path(backend, candidate, &length, path, G_N_ELEMENTS(path))) {
+    return FALSE;
+  }
+  if (!board_selection_controller_path_length_fits("Candidate", length, G_N_ELEMENTS(path)) ||
+      self->selected_length >= G_N_ELEMENTS(self->selected_path)) {
     return FALSE;
   }
   if (length != self->selected_length + 1 || path[self->selected_length] != index) {
@@ -217,6 +235,7 @@ static gboolean board_selection_controller_sync_path_from_candidate(BoardSelecti
                                                                     const GameBackend *backend,
                                                                     gconstpointer candidate) {
   guint length = 0;
+  guint path[G_N_ELEMENTS(self->selected_path)] = {0};
 
   g_return_val_if_fail(BOARD_IS_SELECTION_CONTROLLER(self), FALSE);
   g_return_val_if_fail(backend != NULL, FALSE);
@@ -225,11 +244,15 @@ static gboolean board_selection_controller_sync_path_from_candidate(BoardSelecti
   if (!board_selection_controller_candidate_get_path(backend,
                                                      candidate,
                                                      &length,
-                                                     self->selected_path,
-                                                     G_N_ELEMENTS(self->selected_path))) {
+                                                     path,
+                                                     G_N_ELEMENTS(path))) {
+    return FALSE;
+  }
+  if (!board_selection_controller_path_length_fits("Candidate", length, G_N_ELEMENTS(path))) {
     return FALSE;
   }
 
+  memcpy(self->selected_path, path, length * sizeof(path[0]));
   self->selected_length = length;
   return TRUE;
 }
@@ -247,6 +270,9 @@ static gboolean board_selection_controller_sync_path_from_builder(BoardSelection
   }
 
   if (!backend->move_builder_get_selection_path(&self->builder, &length, path, G_N_ELEMENTS(path))) {
+    return FALSE;
+  }
+  if (!board_selection_controller_path_length_fits("Move builder", length, G_N_ELEMENTS(path))) {
     return FALSE;
   }
 
@@ -507,7 +533,9 @@ gboolean board_selection_controller_collect_highlights(BoardSelectionController 
 
     if (candidate == NULL ||
         !board_selection_controller_candidate_get_path(backend, candidate, &length, path, G_N_ELEMENTS(path)) ||
-        length == 0 || length != self->selected_length + 1) {
+        !board_selection_controller_path_length_fits("Candidate", length, G_N_ELEMENTS(path)) ||
+        length == 0 || self->selected_length >= G_N_ELEMENTS(self->selected_path) ||
+        length != self->selected_length + 1) {
       continue;
     }
 
@@ -575,7 +603,11 @@ gboolean board_selection_controller_handle_click(BoardSelectionController *self,
   if (result == BOARD_SELECTION_CLICK_HANDLED) {
     return TRUE;
   }
-  if (result == BOARD_SELECTION_CLICK_FAILED || self->selected_length == 0) {
+  if (result == BOARD_SELECTION_CLICK_FAILED) {
+    board_selection_controller_clear(self);
+    return FALSE;
+  }
+  if (self->selected_length == 0) {
     return FALSE;
   }
 

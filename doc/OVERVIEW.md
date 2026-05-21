@@ -802,7 +802,8 @@ completion-confirmation callback can defer applying a completed builder move unt
 by boop promotion selections.
 Backends with multi-stage selection can override the visible selected path and reset only the current selection stage;
 boop uses that to keep promotion selection independent from the placement square and to let ordinary board clicks
-change or clear an unconfirmed promotion choice without applying it.
+change or clear an unconfirmed promotion choice without applying it. Backend-reported selection paths are bounded by
+the controller's fixed path capacity before being copied or indexed.
 Collaborates with: `BoardView` and `GGameModel` for applying moves.
 
 ### Piece palette (`src/piece_palette.c`, `src/piece_palette.h`)

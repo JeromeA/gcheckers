@@ -962,3 +962,12 @@ without first rejecting signed text, so values like `nodes=-1` could be accepted
 library conversion behavior.
 
 The fix requires unsigned SGF numeric fields to start with a digit and rejects range errors from the conversion.
+
+## Board selection trusted overlong backend paths
+
+The shared board selection controller stores visible click paths in a fixed-size array. It passed that capacity to
+backend path callbacks, but it still trusted the returned length when copying paths or reading the next selected index.
+
+A backend that returned a length larger than the provided capacity could make the controller read or write past its
+scratch path arrays. The fix validates every backend-reported selection path length before copying or indexing it and
+clears the current builder after an unexpected failed click.

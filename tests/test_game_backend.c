@@ -428,6 +428,219 @@ static gboolean test_backend_bool_arrays_equal(const gboolean *left, const gbool
   return TRUE;
 }
 
+typedef struct {
+  guint path[1];
+  guint length;
+} TestBackendLongPathMove;
+
+typedef struct {
+  gboolean stepped;
+} TestBackendLongPathBuilder;
+
+static const TestBackendLongPathMove test_backend_long_path_candidate = {
+  .path = {3},
+  .length = 1,
+};
+
+static void test_backend_long_path_position_init(gpointer position,
+                                                 const GameBackendVariant */*variant_or_null*/) {
+  assert(position != NULL);
+  *((guint *)position) = 0;
+}
+
+static void test_backend_long_path_position_clear(gpointer position) {
+  assert(position != NULL);
+}
+
+static GameBackendOutcome test_backend_long_path_position_outcome(gconstpointer position) {
+  assert(position != NULL);
+  return GAME_BACKEND_OUTCOME_ONGOING;
+}
+
+static guint test_backend_long_path_position_turn(gconstpointer position) {
+  assert(position != NULL);
+  return 0;
+}
+
+static void test_backend_long_path_move_list_free(GameBackendMoveList *moves) {
+  assert(moves != NULL);
+  moves->moves = NULL;
+  moves->count = 0;
+}
+
+static const void *test_backend_long_path_move_list_get(const GameBackendMoveList *moves, gsize index) {
+  assert(moves != NULL);
+  if (index >= moves->count) {
+    return NULL;
+  }
+
+  const TestBackendLongPathMove *move = moves->moves;
+  return &move[index];
+}
+
+static gboolean test_backend_long_path_moves_equal(gconstpointer left, gconstpointer right) {
+  return left == right;
+}
+
+static gboolean test_backend_long_path_builder_init(gconstpointer position, GameBackendMoveBuilder *out_builder) {
+  assert(position != NULL);
+  assert(out_builder != NULL);
+
+  TestBackendLongPathBuilder *builder = g_new0(TestBackendLongPathBuilder, 1);
+  out_builder->builder_state = builder;
+  out_builder->builder_state_size = sizeof(*builder);
+  return TRUE;
+}
+
+static void test_backend_long_path_builder_clear(GameBackendMoveBuilder *builder) {
+  assert(builder != NULL);
+  g_clear_pointer(&builder->builder_state, g_free);
+  builder->builder_state_size = 0;
+}
+
+static GameBackendMoveList test_backend_long_path_builder_list_candidates(const GameBackendMoveBuilder *builder) {
+  assert(builder != NULL);
+  assert(builder->builder_state != NULL);
+
+  TestBackendLongPathBuilder *state = builder->builder_state;
+  if (state->stepped) {
+    return (GameBackendMoveList){0};
+  }
+
+  return (GameBackendMoveList){
+    .moves = (gpointer)&test_backend_long_path_candidate,
+    .count = 1,
+  };
+}
+
+static gboolean test_backend_long_path_builder_step(GameBackendMoveBuilder *builder, gconstpointer candidate) {
+  assert(builder != NULL);
+  assert(builder->builder_state != NULL);
+  assert(candidate == &test_backend_long_path_candidate);
+
+  TestBackendLongPathBuilder *state = builder->builder_state;
+  state->stepped = TRUE;
+  return TRUE;
+}
+
+static gboolean test_backend_long_path_builder_is_complete(const GameBackendMoveBuilder *builder) {
+  assert(builder != NULL);
+  assert(builder->builder_state != NULL);
+  return FALSE;
+}
+
+static gboolean test_backend_long_path_builder_build_move(const GameBackendMoveBuilder *builder,
+                                                          gpointer out_move) {
+  assert(builder != NULL);
+  assert(out_move != NULL);
+  return FALSE;
+}
+
+static gboolean test_backend_long_path_get_selection_path(const GameBackendMoveBuilder *builder,
+                                                          guint *out_length,
+                                                          guint *out_indices,
+                                                          gsize max_indices) {
+  assert(builder != NULL);
+  assert(builder->builder_state != NULL);
+  assert(out_length != NULL);
+
+  *out_length = 129;
+  for (gsize i = 0; i < max_indices; ++i) {
+    out_indices[i] = (guint)i;
+  }
+  return TRUE;
+}
+
+static gboolean test_backend_long_path_apply_move(gpointer position, gconstpointer move) {
+  assert(position != NULL);
+  assert(move != NULL);
+  return FALSE;
+}
+
+static gboolean test_backend_long_path_format_move(gconstpointer move, char *buffer, gsize size) {
+  assert(move != NULL);
+  assert(buffer != NULL);
+  assert(size > 0);
+
+  g_strlcpy(buffer, "long-path", size);
+  return TRUE;
+}
+
+static gboolean test_backend_long_path_move_get_path(gconstpointer move,
+                                                     guint *out_length,
+                                                     guint *out_indices,
+                                                     gsize max_indices) {
+  assert(move != NULL);
+  assert(out_length != NULL);
+
+  const TestBackendLongPathMove *typed_move = move;
+  *out_length = typed_move->length;
+  if (out_indices != NULL && max_indices >= typed_move->length) {
+    for (guint i = 0; i < typed_move->length; ++i) {
+      out_indices[i] = typed_move->path[i];
+    }
+  }
+  return TRUE;
+}
+
+static const GameBackend test_backend_long_path_backend = {
+  .id = "test-long-path",
+  .display_name = "Test Long Path",
+  .position_size = sizeof(guint),
+  .move_size = sizeof(TestBackendLongPathMove),
+  .supports_move_builder = TRUE,
+  .position_init = test_backend_long_path_position_init,
+  .position_clear = test_backend_long_path_position_clear,
+  .position_outcome = test_backend_long_path_position_outcome,
+  .position_turn = test_backend_long_path_position_turn,
+  .move_list_free = test_backend_long_path_move_list_free,
+  .move_list_get = test_backend_long_path_move_list_get,
+  .moves_equal = test_backend_long_path_moves_equal,
+  .move_builder_init = test_backend_long_path_builder_init,
+  .move_builder_clear = test_backend_long_path_builder_clear,
+  .move_builder_list_candidates = test_backend_long_path_builder_list_candidates,
+  .move_builder_step = test_backend_long_path_builder_step,
+  .move_builder_is_complete = test_backend_long_path_builder_is_complete,
+  .move_builder_build_move = test_backend_long_path_builder_build_move,
+  .move_builder_get_selection_path = test_backend_long_path_get_selection_path,
+  .apply_move = test_backend_long_path_apply_move,
+  .format_move = test_backend_long_path_format_move,
+  .square_grid_move_get_path = test_backend_long_path_move_get_path,
+};
+
+static gboolean test_backend_long_path_move_handler(gconstpointer move, gpointer user_data) {
+  gboolean *called = user_data;
+
+  assert(move != NULL);
+  assert(called != NULL);
+
+  *called = TRUE;
+  return TRUE;
+}
+
+static void test_backend_selection_controller_rejects_overlong_backend_path(void) {
+  GGameModel *model = ggame_model_new(&test_backend_long_path_backend);
+  assert(model != NULL);
+  BoardSelectionController *controller = board_selection_controller_new();
+  assert(controller != NULL);
+
+  gboolean move_handler_called = FALSE;
+  board_selection_controller_set_model(controller, model);
+  board_selection_controller_set_move_handler(controller,
+                                              test_backend_long_path_move_handler,
+                                              &move_handler_called);
+
+  assert(!board_selection_controller_handle_click(controller, test_backend_long_path_candidate.path[0]));
+  assert(!move_handler_called);
+
+  guint selected_length = 0;
+  assert(board_selection_controller_peek_path(controller, &selected_length) != NULL);
+  assert(selected_length == 0);
+
+  g_clear_object(&controller);
+  g_clear_object(&model);
+}
+
 static void test_backend_selection_controller_restarts_from_non_continuation_click(void) {
   if (ggame_active_app_profile()->kind != GGAME_APP_KIND_CHECKERS) {
     return;
@@ -849,6 +1062,7 @@ int main(int argc, char **argv) {
   test_backend_position_and_move_flow();
   test_backend_move_path_length_only_query();
   test_backend_square_grid_row_zero_is_side_zero_bottom();
+  test_backend_selection_controller_rejects_overlong_backend_path();
   test_backend_selection_controller_restarts_from_non_continuation_click();
   test_backend_selection_controller_prefers_boop_rank();
   test_backend_selection_controller_confirms_boop_promotion();
