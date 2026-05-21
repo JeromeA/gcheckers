@@ -828,3 +828,11 @@ bank, but it left `out_pyramid` unchanged. Callers that reused a variable could 
 after the failed lookup.
 
 The fix clears `out_pyramid` to `0` before searching, so both success and failure return a deterministic value.
+
+## Failed Homeworlds empty-system lookup left stale output
+
+`homeworlds_position_find_empty_system()` returned `FALSE` when every non-homeworld system slot was occupied, but left
+`out_system_index` unchanged. That made failure ambiguous for callers that reused an index variable.
+
+The fix initializes `out_system_index` to `HOMEWORLDS_INVALID_INDEX` before searching, so a failed lookup has the same
+sentinel convention as the rest of the Homeworlds code.
