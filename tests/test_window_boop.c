@@ -6,6 +6,7 @@
 #include "game_model.h"
 #include "games/boop/boop_types.h"
 #include "player_controls_panel.h"
+#include "sgf_autosave.h"
 #include "sgf_controller.h"
 #include "sgf_tree.h"
 #include "test_profile_utils.h"
@@ -695,6 +696,11 @@ static void test_ggame_window_boop_puzzle_dialog_starts_puzzle(void) {
 int main(int argc, char **argv) {
   ggame_test_init_profile(&argc, &argv, "boop");
   g_test_init(&argc, &argv, NULL);
+  g_autoptr(GError) autosave_error = NULL;
+  g_autofree char *autosave_root = g_dir_make_tmp("gboop-window-autosave-XXXXXX", &autosave_error);
+  g_assert_no_error(autosave_error);
+  g_assert_nonnull(autosave_root);
+  g_setenv(SGF_AUTOSAVE_ENV, autosave_root, TRUE);
 
   if (!gtk_init_check()) {
     g_test_add_func("/ggame-window/boop/shared-shell-widgets", test_ggame_window_skip);

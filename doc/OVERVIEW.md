@@ -159,6 +159,9 @@ Role: SGF timeline authority and synchronization point between SGF current-node 
 Move application is SGF-first: validate the move against the bound model, append or reuse the matching SGF child
 under SGF current, set SGF current, then project that transition back into the model (`single move` if parent->child,
 otherwise reset+replay from root).
+After a move has been accepted and projected, the controller saves the current SGF tree through the SGF autosave
+helper. The autosave session timestamp is reset when the controller starts a new game or successfully loads an SGF
+file, so each play session gets its own filename prefix.
 Replay now delegates node-setup handling to optional backend SGF hooks before replaying any `B[...]`/`W[...]` move on
 that node. Checkers uses that hook for `AE`/`AB`/`AW` plus `ABK`/`AWK` king markers and `PL`, while boop uses it for
 custom root snapshot properties that restore on-board kittens/cats, per-side supplies, total ply count, and `PL`. Root
@@ -499,7 +502,10 @@ Collaborates with: `sgf_file_actions.c` and `tests/test_file_dialog_history.c`.
 Module: application data directory lookup helpers.
 Role: resolve installed or local read-only data subdirectories such as `puzzles` by checking an explicit environment
 override first, then `g_get_user_data_dir()`, then `g_get_system_data_dirs()`, then the local checkout fallback.
-Collaborates with: `window.c` for packaging-safe puzzle discovery and `tests/test_app_paths.c`.
+It also creates writable user-state subdirectories for features such as puzzle progress and SGF autosaves, with
+environment overrides available for tests and manual runs.
+Collaborates with: `window.c` for packaging-safe puzzle discovery, `sgf_autosave.c` for SGF autosave storage, and
+`tests/test_app_paths.c`.
 
 ## Homeworlds engine (`src/games/homeworlds/homeworlds_types.h`, `src/games/homeworlds/homeworlds_game.c`,
 `src/games/homeworlds/homeworlds_game.h`)
@@ -820,6 +826,14 @@ analysis persists through custom properties:
 `GCAN[move:score:nodes]` for scored moves, while still accepting older `GCAN[move:score]` data when loading. This
 layer is GTK-free so it can be reused by both GUI actions and future CLI commands.
 Collaborates with: `GGameSgfController` load/save entry points and `tests/test_sgf_io.c`.
+
+### SGF autosave (`src/sgf_autosave.c`, `src/sgf_autosave.h`)
+Module: SGF autosave path and write helper.
+Role: save SGF trees into a writable per-game autosave repository under
+`~/.local/share/gcheckers/autosave/<game-id>/` by default, or under `GCHECKERS_AUTOSAVE_DIR/<game-id>/` when that
+override is set. Filenames use `YYYYMMDDHHMMSS-YYYYMMDDHHMMSS-XX`: game-session start time, move time, then the first
+free two-digit suffix for that timestamp pair.
+Collaborates with: `GGameSgfController`, `app_paths.c`, `sgf_io.c`, and `tests/test_sgf_autosave.c`.
 
 ## Puzzle Catalog (`src/puzzle_catalog.c`, `src/puzzle_catalog.h`)
 Module: shared puzzle catalog loader.

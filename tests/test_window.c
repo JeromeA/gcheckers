@@ -1,4 +1,5 @@
 #include <gtk/gtk.h>
+#include <glib/gstdio.h>
 
 #include "active_game_backend.h"
 #include "app_settings.h"
@@ -12,6 +13,7 @@
 #include "analysis_graph.h"
 #include "games/checkers/board.h"
 #include "games/checkers/rulesets.h"
+#include "sgf_autosave.h"
 #include "sgf_move_props.h"
 #include "sgf_tree.h"
 
@@ -2395,6 +2397,12 @@ static void test_ggame_window_new_game_dialog_ruleset_options_and_russian_apply(
 int main(int argc, char **argv) {
   ggame_test_init_profile(&argc, &argv, "checkers");
   g_test_init(&argc, &argv, NULL);
+  g_autoptr(GError) autosave_error = NULL;
+  g_autofree char *autosave_root = g_dir_make_tmp("gcheckers-window-autosave-XXXXXX", &autosave_error);
+  g_assert_no_error(autosave_error);
+  g_assert_nonnull(autosave_root);
+  g_setenv(SGF_AUTOSAVE_ENV, autosave_root, TRUE);
+
   g_test_add_func("/analysis-graph/score-compression", test_analysis_graph_score_compression);
   g_test_add_func("/analysis/score-formatting", test_analysis_score_formatting);
   g_test_add_func("/analysis/report-includes-per-move-nodes", test_analysis_report_includes_per_move_nodes);

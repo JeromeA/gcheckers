@@ -7,6 +7,7 @@
 #include "games/boop/boop_types.h"
 #include "games/checkers/checkers_model.h"
 #include "games/checkers/rulesets.h"
+#include "sgf_autosave.h"
 #include "sgf_controller.h"
 #include "sgf_io.h"
 #include "sgf_move_props.h"
@@ -15,8 +16,14 @@
 #include <glib/gstdio.h>
 #include <string.h>
 
+static char *test_ggame_sgf_controller_autosave_root = NULL;
+
 static void test_ggame_sgf_controller_skip(void) {
   g_test_skip("GTK display not available.");
+}
+
+static void test_ggame_sgf_controller_checkers_only_skip(void) {
+  g_test_skip("Requires checkers profile.");
 }
 
 static gboolean apply_first_move(GGameSgfController *controller,
@@ -110,6 +117,28 @@ static const SgfNode *sgf_node_get_nth_child(const SgfNode *node, guint index) {
   }
 
   return g_ptr_array_index((GPtrArray *)children, index);
+}
+
+static GPtrArray *test_ggame_sgf_controller_list_directory_names(const char *dir_path) {
+  g_return_val_if_fail(dir_path != NULL, NULL);
+
+  GPtrArray *names = g_ptr_array_new_with_free_func(g_free);
+  if (!g_file_test(dir_path, G_FILE_TEST_IS_DIR)) {
+    return names;
+  }
+
+  g_autoptr(GError) error = NULL;
+  GDir *dir = g_dir_open(dir_path, 0, &error);
+  g_assert_no_error(error);
+  g_assert_nonnull(dir);
+
+  const char *name = NULL;
+  while ((name = g_dir_read_name(dir)) != NULL) {
+    g_ptr_array_add(names, g_strdup(name));
+  }
+  g_dir_close(dir);
+
+  return names;
 }
 
 static int sgf_view_count_children(GtkWidget *parent) {
@@ -225,6 +254,56 @@ static void test_ggame_sgf_controller_appends_move_property(void) {
   const char *white = sgf_node_get_property_first(node, "W");
   g_assert_true((black == NULL) != (white == NULL));
   g_assert_cmpstr(black != NULL ? black : white, ==, expected);
+
+  g_clear_object(&controller);
+  g_clear_object(&model);
+  g_clear_object(&board_view);
+}
+
+static void test_ggame_sgf_controller_autosaves_after_move(void) {
+  g_autoptr(GError) error = NULL;
+  g_assert_nonnull(test_ggame_sgf_controller_autosave_root);
+
+  g_autofree char *game_dir = g_build_filename(test_ggame_sgf_controller_autosave_root, "checkers", NULL);
+  g_autoptr(GPtrArray) before_names = test_ggame_sgf_controller_list_directory_names(game_dir);
+  g_autoptr(GHashTable) before_set = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  for (guint i = 0; i < before_names->len; ++i) {
+    g_hash_table_add(before_set, g_strdup(g_ptr_array_index(before_names, i)));
+  }
+
+  BoardView *board_view = board_view_new();
+  GCheckersModel *model = gcheckers_model_new();
+  GGameSgfController *controller = ggame_sgf_controller_new(board_view);
+  ggame_sgf_controller_set_model(controller, model);
+
+  CheckersMove move;
+  g_assert_true(apply_first_move(controller, model, &move));
+
+  g_assert_true(g_file_test(game_dir, G_FILE_TEST_IS_DIR));
+
+  g_autoptr(GPtrArray) names = test_ggame_sgf_controller_list_directory_names(game_dir);
+  g_assert_cmpuint(names->len, ==, before_names->len + 1);
+
+  const char *new_name = NULL;
+  for (guint i = 0; i < names->len; ++i) {
+    const char *candidate = g_ptr_array_index(names, i);
+    if (!g_hash_table_contains(before_set, candidate)) {
+      new_name = candidate;
+      break;
+    }
+  }
+  g_assert_nonnull(new_name);
+
+  g_autofree char *path = g_build_filename(game_dir, new_name, NULL);
+  g_autofree char *contents = NULL;
+  gsize contents_len = 0;
+  g_assert_true(g_file_get_contents(path, &contents, &contents_len, &error));
+  g_assert_no_error(error);
+  g_assert_true(contents_len > 0);
+
+  char expected[128] = {0};
+  g_assert_true(game_format_move_notation(&move, expected, sizeof(expected)));
+  g_assert_nonnull(strstr(contents, expected));
 
   g_clear_object(&controller);
   g_clear_object(&model);
@@ -1248,6 +1327,13 @@ static void test_ggame_sgf_controller_boop_save_position_file(void) {
 int main(int argc, char **argv) {
   ggame_test_init_profile(&argc, &argv, "checkers");
   g_test_init(&argc, &argv, NULL);
+  g_autoptr(GError) autosave_error = NULL;
+  test_ggame_sgf_controller_autosave_root =
+      g_dir_make_tmp("gcheckers-sgf-controller-suite-autosave-XXXXXX", &autosave_error);
+  g_assert_no_error(autosave_error);
+  g_assert_nonnull(test_ggame_sgf_controller_autosave_root);
+  g_setenv(SGF_AUTOSAVE_ENV, test_ggame_sgf_controller_autosave_root, TRUE);
+
   g_test_add_func("/sgf-controller/replay-node-into-position-applies-checkers-setup-root",
                   test_ggame_sgf_controller_replay_node_into_position_applies_checkers_setup_root);
   g_test_add_func("/sgf-controller/replay-node-into-position-roundtrips-boop-setup-root",
@@ -1258,6 +1344,7 @@ int main(int argc, char **argv) {
 
   if (!gtk_init_check()) {
     g_test_add_func("/sgf-controller/appends-move-property", test_ggame_sgf_controller_skip);
+    g_test_add_func("/sgf-controller/autosaves-after-move", test_ggame_sgf_controller_skip);
     g_test_add_func("/sgf-controller/replay-branching", test_ggame_sgf_controller_skip);
     g_test_add_func("/sgf-controller/new-game", test_ggame_sgf_controller_skip);
     g_test_add_func("/sgf-controller/step-ai-move", test_ggame_sgf_controller_skip);
@@ -1277,6 +1364,7 @@ int main(int argc, char **argv) {
     case GGAME_APP_KIND_BOOP:
       g_test_add_func("/sgf-controller/appends-move-property",
                       test_ggame_sgf_controller_boop_appends_move_property);
+      g_test_add_func("/sgf-controller/autosaves-after-move", test_ggame_sgf_controller_checkers_only_skip);
       g_test_add_func("/sgf-controller/replay-branching", test_ggame_sgf_controller_boop_replay_branching);
       g_test_add_func("/sgf-controller/new-game", test_ggame_sgf_controller_boop_new_game_clears_tree);
       g_test_add_func("/sgf-controller/step-ai-move", test_ggame_sgf_controller_boop_step_ai_move);
@@ -1298,6 +1386,7 @@ int main(int argc, char **argv) {
       break;
     case GGAME_APP_KIND_CHECKERS:
       g_test_add_func("/sgf-controller/appends-move-property", test_ggame_sgf_controller_appends_move_property);
+      g_test_add_func("/sgf-controller/autosaves-after-move", test_ggame_sgf_controller_autosaves_after_move);
       g_test_add_func("/sgf-controller/replay-branching", test_ggame_sgf_controller_replay_branching);
       g_test_add_func("/sgf-controller/new-game", test_ggame_sgf_controller_new_game_clears_tree);
       g_test_add_func("/sgf-controller/new-game-no-manual-request",
@@ -1322,6 +1411,7 @@ int main(int argc, char **argv) {
       break;
     case GGAME_APP_KIND_HOMEWORLDS:
       g_test_add_func("/sgf-controller/appends-move-property", test_ggame_sgf_controller_skip);
+      g_test_add_func("/sgf-controller/autosaves-after-move", test_ggame_sgf_controller_checkers_only_skip);
       g_test_add_func("/sgf-controller/replay-branching", test_ggame_sgf_controller_skip);
       g_test_add_func("/sgf-controller/new-game", test_ggame_sgf_controller_skip);
       g_test_add_func("/sgf-controller/step-ai-move", test_ggame_sgf_controller_skip);

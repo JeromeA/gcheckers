@@ -1,4 +1,5 @@
 #include <gtk/gtk.h>
+#include <glib/gstdio.h>
 #include <string.h>
 
 #include "../src/application.h"
@@ -8,6 +9,7 @@
 #include "../src/games/homeworlds/homeworlds_game.h"
 #include "../src/games/homeworlds/homeworlds_view.h"
 #include "../src/player_controls_panel.h"
+#include "../src/sgf_autosave.h"
 #include "../src/sgf_controller.h"
 #include "../src/sgf_tree.h"
 #include "../src/window.h"
@@ -1475,6 +1477,12 @@ static void test_homeworlds_application_view_menu_has_move_report(void) {
 
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
+  g_autoptr(GError) autosave_error = NULL;
+  g_autofree char *autosave_root = g_dir_make_tmp("ghomeworlds-window-autosave-XXXXXX", &autosave_error);
+  g_assert_no_error(autosave_error);
+  g_assert_nonnull(autosave_root);
+  g_setenv(SGF_AUTOSAVE_ENV, autosave_root, TRUE);
+
   const GGameAppProfile *profile = ggame_app_profile_get_by_kind(GGAME_APP_KIND_HOMEWORLDS);
   int result = 0;
 

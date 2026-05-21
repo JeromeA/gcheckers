@@ -3,6 +3,7 @@
 #include "active_game_backend.h"
 #include "games/checkers/checkers_backend.h"
 #include "games/checkers/rulesets.h"
+#include "sgf_autosave.h"
 #include "sgf_io.h"
 #include "sgf_move_props.h"
 
@@ -15,6 +16,7 @@ struct _GGameSgfController {
   GGameModel *game_model;
   SgfTree *sgf_tree;
   SgfView *sgf_view;
+  char *autosave_game_started_at;
   gboolean is_replaying;
 };
 
@@ -36,6 +38,43 @@ static gboolean ggame_sgf_controller_sync_tree_ruleset_from_model(GGameSgfContro
   }
 
   return sgf_io_tree_set_variant(self->sgf_tree, ggame_model_peek_variant(self->game_model));
+}
+
+static void ggame_sgf_controller_reset_autosave_game_started_at(GGameSgfController *self) {
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self));
+
+  g_free(self->autosave_game_started_at);
+  self->autosave_game_started_at = sgf_autosave_format_current_timestamp();
+  if (self->autosave_game_started_at == NULL) {
+    g_debug("Failed to initialize SGF autosave game timestamp");
+  }
+}
+
+static void ggame_sgf_controller_autosave_current_sgf(GGameSgfController *self, const GameBackend *backend) {
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self));
+  g_return_if_fail(backend != NULL);
+
+  if (backend->id == NULL || backend->id[0] == '\0') {
+    g_debug("Failed to autosave SGF: active backend has no id");
+    return;
+  }
+
+  if (self->autosave_game_started_at == NULL) {
+    ggame_sgf_controller_reset_autosave_game_started_at(self);
+  }
+  if (self->autosave_game_started_at == NULL) {
+    return;
+  }
+
+  if (!ggame_sgf_controller_sync_tree_ruleset_from_model(self)) {
+    g_debug("Failed to stamp SGF RU before autosave");
+    return;
+  }
+
+  g_autoptr(GError) error = NULL;
+  if (!sgf_autosave_save_tree(backend->id, self->autosave_game_started_at, self->sgf_tree, &error)) {
+    g_debug("Failed to autosave SGF: %s", error != NULL ? error->message : "unknown error");
+  }
 }
 
 G_DEFINE_TYPE(GGameSgfController, ggame_sgf_controller, G_TYPE_OBJECT)
@@ -442,6 +481,7 @@ static void ggame_sgf_controller_dispose(GObject *object) {
   g_clear_object(&self->board_view);
   g_clear_object(&self->sgf_view);
   g_clear_object(&self->sgf_tree);
+  g_clear_pointer(&self->autosave_game_started_at, g_free);
 
   G_OBJECT_CLASS(ggame_sgf_controller_parent_class)->dispose(object);
 }
@@ -484,6 +524,7 @@ static void ggame_sgf_controller_init(GGameSgfController *self) {
                    self);
 
   self->is_replaying = FALSE;
+  ggame_sgf_controller_reset_autosave_game_started_at(self);
 }
 
 GGameSgfController *ggame_sgf_controller_new(BoardView *board_view) {
@@ -525,6 +566,7 @@ void ggame_sgf_controller_new_game(GGameSgfController *self) {
   g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self));
 
   sgf_tree_reset(self->sgf_tree);
+  ggame_sgf_controller_reset_autosave_game_started_at(self);
   if (!ggame_sgf_controller_sync_tree_ruleset_from_model(self)) {
     g_debug("Failed to stamp SGF RU on new game tree");
   }
@@ -663,6 +705,7 @@ gboolean ggame_sgf_controller_apply_move(GGameSgfController *self, gconstpointer
 
   ggame_sgf_controller_emit_node_changed(self, node);
   sgf_view_refresh(self->sgf_view);
+  ggame_sgf_controller_autosave_current_sgf(self, backend);
   return TRUE;
 }
 
@@ -880,6 +923,7 @@ gboolean ggame_sgf_controller_load_file(GGameSgfController *self, const char *pa
     ggame_sgf_controller_emit_node_changed(self, selected);
     g_signal_emit(self, controller_signals[SIGNAL_MANUAL_REQUESTED], 0, selected);
   }
+  ggame_sgf_controller_reset_autosave_game_started_at(self);
   return TRUE;
 }
 

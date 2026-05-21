@@ -81,6 +81,7 @@ SRCS := $(CHECKERS_SRCS) $(CHECKERS_BACKEND_SRCS) \
 BOARD_SRCS := $(CHECKERS_DIR)/board.c
 SGF_TREE_SRCS := src/sgf_tree.c
 SGF_MOVE_PROPS_SRCS := src/sgf_move_props.c
+SGF_AUTOSAVE_SRCS := src/sgf_autosave.c
 SGF_VIEW_SRCS := \
   src/sgf_view.c \
   src/sgf_view_disc_factory.c \
@@ -152,6 +153,7 @@ TEST_DESKTOP_METADATA_BIN := $(TESTS_DIR)/test_desktop_metadata
 TEST_FLATPAK_MANIFEST_BIN := $(TESTS_DIR)/test_flatpak_manifest
 TEST_SGF_TREE_BIN := $(TESTS_DIR)/test_sgf_tree
 TEST_SGF_IO_BIN := $(TESTS_DIR)/test_sgf_io
+TEST_SGF_AUTOSAVE_BIN := $(TESTS_DIR)/test_sgf_autosave
 TEST_SGF_VIEW_BIN := $(TESTS_DIR)/test_sgf_view
 TEST_BOARD_VIEW_BIN := $(TESTS_DIR)/test_board_view
 TEST_PLAYER_CONTROLS_PANEL_BIN := $(TESTS_DIR)/test_player_controls_panel
@@ -175,7 +177,7 @@ TEST_BINS := $(TEST_GAME_BIN) $(TEST_GAME_PRINT_BIN) $(TEST_GAME_BACKEND_BIN) $(
 	$(TEST_CREATE_PUZZLES_RUNNER_BIN) $(TEST_CHECKERS_MODEL_BIN) $(TEST_AI_SEARCH_BIN) \
 	$(TEST_AI_TRANSPOSITION_TABLE_BIN) $(TEST_BGA_CLIENT_BIN) $(TEST_FILE_DIALOG_HISTORY_BIN) \
 	$(TEST_APP_SETTINGS_BIN) $(TEST_APP_PATHS_BIN) $(TEST_DESKTOP_METADATA_BIN) $(TEST_FLATPAK_MANIFEST_BIN) \
-	$(TEST_SGF_TREE_BIN) $(TEST_SGF_IO_BIN) $(TEST_SGF_VIEW_BIN) $(TEST_BOARD_VIEW_BIN) \
+	$(TEST_SGF_TREE_BIN) $(TEST_SGF_IO_BIN) $(TEST_SGF_AUTOSAVE_BIN) $(TEST_SGF_VIEW_BIN) $(TEST_BOARD_VIEW_BIN) \
 	$(TEST_PLAYER_CONTROLS_PANEL_BIN) $(TEST_SGF_CONTROLLER_BIN) $(TEST_WINDOW_BIN) $(TEST_WINDOW_BOOP_BIN) \
 	$(TEST_PUZZLE_GENERATION_BIN) $(TEST_PUZZLE_CATALOG_BIN) $(TEST_PIECE_PALETTE_BIN) \
 	$(TEST_PUZZLE_PROGRESS_BIN)
@@ -201,7 +203,7 @@ test_game test_game_print test_game_backend test_game_model test_homeworlds_game
 	test_create_puzzles_check test_create_puzzles_runner \
 	test_checkers_model test_ai_search test_ai_transposition_table test_bga_client \
 	test_file_dialog_history test_app_settings test_app_paths test_desktop_metadata test_flatpak_manifest \
-	test_sgf_tree test_sgf_io \
+	test_sgf_tree test_sgf_io test_sgf_autosave \
 	test_sgf_view test_board_view test_player_controls_panel test_sgf_controller test_window test_window_boop \
 	test_puzzle_generation test_puzzle_catalog \
 	test_piece_palette test_puzzle_progress test_puzzle_progress_report_server callgrind-run \
@@ -288,7 +290,8 @@ $(TEST_HOMEWORLDS_WINDOW_BIN): tests/test_homeworlds_window.c $(HOMEWORLDS_UI_SR
 	$(CHECKERS_DIR)/rulesets.h src/import_dialog.c src/sgf_file_actions.c src/sgf_file_actions.h \
 	src/file_dialog_history.c src/file_dialog_history.h src/bga_client.c src/bga_client.h src/window.h \
 	src/style.c src/style.h src/player_controls_panel.c src/player_controls_panel.h src/analysis_graph.c \
-	src/analysis_graph.h src/sgf_controller.c src/sgf_controller.h src/board_view.c src/board_view.h \
+	src/analysis_graph.h $(SGF_AUTOSAVE_SRCS) src/sgf_autosave.h src/sgf_controller.c \
+	src/sgf_controller.h src/board_view.c src/board_view.h \
 	src/board_grid.c src/board_grid.h src/board_square.c src/board_square.h src/board_move_overlay.c \
 	src/board_move_overlay.h src/board_selection_controller.c src/board_selection_controller.h \
 	src/piece_palette.c src/piece_palette.h src/man_paintable.c src/man_paintable.h src/sgf_io.c src/sgf_io.h \
@@ -303,7 +306,7 @@ $(TEST_HOMEWORLDS_WINDOW_BIN): tests/test_homeworlds_window.c $(HOMEWORLDS_UI_SR
 		src/application.c src/window.c $(APP_PATHS_SRCS) $(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) \
 		src/app_settings.c src/settings_dialog.c src/new_game_dialog.c src/puzzle_dialog.c \
 		src/import_dialog.c src/sgf_file_actions.c src/file_dialog_history.c src/bga_client.c src/style.c \
-		src/player_controls_panel.c src/analysis_graph.c src/sgf_controller.c src/board_view.c \
+		src/player_controls_panel.c src/analysis_graph.c src/sgf_controller.c $(SGF_AUTOSAVE_SRCS) src/board_view.c \
 		src/board_grid.c src/board_square.c src/board_move_overlay.c src/board_selection_controller.c \
 		src/piece_palette.c src/man_paintable.c src/sgf_io.c src/sgf_move_props.c src/sgf_tree.c \
 		src/sgf_view.c src/sgf_view_disc_factory.c src/sgf_view_layout.c src/sgf_view_link_renderer.c \
@@ -525,6 +528,14 @@ $(TEST_SGF_IO_BIN): tests/test_sgf_io.c src/sgf_io.c src/sgf_io.h src/sgf_tree.c
 	$(CC) $(CFLAGS) -o $@ tests/test_sgf_io.c $(TEST_PROFILE_UTILS_SRCS) src/sgf_io.c src/sgf_tree.c \
 		src/sgf_move_props.c $(SRCS) $(LDLIBS)
 
+test_sgf_autosave: $(TEST_SGF_AUTOSAVE_BIN)
+$(TEST_SGF_AUTOSAVE_BIN): tests/test_sgf_autosave.c $(SGF_AUTOSAVE_SRCS) src/sgf_autosave.h \
+	$(APP_PATHS_SRCS) src/app_paths.h src/sgf_io.c src/sgf_io.h src/sgf_tree.c src/sgf_tree.h \
+	src/sgf_move_props.c src/sgf_move_props.h $(SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -o $@ tests/test_sgf_autosave.c $(SGF_AUTOSAVE_SRCS) $(APP_PATHS_SRCS) \
+		src/sgf_io.c src/sgf_tree.c src/sgf_move_props.c $(SRCS) $(LDLIBS)
+
 test_sgf_view: $(TEST_SGF_VIEW_BIN)
 $(TEST_SGF_VIEW_BIN): tests/test_sgf_view.c $(SGF_VIEW_SRCS) $(SGF_TREE_SRCS) $(WIDGET_UTILS_SRCS) \
 	src/sgf_view.h src/sgf_tree.h $(WIDGET_UTILS_HDRS)
@@ -536,7 +547,8 @@ test_board_view: $(TEST_BOARD_VIEW_BIN)
 $(TEST_BOARD_VIEW_BIN): tests/test_board_view.c src/board_view.c src/board_view.h src/board_grid.c src/board_grid.h \
 	src/board_square.c src/board_square.h src/board_move_overlay.c src/board_move_overlay.h \
 	src/board_selection_controller.c src/board_selection_controller.h src/piece_palette.c src/piece_palette.h \
-	src/man_paintable.c src/man_paintable.h src/sgf_controller.c src/sgf_controller.h src/sgf_io.c src/sgf_io.h \
+	src/man_paintable.c src/man_paintable.h $(SGF_AUTOSAVE_SRCS) src/sgf_autosave.h $(APP_PATHS_SRCS) \
+	src/app_paths.h src/sgf_controller.c src/sgf_controller.h src/sgf_io.c src/sgf_io.h \
 	src/sgf_move_props.c src/sgf_move_props.h src/sgf_tree.c src/sgf_tree.h src/sgf_view.c src/sgf_view.h \
 	src/sgf_view_disc_factory.c src/sgf_view_disc_factory.h src/sgf_view_layout.c src/sgf_view_layout.h \
 	src/sgf_view_link_renderer.c src/sgf_view_link_renderer.h src/sgf_view_scroller.c src/sgf_view_scroller.h \
@@ -546,9 +558,10 @@ $(TEST_BOARD_VIEW_BIN): tests/test_board_view.c src/board_view.c src/board_view.
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_board_view.c $(TEST_PROFILE_UTILS_SRCS) \
 		src/board_view.c src/board_grid.c \
 		src/board_square.c src/board_move_overlay.c src/board_selection_controller.c src/piece_palette.c \
-		src/man_paintable.c src/sgf_controller.c src/sgf_io.c src/sgf_move_props.c src/sgf_tree.c src/sgf_view.c \
-		src/sgf_view_disc_factory.c src/sgf_view_layout.c src/sgf_view_link_renderer.c src/sgf_view_scroller.c \
-		src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(SRCS) $(LDLIBS) $(GTK_LIBS)
+		src/man_paintable.c $(SGF_AUTOSAVE_SRCS) $(APP_PATHS_SRCS) src/sgf_controller.c src/sgf_io.c \
+		src/sgf_move_props.c src/sgf_tree.c src/sgf_view.c src/sgf_view_disc_factory.c src/sgf_view_layout.c \
+		src/sgf_view_link_renderer.c src/sgf_view_scroller.c src/sgf_view_selection_controller.c \
+		$(WIDGET_UTILS_SRCS) $(SRCS) $(LDLIBS) $(GTK_LIBS)
 
 test_player_controls_panel: $(TEST_PLAYER_CONTROLS_PANEL_BIN)
 $(TEST_PLAYER_CONTROLS_PANEL_BIN): tests/test_player_controls_panel.c src/player_controls_panel.c \
@@ -562,7 +575,8 @@ $(TEST_SGF_CONTROLLER_BIN): tests/test_sgf_controller.c src/sgf_controller.c src
 	src/board_view.c src/board_view.h src/board_grid.c src/board_grid.h src/board_square.c src/board_square.h \
 	src/board_move_overlay.c src/board_move_overlay.h src/board_selection_controller.c \
 	src/board_selection_controller.h src/piece_palette.c src/piece_palette.h src/man_paintable.c \
-	src/man_paintable.h $(CHECKERS_DIR)/checkers_model.c $(CHECKERS_DIR)/checkers_model.h src/sgf_io.c src/sgf_io.h \
+	src/man_paintable.h $(SGF_AUTOSAVE_SRCS) src/sgf_autosave.h $(APP_PATHS_SRCS) src/app_paths.h \
+	$(CHECKERS_DIR)/checkers_model.c $(CHECKERS_DIR)/checkers_model.h src/sgf_io.c src/sgf_io.h \
 	src/sgf_move_props.c src/sgf_move_props.h src/sgf_tree.c src/sgf_tree.h src/sgf_view.c src/sgf_view.h \
 	src/sgf_view_disc_factory.c src/sgf_view_disc_factory.h src/sgf_view_layout.c src/sgf_view_layout.h \
 	src/sgf_view_link_renderer.c src/sgf_view_link_renderer.h src/sgf_view_scroller.c \
@@ -572,8 +586,9 @@ $(TEST_SGF_CONTROLLER_BIN): tests/test_sgf_controller.c src/sgf_controller.c src
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_sgf_controller.c $(TEST_PROFILE_UTILS_SRCS) \
 		src/sgf_controller.c src/board_view.c \
 		src/board_grid.c src/board_square.c src/board_move_overlay.c src/board_selection_controller.c \
-		src/piece_palette.c src/man_paintable.c src/sgf_io.c src/sgf_move_props.c src/sgf_tree.c src/sgf_view.c \
-		src/sgf_view_disc_factory.c src/sgf_view_layout.c src/sgf_view_link_renderer.c src/sgf_view_scroller.c \
+		src/piece_palette.c src/man_paintable.c $(SGF_AUTOSAVE_SRCS) $(APP_PATHS_SRCS) src/sgf_io.c \
+		src/sgf_move_props.c src/sgf_tree.c src/sgf_view.c src/sgf_view_disc_factory.c \
+		src/sgf_view_layout.c src/sgf_view_link_renderer.c src/sgf_view_scroller.c \
 		src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(SRCS) $(LDLIBS) $(GTK_LIBS)
 
 test_window: $(TEST_WINDOW_BIN)
@@ -584,7 +599,8 @@ $(TEST_WINDOW_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_window.c src/window.
 	src/import_dialog.c src/settings_dialog.c src/settings_dialog.h src/sgf_file_actions.c \
 	src/sgf_file_actions.h src/file_dialog_history.c src/file_dialog_history.h src/bga_client.c src/bga_client.h \
 	src/window.h src/style.c src/style.h src/player_controls_panel.c src/player_controls_panel.h \
-	src/analysis_graph.c src/analysis_graph.h src/sgf_controller.c src/sgf_controller.h src/board_view.c \
+	src/analysis_graph.c src/analysis_graph.h $(SGF_AUTOSAVE_SRCS) src/sgf_autosave.h \
+	src/sgf_controller.c src/sgf_controller.h src/board_view.c \
 	src/board_view.h src/board_grid.c src/board_grid.h src/board_square.c src/board_square.h \
 	src/board_move_overlay.c src/board_move_overlay.h src/board_selection_controller.c \
 	src/board_selection_controller.h src/piece_palette.c src/piece_palette.h src/man_paintable.c \
@@ -599,7 +615,7 @@ $(TEST_WINDOW_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_window.c src/window.
 		$(APP_PATHS_SRCS) $(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c \
 		src/new_game_dialog.c src/puzzle_dialog.c src/import_dialog.c src/settings_dialog.c src/file_dialog_history.c \
 		src/sgf_file_actions.c src/bga_client.c src/style.c src/player_controls_panel.c \
-		src/sgf_controller.c src/analysis_graph.c src/board_view.c src/board_grid.c src/board_square.c \
+		src/sgf_controller.c $(SGF_AUTOSAVE_SRCS) src/analysis_graph.c src/board_view.c src/board_grid.c src/board_square.c \
 		src/board_move_overlay.c src/board_selection_controller.c src/piece_palette.c src/man_paintable.c \
 		src/sgf_io.c src/sgf_move_props.c src/sgf_tree.c src/sgf_view.c src/sgf_view_disc_factory.c \
 		src/sgf_view_layout.c src/sgf_view_link_renderer.c src/sgf_view_scroller.c \
@@ -613,7 +629,8 @@ $(TEST_WINDOW_BOOP_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_window_boop.c s
 	src/import_dialog.c src/settings_dialog.c src/settings_dialog.h src/sgf_file_actions.c \
 	src/sgf_file_actions.h src/file_dialog_history.c src/file_dialog_history.h src/bga_client.c src/bga_client.h \
 	src/window.h src/style.c src/style.h src/player_controls_panel.c src/player_controls_panel.h \
-	src/analysis_graph.c src/analysis_graph.h src/sgf_controller.c src/sgf_controller.h src/board_view.c \
+	src/analysis_graph.c src/analysis_graph.h $(SGF_AUTOSAVE_SRCS) src/sgf_autosave.h \
+	src/sgf_controller.c src/sgf_controller.h src/board_view.c \
 	src/board_view.h src/board_grid.c src/board_grid.h src/board_square.c src/board_square.h \
 	src/board_move_overlay.c src/board_move_overlay.h src/board_selection_controller.c \
 	src/board_selection_controller.h src/piece_palette.c src/piece_palette.h src/man_paintable.c \
@@ -629,7 +646,7 @@ $(TEST_WINDOW_BOOP_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_window_boop.c s
 		$(APP_PATHS_SRCS) $(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c \
 		src/new_game_dialog.c src/puzzle_dialog.c src/import_dialog.c src/settings_dialog.c src/file_dialog_history.c \
 		src/sgf_file_actions.c src/bga_client.c src/style.c src/player_controls_panel.c \
-		src/sgf_controller.c src/analysis_graph.c src/board_view.c src/board_grid.c src/board_square.c \
+		src/sgf_controller.c $(SGF_AUTOSAVE_SRCS) src/analysis_graph.c src/board_view.c src/board_grid.c src/board_square.c \
 		src/board_move_overlay.c src/board_selection_controller.c src/piece_palette.c src/man_paintable.c \
 		src/sgf_io.c src/sgf_move_props.c src/sgf_tree.c src/sgf_view.c src/sgf_view_disc_factory.c \
 		src/sgf_view_layout.c src/sgf_view_link_renderer.c src/sgf_view_scroller.c \
@@ -663,7 +680,8 @@ $(CHECKERS_APP_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c $(APP_MAIN_SRC
 	src/import_dialog.c src/sgf_file_actions.c \
 	src/sgf_file_actions.h src/file_dialog_history.c src/file_dialog_history.h src/bga_client.c src/bga_client.h \
 	src/window.h src/style.c src/style.h src/player_controls_panel.c src/player_controls_panel.h \
-	src/analysis_graph.c src/analysis_graph.h src/sgf_controller.c src/sgf_controller.h src/board_view.c \
+	src/analysis_graph.c src/analysis_graph.h $(SGF_AUTOSAVE_SRCS) src/sgf_autosave.h \
+	src/sgf_controller.c src/sgf_controller.h src/board_view.c \
 	src/board_view.h src/board_grid.c src/board_grid.h src/board_square.c src/board_square.h \
 	src/board_move_overlay.c src/board_move_overlay.h src/board_selection_controller.c \
 	src/board_selection_controller.h src/piece_palette.c src/piece_palette.h src/application.h src/man_paintable.c \
@@ -678,8 +696,8 @@ $(CHECKERS_APP_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c $(APP_MAIN_SRC
 		$(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c src/window.c src/settings_dialog.c \
 		src/new_game_dialog.c src/puzzle_dialog.c src/import_dialog.c src/file_dialog_history.c src/style.c \
 		src/player_controls_panel.c src/analysis_graph.c src/sgf_file_actions.c src/bga_client.c \
-		src/sgf_controller.c src/board_view.c src/board_grid.c src/board_square.c src/board_move_overlay.c \
-		src/board_selection_controller.c src/piece_palette.c src/man_paintable.c src/sgf_io.c \
+		src/sgf_controller.c $(SGF_AUTOSAVE_SRCS) src/board_view.c src/board_grid.c src/board_square.c \
+		src/board_move_overlay.c src/board_selection_controller.c src/piece_palette.c src/man_paintable.c src/sgf_io.c \
 		src/sgf_move_props.c src/sgf_tree.c src/sgf_view.c src/sgf_view_disc_factory.c src/sgf_view_layout.c \
 		src/sgf_view_link_renderer.c src/sgf_view_scroller.c src/sgf_view_selection_controller.c \
 		$(WIDGET_UTILS_SRCS) $(SRCS) $(BOOP_UI_SRCS) $(LDLIBS) $(GTK_LIBS)
@@ -692,7 +710,8 @@ $(BOOP_APP_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/gboop.c $(APP_MAIN_SRCS) src/a
 	src/import_dialog.c src/sgf_file_actions.c \
 	src/sgf_file_actions.h src/file_dialog_history.c src/file_dialog_history.h src/bga_client.c src/bga_client.h \
 	src/window.h src/style.c src/style.h src/player_controls_panel.c src/player_controls_panel.h \
-	src/analysis_graph.c src/analysis_graph.h src/sgf_controller.c src/sgf_controller.h src/board_view.c \
+	src/analysis_graph.c src/analysis_graph.h $(SGF_AUTOSAVE_SRCS) src/sgf_autosave.h \
+	src/sgf_controller.c src/sgf_controller.h src/board_view.c \
 	src/board_view.h src/board_grid.c src/board_grid.h src/board_square.c src/board_square.h \
 	src/board_move_overlay.c src/board_move_overlay.h src/board_selection_controller.c \
 	src/board_selection_controller.h src/piece_palette.c src/piece_palette.h src/application.h src/man_paintable.c \
@@ -707,8 +726,8 @@ $(BOOP_APP_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/gboop.c $(APP_MAIN_SRCS) src/a
 		$(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c src/window.c src/settings_dialog.c \
 		src/new_game_dialog.c src/puzzle_dialog.c src/import_dialog.c src/file_dialog_history.c src/style.c \
 		src/player_controls_panel.c src/analysis_graph.c src/sgf_file_actions.c src/bga_client.c \
-		src/sgf_controller.c src/board_view.c src/board_grid.c src/board_square.c src/board_move_overlay.c \
-		src/board_selection_controller.c src/piece_palette.c src/man_paintable.c src/sgf_io.c \
+		src/sgf_controller.c $(SGF_AUTOSAVE_SRCS) src/board_view.c src/board_grid.c src/board_square.c \
+		src/board_move_overlay.c src/board_selection_controller.c src/piece_palette.c src/man_paintable.c src/sgf_io.c \
 		src/sgf_move_props.c src/sgf_tree.c src/sgf_view.c src/sgf_view_disc_factory.c src/sgf_view_layout.c \
 		src/sgf_view_link_renderer.c src/sgf_view_scroller.c src/sgf_view_selection_controller.c \
 		$(WIDGET_UTILS_SRCS) $(SRCS) $(BOOP_UI_SRCS) $(LDLIBS) $(GTK_LIBS)
@@ -720,7 +739,8 @@ $(HOMEWORLDS_APP_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/ghomeworlds.c $(APP_MAIN
 	$(CHECKERS_DIR)/rulesets.c $(CHECKERS_DIR)/rulesets.h src/import_dialog.c src/sgf_file_actions.c \
 	src/sgf_file_actions.h src/file_dialog_history.c src/file_dialog_history.h src/bga_client.c src/bga_client.h \
 	src/window.h src/style.c src/style.h src/player_controls_panel.c src/player_controls_panel.h \
-	src/analysis_graph.c src/analysis_graph.h src/sgf_controller.c src/sgf_controller.h src/board_view.c \
+	src/analysis_graph.c src/analysis_graph.h $(SGF_AUTOSAVE_SRCS) src/sgf_autosave.h \
+	src/sgf_controller.c src/sgf_controller.h src/board_view.c \
 	src/board_view.h src/board_grid.c src/board_grid.h src/board_square.c src/board_square.h \
 	src/board_move_overlay.c src/board_move_overlay.h src/board_selection_controller.c \
 	src/board_selection_controller.h src/piece_palette.c src/piece_palette.h src/application.h src/man_paintable.c \
@@ -736,8 +756,8 @@ $(HOMEWORLDS_APP_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/ghomeworlds.c $(APP_MAIN
 		$(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c src/window.c src/settings_dialog.c \
 		src/new_game_dialog.c src/puzzle_dialog.c src/import_dialog.c src/file_dialog_history.c src/style.c \
 		src/player_controls_panel.c src/analysis_graph.c src/sgf_file_actions.c src/bga_client.c \
-		src/sgf_controller.c src/board_view.c src/board_grid.c src/board_square.c src/board_move_overlay.c \
-		src/board_selection_controller.c src/piece_palette.c src/man_paintable.c src/sgf_io.c \
+		src/sgf_controller.c $(SGF_AUTOSAVE_SRCS) src/board_view.c src/board_grid.c src/board_square.c \
+		src/board_move_overlay.c src/board_selection_controller.c src/piece_palette.c src/man_paintable.c src/sgf_io.c \
 		src/sgf_move_props.c src/sgf_tree.c src/sgf_view.c src/sgf_view_disc_factory.c src/sgf_view_layout.c \
 		src/sgf_view_link_renderer.c src/sgf_view_scroller.c src/sgf_view_selection_controller.c \
 		$(WIDGET_UTILS_SRCS) $(SRCS) $(BOOP_UI_SRCS) $(LDLIBS) $(GTK_LIBS)

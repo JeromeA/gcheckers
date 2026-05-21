@@ -1,10 +1,12 @@
 #include <gtk/gtk.h>
+#include <glib/gstdio.h>
 
 #include "active_game_backend.h"
 #include "board_move_overlay.h"
 #include "board_view.h"
 #include "game_model.h"
 #include "games/boop/boop_game.h"
+#include "sgf_autosave.h"
 #include "test_profile_utils.h"
 
 static void test_board_view_skip(void) {
@@ -300,6 +302,11 @@ static void test_board_view_repeated_primary_clicks_are_processed(void) {
 int main(int argc, char **argv) {
   ggame_test_init_profile(&argc, &argv, "checkers");
   g_test_init(&argc, &argv, NULL);
+  g_autoptr(GError) autosave_error = NULL;
+  g_autofree char *autosave_root = g_dir_make_tmp("gcheckers-board-view-autosave-XXXXXX", &autosave_error);
+  g_assert_no_error(autosave_error);
+  g_assert_nonnull(autosave_root);
+  g_setenv(SGF_AUTOSAVE_ENV, autosave_root, TRUE);
 
   const GGameAppProfile *profile = ggame_active_app_profile();
   g_assert_nonnull(profile);
