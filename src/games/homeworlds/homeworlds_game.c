@@ -218,6 +218,8 @@ gboolean homeworlds_position_resolve_system_ref(const HomeworldsPosition *positi
   g_return_val_if_fail(ref != NULL, FALSE);
   g_return_val_if_fail(out_system_index != NULL, FALSE);
 
+  *out_system_index = HOMEWORLDS_INVALID_INDEX;
+
   switch ((HomeworldsSystemRefKind)ref->kind) {
     case HOMEWORLDS_SYSTEM_REF_HOMEWORLD:
       if (ref->homeworld_side >= 2) {

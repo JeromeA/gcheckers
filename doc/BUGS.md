@@ -836,3 +836,10 @@ The fix clears `out_pyramid` to `0` before searching, so both success and failur
 
 The fix initializes `out_system_index` to `HOMEWORLDS_INVALID_INDEX` before searching, so a failed lookup has the same
 sentinel convention as the rest of the Homeworlds code.
+
+## Failed Homeworlds system-reference resolution left stale output
+
+`homeworlds_position_resolve_system_ref()` returned `FALSE` for unresolved symbolic references but did not reset
+`out_system_index`. A caller that inspected the index after failure could see a stale valid system index.
+
+The fix initializes `out_system_index` to `HOMEWORLDS_INVALID_INDEX` before resolving the reference.
