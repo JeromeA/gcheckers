@@ -44,16 +44,27 @@ typedef struct {
 #define HOMEWORLDS_VIEW_FALLBACK_BOARD_HEIGHT 620
 #define HOMEWORLDS_VIEW_ROW_MARGIN 54.0
 #define HOMEWORLDS_VIEW_ROW_MIN_EMPTY_GAP 24.0
+#define HOMEWORLDS_VIEW_ROW_MIN_VERTICAL_GAP 24.0
 #define HOMEWORLDS_VIEW_MIN_BOARD_VIEWPORT_WIDTH 420
 #define HOMEWORLDS_VIEW_TEXT_PANEL_WIDTH 280
 #define HOMEWORLDS_VIEW_TEXT_PANEL_LABEL_WIDTH_CHARS 28
 #define HOMEWORLDS_VIEW_INITIAL_BOARD_WIDTH 1
+#define HOMEWORLDS_VIEW_INITIAL_BOARD_HEIGHT 1
 #define HOMEWORLDS_VIEW_SYSTEM_PIECE_MAX (HOMEWORLDS_STAR_SLOT_COUNT + (2 * HOMEWORLDS_SHIP_SLOT_COUNT))
 typedef enum {
   HOMEWORLDS_VIEW_SYSTEM_ROW_TOP = 0,
   HOMEWORLDS_VIEW_SYSTEM_ROW_MIDDLE,
   HOMEWORLDS_VIEW_SYSTEM_ROW_BOTTOM,
 } HomeworldsViewSystemRow;
+
+typedef enum {
+  HOMEWORLDS_VIEW_BOARD_ROW_PLAYER_2 = 0,
+  HOMEWORLDS_VIEW_BOARD_ROW_TOP,
+  HOMEWORLDS_VIEW_BOARD_ROW_MIDDLE,
+  HOMEWORLDS_VIEW_BOARD_ROW_BOTTOM,
+  HOMEWORLDS_VIEW_BOARD_ROW_PLAYER_1,
+  HOMEWORLDS_VIEW_BOARD_ROW_COUNT,
+} HomeworldsViewBoardRow;
 
 typedef struct {
   HomeworldsPyramid pyramid;
@@ -87,6 +98,13 @@ typedef struct {
 } HomeworldsViewRowSystem;
 
 typedef struct {
+  gboolean present;
+  double fraction;
+  double top;
+  double bottom;
+} HomeworldsViewBoardRowExtent;
+
+typedef struct {
   guint system_index;
   HomeworldsColor color;
 } HomeworldsViewCatastropheChoice;
@@ -114,12 +132,14 @@ struct _HomeworldsView {
   gulong model_state_changed_handler_id;
   GtkAdjustment *board_hadjustment;
   gulong board_hadjustment_changed_handler_id;
+  GtkAdjustment *board_vadjustment;
+  gulong board_vadjustment_changed_handler_id;
   guint board_layout_settle_tick_id;
   gulong root_destroy_handler_id;
 };
 
 static void homeworlds_view_update_from_current_builder(HomeworldsView *view);
-static gboolean homeworlds_view_update_board_content_width(HomeworldsView *view);
+static gboolean homeworlds_view_update_board_content_size(HomeworldsView *view);
 static void homeworlds_view_update_board_bank(HomeworldsView *view);
 static void homeworlds_view_update_board_choice_buttons(HomeworldsView *view);
 static void homeworlds_view_update_move_report(HomeworldsView *view);
@@ -689,15 +709,14 @@ static HomeworldsViewSystemRow homeworlds_view_system_row(const HomeworldsPositi
   return HOMEWORLDS_VIEW_SYSTEM_ROW_MIDDLE;
 }
 
-static void homeworlds_view_row_y_positions(double height,
-                                            gboolean has_non_home_system,
+static void homeworlds_view_row_y_fractions(gboolean has_non_home_system,
                                             double *out_top,
                                             double *out_middle,
                                             double *out_bottom,
                                             double *out_player_1,
                                             double *out_player_2) {
-  double player_1_y = has_non_home_system ? height * 0.84 : height * 0.72;
-  double player_2_y = has_non_home_system ? height * 0.16 : height * 0.28;
+  double player_1_y = has_non_home_system ? 0.84 : 0.72;
+  double player_2_y = has_non_home_system ? 0.16 : 0.28;
   double band = player_1_y - player_2_y;
 
   g_return_if_fail(out_top != NULL);
@@ -711,6 +730,33 @@ static void homeworlds_view_row_y_positions(double height,
   *out_bottom = player_2_y + (band * 0.75);
   *out_player_1 = player_1_y;
   *out_player_2 = player_2_y;
+}
+
+static void homeworlds_view_row_y_positions(double height,
+                                            gboolean has_non_home_system,
+                                            double *out_top,
+                                            double *out_middle,
+                                            double *out_bottom,
+                                            double *out_player_1,
+                                            double *out_player_2) {
+  g_return_if_fail(height > 0.0);
+  g_return_if_fail(out_top != NULL);
+  g_return_if_fail(out_middle != NULL);
+  g_return_if_fail(out_bottom != NULL);
+  g_return_if_fail(out_player_1 != NULL);
+  g_return_if_fail(out_player_2 != NULL);
+
+  homeworlds_view_row_y_fractions(has_non_home_system,
+                                  out_top,
+                                  out_middle,
+                                  out_bottom,
+                                  out_player_1,
+                                  out_player_2);
+  *out_top *= height;
+  *out_middle *= height;
+  *out_bottom *= height;
+  *out_player_1 *= height;
+  *out_player_2 *= height;
 }
 
 static double homeworlds_view_bank_reserved_width(void) {
@@ -850,6 +896,99 @@ static double homeworlds_view_board_width_for_row(double required_row_width) {
   return (2.0 * HOMEWORLDS_VIEW_ROW_MARGIN) + homeworlds_view_bank_reserved_width() + required_row_width;
 }
 
+static void homeworlds_view_board_row_extent_add(HomeworldsViewBoardRowExtent *extent,
+                                                 double top,
+                                                 double bottom) {
+  g_return_if_fail(extent != NULL);
+  g_return_if_fail(bottom >= top);
+
+  if (!extent->present) {
+    extent->present = TRUE;
+    extent->top = top;
+    extent->bottom = bottom;
+    return;
+  }
+
+  extent->top = MIN(extent->top, top);
+  extent->bottom = MAX(extent->bottom, bottom);
+}
+
+static HomeworldsViewBoardRow homeworlds_view_board_row_for_system(const HomeworldsPosition *position,
+                                                                   guint system_index) {
+  g_return_val_if_fail(position != NULL, HOMEWORLDS_VIEW_BOARD_ROW_MIDDLE);
+  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, HOMEWORLDS_VIEW_BOARD_ROW_MIDDLE);
+
+  if (system_index == 0) {
+    return HOMEWORLDS_VIEW_BOARD_ROW_PLAYER_1;
+  }
+  if (system_index == 1) {
+    return HOMEWORLDS_VIEW_BOARD_ROW_PLAYER_2;
+  }
+
+  switch (homeworlds_view_system_row(position, system_index)) {
+    case HOMEWORLDS_VIEW_SYSTEM_ROW_TOP:
+      return HOMEWORLDS_VIEW_BOARD_ROW_TOP;
+    case HOMEWORLDS_VIEW_SYSTEM_ROW_BOTTOM:
+      return HOMEWORLDS_VIEW_BOARD_ROW_BOTTOM;
+    case HOMEWORLDS_VIEW_SYSTEM_ROW_MIDDLE:
+    default:
+      return HOMEWORLDS_VIEW_BOARD_ROW_MIDDLE;
+  }
+}
+
+static void homeworlds_view_board_row_extents_init(HomeworldsViewBoardRowExtent *extents,
+                                                   gboolean has_non_home_system) {
+  double top = 0.0;
+  double middle = 0.0;
+  double bottom = 0.0;
+  double player_1 = 0.0;
+  double player_2 = 0.0;
+
+  g_return_if_fail(extents != NULL);
+
+  homeworlds_view_row_y_fractions(has_non_home_system, &top, &middle, &bottom, &player_1, &player_2);
+  extents[HOMEWORLDS_VIEW_BOARD_ROW_PLAYER_2].fraction = player_2;
+  extents[HOMEWORLDS_VIEW_BOARD_ROW_TOP].fraction = top;
+  extents[HOMEWORLDS_VIEW_BOARD_ROW_MIDDLE].fraction = middle;
+  extents[HOMEWORLDS_VIEW_BOARD_ROW_BOTTOM].fraction = bottom;
+  extents[HOMEWORLDS_VIEW_BOARD_ROW_PLAYER_1].fraction = player_1;
+}
+
+static double homeworlds_view_required_height_for_row_extents(const HomeworldsViewBoardRowExtent *extents,
+                                                             double viewport_height) {
+  double required_height = viewport_height;
+  const HomeworldsViewBoardRowExtent *previous = NULL;
+
+  g_return_val_if_fail(extents != NULL, viewport_height);
+  g_return_val_if_fail(viewport_height > 0.0, viewport_height);
+
+  for (guint i = 0; i < HOMEWORLDS_VIEW_BOARD_ROW_COUNT; i++) {
+    const HomeworldsViewBoardRowExtent *extent = &extents[i];
+    double fraction = extent->fraction;
+
+    if (!extent->present) {
+      continue;
+    }
+
+    if (fraction > 0.0) {
+      required_height = MAX(required_height, -extent->top / fraction);
+    }
+    if (fraction < 1.0) {
+      required_height = MAX(required_height, extent->bottom / (1.0 - fraction));
+    }
+
+    if (previous != NULL && fraction > previous->fraction) {
+      double required_gap_height =
+          (previous->bottom + HOMEWORLDS_VIEW_ROW_MIN_VERTICAL_GAP - extent->top) /
+          (fraction - previous->fraction);
+      required_height = MAX(required_height, required_gap_height);
+    }
+    previous = extent;
+  }
+
+  return ceil(required_height);
+}
+
 static double homeworlds_view_row_center_for_index(double left,
                                                    double right,
                                                    const HomeworldsViewRowSystem *systems,
@@ -880,13 +1019,24 @@ static double homeworlds_view_row_center_for_index(double left,
   return (left + right) / 2.0;
 }
 
-double homeworlds_view_calculate_board_content_width(const HomeworldsPosition *position, double viewport_width) {
+gboolean homeworlds_view_calculate_board_content_size(const HomeworldsPosition *position,
+                                                      double viewport_width,
+                                                      double viewport_height,
+                                                      int *out_width,
+                                                      int *out_height) {
   double required_width = viewport_width;
+  HomeworldsViewBoardRowExtent extents[HOMEWORLDS_VIEW_BOARD_ROW_COUNT] = {0};
 
-  g_return_val_if_fail(position != NULL, (double)HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH);
-  g_return_val_if_fail(viewport_width > 0.0, (double)HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH);
+  g_return_val_if_fail(position != NULL, FALSE);
+  g_return_val_if_fail(viewport_width > 0.0, FALSE);
+  g_return_val_if_fail(viewport_height > 0.0, FALSE);
+  g_return_val_if_fail(out_width != NULL, FALSE);
+  g_return_val_if_fail(out_height != NULL, FALSE);
 
+  homeworlds_view_board_row_extents_init(extents, homeworlds_view_position_has_non_home_system(position));
   for (guint system_index = 0; system_index < 2; ++system_index) {
+    const HomeworldsSystem *system = &position->systems[system_index];
+    HomeworldsViewSystemLayout layout = {0};
     double system_width = 0.0;
 
     if (!homeworlds_view_measure_system_width(position, system_index, &system_width)) {
@@ -894,6 +1044,10 @@ double homeworlds_view_calculate_board_content_width(const HomeworldsPosition *p
     }
     required_width = MAX(required_width,
                          homeworlds_view_board_width_for_row(homeworlds_view_row_required_width(system_width, 1)));
+    if (homeworlds_view_calculate_system_layout(system, system_index, 0.0, 0.0, &layout)) {
+      HomeworldsViewBoardRow row = homeworlds_view_board_row_for_system(position, system_index);
+      homeworlds_view_board_row_extent_add(&extents[row], layout.box_y, layout.box_y + layout.box_height);
+    }
   }
 
   for (guint row_value = HOMEWORLDS_VIEW_SYSTEM_ROW_TOP;
@@ -904,9 +1058,11 @@ double homeworlds_view_calculate_board_content_width(const HomeworldsPosition *p
     double total_width = 0.0;
 
     for (guint system_index = 2; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
+      const HomeworldsSystem *system = &position->systems[system_index];
+      HomeworldsViewSystemLayout layout = {0};
       double system_width = 0.0;
 
-      if (homeworlds_system_is_empty(&position->systems[system_index]) ||
+      if (homeworlds_system_is_empty(system) ||
           homeworlds_view_system_row(position, system_index) != row) {
         continue;
       }
@@ -915,6 +1071,10 @@ double homeworlds_view_calculate_board_content_width(const HomeworldsPosition *p
       }
       total_width += system_width;
       system_count++;
+      if (homeworlds_view_calculate_system_layout(system, system_index, 0.0, 0.0, &layout)) {
+        HomeworldsViewBoardRow board_row = homeworlds_view_board_row_for_system(position, system_index);
+        homeworlds_view_board_row_extent_add(&extents[board_row], layout.box_y, layout.box_y + layout.box_height);
+      }
     }
 
     if (system_count > 0) {
@@ -924,7 +1084,27 @@ double homeworlds_view_calculate_board_content_width(const HomeworldsPosition *p
     }
   }
 
-  return ceil(required_width);
+  *out_width = (int)ceil(required_width);
+  *out_height = (int)homeworlds_view_required_height_for_row_extents(extents, viewport_height);
+  return TRUE;
+}
+
+double homeworlds_view_calculate_board_content_width(const HomeworldsPosition *position, double viewport_width) {
+  int content_width = HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH;
+  int content_height = HOMEWORLDS_VIEW_FALLBACK_BOARD_HEIGHT;
+
+  g_return_val_if_fail(position != NULL, (double)HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH);
+  g_return_val_if_fail(viewport_width > 0.0, (double)HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH);
+
+  if (!homeworlds_view_calculate_board_content_size(position,
+                                                    viewport_width,
+                                                    (double)HOMEWORLDS_VIEW_FALLBACK_BOARD_HEIGHT,
+                                                    &content_width,
+                                                    &content_height)) {
+    return (double)HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH;
+  }
+
+  return (double)content_width;
 }
 
 gboolean homeworlds_view_calculate_system_center(const HomeworldsPosition *position,
@@ -1352,38 +1532,50 @@ static void homeworlds_view_board_size(HomeworldsView *view, int *out_width, int
   }
 }
 
-static int homeworlds_view_board_viewport_width(HomeworldsView *view) {
+static void homeworlds_view_board_viewport_size(HomeworldsView *view, int *out_width, int *out_height) {
   int width = 0;
+  int height = 0;
 
-  g_return_val_if_fail(view != NULL, HOMEWORLDS_VIEW_INITIAL_BOARD_WIDTH);
+  g_return_if_fail(view != NULL);
+  g_return_if_fail(out_width != NULL);
+  g_return_if_fail(out_height != NULL);
 
   if (view->board_scroller != NULL) {
     width = gtk_widget_get_width(view->board_scroller);
-    if (width > 1) {
-      return width;
-    }
+    height = gtk_widget_get_height(view->board_scroller);
   }
-  if (view->board_overlay != NULL) {
+  if (width <= 1 && view->board_overlay != NULL) {
     width = gtk_widget_get_width(view->board_overlay);
-    if (width > 1) {
-      return width;
-    }
   }
-  if (view->board_hadjustment != NULL) {
+  if (height <= 1 && view->board_overlay != NULL) {
+    height = gtk_widget_get_height(view->board_overlay);
+  }
+  if (width <= 1 && view->board_hadjustment != NULL) {
     double page_size = gtk_adjustment_get_page_size(view->board_hadjustment);
     if (page_size > 1.0) {
-      return (int)ceil(page_size);
+      width = (int)ceil(page_size);
+    }
+  }
+  if (height <= 1 && view->board_vadjustment != NULL) {
+    double page_size = gtk_adjustment_get_page_size(view->board_vadjustment);
+    if (page_size > 1.0) {
+      height = (int)ceil(page_size);
     }
   }
 
-  return HOMEWORLDS_VIEW_INITIAL_BOARD_WIDTH;
+  *out_width = width > 1 ? width : HOMEWORLDS_VIEW_INITIAL_BOARD_WIDTH;
+  *out_height = height > 1 ? height : HOMEWORLDS_VIEW_INITIAL_BOARD_HEIGHT;
 }
 
-static gboolean homeworlds_view_update_board_content_width(HomeworldsView *view) {
+static gboolean homeworlds_view_update_board_content_size(HomeworldsView *view) {
   const HomeworldsPosition *position = NULL;
   int viewport_width = 0;
+  int viewport_height = 0;
   int content_width = 0;
+  int content_height = 0;
   int current_content_width = 0;
+  int current_content_height = 0;
+  gboolean changed = FALSE;
 
   g_return_val_if_fail(view != NULL, FALSE);
   g_return_val_if_fail(GTK_IS_DRAWING_AREA(view->drawing_area), FALSE);
@@ -1393,29 +1585,50 @@ static gboolean homeworlds_view_update_board_content_width(HomeworldsView *view)
     return FALSE;
   }
 
-  viewport_width = homeworlds_view_board_viewport_width(view);
-  content_width = (int)homeworlds_view_calculate_board_content_width(position, (double)viewport_width);
-  if (viewport_width <= HOMEWORLDS_VIEW_INITIAL_BOARD_WIDTH &&
-      content_width <= HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH) {
+  homeworlds_view_board_viewport_size(view, &viewport_width, &viewport_height);
+  if (!homeworlds_view_calculate_board_content_size(position,
+                                                    (double)viewport_width,
+                                                    (double)viewport_height,
+                                                    &content_width,
+                                                    &content_height)) {
     return FALSE;
   }
   current_content_width = gtk_drawing_area_get_content_width(GTK_DRAWING_AREA(view->drawing_area));
+  current_content_height = gtk_drawing_area_get_content_height(GTK_DRAWING_AREA(view->drawing_area));
+  if (viewport_width <= HOMEWORLDS_VIEW_INITIAL_BOARD_WIDTH &&
+      content_width <= HOMEWORLDS_VIEW_FALLBACK_BOARD_WIDTH) {
+    content_width = current_content_width;
+  }
+  if (viewport_height <= HOMEWORLDS_VIEW_INITIAL_BOARD_HEIGHT &&
+      content_height <= HOMEWORLDS_VIEW_FALLBACK_BOARD_HEIGHT) {
+    content_height = current_content_height;
+  }
   if (content_width != current_content_width) {
     gtk_drawing_area_set_content_width(GTK_DRAWING_AREA(view->drawing_area), content_width);
-    return TRUE;
+    changed = TRUE;
+  }
+  if (content_height != current_content_height) {
+    gtk_drawing_area_set_content_height(GTK_DRAWING_AREA(view->drawing_area), content_height);
+    changed = TRUE;
   }
 
-  return FALSE;
+  return changed;
 }
 
 static gboolean homeworlds_view_board_layout_matches_viewport(HomeworldsView *view) {
   const HomeworldsPosition *position = NULL;
   int viewport_width = 0;
+  int viewport_height = 0;
   int expected_content_width = 0;
+  int expected_content_height = 0;
   int content_width = 0;
+  int content_height = 0;
   int allocated_content_width = 0;
+  int allocated_content_height = 0;
   int allocated_overlay_width = 0;
+  int allocated_overlay_height = 0;
   int minimum_allocated_width = 0;
+  int minimum_allocated_height = 0;
 
   g_return_val_if_fail(view != NULL, FALSE);
 
@@ -1426,7 +1639,8 @@ static gboolean homeworlds_view_board_layout_matches_viewport(HomeworldsView *vi
   }
 
   viewport_width = gtk_widget_get_width(view->board_scroller);
-  if (viewport_width <= 1) {
+  viewport_height = gtk_widget_get_height(view->board_scroller);
+  if (viewport_width <= 1 || viewport_height <= 1) {
     return FALSE;
   }
 
@@ -1435,32 +1649,49 @@ static gboolean homeworlds_view_board_layout_matches_viewport(HomeworldsView *vi
     return FALSE;
   }
 
-  expected_content_width = (int)homeworlds_view_calculate_board_content_width(position, (double)viewport_width);
+  if (!homeworlds_view_calculate_board_content_size(position,
+                                                    (double)viewport_width,
+                                                    (double)viewport_height,
+                                                    &expected_content_width,
+                                                    &expected_content_height)) {
+    return FALSE;
+  }
   content_width = gtk_drawing_area_get_content_width(GTK_DRAWING_AREA(view->drawing_area));
+  content_height = gtk_drawing_area_get_content_height(GTK_DRAWING_AREA(view->drawing_area));
   allocated_content_width = gtk_widget_get_width(view->drawing_area);
+  allocated_content_height = gtk_widget_get_height(view->drawing_area);
   allocated_overlay_width = gtk_widget_get_width(view->board_overlay);
+  allocated_overlay_height = gtk_widget_get_height(view->board_overlay);
   minimum_allocated_width = MIN(viewport_width, content_width);
+  minimum_allocated_height = MIN(viewport_height, content_height);
   if (ABS(content_width - expected_content_width) > 1) {
     return FALSE;
   }
+  if (ABS(content_height - expected_content_height) > 1) {
+    return FALSE;
+  }
   if (allocated_content_width < minimum_allocated_width - 1 ||
-      allocated_overlay_width < minimum_allocated_width - 1) {
+      allocated_overlay_width < minimum_allocated_width - 1 ||
+      allocated_content_height < minimum_allocated_height - 1 ||
+      allocated_overlay_height < minimum_allocated_height - 1) {
     return FALSE;
   }
   return allocated_content_width <= content_width + 1 &&
-         allocated_overlay_width <= content_width + 1;
+         allocated_overlay_width <= content_width + 1 &&
+         allocated_content_height <= content_height + 1 &&
+         allocated_overlay_height <= content_height + 1;
 }
 
 static gboolean homeworlds_view_board_layout_settle_tick(GtkWidget * /*widget*/,
                                                          GdkFrameClock * /*frame_clock*/,
                                                          gpointer user_data) {
   HomeworldsView *view = user_data;
-  gboolean content_width_changed = FALSE;
+  gboolean content_size_changed = FALSE;
 
   g_return_val_if_fail(view != NULL, G_SOURCE_REMOVE);
 
-  content_width_changed = homeworlds_view_update_board_content_width(view);
-  if (content_width_changed) {
+  content_size_changed = homeworlds_view_update_board_content_size(view);
+  if (content_size_changed) {
     gtk_widget_queue_resize(view->board_overlay);
     gtk_widget_queue_resize(view->drawing_area);
     homeworlds_view_update_board_choice_buttons(view);
@@ -1765,7 +1996,7 @@ static void homeworlds_view_board_resized(GtkDrawingArea * /*drawing_area*/,
 
   g_return_if_fail(view != NULL);
 
-  homeworlds_view_update_board_content_width(view);
+  homeworlds_view_update_board_content_size(view);
   homeworlds_view_update_board_choice_buttons(view);
   homeworlds_view_schedule_board_layout_settle(view);
 }
@@ -1775,7 +2006,7 @@ static void homeworlds_view_board_viewport_changed(GtkAdjustment * /*adjustment*
 
   g_return_if_fail(view != NULL);
 
-  homeworlds_view_update_board_content_width(view);
+  homeworlds_view_update_board_content_size(view);
   homeworlds_view_update_board_choice_buttons(view);
   homeworlds_view_schedule_board_layout_settle(view);
   gtk_widget_queue_draw(view->drawing_area);
@@ -2411,7 +2642,7 @@ static void homeworlds_view_update_from_current_builder(HomeworldsView *view) {
 
   homeworlds_view_update_candidates(view);
   homeworlds_view_update_catastrophes(view);
-  homeworlds_view_update_board_content_width(view);
+  homeworlds_view_update_board_content_size(view);
   homeworlds_view_update_board_bank(view);
   homeworlds_view_update_board_choice_buttons(view);
   gtk_widget_queue_draw(view->drawing_area);
@@ -2475,13 +2706,19 @@ static HomeworldsView *homeworlds_view_new_with_move_report(GGameModel *model, g
   gtk_widget_set_hexpand(view->drawing_area, TRUE);
   gtk_widget_set_vexpand(view->drawing_area, TRUE);
   gtk_drawing_area_set_content_width(GTK_DRAWING_AREA(view->drawing_area), HOMEWORLDS_VIEW_INITIAL_BOARD_WIDTH);
-  gtk_drawing_area_set_content_height(GTK_DRAWING_AREA(view->drawing_area), 620);
+  gtk_drawing_area_set_content_height(GTK_DRAWING_AREA(view->drawing_area), HOMEWORLDS_VIEW_INITIAL_BOARD_HEIGHT);
   gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(view->drawing_area), homeworlds_view_draw, view, NULL);
   g_signal_connect(view->drawing_area, "resize", G_CALLBACK(homeworlds_view_board_resized), view);
   gtk_overlay_set_child(GTK_OVERLAY(view->board_overlay), view->drawing_area);
   view->board_hadjustment =
       g_object_ref(gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(view->board_scroller)));
   view->board_hadjustment_changed_handler_id = g_signal_connect(view->board_hadjustment,
+                                                                "changed",
+                                                                G_CALLBACK(homeworlds_view_board_viewport_changed),
+                                                                view);
+  view->board_vadjustment =
+      g_object_ref(gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(view->board_scroller)));
+  view->board_vadjustment_changed_handler_id = g_signal_connect(view->board_vadjustment,
                                                                 "changed",
                                                                 G_CALLBACK(homeworlds_view_board_viewport_changed),
                                                                 view);
@@ -2624,7 +2861,12 @@ void homeworlds_view_free(HomeworldsView *view) {
     g_signal_handler_disconnect(view->board_hadjustment, view->board_hadjustment_changed_handler_id);
     view->board_hadjustment_changed_handler_id = 0;
   }
+  if (view->board_vadjustment != NULL && view->board_vadjustment_changed_handler_id != 0) {
+    g_signal_handler_disconnect(view->board_vadjustment, view->board_vadjustment_changed_handler_id);
+    view->board_vadjustment_changed_handler_id = 0;
+  }
   g_clear_object(&view->board_hadjustment);
+  g_clear_object(&view->board_vadjustment);
   if (view->builder_ready) {
     homeworlds_move_builder_clear(&view->builder);
   }
@@ -2645,7 +2887,7 @@ void homeworlds_view_refresh(HomeworldsView *view) {
   homeworlds_view_update_candidates(view);
   homeworlds_view_update_catastrophes(view);
   homeworlds_view_update_move_report(view);
-  homeworlds_view_update_board_content_width(view);
+  homeworlds_view_update_board_content_size(view);
   homeworlds_view_update_board_bank(view);
   homeworlds_view_update_board_choice_buttons(view);
   gtk_widget_queue_draw(view->drawing_area);

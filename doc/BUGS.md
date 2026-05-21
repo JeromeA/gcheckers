@@ -750,3 +750,13 @@ The fix makes board content-width updates report whether the width actually chan
 interactive board-choice overlay only after a real content-width change, its stop predicate accepts the allocated board
 and overlay once they are no longer wider than the expected content width, and the root widget cancels any remaining
 tick during destruction.
+
+## Homeworlds board height stayed fixed instead of viewport-sized
+
+The Homeworlds board content width already matched the viewport when rows fit and expanded only when a row needed more
+horizontal space. Height still used a fixed drawing-area content height, so the board could be taller than the available
+viewport even when the rows fit, or too short when several tall rows needed more vertical room.
+
+The fix replaces the width-only content calculation with a single content-size calculation for both axes. It keeps the
+viewport size when all visible row boxes fit, expands width for horizontally crowded rows, and expands height when row
+boxes would clip or overlap vertically. The scroller now tracks both horizontal and vertical viewport adjustments.

@@ -605,6 +605,8 @@ static void test_homeworlds_view_row_layout_accounts_for_system_width(void) {
 static void test_homeworlds_view_board_content_width_expands_for_wide_rows(void) {
   HomeworldsPosition position = {0};
   double content_width = 0.0;
+  int content_size_width = 0;
+  int content_size_height = 0;
 
   test_homeworlds_prepare_compact_row_position(&position);
   for (guint system_index = 2; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
@@ -614,14 +616,53 @@ static void test_homeworlds_view_board_content_width_expands_for_wide_rows(void)
 
   content_width = homeworlds_view_calculate_board_content_width(&position, 900.0);
   g_assert_cmpfloat(content_width, >, 900.0);
+  g_assert_true(homeworlds_view_calculate_board_content_size(&position,
+                                                            900.0,
+                                                            700.0,
+                                                            &content_size_width,
+                                                            &content_size_height));
+  g_assert_cmpint(content_size_width, >, 900);
+  g_assert_cmpint(content_size_height, ==, 700);
 }
 
-static void test_homeworlds_view_board_content_width_matches_viewport_when_rows_fit(void) {
+static void test_homeworlds_view_board_content_size_matches_viewport_when_rows_fit(void) {
   HomeworldsPosition position = {0};
+  int content_width = 0;
+  int content_height = 0;
 
   test_homeworlds_prepare_compact_row_position(&position);
 
+  g_assert_true(homeworlds_view_calculate_board_content_size(&position,
+                                                            900.0,
+                                                            700.0,
+                                                            &content_width,
+                                                            &content_height));
+  g_assert_cmpint(content_width, ==, 900);
+  g_assert_cmpint(content_height, ==, 700);
   g_assert_cmpfloat(homeworlds_view_calculate_board_content_width(&position, 900.0), ==, 900.0);
+}
+
+static void test_homeworlds_view_board_content_height_expands_for_tall_rows(void) {
+  HomeworldsPosition position = {0};
+  int content_width = 0;
+  int content_height = 0;
+
+  position.phase = HOMEWORLDS_PHASE_PLAY;
+  position.systems[0].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL);
+  position.systems[0].stars[1] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_MEDIUM);
+  position.systems[1].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_MEDIUM);
+  position.systems[1].stars[1] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE);
+  test_homeworlds_make_wide_system(&position.systems[2], HOMEWORLDS_COLOR_RED);
+  test_homeworlds_make_wide_system(&position.systems[3], HOMEWORLDS_COLOR_RED);
+  test_homeworlds_make_wide_system(&position.systems[4], HOMEWORLDS_COLOR_GREEN);
+
+  g_assert_true(homeworlds_view_calculate_board_content_size(&position,
+                                                            1200.0,
+                                                            220.0,
+                                                            &content_width,
+                                                            &content_height));
+  g_assert_cmpint(content_width, >=, 1200);
+  g_assert_cmpint(content_height, >, 220);
 }
 
 static void test_homeworlds_view_board_is_horizontally_scrollable(void) {
@@ -824,13 +865,14 @@ static void test_homeworlds_window_main_split_can_exceed_height(void) {
   g_object_unref(app);
 }
 
-static void test_homeworlds_view_board_content_width_tracks_viewport(void) {
+static void test_homeworlds_view_board_content_size_tracks_viewport(void) {
   GGameModel *model = ggame_model_new(&homeworlds_game_backend);
   HomeworldsView *view = test_homeworlds_view_new_without_move_report(model);
   GtkWidget *root = homeworlds_view_get_widget(view);
   GtkWidget *board = NULL;
   GtkWidget *board_scroller = NULL;
   GtkAdjustment *hadjustment = NULL;
+  GtkAdjustment *vadjustment = NULL;
 
   board = test_homeworlds_find_widget_named(root, "homeworlds-board");
   board_scroller = test_homeworlds_find_widget_named(root, "homeworlds-board-scroller");
@@ -841,12 +883,18 @@ static void test_homeworlds_view_board_content_width_tracks_viewport(void) {
   g_assert_true(GTK_IS_SCROLLED_WINDOW(board_scroller));
   hadjustment = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(board_scroller));
   g_assert_nonnull(hadjustment);
+  vadjustment = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(board_scroller));
+  g_assert_nonnull(vadjustment);
 
   gtk_adjustment_configure(hadjustment, 0.0, 0.0, 1200.0, 1.0, 100.0, 1200.0);
+  gtk_adjustment_configure(vadjustment, 0.0, 0.0, 500.0, 1.0, 100.0, 500.0);
   g_assert_cmpint(gtk_drawing_area_get_content_width(GTK_DRAWING_AREA(board)), ==, 1200);
+  g_assert_cmpint(gtk_drawing_area_get_content_height(GTK_DRAWING_AREA(board)), ==, 500);
 
   gtk_adjustment_configure(hadjustment, 0.0, 0.0, 700.0, 1.0, 100.0, 700.0);
+  gtk_adjustment_configure(vadjustment, 0.0, 0.0, 400.0, 1.0, 100.0, 400.0);
   g_assert_cmpint(gtk_drawing_area_get_content_width(GTK_DRAWING_AREA(board)), ==, 700);
+  g_assert_cmpint(gtk_drawing_area_get_content_height(GTK_DRAWING_AREA(board)), ==, 400);
 
   homeworlds_view_free(view);
   g_object_unref(model);
@@ -1542,8 +1590,10 @@ int main(int argc, char **argv) {
                   test_homeworlds_view_row_layout_accounts_for_system_width);
   g_test_add_func("/homeworlds/view/board-width-expands-for-wide-rows",
                   test_homeworlds_view_board_content_width_expands_for_wide_rows);
-  g_test_add_func("/homeworlds/view/board-width-matches-viewport-when-rows-fit",
-                  test_homeworlds_view_board_content_width_matches_viewport_when_rows_fit);
+  g_test_add_func("/homeworlds/view/board-size-matches-viewport-when-rows-fit",
+                  test_homeworlds_view_board_content_size_matches_viewport_when_rows_fit);
+  g_test_add_func("/homeworlds/view/board-height-expands-for-tall-rows",
+                  test_homeworlds_view_board_content_height_expands_for_tall_rows);
   g_test_add_func("/homeworlds/view/piece-metrics", test_homeworlds_view_piece_metrics_keep_pyramids_tall);
   if (!gtk_init_check()) {
     g_test_add_func("/homeworlds/window/replaces-skeleton", test_homeworlds_window_skip);
@@ -1565,7 +1615,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/view/move-report-initial-state", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/board-scrollable", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/text-panel-fixed-width", test_homeworlds_window_skip);
-    g_test_add_func("/homeworlds/view/board-content-width-tracks-viewport", test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/view/board-content-size-tracks-viewport", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/window/move-report-action", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/window/view-menu-move-report", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/window/catastrophe-prefix-records-single-sgf-move",
@@ -1598,8 +1648,8 @@ int main(int argc, char **argv) {
                     test_homeworlds_board_host_initial_move_report_state_is_applied);
     g_test_add_func("/homeworlds/view/board-scrollable", test_homeworlds_view_board_is_horizontally_scrollable);
     g_test_add_func("/homeworlds/view/text-panel-fixed-width", test_homeworlds_view_text_panel_has_fixed_width);
-    g_test_add_func("/homeworlds/view/board-content-width-tracks-viewport",
-                    test_homeworlds_view_board_content_width_tracks_viewport);
+    g_test_add_func("/homeworlds/view/board-content-size-tracks-viewport",
+                    test_homeworlds_view_board_content_size_tracks_viewport);
     g_test_add_func("/homeworlds/window/move-report-action", test_homeworlds_window_move_report_action_toggles_view);
     g_test_add_func("/homeworlds/window/view-menu-move-report",
                     test_homeworlds_application_view_menu_has_move_report);
