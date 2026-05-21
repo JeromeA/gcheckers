@@ -1302,11 +1302,19 @@ static void test_homeworlds_view_bank_layout_is_compact_and_centered(void) {
   g_object_unref(model);
 }
 
+static gint test_homeworlds_widget_natural_width(GtkWidget *widget) {
+  gint natural = 0;
+
+  g_return_val_if_fail(GTK_IS_WIDGET(widget), 0);
+
+  gtk_widget_measure(widget, GTK_ORIENTATION_HORIZONTAL, -1, NULL, &natural, NULL, NULL);
+  return natural;
+}
+
 static void test_homeworlds_view_bank_layout_stays_compact_after_setup(void) {
   GGameModel *model = ggame_model_new(&homeworlds_game_backend);
   HomeworldsView *view = test_homeworlds_view_new_without_move_report(model);
   GtkWidget *root = homeworlds_view_get_widget(view);
-  GtkWidget *window = gtk_window_new();
   GtkWidget *bank = NULL;
   gint setup_bank_width = 0;
 
@@ -1314,31 +1322,25 @@ static void test_homeworlds_view_bank_layout_stays_compact_after_setup(void) {
   g_assert_nonnull(view);
   g_assert_nonnull(root);
   ggame_style_init();
-  gtk_window_set_child(GTK_WINDOW(window), root);
-  gtk_window_set_default_size(GTK_WINDOW(window), 1200, 700);
-  gtk_window_present(GTK_WINDOW(window));
-  test_homeworlds_drain_main_context(64);
 
   bank = test_homeworlds_find_widget_named(root, "homeworlds-board-bank");
   g_assert_nonnull(bank);
-  setup_bank_width = gtk_widget_get_width(bank);
+  setup_bank_width = test_homeworlds_widget_natural_width(bank);
   g_assert_cmpint(setup_bank_width, >, 0);
   g_assert_cmpuint(test_homeworlds_count_bank_buttons_without_compact_style(bank), ==, 0);
   g_assert_cmpuint(test_homeworlds_count_bank_buttons_with_css_class(bank, "homeworlds-bank-choice"), ==, 12);
 
   for (guint step = 0; step < 6; step++) {
     g_assert_true(homeworlds_view_apply_candidate_at(view, 0));
-    test_homeworlds_drain_main_context(64);
   }
 
   bank = test_homeworlds_find_widget_named(root, "homeworlds-board-bank");
   g_assert_nonnull(bank);
-  g_assert_cmpint(gtk_widget_get_width(bank), <=, setup_bank_width);
+  g_assert_cmpint(test_homeworlds_widget_natural_width(bank), <=, setup_bank_width);
   g_assert_cmpuint(test_homeworlds_count_bank_buttons_without_compact_style(bank), ==, 0);
   g_assert_cmpuint(test_homeworlds_count_bank_buttons_with_css_class(bank, "homeworlds-bank-choice"), ==, 0);
 
   homeworlds_view_free(view);
-  gtk_window_destroy(GTK_WINDOW(window));
   g_object_unref(model);
 }
 

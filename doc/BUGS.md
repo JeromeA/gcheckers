@@ -843,3 +843,14 @@ sentinel convention as the rest of the Homeworlds code.
 `out_system_index`. A caller that inspected the index after failure could see a stale valid system index.
 
 The fix initializes `out_system_index` to `HOMEWORLDS_INVALID_INDEX` before resolving the reference.
+
+## Homeworlds bank layout test poisoned the next rendered window
+
+The bank layout regression test only needed to prove that the bank kept its compact natural width after setup.
+
+It presented and destroyed a throwaway `GtkWindow` just to read the bank's allocated width. The failure was not in the
+next text-panel assertions: logs showed the next test aborted on its first main-context iteration, and gdb showed GTK
+calling `g_signal_emit()` with a NULL instance from an internal render idle before the new Homeworlds view ran.
+
+The fix measures the bank widget's natural width directly with `gtk_widget_measure()`. That keeps the test focused on
+the compact layout contract and avoids leaving fragile renderer state behind for the following toplevel test.
