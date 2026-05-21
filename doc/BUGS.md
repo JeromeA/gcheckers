@@ -716,3 +716,13 @@ The fix tracks structural move hashes in the good-move buffer. A duplicate now e
 and duplicated move, but the move is still appended so the guard does not silently hide the generator bug. The duplicate
 cases exposed while adding the guard were fixed in the generator: build actions now use one canonical same-color source
 ship, and AI catastrophe insertion only happens at stable move boundaries.
+
+## Homeworlds setup text changed the side-panel width
+
+The Homeworlds text panel should keep one fixed width while setup choices advance. The panel requested a fixed content
+width, but its child labels and side-panel buttons still contributed changing natural widths; after selecting the first
+star, the setup prompt could widen the panel before later setup stages shrank it again.
+
+The fix makes the text panel explicitly non-expanding, allows horizontal scrolling only as a containment fallback, and
+constrains side-panel labels and buttons to wrap inside the fixed panel width. The fixed-width test now realizes the
+view and checks the allocated panel width across the first setup choices.

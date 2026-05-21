@@ -46,6 +46,7 @@ typedef struct {
 #define HOMEWORLDS_VIEW_ROW_MIN_EMPTY_GAP 24.0
 #define HOMEWORLDS_VIEW_MIN_BOARD_VIEWPORT_WIDTH 420
 #define HOMEWORLDS_VIEW_TEXT_PANEL_WIDTH 280
+#define HOMEWORLDS_VIEW_TEXT_PANEL_LABEL_WIDTH_CHARS 28
 #define HOMEWORLDS_VIEW_SYSTEM_PIECE_MAX (HOMEWORLDS_STAR_SLOT_COUNT + (2 * HOMEWORLDS_SHIP_SLOT_COUNT))
 typedef enum {
   HOMEWORLDS_VIEW_SYSTEM_ROW_TOP = 0,
@@ -402,6 +403,48 @@ static void homeworlds_view_clear_fixed(GtkWidget *fixed) {
     gtk_fixed_remove(GTK_FIXED(fixed), child);
     child = next;
   }
+}
+
+static void homeworlds_view_constrain_text_panel_label(GtkWidget *label) {
+  g_return_if_fail(GTK_IS_LABEL(label));
+
+  gtk_label_set_wrap(GTK_LABEL(label), TRUE);
+  gtk_label_set_wrap_mode(GTK_LABEL(label), PANGO_WRAP_WORD_CHAR);
+  gtk_label_set_width_chars(GTK_LABEL(label), HOMEWORLDS_VIEW_TEXT_PANEL_LABEL_WIDTH_CHARS);
+  gtk_label_set_max_width_chars(GTK_LABEL(label), HOMEWORLDS_VIEW_TEXT_PANEL_LABEL_WIDTH_CHARS);
+}
+
+static GtkWidget *homeworlds_view_new_text_panel_label(const char *text) {
+  GtkWidget *label = NULL;
+
+  g_return_val_if_fail(text != NULL, NULL);
+
+  label = gtk_label_new(text);
+  homeworlds_view_constrain_text_panel_label(label);
+  gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
+  return label;
+}
+
+static void homeworlds_view_constrain_text_panel_button(GtkWidget *button) {
+  GtkWidget *child = NULL;
+
+  g_return_if_fail(GTK_IS_BUTTON(button));
+
+  gtk_widget_set_halign(button, GTK_ALIGN_FILL);
+  child = gtk_button_get_child(GTK_BUTTON(button));
+  if (GTK_IS_LABEL(child)) {
+    homeworlds_view_constrain_text_panel_label(child);
+  }
+}
+
+static GtkWidget *homeworlds_view_new_text_panel_button(const char *label) {
+  GtkWidget *button = NULL;
+
+  g_return_val_if_fail(label != NULL, NULL);
+
+  button = gtk_button_new_with_label(label);
+  homeworlds_view_constrain_text_panel_button(button);
+  return button;
 }
 
 static gboolean homeworlds_view_stage_uses_bank_choices(const HomeworldsView *view) {
@@ -1813,8 +1856,7 @@ static void homeworlds_view_append_candidate_button(HomeworldsView *view, const 
   g_return_if_fail(candidate != NULL);
 
   label = homeworlds_view_candidate_label(candidate);
-  button = gtk_button_new_with_label(label);
-  gtk_widget_set_halign(button, GTK_ALIGN_FILL);
+  button = homeworlds_view_new_text_panel_button(label);
   g_object_set_data_full(G_OBJECT(button),
                          "homeworlds-candidate",
                          g_memdup2(candidate, sizeof(*candidate)),
@@ -1838,8 +1880,7 @@ static void homeworlds_view_append_cancel_button(HomeworldsView *view) {
 
   g_return_if_fail(view != NULL);
 
-  button = gtk_button_new_with_label("Cancel");
-  gtk_widget_set_halign(button, GTK_ALIGN_FILL);
+  button = homeworlds_view_new_text_panel_button("Cancel");
   g_object_set_data(G_OBJECT(button), "homeworlds-cancel-choice", GUINT_TO_POINTER(1));
   g_signal_connect(button, "clicked", G_CALLBACK(homeworlds_view_cancel_selection_clicked), view);
   gtk_box_append(GTK_BOX(view->candidate_box), button);
@@ -1948,7 +1989,7 @@ static void homeworlds_view_update_catastrophes(HomeworldsView *view) {
       char *label = g_strdup_printf("Catastrophe %s at system %u",
                                     homeworlds_view_color_name((HomeworldsColor) color),
                                     system_index);
-      GtkWidget *button = gtk_button_new_with_label(label);
+      GtkWidget *button = homeworlds_view_new_text_panel_button(label);
       g_object_set_data(G_OBJECT(button), "homeworlds-system-index", GUINT_TO_POINTER(system_index + 1));
       g_object_set_data(G_OBJECT(button), "homeworlds-color", GUINT_TO_POINTER(color + 1));
       g_signal_connect(button, "clicked", G_CALLBACK(homeworlds_view_catastrophe_clicked), view);
@@ -1959,9 +2000,7 @@ static void homeworlds_view_update_catastrophes(HomeworldsView *view) {
   }
 
   if (!appended) {
-    GtkWidget *label = gtk_label_new("No catastrophes are currently available.");
-    gtk_label_set_wrap(GTK_LABEL(label), TRUE);
-    gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
+    GtkWidget *label = homeworlds_view_new_text_panel_label("No catastrophes are currently available.");
     gtk_box_append(GTK_BOX(view->catastrophe_box), label);
   }
 }
@@ -2169,7 +2208,7 @@ static void homeworlds_view_update_candidates(HomeworldsView *view) {
   state = homeworlds_view_builder_state(view);
 
   if (!view->builder_ready) {
-    gtk_box_append(GTK_BOX(view->candidate_box), gtk_label_new("The game is finished."));
+    gtk_box_append(GTK_BOX(view->candidate_box), homeworlds_view_new_text_panel_label("The game is finished."));
     return;
   }
 
@@ -2177,11 +2216,9 @@ static void homeworlds_view_update_candidates(HomeworldsView *view) {
   if (state != NULL &&
       state->stage == HOMEWORLDS_BUILDER_STAGE_COMPLETE &&
       homeworlds_view_builder_has_catastrophe_choices(state)) {
-    GtkWidget *label = gtk_label_new("Catastrophe available. Trigger one or pass.");
-    GtkWidget *button = gtk_button_new_with_label("Pass");
+    GtkWidget *label = homeworlds_view_new_text_panel_label("Catastrophe available. Trigger one or pass.");
+    GtkWidget *button = homeworlds_view_new_text_panel_button("Pass");
 
-    gtk_label_set_wrap(GTK_LABEL(label), TRUE);
-    gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
     gtk_box_append(GTK_BOX(view->candidate_box), label);
     g_object_set_data(G_OBJECT(button), "homeworlds-finish-catastrophes-pass", GUINT_TO_POINTER(1));
     g_signal_connect(button, "clicked", G_CALLBACK(homeworlds_view_pass_staged_catastrophes_clicked), view);
@@ -2192,9 +2229,7 @@ static void homeworlds_view_update_candidates(HomeworldsView *view) {
   if (state != NULL &&
       state->stage != HOMEWORLDS_BUILDER_STAGE_SELECT_SHIP &&
       homeworlds_view_stage_uses_visual_choices(view)) {
-    GtkWidget *label = gtk_label_new(homeworlds_view_visual_choice_text(state));
-    gtk_label_set_wrap(GTK_LABEL(label), TRUE);
-    gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
+    GtkWidget *label = homeworlds_view_new_text_panel_label(homeworlds_view_visual_choice_text(state));
     gtk_box_append(GTK_BOX(view->candidate_box), label);
     homeworlds_view_append_cancel_button_if_available(view);
     g_clear_pointer(&candidates.moves, g_free);
@@ -2202,9 +2237,8 @@ static void homeworlds_view_update_candidates(HomeworldsView *view) {
   }
 
   if (candidates.count == 0) {
-    GtkWidget *label = gtk_label_new("No legal choices from this partial selection. Reset selection.");
-    gtk_label_set_wrap(GTK_LABEL(label), TRUE);
-    gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
+    GtkWidget *label = homeworlds_view_new_text_panel_label("No legal choices from this partial selection. "
+                                                            "Reset selection.");
     gtk_box_append(GTK_BOX(view->candidate_box), label);
     homeworlds_view_append_cancel_button_if_available(view);
     g_clear_pointer(&candidates.moves, g_free);
@@ -2212,9 +2246,7 @@ static void homeworlds_view_update_candidates(HomeworldsView *view) {
   }
 
   if (state != NULL && state->stage == HOMEWORLDS_BUILDER_STAGE_SELECT_SHIP) {
-    GtkWidget *label = gtk_label_new(homeworlds_view_visual_choice_text(state));
-    gtk_label_set_wrap(GTK_LABEL(label), TRUE);
-    gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
+    GtkWidget *label = homeworlds_view_new_text_panel_label(homeworlds_view_visual_choice_text(state));
     gtk_box_append(GTK_BOX(view->candidate_box), label);
 
     for (gsize i = 0; i < candidates.count; ++i) {
@@ -2226,9 +2258,7 @@ static void homeworlds_view_update_candidates(HomeworldsView *view) {
       appended = TRUE;
     }
     if (!appended) {
-      GtkWidget *fallback = gtk_label_new("No side-panel choices are available for this step.");
-      gtk_label_set_wrap(GTK_LABEL(fallback), TRUE);
-      gtk_label_set_xalign(GTK_LABEL(fallback), 0.0f);
+      GtkWidget *fallback = homeworlds_view_new_text_panel_label("No side-panel choices are available for this step.");
       gtk_box_append(GTK_BOX(view->candidate_box), fallback);
     }
     homeworlds_view_append_cancel_button_if_available(view);
@@ -2342,11 +2372,13 @@ static HomeworldsView *homeworlds_view_new_with_move_report(GGameModel *model, g
 
   side_scroller = gtk_scrolled_window_new();
   gtk_widget_set_name(side_scroller, "homeworlds-text-panel");
+  gtk_widget_set_hexpand(side_scroller, FALSE);
+  gtk_widget_set_halign(side_scroller, GTK_ALIGN_START);
   gtk_widget_set_size_request(side_scroller, HOMEWORLDS_VIEW_TEXT_PANEL_WIDTH, -1);
   gtk_scrolled_window_set_min_content_width(GTK_SCROLLED_WINDOW(side_scroller), HOMEWORLDS_VIEW_TEXT_PANEL_WIDTH);
   gtk_scrolled_window_set_max_content_width(GTK_SCROLLED_WINDOW(side_scroller), HOMEWORLDS_VIEW_TEXT_PANEL_WIDTH);
   gtk_scrolled_window_set_propagate_natural_width(GTK_SCROLLED_WINDOW(side_scroller), FALSE);
-  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(side_scroller), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(side_scroller), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
   gtk_box_append(GTK_BOX(view->root), side_scroller);
 
   side_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
@@ -2362,7 +2394,7 @@ static HomeworldsView *homeworlds_view_new_with_move_report(GGameModel *model, g
   gtk_box_append(GTK_BOX(side_panel), heading);
 
   view->stage_label = gtk_label_new("");
-  gtk_label_set_wrap(GTK_LABEL(view->stage_label), TRUE);
+  homeworlds_view_constrain_text_panel_label(view->stage_label);
   gtk_label_set_xalign(GTK_LABEL(view->stage_label), 0.0f);
   gtk_box_append(GTK_BOX(side_panel), view->stage_label);
 
@@ -2388,7 +2420,7 @@ static HomeworldsView *homeworlds_view_new_with_move_report(GGameModel *model, g
   gtk_box_append(GTK_BOX(side_panel), section);
 
   view->last_move_label = gtk_label_new("None");
-  gtk_label_set_wrap(GTK_LABEL(view->last_move_label), TRUE);
+  homeworlds_view_constrain_text_panel_label(view->last_move_label);
   gtk_label_set_xalign(GTK_LABEL(view->last_move_label), 0.0f);
   gtk_box_append(GTK_BOX(side_panel), view->last_move_label);
 
@@ -2400,7 +2432,7 @@ static HomeworldsView *homeworlds_view_new_with_move_report(GGameModel *model, g
   view->move_report_label = gtk_label_new("");
   gtk_widget_set_name(view->move_report_label, "homeworlds-move-report");
   gtk_label_set_selectable(GTK_LABEL(view->move_report_label), TRUE);
-  gtk_label_set_wrap(GTK_LABEL(view->move_report_label), TRUE);
+  homeworlds_view_constrain_text_panel_label(view->move_report_label);
   gtk_label_set_xalign(GTK_LABEL(view->move_report_label), 0.0f);
   gtk_box_append(GTK_BOX(side_panel), view->move_report_label);
 

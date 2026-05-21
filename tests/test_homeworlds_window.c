@@ -664,9 +664,15 @@ static void test_homeworlds_view_text_panel_has_fixed_width(void) {
   HomeworldsView *view = test_homeworlds_view_new_without_move_report(model);
   GtkWidget *root = homeworlds_view_get_widget(view);
   GtkWidget *text_panel = test_homeworlds_find_widget_named(root, "homeworlds-text-panel");
+  GtkApplication *app = NULL;
+  GGameModel *window_model = NULL;
+  GGameWindow *window = NULL;
+  HomeworldsView *window_view = NULL;
+  GtkWidget *window_text_panel = NULL;
   GtkPolicyType horizontal_policy = GTK_POLICY_AUTOMATIC;
   GtkPolicyType vertical_policy = GTK_POLICY_NEVER;
   gint width_request = -1;
+  gint allocated_width = 0;
 
   g_assert_nonnull(text_panel);
   g_assert_true(GTK_IS_SCROLLED_WINDOW(text_panel));
@@ -676,11 +682,33 @@ static void test_homeworlds_view_text_panel_has_fixed_width(void) {
   g_assert_cmpint(gtk_scrolled_window_get_max_content_width(GTK_SCROLLED_WINDOW(text_panel)), ==, 280);
   g_assert_false(gtk_scrolled_window_get_propagate_natural_width(GTK_SCROLLED_WINDOW(text_panel)));
   gtk_scrolled_window_get_policy(GTK_SCROLLED_WINDOW(text_panel), &horizontal_policy, &vertical_policy);
-  g_assert_cmpuint(horizontal_policy, ==, GTK_POLICY_NEVER);
+  g_assert_cmpuint(horizontal_policy, ==, GTK_POLICY_AUTOMATIC);
   g_assert_cmpuint(vertical_policy, ==, GTK_POLICY_AUTOMATIC);
 
   homeworlds_view_free(view);
   g_object_unref(model);
+
+  window = test_homeworlds_create_window(&app, &window_model);
+  window_view = test_homeworlds_get_window_view(window);
+  window_text_panel = test_homeworlds_find_widget_named(GTK_WIDGET(window), "homeworlds-text-panel");
+  g_assert_nonnull(window_view);
+  g_assert_nonnull(window_text_panel);
+  homeworlds_view_set_move_report_enabled(window_view, FALSE);
+  gtk_window_set_default_size(GTK_WINDOW(window), 1200, 700);
+  gtk_window_present(GTK_WINDOW(window));
+  test_homeworlds_drain_main_context(64);
+
+  allocated_width = gtk_widget_get_width(window_text_panel);
+  g_assert_cmpint(allocated_width, >, 0);
+  for (guint step = 0; step < 3; step++) {
+    g_assert_true(homeworlds_view_apply_candidate_at(window_view, 0));
+    test_homeworlds_drain_main_context(64);
+    g_assert_cmpint(gtk_widget_get_width(window_text_panel), ==, allocated_width);
+  }
+
+  gtk_window_destroy(GTK_WINDOW(window));
+  g_object_unref(window_model);
+  g_object_unref(app);
 }
 
 static void test_homeworlds_view_piece_metrics_keep_pyramids_tall(void) {
