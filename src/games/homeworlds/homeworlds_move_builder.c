@@ -117,6 +117,36 @@ static gboolean homeworlds_builder_ship_was_trade_result(const HomeworldsMoveBui
   return FALSE;
 }
 
+static gboolean homeworlds_builder_ship_is_canonical_build_source(const HomeworldsMoveBuilderState *state,
+                                                                  guint system_index,
+                                                                  guint ship_slot) {
+  const HomeworldsSystem *system = NULL;
+  const guint side = state->working_position.turn;
+  HomeworldsPyramid ship = 0;
+  HomeworldsColor color = HOMEWORLDS_COLOR_RED;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
+  g_return_val_if_fail(ship_slot < HOMEWORLDS_SHIP_SLOT_COUNT, FALSE);
+
+  system = &state->working_position.systems[system_index];
+  ship = system->ships[side][ship_slot];
+  g_return_val_if_fail(homeworlds_pyramid_is_valid(ship), FALSE);
+
+  color = homeworlds_pyramid_color(ship);
+  for (guint previous_slot = 0; previous_slot < ship_slot; ++previous_slot) {
+    HomeworldsPyramid previous_ship = system->ships[side][previous_slot];
+
+    if (homeworlds_pyramid_is_valid(previous_ship) &&
+        homeworlds_pyramid_color(previous_ship) == color &&
+        !homeworlds_builder_ship_was_trade_result(state, system_index, previous_ship)) {
+      return FALSE;
+    }
+  }
+
+  return TRUE;
+}
+
 static gboolean homeworlds_builder_selected_ship_ref(const HomeworldsMoveBuilderState *state,
                                                      HomeworldsShipRef *out_ref) {
   g_return_val_if_fail(state != NULL, FALSE);
@@ -320,6 +350,11 @@ static gboolean homeworlds_builder_start_selected_action(HomeworldsMoveBuilderSt
   if (action == HOMEWORLDS_STEP_BUILD) {
     gboolean require_access = state->pending_actions_remaining == 0;
 
+    if (!homeworlds_builder_ship_is_canonical_build_source(state,
+                                                           state->selected_system_index,
+                                                           selected_ship_slot)) {
+      return FALSE;
+    }
     step.actor.ship = 0;
     step.target_color = homeworlds_pyramid_color(selected_ship);
     homeworlds_builder_consume_pending_action(state);
@@ -460,8 +495,13 @@ static GameBackendMoveList homeworlds_builder_list_setup_ships(const HomeworldsM
 static GameBackendMoveList homeworlds_builder_list_selectable_ships(const HomeworldsMoveBuilderState *state) {
   HomeworldsCandidateBuffer buffer = {0};
   const guint side = state->working_position.turn;
+  HomeworldsStepKind forced_action = HOMEWORLDS_STEP_NONE;
 
   g_return_val_if_fail(state != NULL, (GameBackendMoveList){0});
+
+  if (state->pending_actions_remaining > 0 && state->forced_action_color <= HOMEWORLDS_COLOR_BLUE) {
+    forced_action = homeworlds_builder_action_for_color((HomeworldsColor) state->forced_action_color);
+  }
 
   for (guint system_index = 0; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
     const HomeworldsSystem *system = &state->working_position.systems[system_index];
@@ -477,6 +517,10 @@ static GameBackendMoveList homeworlds_builder_list_selectable_ships(const Homewo
         continue;
       }
       if (homeworlds_builder_ship_was_trade_result(state, system_index, pyramid)) {
+        continue;
+      }
+      if (forced_action == HOMEWORLDS_STEP_BUILD &&
+          !homeworlds_builder_ship_is_canonical_build_source(state, system_index, ship_slot)) {
         continue;
       }
       seen_pyramids[pyramid] = TRUE;
@@ -551,7 +595,8 @@ static GameBackendMoveList homeworlds_builder_list_actions(const HomeworldsMoveB
     };
     homeworlds_candidate_buffer_append(&buffer, &move);
   }
-  if (homeworlds_system_has_access_to_color(system, side, HOMEWORLDS_COLOR_GREEN)) {
+  if (homeworlds_system_has_access_to_color(system, side, HOMEWORLDS_COLOR_GREEN) &&
+      homeworlds_builder_ship_is_canonical_build_source(state, state->selected_system_index, selected_ship_slot)) {
     HomeworldsMoveCandidate build = {
       .data.kind = HOMEWORLDS_CANDIDATE_ACTION,
       .data.target_color = HOMEWORLDS_STEP_BUILD,

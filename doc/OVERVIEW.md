@@ -672,8 +672,10 @@ Role: `game_backend.h` defines the generic callback table used to describe one c
 formatting APIs into that generic table. `src/games/homeworlds/homeworlds_backend.c` now adapts the slot-based
 Homeworlds engine and staged move builder, advertises `supports_move_builder = TRUE`, `supports_move_list = FALSE`,
 `supports_ai_search = TRUE`, and implements `list_good_moves` by exploring the builder in heuristic order while
-filtering nonsensical setup, pass, unsafe homeworld, and unsafe catastrophe-triggering build choices. The playable
-Homeworlds UI uses the same builder directly rather than asking this backend for full move enumeration.
+filtering nonsensical setup, pass, unsafe homeworld, and unsafe catastrophe-triggering build choices. Its good-move
+buffer tracks structural move hashes only to warn with the root position and duplicated move if generation ever
+produces a duplicate; it does not rely on the guard to suppress duplicates. The playable Homeworlds UI uses the same
+builder directly rather than asking this backend for full move enumeration.
 `src/games/boop/boop_backend.c` adapts the boop engine, advertises move lists, staged
 move-building, square-grid rendering, AI search, notation formatting/parsing, hashing, and backend-owned SGF position
 snapshot hooks.

@@ -54,14 +54,16 @@ once rather than once per physical bank copy. Discovery choices list each reacha
 selection deduplicates identical same-side ships within a system, because selecting either identical ship has the same
 symbolic move. Build steps store only the source system and build color, not the size of the source ship, because
 `H1g1+` and `H1g3+` are the same build when both are green ships in `H1`.
+The staged builder therefore offers build only from the first selectable source ship of each color in a system; other
+same-color ships can still be selected for actions where size matters.
 During a blue sacrifice, ship selection also skips any pyramid that was created by an earlier trade in that same
 system, so `H1r2=g H1g2=y` is represented canonically as `H1r2=y pass`.
 
-Collectors still guard against duplicates when they finish a move. `homeworlds_backend_move_buffer_append()` and the
-diagnostic view buffer compare moves through backend formatting/equality before appending. This is a safety net for
-multi-step paths, especially when optional catastrophes or equivalent candidate choices can reach the same final
-symbolic move. The goal is to make duplicates impossible by construction where practical, and harmless where that would
-make the builder too complicated.
+The AI collector still guards against duplicates when it finishes a move, but only as a diagnostic safety net.
+`homeworlds_backend_move_buffer_append()` records structural move hashes in a `GHashTable`; if the same symbolic move
+appears again, the duplicate is still appended and a warning logs both the duplicated move and the root position that
+generated it. The normal goal is to make duplicates impossible by construction, so this guard should explain a
+generation bug rather than silently hiding it.
 
 ## Current Good-Move Policy
 

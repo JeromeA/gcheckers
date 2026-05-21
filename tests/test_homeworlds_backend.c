@@ -313,6 +313,37 @@ static void test_backend_move_roundtrips(const HomeworldsMove *move) {
   assert(backend->moves_equal(move, &parsed));
 }
 
+static void test_backend_move_equality_uses_symbolic_build_identity(void) {
+  const GameBackend *backend = &homeworlds_game_backend;
+  HomeworldsMove build = {
+    .kind = HOMEWORLDS_MOVE_KIND_TURN,
+    .step_count = 1,
+    .steps = {
+      {
+        .kind = HOMEWORLDS_STEP_BUILD,
+        .actor = {
+          .system = test_homeworld_ref(0),
+          .ship = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL),
+        },
+        .target_ship = {
+          .system = test_star_ref(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL, 0),
+          .ship = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL),
+        },
+        .target_color = HOMEWORLDS_COLOR_GREEN,
+      },
+    },
+  };
+  HomeworldsMove same_build = build;
+  HomeworldsMove different_build = build;
+
+  same_build.steps[0].actor.ship = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE);
+  same_build.steps[0].target_ship.ship = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE);
+  different_build.steps[0].target_color = HOMEWORLDS_COLOR_BLUE;
+
+  assert(backend->moves_equal(&build, &same_build));
+  assert(!backend->moves_equal(&build, &different_build));
+}
+
 static void test_backend_move_codec_roundtrips_setup_and_turn(void) {
   HomeworldsMove setup = test_setup_move(0,
                                          homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL),
@@ -875,11 +906,14 @@ static void test_backend_good_moves_deduplicate_builds_by_color(void) {
   const GameBackend *backend = &homeworlds_game_backend;
   HomeworldsPosition position = {0};
   GameBackendMoveList good_moves = {0};
+  GHashTable *seen_notation = NULL;
   guint green_homeworld_builds = 0;
 
   test_prepare_position(&position);
   position.systems[0].ships[0][1] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL);
 
+  seen_notation = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  assert(seen_notation != NULL);
   good_moves = backend->list_good_moves(&position, 0);
   assert(good_moves.count > 0);
   for (gsize i = 0; i < good_moves.count; ++i) {
@@ -888,6 +922,8 @@ static void test_backend_good_moves_deduplicate_builds_by_color(void) {
 
     assert(move != NULL);
     assert(homeworlds_move_format(move, notation, sizeof(notation)));
+    assert(!g_hash_table_contains(seen_notation, notation));
+    g_hash_table_add(seen_notation, g_strdup(notation));
     assert(strstr(notation, "g1+") == NULL);
     assert(strstr(notation, "g3+") == NULL);
     if (strcmp(notation, "H1g+") == 0) {
@@ -896,6 +932,7 @@ static void test_backend_good_moves_deduplicate_builds_by_color(void) {
   }
   assert(green_homeworld_builds == 1);
   backend->move_list_free(&good_moves);
+  g_hash_table_unref(seen_notation);
 }
 
 static void test_backend_good_moves_skip_pass_when_other_moves_remain(void) {
@@ -1567,6 +1604,7 @@ static void test_backend_destroying_opponent_homeworld_wins_immediately(void) {
 
 int main(void) {
   test_backend_metadata();
+  test_backend_move_equality_uses_symbolic_build_identity();
   test_backend_move_codec_roundtrips_setup_and_turn();
   test_backend_sgf_snapshot_roundtrips_position();
   test_backend_move_builder_completes_setup();

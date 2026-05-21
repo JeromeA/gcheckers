@@ -705,3 +705,14 @@ destination was already reachable from the original `H2` system.
 The fix tracks repeated movement of the same ship during a pending yellow sacrifice. When a later hop returns to the
 origin or targets a system that was directly reachable from that origin at the start of the chain, `good_moves()`
 prunes that branch.
+
+## Homeworlds duplicate safety check made good-move generation quadratic
+
+Homeworlds good-move generation should not produce duplicate symbolic moves. The safety check that guarded this
+invariant compared each completed move against every previously collected move by formatting both to notation strings.
+Large positions could therefore spend most of their time in duplicate detection instead of move generation.
+
+The fix tracks structural move hashes in the good-move buffer. A duplicate now emits a warning with the root position
+and duplicated move, but the move is still appended so the guard does not silently hide the generator bug. The duplicate
+cases exposed while adding the guard were fixed in the generator: build actions now use one canonical same-color source
+ship, and AI catastrophe insertion only happens at stable move boundaries.
