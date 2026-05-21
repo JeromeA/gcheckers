@@ -784,3 +784,10 @@ switch to a wider spacing mode.
 The fix gives every bank pile the same `homeworlds-bank-pile` base style with zero padding and a stable transparent
 border, then adds `homeworlds-bank-choice` only for the selectable outline. A realized-window regression now checks that
 the bank frame does not grow after the six setup selections.
+
+## Failed Homeworlds move parses cleared or partially rewrote the caller output
+
+`homeworlds_move_parse()` wrote directly into the caller's `HomeworldsMove` while trying setup and turn notation. A
+failed parse could therefore clear a previous value or leave a partial turn move behind.
+
+The fix parses into a local scratch move and copies it to the caller only after the whole notation string succeeds.

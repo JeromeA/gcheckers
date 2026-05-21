@@ -522,7 +522,8 @@ cleanup, end-of-turn homeworld loss detection for either side, static evaluation
 move formatting/parsing, and whole-position SGF snapshots in `homeworlds_sgf_position.c`. Move notation uses pyramid
 letters and sizes directly, such as `Y2B1g3`, `H1g+`, `G3y2>G2 G3y!`, and `pass`; multi-step moves are formatted with
 spaces between complete steps and no internal slash separator, while the parser also accepts older saved `H1 g+` and
-slash-separated step notation. Static evaluation counts ship material and repeats the largest own ship at each
+slash-separated step notation. The public parser only writes the output move after the whole notation succeeds. Static
+evaluation counts ship material and repeats the largest own ship at each
 player's homeworld. Sacrifice-granted actions reuse the normal action application code but bypass local
 color-access checks because the sacrificed ship supplies the action color.
 `homeworlds_position_text.c` formats a non-GTK ASCII board snapshot, with each system shown as player 2 ships,

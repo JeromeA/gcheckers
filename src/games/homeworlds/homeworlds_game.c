@@ -1408,16 +1408,23 @@ gboolean homeworlds_move_parse(const char *notation, HomeworldsMove *out_move) {
   g_return_val_if_fail(notation != NULL, FALSE);
   g_return_val_if_fail(out_move != NULL, FALSE);
 
-  memset(out_move, 0, sizeof(*out_move));
+  HomeworldsMove parsed = {0};
+
   if (notation[0] == '\0') {
     return FALSE;
   }
   if (g_ascii_isupper(notation[0]) && notation[0] != 'H') {
-    if (homeworlds_move_parse_setup(notation, out_move)) {
+    if (homeworlds_move_parse_setup(notation, &parsed)) {
+      *out_move = parsed;
       return TRUE;
     }
-    memset(out_move, 0, sizeof(*out_move));
   }
 
-  return homeworlds_move_parse_turn(notation, out_move);
+  memset(&parsed, 0, sizeof(parsed));
+  if (!homeworlds_move_parse_turn(notation, &parsed)) {
+    return FALSE;
+  }
+
+  *out_move = parsed;
+  return TRUE;
 }
