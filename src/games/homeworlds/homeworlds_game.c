@@ -172,6 +172,8 @@ static gboolean homeworlds_system_find_ship_slot(const HomeworldsSystem *system,
   g_return_val_if_fail(homeworlds_pyramid_is_valid(ship), FALSE);
   g_return_val_if_fail(out_ship_slot != NULL, FALSE);
 
+  *out_ship_slot = HOMEWORLDS_INVALID_INDEX;
+
   for (guint slot = 0; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
     if (system->ships[side][slot] != ship) {
       continue;
@@ -280,6 +282,10 @@ static gboolean homeworlds_position_resolve_ship_ref(const HomeworldsPosition *p
   g_return_val_if_fail(out_system_index != NULL, FALSE);
   g_return_val_if_fail(out_ship_slot != NULL, FALSE);
   g_return_val_if_fail(out_ship != NULL, FALSE);
+
+  *out_system_index = HOMEWORLDS_INVALID_INDEX;
+  *out_ship_slot = HOMEWORLDS_INVALID_INDEX;
+  *out_ship = 0;
 
   if (!homeworlds_pyramid_is_valid(ref->ship) ||
       !homeworlds_position_resolve_system_ref(position, &ref->system, &system_index)) {

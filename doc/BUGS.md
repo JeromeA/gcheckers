@@ -971,3 +971,12 @@ backend path callbacks, but it still trusted the returned length when copying pa
 A backend that returned a length larger than the provided capacity could make the controller read or write past its
 scratch path arrays. The fix validates every backend-reported selection path length before copying or indexing it and
 clears the current builder after an unexpected failed click.
+
+## Homeworlds failed ship lookup left stale outputs
+
+Homeworlds symbolic ship references are resolved into concrete system and ship-slot indexes. The system-reference
+lookup already wrote `HOMEWORLDS_INVALID_INDEX` on failure, but ship lookup helpers returned failure without clearing
+their output indexes or pyramid value.
+
+That made callers depend on separately initialized locals to avoid stale data after a failed lookup. The fix writes the
+invalid index sentinels and clears the output pyramid before attempting ship resolution.

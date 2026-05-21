@@ -518,8 +518,9 @@ the players' homeworlds), two star slots per system, and fourteen ship slots per
 one place later if needed. `HomeworldsMove` does not store physical slot indexes or an acting side; it stores the same
 symbolic system and ship references used by notation (`H1`, `G3'`, `g2`, etc.), and the rules engine resolves those
 references against the current position at apply time. Failed system-reference resolution returns
-`HOMEWORLDS_INVALID_INDEX` through the output index. Build steps are canonicalized further: they store only the source
-system plus the build color in `target_color`, because the exact source ship size does not change the move.
+`HOMEWORLDS_INVALID_INDEX` through the output index, and failed ship-reference resolution clears its resolved indexes
+and pyramid. Build steps are canonicalized further: they store only the source system plus the build color in
+`target_color`, because the exact source ship size does not change the move.
 Rules covered: setup, build, trade, attack, move, discover, sacrifice, catastrophe resolution, empty-system
 cleanup, end-of-turn homeworld loss detection for either side, static evaluation, terminal scoring, hashing, compact
 move formatting/parsing, structural move equality, ordered unique all-move generation, and whole-position SGF snapshots
