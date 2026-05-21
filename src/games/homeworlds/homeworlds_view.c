@@ -329,6 +329,13 @@ static char *homeworlds_view_pyramid_label(HomeworldsPyramid pyramid) {
                          homeworlds_view_size_name(homeworlds_pyramid_size(pyramid)));
 }
 
+static gboolean homeworlds_view_candidate_is_discovery(const HomeworldsMoveCandidate *candidate) {
+  g_return_val_if_fail(candidate != NULL, FALSE);
+
+  return candidate->data.kind == HOMEWORLDS_CANDIDATE_MOVE_TARGET &&
+         candidate->data.target_system_index == HOMEWORLDS_INVALID_INDEX;
+}
+
 static char *homeworlds_view_candidate_label(const HomeworldsMoveCandidate *candidate) {
   char *pyramid_label = NULL;
   char *label = NULL;
@@ -362,7 +369,7 @@ static char *homeworlds_view_candidate_label(const HomeworldsMoveCandidate *cand
                              (guint) candidate->data.target_ship_owner + 1,
                              (guint) candidate->data.target_ship_slot);
     case HOMEWORLDS_CANDIDATE_MOVE_TARGET:
-      if (candidate->data.target_system_index == HOMEWORLDS_INVALID_INDEX) {
+      if (homeworlds_view_candidate_is_discovery(candidate)) {
         pyramid_label = homeworlds_view_pyramid_label(candidate->data.pyramid);
         label = g_strdup_printf("Discover at %s star", pyramid_label);
         g_free(pyramid_label);
@@ -2372,6 +2379,42 @@ static void homeworlds_view_update_catastrophes(HomeworldsView *view) {
   }
 }
 
+static gboolean homeworlds_view_trade_candidate_matches_pyramid(const HomeworldsMoveCandidate *candidate,
+                                                                const HomeworldsMoveBuilderState *state,
+                                                                HomeworldsPyramid pyramid) {
+  g_return_val_if_fail(candidate != NULL, FALSE);
+  g_return_val_if_fail(homeworlds_pyramid_is_valid(pyramid), FALSE);
+
+  return candidate->data.kind == HOMEWORLDS_CANDIDATE_TRADE_COLOR &&
+         state != NULL &&
+         homeworlds_pyramid_is_valid(state->selected_ship_pyramid) &&
+         homeworlds_pyramid_size(state->selected_ship_pyramid) == homeworlds_pyramid_size(pyramid) &&
+         candidate->data.target_color == homeworlds_pyramid_color(pyramid);
+}
+
+static gboolean homeworlds_view_bank_candidate_matches_pyramid(const HomeworldsMoveCandidate *candidate,
+                                                               const HomeworldsMoveBuilderState *state,
+                                                               HomeworldsPyramid pyramid) {
+  g_return_val_if_fail(candidate != NULL, FALSE);
+  g_return_val_if_fail(homeworlds_pyramid_is_valid(pyramid), FALSE);
+
+  switch ((HomeworldsCandidateKind) candidate->data.kind) {
+    case HOMEWORLDS_CANDIDATE_SETUP_STAR:
+    case HOMEWORLDS_CANDIDATE_SETUP_SHIP:
+      return candidate->data.pyramid == pyramid;
+    case HOMEWORLDS_CANDIDATE_TRADE_COLOR:
+      return homeworlds_view_trade_candidate_matches_pyramid(candidate, state, pyramid);
+    case HOMEWORLDS_CANDIDATE_MOVE_TARGET:
+      return homeworlds_view_candidate_is_discovery(candidate) && candidate->data.pyramid == pyramid;
+    case HOMEWORLDS_CANDIDATE_NONE:
+    case HOMEWORLDS_CANDIDATE_SELECT_SHIP:
+    case HOMEWORLDS_CANDIDATE_ACTION:
+    case HOMEWORLDS_CANDIDATE_ATTACK_TARGET:
+    default:
+      return FALSE;
+  }
+}
+
 static gboolean homeworlds_view_find_bank_candidate(HomeworldsView *view,
                                                     HomeworldsPyramid pyramid,
                                                     HomeworldsMoveCandidate *out_candidate) {
@@ -2392,32 +2435,9 @@ static gboolean homeworlds_view_find_bank_candidate(HomeworldsView *view,
   for (gsize i = 0; i < candidates.count; ++i) {
     const HomeworldsMoveCandidate *candidate = &((const HomeworldsMoveCandidate *) candidates.moves)[i];
 
-    switch ((HomeworldsCandidateKind) candidate->data.kind) {
-      case HOMEWORLDS_CANDIDATE_SETUP_STAR:
-      case HOMEWORLDS_CANDIDATE_SETUP_SHIP:
-        found = candidate->data.pyramid == pyramid;
-        break;
-      case HOMEWORLDS_CANDIDATE_TRADE_COLOR:
-        found = state != NULL &&
-                homeworlds_pyramid_is_valid(state->selected_ship_pyramid) &&
-                homeworlds_pyramid_size(state->selected_ship_pyramid) == homeworlds_pyramid_size(pyramid) &&
-                candidate->data.target_color == homeworlds_pyramid_color(pyramid);
-        break;
-      case HOMEWORLDS_CANDIDATE_MOVE_TARGET:
-        found = candidate->data.target_system_index == HOMEWORLDS_INVALID_INDEX &&
-                candidate->data.pyramid == pyramid;
-        break;
-      case HOMEWORLDS_CANDIDATE_NONE:
-      case HOMEWORLDS_CANDIDATE_SELECT_SHIP:
-      case HOMEWORLDS_CANDIDATE_ACTION:
-      case HOMEWORLDS_CANDIDATE_ATTACK_TARGET:
-      default:
-        found = FALSE;
-        break;
-    }
-
-    if (found) {
+    if (homeworlds_view_bank_candidate_matches_pyramid(candidate, state, pyramid)) {
       *out_candidate = *candidate;
+      found = TRUE;
       break;
     }
   }

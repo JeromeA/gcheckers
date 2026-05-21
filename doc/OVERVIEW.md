@@ -579,7 +579,8 @@ start ships, trade colors, and discovery stars do not require a long side-panel 
 selectable ships, capture targets, and existing-system move targets are also overlaid as board buttons; the side panel
 has a fixed-width text area with horizontal scrolling externalized, overlay vertical scrolling enabled, word-wrapped
 labels, width-constrained buttons, and only keeps non-board choices such as pass or follow-up actions, with a `Cancel`
-button whenever those choices belong to an in-progress move. During play, the
+button whenever those choices belong to an in-progress move. Bank pile matching is split into setup, trade-color, and
+discovery predicates so the board button layer does not duplicate raw candidate-field tests. During play, the
 side panel also reports the backend `good_moves()` list followed by the remaining
 legal moves collected from the staged builder by `homeworlds_move_report.c`. The report deduplicates canonical moves
 but does not cap the backend-good or diagnostic collectors. The `View` -> `Move report` action disables this report
