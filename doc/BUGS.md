@@ -738,3 +738,15 @@ before GTK has allocated the scroller. Once the scroller maps, the board schedul
 recalculating until the allocated scroller width, overlay width, and drawing-area content width agree, so startup
 allocation is applied before user scrollbar interaction. A realized-window test now checks that the initial board
 content width matches the startup viewport and that the overlaid bank starts inside that viewport.
+
+## Homeworlds board settle tick could replace ship click targets
+
+The Homeworlds board startup settle tick should stop once GTK has applied the real board allocation. In some real
+windows, the visible resize could already be correct while the tick's strict allocation predicate still failed. The
+tick then kept clearing and recreating the board-choice overlay every frame, so a highlighted ship button could be
+replaced between pointer press and release and the click did nothing.
+
+The fix makes board content-width updates report whether the width actually changed. The settle tick now rebuilds the
+interactive board-choice overlay only after a real content-width change, its stop predicate accepts the allocated board
+and overlay once they are no longer wider than the expected content width, and the root widget cancels any remaining
+tick during destruction.
