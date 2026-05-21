@@ -929,3 +929,12 @@ append result. If allocation failed while growing the buffer, the builder could 
 choices.
 
 The fix routes those paths through the same checked append-and-abort behavior used by the other candidate lists.
+
+## SGF loading accepted trailing content after the game tree
+
+SGF loading should reject non-whitespace data after the parsed game tree. `sgf_io_load_data()` delegated to the tree
+parser and accepted the result as soon as one tree was parsed, without checking whether the input cursor had reached
+the end of the data.
+
+That allowed malformed files such as a valid SGF followed by arbitrary bytes to load silently. The fix skips trailing
+whitespace after the tree and reports an SGF parse error for any remaining content.

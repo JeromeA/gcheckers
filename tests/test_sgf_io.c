@@ -253,6 +253,14 @@ static void test_sgf_io_load_rejects_invalid_header(void) {
   g_assert_error(error, g_quark_from_static_string("sgf-io-error"), 1);
 }
 
+static void test_sgf_io_load_rejects_trailing_content(void) {
+  g_autoptr(SgfTree) loaded = NULL;
+  g_autoptr(GError) error = NULL;
+  gboolean ok = sgf_io_load_data("(;FF[4]CA[UTF-8]AP[gcheckers]GM[40]) junk", &loaded, &error);
+  g_assert_false(ok);
+  g_assert_error(error, g_quark_from_static_string("sgf-io-error"), 25);
+}
+
 static void test_sgf_io_preserves_repeated_property_values(void) {
   const char *content = "(;FF[4]CA[UTF-8]AP[gcheckers]GM[40]C[root-a][root-b];B[12-16]N[line-a][line-b])";
 
@@ -597,6 +605,7 @@ int main(int argc, char **argv) {
       g_test_add_func("/sgf-io/roundtrip-multi-capture", test_sgf_io_roundtrip_multi_capture);
       g_test_add_func("/sgf-io/roundtrip-branches", test_sgf_io_roundtrip_branches);
       g_test_add_func("/sgf-io/load-invalid-header", test_sgf_io_load_rejects_invalid_header);
+      g_test_add_func("/sgf-io/load-trailing-content", test_sgf_io_load_rejects_trailing_content);
       g_test_add_func("/sgf-io/repeated-property-values", test_sgf_io_preserves_repeated_property_values);
       g_test_add_func("/sgf-io/ruleset-roundtrip", test_sgf_io_roundtrip_ruleset_property);
       g_test_add_func("/sgf-io/ruleset-invalid", test_sgf_io_rejects_unknown_ruleset_property);
@@ -610,12 +619,14 @@ int main(int argc, char **argv) {
       g_test_add_func("/sgf-io/roundtrip-promotion-move", test_sgf_io_boop_roundtrip_promotion_move);
       g_test_add_func("/sgf-io/boop-padded-promotion-mask", test_sgf_io_boop_promotion_masks_use_padded_rows);
       g_test_add_func("/sgf-io/load-invalid-header", test_sgf_io_load_rejects_invalid_header);
+      g_test_add_func("/sgf-io/load-trailing-content", test_sgf_io_load_rejects_trailing_content);
       g_test_add_func("/sgf-io/repeated-property-values", test_sgf_io_boop_preserves_repeated_property_values);
       g_test_add_func("/sgf-io/ruleset-missing", test_sgf_io_boop_accepts_missing_ruleset_property);
       g_test_add_func("/sgf-io/ruleset-invalid", test_sgf_io_boop_rejects_ruleset_property);
       break;
     case GGAME_APP_KIND_HOMEWORLDS:
       g_test_add_func("/sgf-io/load-invalid-header", test_sgf_io_load_rejects_invalid_header);
+      g_test_add_func("/sgf-io/load-trailing-content", test_sgf_io_load_rejects_trailing_content);
       break;
     default:
       g_assert_not_reached();

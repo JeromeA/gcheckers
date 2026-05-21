@@ -167,6 +167,8 @@ that node. Checkers uses that hook for `AE`/`AB`/`AW` plus `ABK`/`AWK` king mark
 custom root snapshot properties that restore on-board kittens/cats, per-side supplies, total ply count, and `PL`. Root
 `RU[<ruleset-short-name>]` is still read on load to switch the legacy checkers model to the matching ruleset before
 replay, and SGF loads now fail if `RU` is missing or unknown instead of falling back to the current model rules.
+SGF parsing also rejects non-whitespace content after the parsed tree, so malformed files cannot be accepted by
+silently ignoring trailing bytes.
 `RU` is stamped back onto fresh trees and saved SGFs when the active backend has variants; zero-variant backends such
 as boop accept and write no `RU`. SGF move colors also come from the active backend through `sgf_color_for_side()` so
 checkers can keep side 0 as white while boop maps side 0 to black. `Save position...` now uses the same backend hook

@@ -861,6 +861,11 @@ gboolean sgf_io_load_data(const char *content, SgfTree **out_tree, GError **erro
   if (!sgf_io_parse_tree(&parser, tree, root, &seen_root, error)) {
     return FALSE;
   }
+  sgf_io_skip_ws(&parser);
+  if (parser.pos < parser.len) {
+    g_set_error(error, sgf_io_error_quark(), 25, "Unexpected content after SGF tree at offset %zu", parser.pos);
+    return FALSE;
+  }
   if (!seen_root) {
     g_set_error_literal(error, sgf_io_error_quark(), 22, "Missing SGF root node");
     return FALSE;
