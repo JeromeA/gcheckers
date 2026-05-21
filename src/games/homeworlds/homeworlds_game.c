@@ -919,6 +919,8 @@ gboolean homeworlds_system_find_smallest_bank_ship(const HomeworldsPosition *pos
   g_return_val_if_fail(color <= HOMEWORLDS_COLOR_BLUE, FALSE);
   g_return_val_if_fail(out_pyramid != NULL, FALSE);
 
+  *out_pyramid = 0;
+
   for (HomeworldsSize size = HOMEWORLDS_SIZE_SMALL; size <= HOMEWORLDS_SIZE_LARGE; size++) {
     HomeworldsPyramid pyramid = homeworlds_pyramid_make(color, size);
     for (guint slot = 0; slot < HOMEWORLDS_BANK_SLOT_COUNT; ++slot) {

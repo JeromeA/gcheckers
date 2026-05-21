@@ -784,3 +784,11 @@ switch to a wider spacing mode.
 The fix gives every bank pile the same `homeworlds-bank-pile` base style with zero padding and a stable transparent
 border, then adds `homeworlds-bank-choice` only for the selectable outline. A realized-window regression now checks that
 the bank frame does not grow after the six setup selections.
+
+## Failed Homeworlds bank-ship lookup left stale output
+
+`homeworlds_system_find_smallest_bank_ship()` reported `FALSE` when no ship of the requested color remained in the
+bank, but it left `out_pyramid` unchanged. Callers that reused a variable could accidentally inspect a stale pyramid
+after the failed lookup.
+
+The fix clears `out_pyramid` to `0` before searching, so both success and failure return a deterministic value.
