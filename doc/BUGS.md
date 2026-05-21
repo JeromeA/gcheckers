@@ -938,3 +938,11 @@ the end of the data.
 
 That allowed malformed files such as a valid SGF followed by arbitrary bytes to load silently. The fix skips trailing
 whitespace after the tree and reports an SGF parse error for any remaining content.
+
+## Failed SGF move parsing cleared caller output
+
+SGF move parsing should not mutate caller-owned move storage unless the notation parses successfully.
+`sgf_move_props_parse_notation()` cleared the output buffer before delegating to the active backend parser, so a bad
+move string could erase the caller's previous move value even though the function returned failure.
+
+The fix parses into scratch storage and copies the typed move back only after the backend accepts the notation.

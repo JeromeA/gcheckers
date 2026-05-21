@@ -833,7 +833,8 @@ Collaborates with: SGF view and controller modules.
 Module: SGF move property helpers.
 Role: convert between SGF move properties (`B[...]`/`W[...]`) and typed move storage supplied by the active backend.
 Parsing and formatting are delegated to the active backend, so checkers notation and boop notation share the same SGF
-property helpers while the public API only accepts opaque move storage pointers.
+property helpers while the public API only accepts opaque move storage pointers. Failed notation parsing leaves caller
+move storage untouched.
 Collaborates with: `sgf_io` and `GGameSgfController`.
 
 ### SGF IO (`src/sgf_io.c`, `src/sgf_io.h`)

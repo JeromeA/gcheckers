@@ -23,12 +23,13 @@ gboolean sgf_move_props_parse_notation(const char *notation, gpointer out_move, 
     return FALSE;
   }
 
-  memset(out_move, 0, backend->move_size);
-  if (!backend->parse_move(notation, out_move)) {
+  g_autofree gpointer parsed_move = g_malloc0(backend->move_size);
+  if (!backend->parse_move(notation, parsed_move)) {
     g_set_error(error, sgf_move_props_error_quark(), 2, "Invalid SGF move value: %s", notation);
     return FALSE;
   }
 
+  memcpy(out_move, parsed_move, backend->move_size);
   return TRUE;
 }
 

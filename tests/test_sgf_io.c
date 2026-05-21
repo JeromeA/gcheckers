@@ -8,6 +8,8 @@
 #include "../src/sgf_move_props.h"
 #include "test_profile_utils.h"
 
+#include <string.h>
+
 static CheckersMove test_sgf_io_make_move(const guint8 *path, guint8 length, guint8 captures) {
   g_return_val_if_fail(path != NULL, (CheckersMove){0});
   g_return_val_if_fail(length >= 2, (CheckersMove){0});
@@ -259,6 +261,18 @@ static void test_sgf_io_load_rejects_trailing_content(void) {
   gboolean ok = sgf_io_load_data("(;FF[4]CA[UTF-8]AP[gcheckers]GM[40]) junk", &loaded, &error);
   g_assert_false(ok);
   g_assert_error(error, g_quark_from_static_string("sgf-io-error"), 25);
+}
+
+static void test_sgf_io_invalid_move_parse_preserves_output(void) {
+  const guint8 path[] = {12, 16};
+  const CheckersMove before = test_sgf_io_make_move(path, 2, 0);
+  CheckersMove move = before;
+
+  g_autoptr(GError) error = NULL;
+  gboolean ok = sgf_move_props_parse_notation("not-a-move", &move, &error);
+  g_assert_false(ok);
+  g_assert_error(error, g_quark_from_static_string("sgf-move-props-error"), 2);
+  g_assert_cmpint(memcmp(&move, &before, sizeof(move)), ==, 0);
 }
 
 static void test_sgf_io_preserves_repeated_property_values(void) {
@@ -606,6 +620,8 @@ int main(int argc, char **argv) {
       g_test_add_func("/sgf-io/roundtrip-branches", test_sgf_io_roundtrip_branches);
       g_test_add_func("/sgf-io/load-invalid-header", test_sgf_io_load_rejects_invalid_header);
       g_test_add_func("/sgf-io/load-trailing-content", test_sgf_io_load_rejects_trailing_content);
+      g_test_add_func("/sgf-io/invalid-move-parse-preserves-output",
+                      test_sgf_io_invalid_move_parse_preserves_output);
       g_test_add_func("/sgf-io/repeated-property-values", test_sgf_io_preserves_repeated_property_values);
       g_test_add_func("/sgf-io/ruleset-roundtrip", test_sgf_io_roundtrip_ruleset_property);
       g_test_add_func("/sgf-io/ruleset-invalid", test_sgf_io_rejects_unknown_ruleset_property);
