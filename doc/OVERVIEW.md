@@ -878,11 +878,12 @@ Collaborates with: SGF node widget mapping and view sizing.
 ### SGF scroller (`src/sgf_view_scroller.c`, `src/sgf_view_scroller.h`)
 Module: selection scroll helper.
 Role: `sgf_view_scroller_scroll()` remembers selected-node context, attempts immediate horizontal clamping from selected
-widget bounds (`[bounds.origin.x, bounds.origin.x + bounds.size.width]`), and internally schedules idle retries only
-for transient geometry readiness paths. Missing selected-node widget mappings are logged with a hash-table dump and not
-retried to avoid perpetual idle loops on stale selection pointers. Callers use one API and do not handle retry paths.
-`SgfView` now refuses to start a scroll request at all when the scrolled window is currently unmapped, which avoids
-queueing impossible retries while puzzle mode hides the navigation panel.
+widget bounds (`[bounds.origin.x, bounds.origin.x + bounds.size.width]`), then verifies that the selected range is
+visible after clamping. It internally schedules bounded idle retries for transient geometry or scroll-adjustment
+readiness paths, while missing selected-node widget mappings are not retried to avoid perpetual idle loops on stale
+selection pointers. Callers use one API and do not handle retry paths. `SgfView` now refuses to start a scroll request
+at all when the scrolled window is currently unmapped, which avoids queueing impossible retries while puzzle mode hides
+the navigation panel.
 Collaborates with: `SgfView`, SGF node widget mapping, and selection controller updates.
 
 ### SGF selection controller (`src/sgf_view_selection_controller.c`, `src/sgf_view_selection_controller.h`)

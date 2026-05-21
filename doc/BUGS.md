@@ -784,3 +784,14 @@ switch to a wider spacing mode.
 The fix gives every bank pile the same `homeworlds-bank-pile` base style with zero padding and a stable transparent
 border, then adds `homeworlds-bank-choice` only for the selectable outline. A realized-window regression now checks that
 the bank frame does not grow after the six setup selections.
+
+## SGF tree scroll could run before adjustment ranges settled
+
+The SGF tree scroller retried when selected-disc geometry was not ready, but stopped retrying once it could compute
+disc bounds. GTK can still report stale scroll adjustment ranges for a short time after rebuilding a large tree, so
+`gtk_adjustment_clamp_page()` could run while the horizontal adjustment was effectively unscrollable and leave the
+new selected disc offscreen.
+
+The fix checks whether the requested disc range is actually visible after clamping. If it is not, the scroller schedules
+another bounded idle retry, covering both geometry readiness and adjustment-range readiness without allowing an
+unbounded retry loop.

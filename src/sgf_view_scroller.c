@@ -13,11 +13,13 @@ struct _SgfViewScroller {
   GHashTable *node_widgets;
   const SgfNode *selected;
   gboolean retry_scheduled;
-  guint retry_generation;
   guint retry_count;
 };
 
 G_DEFINE_TYPE(SgfViewScroller, sgf_view_scroller, G_TYPE_OBJECT)
+
+#define SGF_VIEW_SCROLLER_MAX_RETRIES 60
+#define SGF_VIEW_SCROLLER_EPSILON 0.5
 
 static void sgf_view_scroller_clear_context(SgfViewScroller *self) {
   g_return_if_fail(SGF_IS_VIEW_SCROLLER(self));
@@ -25,7 +27,6 @@ static void sgf_view_scroller_clear_context(SgfViewScroller *self) {
   g_clear_object(&self->root);
   g_clear_pointer(&self->node_widgets, g_hash_table_unref);
   self->selected = NULL;
-  self->retry_generation = 0;
   self->retry_count = 0;
 }
 
@@ -51,9 +52,27 @@ static void sgf_view_scroller_schedule_retry(SgfViewScroller *self) {
   if (self->retry_scheduled) {
     return;
   }
+  if (self->retry_count >= SGF_VIEW_SCROLLER_MAX_RETRIES) {
+    g_debug("SGF view scroller gave up after %u retries", self->retry_count);
+    return;
+  }
 
   self->retry_scheduled = TRUE;
   g_idle_add_once(sgf_view_scroller_retry_callback, g_object_ref(self));
+}
+
+static gboolean sgf_view_scroller_target_is_visible(GtkAdjustment *adjustment,
+                                                    double target_start,
+                                                    double target_end) {
+  double value = 0.0;
+  double page_size = 0.0;
+
+  g_return_val_if_fail(GTK_IS_ADJUSTMENT(adjustment), TRUE);
+
+  value = gtk_adjustment_get_value(adjustment);
+  page_size = gtk_adjustment_get_page_size(adjustment);
+  return target_start >= value - SGF_VIEW_SCROLLER_EPSILON &&
+         target_end <= value + page_size + SGF_VIEW_SCROLLER_EPSILON;
 }
 
 static void sgf_view_scroller_dispose(GObject *object) {
@@ -83,7 +102,6 @@ void sgf_view_scroller_scroll(SgfViewScroller *self,
     self->root = root_ref;
     self->node_widgets = node_widgets_ref;
     self->selected = selected;
-    self->retry_generation++;
     self->retry_count = 0;
   }
 
@@ -131,6 +149,9 @@ void sgf_view_scroller_scroll(SgfViewScroller *self,
   const double h_start = bounds.origin.x;
   const double h_end = bounds.origin.x + bounds.size.width;
   gtk_adjustment_clamp_page(hadjustment, h_start, h_end);
+  if (!sgf_view_scroller_target_is_visible(hadjustment, h_start, h_end)) {
+    sgf_view_scroller_schedule_retry(self);
+  }
 }
 
 static void sgf_view_scroller_class_init(SgfViewScrollerClass *klass) {
@@ -144,7 +165,6 @@ static void sgf_view_scroller_init(SgfViewScroller *self) {
   self->node_widgets = NULL;
   self->selected = NULL;
   self->retry_scheduled = FALSE;
-  self->retry_generation = 0;
   self->retry_count = 0;
 }
 
