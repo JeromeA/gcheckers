@@ -735,7 +735,10 @@ gboolean homeworlds_position_apply_move(HomeworldsPosition *position, const Home
     *position = working;
     return TRUE;
   }
-  if (working.phase != HOMEWORLDS_PHASE_PLAY || move->kind != HOMEWORLDS_MOVE_KIND_TURN || move->step_count == 0) {
+  if (working.phase != HOMEWORLDS_PHASE_PLAY ||
+      move->kind != HOMEWORLDS_MOVE_KIND_TURN ||
+      move->step_count == 0 ||
+      move->step_count > HOMEWORLDS_MAX_MOVE_STEPS) {
     return FALSE;
   }
 

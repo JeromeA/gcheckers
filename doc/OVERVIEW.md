@@ -526,11 +526,12 @@ in `homeworlds_sgf_position.c`. Move notation uses pyramid letters and sizes dir
 separator, while the parser also accepts older saved `H1 g+` and slash-separated step notation. The public parser only
 writes the output move after the whole notation succeeds. Static evaluation counts ship material and repeats the largest
 own ship at each player's homeworld. Applying a move is transactional: setup and turn moves are resolved against a
-working copy and only replace the original position after the full move succeeds. Sacrifice-granted actions reuse the
-normal action application code but bypass local color-access checks because the sacrificed ship supplies the action
-color. Public single-step application is also transactional, so failed staged steps do not leak partial bank or system
-changes into the builder. Bank lookup helpers return `0` as their output pyramid when no matching bank ship is
-available, and empty-system lookup returns `HOMEWORLDS_INVALID_INDEX` when no empty system slot is available.
+working copy and only replace the original position after the full move succeeds, and malformed turn moves with
+overlong step counts are rejected before step storage is read. Sacrifice-granted actions reuse the normal action
+application code but bypass local color-access checks because the sacrificed ship supplies the action color. Public
+single-step application is also transactional, so failed staged steps do not leak partial bank or system changes into
+the builder. Bank lookup helpers return `0` as their output pyramid when no matching bank ship is available, and
+empty-system lookup returns `HOMEWORLDS_INVALID_INDEX` when no empty system slot is available.
 `homeworlds_position_text.c` formats a non-GTK ASCII board snapshot, with each system shown as player 2 ships,
 stars, and player 1 ships in the same top-to-bottom reachability order as the board.
 Collaborates with: `homeworlds_move_builder.c`, `homeworlds_backend.c`, `homeworlds_sgf_position.c`,

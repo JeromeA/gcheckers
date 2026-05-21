@@ -910,3 +910,11 @@ Some step helpers changed the board before their final failure point. For exampl
 the bank ship and then failed when the destination had no free ship slot.
 
 The fix applies each public turn step to a scratch position first and copies it back only after the step succeeds.
+
+## Homeworlds move application trusted overlong turn step counts
+
+Homeworlds moves store at most `HOMEWORLDS_MAX_MOVE_STEPS` turn steps. `homeworlds_position_apply_move()` rejected
+empty turn moves, but it did not reject a malformed move whose `step_count` was larger than the fixed step array.
+
+That could make the validation loop read beyond the move's `steps` storage. The fix rejects overlong step counts before
+iterating over the array.
