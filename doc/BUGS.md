@@ -820,3 +820,11 @@ move has validated and applied successfully, so rejected moves leave their input
 failed parse could therefore clear a previous value or leave a partial turn move behind.
 
 The fix parses into a local scratch move and copies it to the caller only after the whole notation string succeeds.
+
+## Failed Homeworlds bank-ship lookup left stale output
+
+`homeworlds_system_find_smallest_bank_ship()` reported `FALSE` when no ship of the requested color remained in the
+bank, but it left `out_pyramid` unchanged. Callers that reused a variable could accidentally inspect a stale pyramid
+after the failed lookup.
+
+The fix clears `out_pyramid` to `0` before searching, so both success and failure return a deterministic value.

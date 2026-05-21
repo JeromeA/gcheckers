@@ -195,6 +195,21 @@ static void test_invalid_multi_step_move_leaves_position_unchanged(void) {
   assert(memcmp(&position, &before, sizeof(position)) == 0);
 }
 
+static void test_smallest_bank_ship_failure_clears_output(void) {
+  HomeworldsPosition position = {0};
+  HomeworldsPyramid found = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL);
+
+  homeworlds_position_init(&position);
+  for (guint i = 0; i < HOMEWORLDS_BANK_SLOT_COUNT; ++i) {
+    if (homeworlds_pyramid_color(position.bank[i]) == HOMEWORLDS_COLOR_BLUE) {
+      position.bank[i] = 0;
+    }
+  }
+
+  assert(!homeworlds_system_find_smallest_bank_ship(&position, HOMEWORLDS_COLOR_BLUE, &found));
+  assert(found == 0);
+}
+
 static void test_trade_preserves_size(void) {
   HomeworldsPosition position = {0};
   HomeworldsMove move = {0};
@@ -546,6 +561,7 @@ int main(void) {
   test_setup_accepts_any_bank_pyramids();
   test_build_uses_smallest_available_ship();
   test_invalid_multi_step_move_leaves_position_unchanged();
+  test_smallest_bank_ship_failure_clears_output();
   test_trade_preserves_size();
   test_attack_requires_size_and_changes_owner();
   test_move_and_discover_follow_connectivity();
