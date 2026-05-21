@@ -251,6 +251,16 @@ static void test_move_and_discover_follow_connectivity(void) {
                                                                            HOMEWORLDS_SIZE_LARGE));
 }
 
+static void test_system_ref_resolution_failure_sets_invalid_index(void) {
+  HomeworldsPosition position = {0};
+  HomeworldsSystemRef ref = test_star_ref(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE, 0);
+  guint system_index = 0;
+
+  homeworlds_position_init(&position);
+  assert(!homeworlds_position_resolve_system_ref(&position, &ref, &system_index));
+  assert(system_index == HOMEWORLDS_INVALID_INDEX);
+}
+
 static void test_sacrifice_grants_multiple_actions(void) {
   HomeworldsPosition position = {0};
   HomeworldsMove move = {0};
@@ -505,6 +515,7 @@ int main(void) {
   test_trade_preserves_size();
   test_attack_requires_size_and_changes_owner();
   test_move_and_discover_follow_connectivity();
+  test_system_ref_resolution_failure_sets_invalid_index();
   test_sacrifice_grants_multiple_actions();
   test_sacrifice_actions_ignore_local_color_access();
   test_catastrophe_removes_matching_color_and_collapses_star_system();

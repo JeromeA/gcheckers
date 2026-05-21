@@ -515,8 +515,9 @@ the players' homeworlds), two star slots per system, and fourteen ship slots per
 `homeworlds_types.h` own pyramid encoding/decoding and low-level slot semantics so the representation can change in
 one place later if needed. `HomeworldsMove` does not store physical slot indexes or an acting side; it stores the same
 symbolic system and ship references used by notation (`H1`, `G3'`, `g2`, etc.), and the rules engine resolves those
-references against the current position at apply time. Build steps are canonicalized further: they store only the
-source system plus the build color in `target_color`, because the exact source ship size does not change the move.
+references against the current position at apply time. Failed system-reference resolution returns
+`HOMEWORLDS_INVALID_INDEX` through the output index. Build steps are canonicalized further: they store only the source
+system plus the build color in `target_color`, because the exact source ship size does not change the move.
 Rules covered: setup, build, trade, attack, move, discover, sacrifice, catastrophe resolution, empty-system
 cleanup, end-of-turn homeworld loss detection for either side, static evaluation, terminal scoring, hashing, compact
 move formatting/parsing, and whole-position SGF snapshots in `homeworlds_sgf_position.c`. Move notation uses pyramid

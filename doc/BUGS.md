@@ -784,3 +784,10 @@ switch to a wider spacing mode.
 The fix gives every bank pile the same `homeworlds-bank-pile` base style with zero padding and a stable transparent
 border, then adds `homeworlds-bank-choice` only for the selectable outline. A realized-window regression now checks that
 the bank frame does not grow after the six setup selections.
+
+## Failed Homeworlds system-reference resolution left stale output
+
+`homeworlds_position_resolve_system_ref()` returned `FALSE` for unresolved symbolic references but did not reset
+`out_system_index`. A caller that inspected the index after failure could see a stale valid system index.
+
+The fix initializes `out_system_index` to `HOMEWORLDS_INVALID_INDEX` before resolving the reference.
