@@ -2479,7 +2479,10 @@ static GtkWidget *homeworlds_view_create_bank_button(HomeworldsView *view, Homew
   button_height = (int)homeworlds_view_bank_button_height(homeworlds_pyramid_size(pyramid));
   selectable = homeworlds_view_find_bank_candidate(view, pyramid, &candidate);
   button = gtk_button_new();
-  gtk_widget_add_css_class(button, selectable ? "homeworlds-bank-choice" : "flat");
+  gtk_widget_add_css_class(button, "homeworlds-bank-pile");
+  if (selectable) {
+    gtk_widget_add_css_class(button, "homeworlds-bank-choice");
+  }
   gtk_widget_set_size_request(button, button_width, button_height);
   gtk_widget_set_can_focus(button, selectable);
   gtk_widget_set_sensitive(button, selectable);

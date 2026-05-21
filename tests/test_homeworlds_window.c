@@ -12,6 +12,7 @@
 #include "../src/sgf_autosave.h"
 #include "../src/sgf_controller.h"
 #include "../src/sgf_tree.h"
+#include "../src/style.h"
 #include "../src/window.h"
 
 static void test_homeworlds_window_skip(void) {
@@ -201,6 +202,43 @@ static guint test_homeworlds_count_widgets_with_data(GtkWidget *root, const char
   for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
        child = gtk_widget_get_next_sibling(child)) {
     count += test_homeworlds_count_widgets_with_data(child, key);
+  }
+
+  return count;
+}
+
+static guint test_homeworlds_count_bank_buttons_with_css_class(GtkWidget *root, const char *css_class) {
+  guint count = 0;
+
+  g_return_val_if_fail(GTK_IS_WIDGET(root), 0);
+  g_return_val_if_fail(css_class != NULL, 0);
+
+  if (g_object_get_data(G_OBJECT(root), "homeworlds-board-bank-choice") != NULL &&
+      gtk_widget_has_css_class(root, css_class)) {
+    count++;
+  }
+
+  for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
+       child = gtk_widget_get_next_sibling(child)) {
+    count += test_homeworlds_count_bank_buttons_with_css_class(child, css_class);
+  }
+
+  return count;
+}
+
+static guint test_homeworlds_count_bank_buttons_without_compact_style(GtkWidget *root) {
+  guint count = 0;
+
+  g_return_val_if_fail(GTK_IS_WIDGET(root), 0);
+
+  if (g_object_get_data(G_OBJECT(root), "homeworlds-board-bank-choice") != NULL &&
+      (!gtk_widget_has_css_class(root, "homeworlds-bank-pile") || gtk_widget_has_css_class(root, "flat"))) {
+    count++;
+  }
+
+  for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
+       child = gtk_widget_get_next_sibling(child)) {
+    count += test_homeworlds_count_bank_buttons_without_compact_style(child);
   }
 
   return count;
@@ -1244,6 +1282,8 @@ static void test_homeworlds_view_bank_layout_is_compact_and_centered(void) {
   g_assert_cmpuint(test_homeworlds_count_labels_with_text(bank, "x1"), ==, 0);
   g_assert_cmpuint(test_homeworlds_count_labels_with_text(bank, "x2"), ==, 0);
   g_assert_cmpuint(test_homeworlds_count_labels_with_text(bank, "x3"), ==, 0);
+  g_assert_cmpuint(test_homeworlds_count_bank_buttons_without_compact_style(bank), ==, 0);
+  g_assert_cmpuint(test_homeworlds_count_bank_buttons_with_css_class(bank, "homeworlds-bank-choice"), ==, 12);
   first_grid_child = gtk_grid_get_child_at(GTK_GRID(grid), 0, 0);
   g_assert_nonnull(first_grid_child);
   g_assert_cmpuint(GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(first_grid_child), "homeworlds-bank-pyramid")),
@@ -1259,6 +1299,46 @@ static void test_homeworlds_view_bank_layout_is_compact_and_centered(void) {
   g_assert_cmpint(small_width, <, large_width);
 
   homeworlds_view_free(view);
+  g_object_unref(model);
+}
+
+static void test_homeworlds_view_bank_layout_stays_compact_after_setup(void) {
+  GGameModel *model = ggame_model_new(&homeworlds_game_backend);
+  HomeworldsView *view = test_homeworlds_view_new_without_move_report(model);
+  GtkWidget *root = homeworlds_view_get_widget(view);
+  GtkWidget *window = gtk_window_new();
+  GtkWidget *bank = NULL;
+  gint setup_bank_width = 0;
+
+  g_assert_nonnull(model);
+  g_assert_nonnull(view);
+  g_assert_nonnull(root);
+  ggame_style_init();
+  gtk_window_set_child(GTK_WINDOW(window), root);
+  gtk_window_set_default_size(GTK_WINDOW(window), 1200, 700);
+  gtk_window_present(GTK_WINDOW(window));
+  test_homeworlds_drain_main_context(64);
+
+  bank = test_homeworlds_find_widget_named(root, "homeworlds-board-bank");
+  g_assert_nonnull(bank);
+  setup_bank_width = gtk_widget_get_width(bank);
+  g_assert_cmpint(setup_bank_width, >, 0);
+  g_assert_cmpuint(test_homeworlds_count_bank_buttons_without_compact_style(bank), ==, 0);
+  g_assert_cmpuint(test_homeworlds_count_bank_buttons_with_css_class(bank, "homeworlds-bank-choice"), ==, 12);
+
+  for (guint step = 0; step < 6; step++) {
+    g_assert_true(homeworlds_view_apply_candidate_at(view, 0));
+    test_homeworlds_drain_main_context(64);
+  }
+
+  bank = test_homeworlds_find_widget_named(root, "homeworlds-board-bank");
+  g_assert_nonnull(bank);
+  g_assert_cmpint(gtk_widget_get_width(bank), <=, setup_bank_width);
+  g_assert_cmpuint(test_homeworlds_count_bank_buttons_without_compact_style(bank), ==, 0);
+  g_assert_cmpuint(test_homeworlds_count_bank_buttons_with_css_class(bank, "homeworlds-bank-choice"), ==, 0);
+
+  homeworlds_view_free(view);
+  gtk_window_destroy(GTK_WINDOW(window));
   g_object_unref(model);
 }
 
@@ -1664,6 +1744,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/window/setup-recorded-in-sgf", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/setup-bank-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/bank-layout", test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/view/bank-layout-stays-compact-after-setup", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/board-ship-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/action-button-labels", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/choice-list-cancel", test_homeworlds_window_skip);
@@ -1693,6 +1774,8 @@ int main(int argc, char **argv) {
                     test_homeworlds_window_setup_moves_are_recorded_in_sgf);
     g_test_add_func("/homeworlds/view/setup-bank-buttons", test_homeworlds_view_setup_uses_board_bank_buttons);
     g_test_add_func("/homeworlds/view/bank-layout", test_homeworlds_view_bank_layout_is_compact_and_centered);
+    g_test_add_func("/homeworlds/view/bank-layout-stays-compact-after-setup",
+                    test_homeworlds_view_bank_layout_stays_compact_after_setup);
     g_test_add_func("/homeworlds/view/board-ship-buttons", test_homeworlds_view_uses_board_ship_buttons);
     g_test_add_func("/homeworlds/view/action-button-labels", test_homeworlds_view_action_buttons_use_plain_labels);
     g_test_add_func("/homeworlds/view/choice-list-cancel",

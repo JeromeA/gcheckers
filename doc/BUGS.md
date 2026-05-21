@@ -773,3 +773,14 @@ drives the panel allocation. The panel also uses overlay scrolling and gives the
 panel margins, so textual content and the vertical scrollbar cannot change the panel's horizontal behavior. Text panel
 labels use GTK's word-based natural wrapping without a character-width minimum, and all catastrophe status text goes
 through the same label helper. Vertical scrolling remains automatic.
+
+## Homeworlds bank piles expanded after setup
+
+The Homeworlds bank should use one compact layout throughout the game. During setup, every bank pile was selectable and
+therefore used the custom `homeworlds-bank-choice` CSS, which removes GTK button padding. Once setup ended, ordinary
+non-selectable piles fell back to GTK's `flat` button styling, so their natural size grew and the same grid appeared to
+switch to a wider spacing mode.
+
+The fix gives every bank pile the same `homeworlds-bank-pile` base style with zero padding and a stable transparent
+border, then adds `homeworlds-bank-choice` only for the selectable outline. A realized-window regression now checks that
+the bank frame does not grow after the six setup selections.

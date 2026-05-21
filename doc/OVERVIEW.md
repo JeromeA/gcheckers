@@ -245,8 +245,8 @@ Collaborates with: `src/create_puzzles_runner.c`, `src/ai_search.c`, `src/puzzle
 ## `ggame_style_init()` (`src/style.c`)
 Module: `ggame_style_init()` (style helper, not a class).
 Role: installs application CSS once per process using `g_once_init_enter/leave`, including SGF disc colors and the
-colored puzzle-picker square styles, plus transparent Homeworlds board/bank choice hitboxes and active-ship highlights
-with visible borders.
+colored puzzle-picker square styles, plus transparent Homeworlds board/bank choice hitboxes, stable compact bank-pile
+button sizing, and active-ship highlights with visible borders.
 Owns: CSS string and `GtkCssProvider` setup.
 Collaborates with: `GdkDisplay`/`GtkStyleContext` and is invoked by `GGameWindow`.
 
@@ -561,7 +561,8 @@ placement between the two homeworlds, measured-width row packing that reserves t
 scroller only when needed, viewport-tracking drawing-area content size that expands width for crowded rows and height
 for vertically crowded row boxes, mapped-frame ticks that recheck startup allocation without replacing stable click
 targets, a fixed minimum board viewport, homeworld labels, pipped square stars, tall pipped ship pyramids, overlaid
-clickable compact bank piles with an in-panel title, staged legal-choice buttons, and catastrophe buttons that stage
+compact bank piles with a shared base button style, an in-panel title, staged legal-choice buttons, and catastrophe
+buttons that stage
 normal symbolic steps into the
 current move so SGF, model state, and the last-move label stay synchronized. Homeworld rendering keeps player 1 at the
 bottom, player 2 at
