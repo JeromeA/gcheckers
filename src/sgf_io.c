@@ -555,8 +555,8 @@ static gboolean sgf_io_sync_analysis_properties(SgfNode *node, GError **error) {
     g_return_val_if_fail(entry != NULL, FALSE);
     g_return_val_if_fail(entry->move_text != NULL, FALSE);
 
-    char encoded[192] = {0};
-    g_snprintf(encoded, sizeof(encoded), "%s:%d:%" G_GUINT64_FORMAT, entry->move_text, entry->score, entry->nodes);
+    g_autofree char *encoded =
+        g_strdup_printf("%s:%d:%" G_GUINT64_FORMAT, entry->move_text, entry->score, entry->nodes);
     if (!sgf_node_add_property(node, SGF_IO_PROP_ANALYSIS_MOVE, encoded)) {
       g_set_error_literal(error, sgf_io_error_quark(), SGF_IO_ANALYSIS_PROP_MOVE, "Unable to write GCAN");
       return FALSE;

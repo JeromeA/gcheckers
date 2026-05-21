@@ -946,3 +946,11 @@ SGF move parsing should not mutate caller-owned move storage unless the notation
 move string could erase the caller's previous move value even though the function returned failure.
 
 The fix parses into scratch storage and copies the typed move back only after the backend accepts the notation.
+
+## SGF analysis move text could be truncated while saving
+
+Analysis move entries are saved as `GCAN[move:score:nodes]`, and the move text comes from the analysis report rather
+than a fixed-size backend move buffer. `sgf_io_sync_analysis_properties()` formatted each entry into a 192-byte stack
+buffer, so longer move labels were silently truncated in saved SGF data.
+
+The fix formats each `GCAN` value dynamically, preserving the full analysis move text through save/load roundtrips.

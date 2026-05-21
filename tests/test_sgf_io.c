@@ -334,7 +334,12 @@ static void test_sgf_io_roundtrip_node_analysis_properties(void) {
   analysis->tt_probes = 700;
   analysis->tt_hits = 250;
   analysis->tt_cutoffs = 90;
+  g_autoptr(GString) long_move = g_string_sized_new(240);
+  for (guint i = 0; i < 240; ++i) {
+    g_string_append_c(long_move, 'x');
+  }
   g_assert_true(sgf_node_analysis_add_scored_move(analysis, "13-17", 12, 345));
+  g_assert_true(sgf_node_analysis_add_scored_move(analysis, long_move->str, -34, 987654321));
   g_assert_true(sgf_node_set_analysis(node, analysis));
 
   g_autoptr(GError) error = NULL;
@@ -360,10 +365,15 @@ static void test_sgf_io_roundtrip_node_analysis_properties(void) {
   g_autoptr(SgfNodeAnalysis) loaded_analysis = sgf_node_get_analysis(loaded_node);
   g_assert_nonnull(loaded_analysis);
   g_assert_cmpuint(loaded_analysis->depth, ==, 7);
-  g_assert_cmpuint(loaded_analysis->moves->len, ==, 1);
+  g_assert_cmpuint(loaded_analysis->moves->len, ==, 2);
   const SgfNodeScoredMove *loaded_move = g_ptr_array_index(loaded_analysis->moves, 0);
   g_assert_nonnull(loaded_move);
   g_assert_cmpstr(loaded_move->move_text, ==, "13-17");
+  const SgfNodeScoredMove *loaded_long_move = g_ptr_array_index(loaded_analysis->moves, 1);
+  g_assert_nonnull(loaded_long_move);
+  g_assert_cmpstr(loaded_long_move->move_text, ==, long_move->str);
+  g_assert_cmpint(loaded_long_move->score, ==, -34);
+  g_assert_cmpuint(loaded_long_move->nodes, ==, 987654321);
 }
 
 static void test_sgf_io_roundtrip_ruleset_property(void) {
