@@ -1238,6 +1238,95 @@ static gboolean homeworlds_move_append_turn_step(GString *text, const Homeworlds
   }
 }
 
+static gboolean homeworlds_system_refs_equal(const HomeworldsSystemRef *left, const HomeworldsSystemRef *right) {
+  g_return_val_if_fail(left != NULL, FALSE);
+  g_return_val_if_fail(right != NULL, FALSE);
+
+  if (left->kind != right->kind) {
+    return FALSE;
+  }
+
+  switch ((HomeworldsSystemRefKind)left->kind) {
+    case HOMEWORLDS_SYSTEM_REF_HOMEWORLD:
+      return left->homeworld_side == right->homeworld_side;
+    case HOMEWORLDS_SYSTEM_REF_STAR:
+      return left->star == right->star && left->duplicate_index == right->duplicate_index;
+    case HOMEWORLDS_SYSTEM_REF_NONE:
+    default:
+      return TRUE;
+  }
+}
+
+static gboolean homeworlds_ship_refs_equal(const HomeworldsShipRef *left, const HomeworldsShipRef *right) {
+  g_return_val_if_fail(left != NULL, FALSE);
+  g_return_val_if_fail(right != NULL, FALSE);
+
+  return left->ship == right->ship && homeworlds_system_refs_equal(&left->system, &right->system);
+}
+
+static gboolean homeworlds_turn_steps_equal(const HomeworldsTurnStep *left, const HomeworldsTurnStep *right) {
+  g_return_val_if_fail(left != NULL, FALSE);
+  g_return_val_if_fail(right != NULL, FALSE);
+
+  if (left->kind != right->kind) {
+    return FALSE;
+  }
+
+  switch ((HomeworldsStepKind)left->kind) {
+    case HOMEWORLDS_STEP_PASS:
+      return TRUE;
+    case HOMEWORLDS_STEP_CATASTROPHE:
+      return left->target_color == right->target_color &&
+             homeworlds_system_refs_equal(&left->target_system, &right->target_system);
+    case HOMEWORLDS_STEP_BUILD:
+      return left->target_color == right->target_color &&
+             homeworlds_system_refs_equal(&left->actor.system, &right->actor.system);
+    case HOMEWORLDS_STEP_TRADE:
+      return left->target_color == right->target_color && homeworlds_ship_refs_equal(&left->actor, &right->actor);
+    case HOMEWORLDS_STEP_ATTACK:
+      return left->target_ship.ship == right->target_ship.ship &&
+             homeworlds_ship_refs_equal(&left->actor, &right->actor);
+    case HOMEWORLDS_STEP_MOVE:
+    case HOMEWORLDS_STEP_DISCOVER:
+      return homeworlds_ship_refs_equal(&left->actor, &right->actor) &&
+             homeworlds_system_refs_equal(&left->target_system, &right->target_system);
+    case HOMEWORLDS_STEP_SACRIFICE:
+      return homeworlds_ship_refs_equal(&left->actor, &right->actor);
+    case HOMEWORLDS_STEP_NONE:
+    default:
+      return TRUE;
+  }
+}
+
+gboolean homeworlds_moves_equal(const HomeworldsMove *left, const HomeworldsMove *right) {
+  g_return_val_if_fail(left != NULL, FALSE);
+  g_return_val_if_fail(right != NULL, FALSE);
+
+  if (left->kind != right->kind) {
+    return FALSE;
+  }
+
+  switch ((HomeworldsMoveKind)left->kind) {
+    case HOMEWORLDS_MOVE_KIND_SETUP:
+      return left->setup_stars[0] == right->setup_stars[0] &&
+             left->setup_stars[1] == right->setup_stars[1] &&
+             left->setup_ship == right->setup_ship;
+    case HOMEWORLDS_MOVE_KIND_TURN:
+      if (left->step_count != right->step_count || left->step_count > HOMEWORLDS_MAX_MOVE_STEPS) {
+        return FALSE;
+      }
+      for (guint i = 0; i < left->step_count; ++i) {
+        if (!homeworlds_turn_steps_equal(&left->steps[i], &right->steps[i])) {
+          return FALSE;
+        }
+      }
+      return TRUE;
+    case HOMEWORLDS_MOVE_KIND_NONE:
+    default:
+      return TRUE;
+  }
+}
+
 gboolean homeworlds_move_format(const HomeworldsMove *move, char *buffer, gsize size) {
   GString *text = NULL;
   gboolean ok = FALSE;

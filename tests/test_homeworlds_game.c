@@ -579,6 +579,36 @@ static void test_move_parse_accepts_legacy_step_spacing(void) {
   assert(strcmp(notation, "H2g3- B1g+ H2g+ B1g+") == 0);
 }
 
+static void test_move_equality_uses_structural_notation_identity(void) {
+  HomeworldsMove build = {
+    .kind = HOMEWORLDS_MOVE_KIND_TURN,
+    .step_count = 1,
+    .steps = {
+      {
+        .kind = HOMEWORLDS_STEP_BUILD,
+        .actor = {
+          .system = test_homeworld_ref(0),
+          .ship = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL),
+        },
+        .target_ship = {
+          .system = test_star_ref(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL, 0),
+          .ship = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL),
+        },
+        .target_color = HOMEWORLDS_COLOR_GREEN,
+      },
+    },
+  };
+  HomeworldsMove same_build = build;
+  HomeworldsMove different_build = build;
+
+  same_build.steps[0].actor.ship = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE);
+  same_build.steps[0].target_ship.ship = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE);
+  different_build.steps[0].target_color = HOMEWORLDS_COLOR_BLUE;
+
+  assert(homeworlds_moves_equal(&build, &same_build));
+  assert(!homeworlds_moves_equal(&build, &different_build));
+}
+
 int main(void) {
   test_setup_and_loss_detection();
   test_setup_accepts_any_bank_pyramids();
@@ -600,5 +630,6 @@ int main(void) {
   test_position_ascii_formats_empty_position();
   test_move_parse_failure_leaves_output_unchanged();
   test_move_parse_accepts_legacy_step_spacing();
+  test_move_equality_uses_structural_notation_identity();
   return 0;
 }

@@ -4,8 +4,6 @@
 #include "homeworlds_game.h"
 #include "homeworlds_move_builder.h"
 
-#include <string.h>
-
 typedef struct {
   HomeworldsMove *moves;
   gsize count;
@@ -18,15 +16,10 @@ typedef struct {
 } HomeworldsMoveReportCatastropheChoice;
 
 static gboolean homeworlds_move_report_moves_equal(const HomeworldsMove *left, const HomeworldsMove *right) {
-  char left_text[128] = {0};
-  char right_text[128] = {0};
-
   g_return_val_if_fail(left != NULL, FALSE);
   g_return_val_if_fail(right != NULL, FALSE);
 
-  return homeworlds_move_format(left, left_text, sizeof(left_text)) &&
-         homeworlds_move_format(right, right_text, sizeof(right_text)) &&
-         strcmp(left_text, right_text) == 0;
+  return homeworlds_moves_equal(left, right);
 }
 
 static gboolean homeworlds_move_report_buffer_append(HomeworldsMoveReportBuffer *buffer,

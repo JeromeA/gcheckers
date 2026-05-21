@@ -14,6 +14,7 @@ void homeworlds_position_copy(HomeworldsPosition *dest, const HomeworldsPosition
 GameBackendOutcome homeworlds_position_outcome(const HomeworldsPosition *position);
 guint homeworlds_position_turn(const HomeworldsPosition *position);
 
+gboolean homeworlds_moves_equal(const HomeworldsMove *left, const HomeworldsMove *right);
 gboolean homeworlds_position_apply_move(HomeworldsPosition *position, const HomeworldsMove *move);
 gboolean homeworlds_position_apply_catastrophe(HomeworldsPosition *position, guint system_index, HomeworldsColor color);
 gboolean homeworlds_position_apply_turn_step(HomeworldsPosition *position, const HomeworldsTurnStep *step);

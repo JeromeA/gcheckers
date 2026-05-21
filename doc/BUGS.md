@@ -880,3 +880,13 @@ the board used fixed fractions for player 2, top, middle, bottom, and player 1 r
 The fix assigns board-row fractions from the visible row groups and their connectivity. Connected neighboring groups
 use adjacent spacing, while disconnected groups reserve an extra empty slot; a real middle-row system still gets its own
 row.
+
+## Homeworlds move report compared moves by formatting them
+
+The Homeworlds move report should compare generated moves structurally. It deduplicated candidates by formatting both
+moves into notation strings and comparing the text, even though the backend already had a structural comparator for
+move identity.
+
+That made report generation spend most of its time in move formatting when many generated moves collapsed to the same
+symbolic notation. The fix moves the structural comparator into the Homeworlds core API and lets both the backend and
+move report use it directly.

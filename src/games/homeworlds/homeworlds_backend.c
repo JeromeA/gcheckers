@@ -241,50 +241,6 @@ static gboolean homeworlds_backend_system_refs_equal(const HomeworldsSystemRef *
   }
 }
 
-static gboolean homeworlds_backend_ship_refs_equal(const HomeworldsShipRef *left, const HomeworldsShipRef *right) {
-  g_return_val_if_fail(left != NULL, FALSE);
-  g_return_val_if_fail(right != NULL, FALSE);
-
-  return left->ship == right->ship &&
-         homeworlds_backend_system_refs_equal(&left->system, &right->system);
-}
-
-static gboolean homeworlds_backend_turn_steps_equal(const HomeworldsTurnStep *left,
-                                                    const HomeworldsTurnStep *right) {
-  g_return_val_if_fail(left != NULL, FALSE);
-  g_return_val_if_fail(right != NULL, FALSE);
-
-  if (left->kind != right->kind) {
-    return FALSE;
-  }
-
-  switch ((HomeworldsStepKind)left->kind) {
-    case HOMEWORLDS_STEP_PASS:
-      return TRUE;
-    case HOMEWORLDS_STEP_CATASTROPHE:
-      return left->target_color == right->target_color &&
-             homeworlds_backend_system_refs_equal(&left->target_system, &right->target_system);
-    case HOMEWORLDS_STEP_BUILD:
-      return left->target_color == right->target_color &&
-             homeworlds_backend_system_refs_equal(&left->actor.system, &right->actor.system);
-    case HOMEWORLDS_STEP_TRADE:
-      return left->target_color == right->target_color &&
-             homeworlds_backend_ship_refs_equal(&left->actor, &right->actor);
-    case HOMEWORLDS_STEP_ATTACK:
-      return left->target_ship.ship == right->target_ship.ship &&
-             homeworlds_backend_ship_refs_equal(&left->actor, &right->actor);
-    case HOMEWORLDS_STEP_MOVE:
-    case HOMEWORLDS_STEP_DISCOVER:
-      return homeworlds_backend_ship_refs_equal(&left->actor, &right->actor) &&
-             homeworlds_backend_system_refs_equal(&left->target_system, &right->target_system);
-    case HOMEWORLDS_STEP_SACRIFICE:
-      return homeworlds_backend_ship_refs_equal(&left->actor, &right->actor);
-    case HOMEWORLDS_STEP_NONE:
-    default:
-      return TRUE;
-  }
-}
-
 static gboolean homeworlds_backend_moves_equal(gconstpointer left, gconstpointer right) {
   const HomeworldsMove *left_move = left;
   const HomeworldsMove *right_move = right;
@@ -292,30 +248,7 @@ static gboolean homeworlds_backend_moves_equal(gconstpointer left, gconstpointer
   g_return_val_if_fail(left_move != NULL, FALSE);
   g_return_val_if_fail(right_move != NULL, FALSE);
 
-  if (left_move->kind != right_move->kind) {
-    return FALSE;
-  }
-
-  switch ((HomeworldsMoveKind)left_move->kind) {
-    case HOMEWORLDS_MOVE_KIND_SETUP:
-      return left_move->setup_stars[0] == right_move->setup_stars[0] &&
-             left_move->setup_stars[1] == right_move->setup_stars[1] &&
-             left_move->setup_ship == right_move->setup_ship;
-    case HOMEWORLDS_MOVE_KIND_TURN:
-      if (left_move->step_count != right_move->step_count ||
-          left_move->step_count > HOMEWORLDS_MAX_MOVE_STEPS) {
-        return FALSE;
-      }
-      for (guint i = 0; i < left_move->step_count; ++i) {
-        if (!homeworlds_backend_turn_steps_equal(&left_move->steps[i], &right_move->steps[i])) {
-          return FALSE;
-        }
-      }
-      return TRUE;
-    case HOMEWORLDS_MOVE_KIND_NONE:
-    default:
-      return TRUE;
-  }
+  return homeworlds_moves_equal(left_move, right_move);
 }
 
 static gboolean homeworlds_backend_profitable_catastrophes_equal(const HomeworldsProfitableCatastrophe *left,
