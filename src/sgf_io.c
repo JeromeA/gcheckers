@@ -465,6 +465,9 @@ static gboolean sgf_io_parse_analysis_move(const char *value,
   }
 
   g_autofree char *notation = g_strndup(value, (gsize)(score_sep - value));
+  if (notation[0] == '\0') {
+    return FALSE;
+  }
   const char *score_end = nodes_sep != NULL ? nodes_sep : value + strlen(value);
   g_autofree char *score_text =
       g_strndup(score_sep + 1, (gsize)(score_end - score_sep - 1));

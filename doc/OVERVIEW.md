@@ -848,8 +848,9 @@ backend has variants, and is omitted/accepted as missing for zero-variant games 
 analysis persists through custom properties:
 `GCAD[depth]`, `GCAS[nodes=...;tt_probes=...;tt_hits=...;tt_cutoffs=...]`, and repeated
 `GCAN[move:score:nodes]` for scored moves, while still accepting older `GCAN[move:score]` data when loading. `GCAN`
-values are formatted dynamically so long analysis move labels are not truncated. Unsigned SGF numeric fields reject
-signed text and range errors. This layer is GTK-free so it can be reused by both GUI actions and future CLI commands.
+values are formatted dynamically so long analysis move labels are not truncated, and empty analysis move labels are
+rejected on load. Unsigned SGF numeric fields reject signed text and range errors. This layer is GTK-free so it can be
+reused by both GUI actions and future CLI commands.
 Collaborates with: `GGameSgfController` load/save entry points and `tests/test_sgf_io.c`.
 
 ### SGF autosave (`src/sgf_autosave.c`, `src/sgf_autosave.h`)

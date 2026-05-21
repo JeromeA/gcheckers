@@ -980,3 +980,10 @@ their output indexes or pyramid value.
 
 That made callers depend on separately initialized locals to avoid stale data after a failed lookup. The fix writes the
 invalid index sentinels and clears the output pyramid before attempting ship resolution.
+
+## SGF analysis accepted empty move labels
+
+SGF analysis move entries are stored as `GCAN[move:score:nodes]`. The parser rejected missing separators, but it did
+not reject an empty `move` portion when the value started with a colon, such as `GCAN[:12:345]`.
+
+The fix rejects empty analysis move text before accepting the scored move entry.
