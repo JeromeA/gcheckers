@@ -607,9 +607,9 @@ static gboolean homeworlds_position_apply_sacrifice(HomeworldsPosition *position
   return TRUE;
 }
 
-static gboolean homeworlds_position_apply_turn_step_with_access(HomeworldsPosition *position,
-                                                                const HomeworldsTurnStep *step,
-                                                                gboolean require_access) {
+static gboolean homeworlds_position_apply_turn_step_in_place(HomeworldsPosition *position,
+                                                             const HomeworldsTurnStep *step,
+                                                             gboolean require_access) {
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(step != NULL, FALSE);
 
@@ -639,6 +639,23 @@ static gboolean homeworlds_position_apply_turn_step_with_access(HomeworldsPositi
     default:
       return FALSE;
   }
+}
+
+static gboolean homeworlds_position_apply_turn_step_with_access(HomeworldsPosition *position,
+                                                                const HomeworldsTurnStep *step,
+                                                                gboolean require_access) {
+  HomeworldsPosition working = {0};
+
+  g_return_val_if_fail(position != NULL, FALSE);
+  g_return_val_if_fail(step != NULL, FALSE);
+
+  working = *position;
+  if (!homeworlds_position_apply_turn_step_in_place(&working, step, require_access)) {
+    return FALSE;
+  }
+
+  *position = working;
+  return TRUE;
 }
 
 gboolean homeworlds_position_apply_turn_step(HomeworldsPosition *position, const HomeworldsTurnStep *step) {

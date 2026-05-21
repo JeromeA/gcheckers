@@ -901,3 +901,12 @@ checking every all-move against every good move. That left report formatting qua
 
 The fix builds one temporary structural hash set from `good_moves()` and uses it while rendering the remaining legal
 moves, so the report keeps stable ordering without the nested scan.
+
+## Failed Homeworlds turn steps could partially mutate a position
+
+Homeworlds turn-step application should either apply a whole symbolic step or leave the position unchanged.
+
+Some step helpers changed the board before their final failure point. For example, building in a full system removed
+the bank ship and then failed when the destination had no free ship slot.
+
+The fix applies each public turn step to a scratch position first and copies it back only after the step succeeds.
