@@ -795,3 +795,12 @@ new selected disc offscreen.
 The fix checks whether the requested disc range is actually visible after clamping. If it is not, the scroller schedules
 another bounded idle retry, covering both geometry readiness and adjustment-range readiness without allowing an
 unbounded retry loop.
+
+## Generic model position replacement dereferenced null receivers
+
+`ggame_model_set_position()` delegated to `ggame_model_set_position_variant()` but read `self->variant` before the
+delegate could validate `self`. Invalid callers therefore crashed instead of getting the same `FALSE` result and GLib
+precondition diagnostic as the variant-aware API.
+
+The fix adds the missing receiver precondition before reading the current variant, and the model test covers the null
+receiver path.

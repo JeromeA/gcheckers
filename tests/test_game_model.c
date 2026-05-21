@@ -439,11 +439,20 @@ static void test_game_model_builder_only_backend(void) {
   g_object_unref(model);
 }
 
+static void test_game_model_set_position_rejects_null_model(void) {
+  TestBuilderOnlyPosition position = {
+    .total = 0,
+  };
+
+  assert(!ggame_model_set_position(NULL, &position));
+}
+
 int main(int argc, char **argv) {
   ggame_test_init_profile(&argc, &argv, "checkers");
   test_game_model_init_and_apply_move();
   test_game_model_reset_and_status();
   test_game_model_builder_only_backend();
+  test_game_model_set_position_rejects_null_model();
 
   return 0;
 }
