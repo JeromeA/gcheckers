@@ -784,3 +784,12 @@ switch to a wider spacing mode.
 The fix gives every bank pile the same `homeworlds-bank-pile` base style with zero padding and a stable transparent
 border, then adds `homeworlds-bank-choice` only for the selectable outline. A realized-window regression now checks that
 the bank frame does not grow after the six setup selections.
+
+## Failed Homeworlds multi-step moves could leave partial mutations
+
+`homeworlds_position_apply_move()` applied each turn step directly to the live position while validating a whole
+multi-step move. If a later step then made the move invalid, such as a second primary action without a sacrifice, the
+function returned `FALSE` after earlier steps had already changed the bank, ships, or systems.
+
+The fix applies setup and turn moves to a working copy first. The original position is replaced only after the entire
+move has validated and applied successfully, so rejected moves leave their input position unchanged.
