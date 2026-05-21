@@ -47,7 +47,9 @@ typedef struct {
 #define HOMEWORLDS_VIEW_ROW_MIN_VERTICAL_GAP 24.0
 #define HOMEWORLDS_VIEW_MIN_BOARD_VIEWPORT_WIDTH 420
 #define HOMEWORLDS_VIEW_TEXT_PANEL_WIDTH 280
-#define HOMEWORLDS_VIEW_TEXT_PANEL_LABEL_WIDTH_CHARS 28
+#define HOMEWORLDS_VIEW_TEXT_PANEL_MARGIN 12
+#define HOMEWORLDS_VIEW_TEXT_PANEL_CONTENT_WIDTH \
+  (HOMEWORLDS_VIEW_TEXT_PANEL_WIDTH - (2 * HOMEWORLDS_VIEW_TEXT_PANEL_MARGIN))
 #define HOMEWORLDS_VIEW_INITIAL_BOARD_WIDTH 1
 #define HOMEWORLDS_VIEW_INITIAL_BOARD_HEIGHT 1
 #define HOMEWORLDS_VIEW_SYSTEM_PIECE_MAX (HOMEWORLDS_STAR_SLOT_COUNT + (2 * HOMEWORLDS_SHIP_SLOT_COUNT))
@@ -433,10 +435,11 @@ static void homeworlds_view_clear_fixed(GtkWidget *fixed) {
 static void homeworlds_view_constrain_text_panel_label(GtkWidget *label) {
   g_return_if_fail(GTK_IS_LABEL(label));
 
+  gtk_widget_set_halign(label, GTK_ALIGN_FILL);
+  gtk_widget_set_hexpand(label, TRUE);
   gtk_label_set_wrap(GTK_LABEL(label), TRUE);
   gtk_label_set_wrap_mode(GTK_LABEL(label), PANGO_WRAP_WORD_CHAR);
-  gtk_label_set_width_chars(GTK_LABEL(label), HOMEWORLDS_VIEW_TEXT_PANEL_LABEL_WIDTH_CHARS);
-  gtk_label_set_max_width_chars(GTK_LABEL(label), HOMEWORLDS_VIEW_TEXT_PANEL_LABEL_WIDTH_CHARS);
+  gtk_label_set_natural_wrap_mode(GTK_LABEL(label), GTK_NATURAL_WRAP_WORD);
 }
 
 static GtkWidget *homeworlds_view_new_text_panel_label(const char *text) {
@@ -2333,7 +2336,8 @@ static void homeworlds_view_update_catastrophes(HomeworldsView *view) {
 
   homeworlds_view_clear_box(view->catastrophe_box);
   if (homeworlds_view_has_partial_selection(view)) {
-    gtk_box_append(GTK_BOX(view->catastrophe_box), gtk_label_new("Reset the partial move before catastrophes."));
+    GtkWidget *label = homeworlds_view_new_text_panel_label("Reset the partial move before catastrophes.");
+    gtk_box_append(GTK_BOX(view->catastrophe_box), label);
     return;
   }
 
@@ -2752,14 +2756,19 @@ static HomeworldsView *homeworlds_view_new_with_move_report(GGameModel *model, g
   gtk_scrolled_window_set_min_content_width(GTK_SCROLLED_WINDOW(side_scroller), HOMEWORLDS_VIEW_TEXT_PANEL_WIDTH);
   gtk_scrolled_window_set_max_content_width(GTK_SCROLLED_WINDOW(side_scroller), HOMEWORLDS_VIEW_TEXT_PANEL_WIDTH);
   gtk_scrolled_window_set_propagate_natural_width(GTK_SCROLLED_WINDOW(side_scroller), FALSE);
-  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(side_scroller), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+  gtk_scrolled_window_set_overlay_scrolling(GTK_SCROLLED_WINDOW(side_scroller), TRUE);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(side_scroller), GTK_POLICY_EXTERNAL, GTK_POLICY_AUTOMATIC);
   gtk_box_append(GTK_BOX(view->root), side_scroller);
 
   side_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
-  gtk_widget_set_margin_top(side_panel, 12);
-  gtk_widget_set_margin_bottom(side_panel, 12);
-  gtk_widget_set_margin_start(side_panel, 12);
-  gtk_widget_set_margin_end(side_panel, 12);
+  gtk_widget_set_name(side_panel, "homeworlds-text-panel-content");
+  gtk_widget_set_halign(side_panel, GTK_ALIGN_FILL);
+  gtk_widget_set_hexpand(side_panel, FALSE);
+  gtk_widget_set_size_request(side_panel, HOMEWORLDS_VIEW_TEXT_PANEL_CONTENT_WIDTH, -1);
+  gtk_widget_set_margin_top(side_panel, HOMEWORLDS_VIEW_TEXT_PANEL_MARGIN);
+  gtk_widget_set_margin_bottom(side_panel, HOMEWORLDS_VIEW_TEXT_PANEL_MARGIN);
+  gtk_widget_set_margin_start(side_panel, HOMEWORLDS_VIEW_TEXT_PANEL_MARGIN);
+  gtk_widget_set_margin_end(side_panel, HOMEWORLDS_VIEW_TEXT_PANEL_MARGIN);
   gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(side_scroller), side_panel);
 
   heading = gtk_label_new("Homeworlds");

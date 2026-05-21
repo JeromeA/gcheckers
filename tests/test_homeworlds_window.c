@@ -228,6 +228,36 @@ static guint test_homeworlds_count_labels_with_text(GtkWidget *root, const char 
   return count;
 }
 
+static GtkWidget *test_homeworlds_find_label_with_text(GtkWidget *root, const char *text) {
+  g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
+  g_return_val_if_fail(text != NULL, NULL);
+
+  if (GTK_IS_LABEL(root) && g_strcmp0(gtk_label_get_text(GTK_LABEL(root)), text) == 0) {
+    return root;
+  }
+
+  for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
+       child = gtk_widget_get_next_sibling(child)) {
+    GtkWidget *match = test_homeworlds_find_label_with_text(child, text);
+    if (match != NULL) {
+      return match;
+    }
+  }
+
+  return NULL;
+}
+
+static void test_homeworlds_assert_text_panel_label_wraps(GtkWidget *label) {
+  g_assert_true(GTK_IS_LABEL(label));
+  g_assert_true(gtk_label_get_wrap(GTK_LABEL(label)));
+  g_assert_cmpuint(gtk_label_get_wrap_mode(GTK_LABEL(label)), ==, PANGO_WRAP_WORD_CHAR);
+  g_assert_cmpuint(gtk_label_get_natural_wrap_mode(GTK_LABEL(label)), ==, GTK_NATURAL_WRAP_WORD);
+  g_assert_cmpint(gtk_label_get_width_chars(GTK_LABEL(label)), ==, -1);
+  g_assert_cmpint(gtk_label_get_max_width_chars(GTK_LABEL(label)), ==, -1);
+  g_assert_cmpuint(gtk_widget_get_halign(label), ==, GTK_ALIGN_FILL);
+  g_assert_true(gtk_widget_get_hexpand(label));
+}
+
 static GtkButton *test_homeworlds_find_selectable_bank_button(GtkWidget *root) {
   g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
 
@@ -705,30 +735,41 @@ static void test_homeworlds_view_text_panel_has_fixed_width(void) {
   HomeworldsView *view = test_homeworlds_view_new_without_move_report(model);
   GtkWidget *root = homeworlds_view_get_widget(view);
   GtkWidget *text_panel = test_homeworlds_find_widget_named(root, "homeworlds-text-panel");
+  GtkWidget *text_panel_content = test_homeworlds_find_widget_named(root, "homeworlds-text-panel-content");
   GtkApplication *app = NULL;
   GGameModel *window_model = NULL;
   GGameWindow *window = NULL;
   HomeworldsView *window_view = NULL;
   GtkWidget *window_text_panel = NULL;
+  GtkWidget *window_text_panel_content = NULL;
   GtkWidget *window_board = NULL;
   GtkWidget *window_board_scroller = NULL;
   GtkWidget *window_bank = NULL;
+  graphene_rect_t content_bounds = {0};
+  graphene_rect_t label_bounds = {0};
   graphene_rect_t bank_bounds = {0};
+  GtkWidget *catastrophe_reset_label = NULL;
+  GtkWidget *visual_choice_label = NULL;
   GtkPolicyType horizontal_policy = GTK_POLICY_AUTOMATIC;
   GtkPolicyType vertical_policy = GTK_POLICY_NEVER;
   gint width_request = -1;
+  gint content_width_request = -1;
   gint allocated_width = 0;
   gint board_viewport_width = 0;
 
   g_assert_nonnull(text_panel);
+  g_assert_nonnull(text_panel_content);
   g_assert_true(GTK_IS_SCROLLED_WINDOW(text_panel));
   gtk_widget_get_size_request(text_panel, &width_request, NULL);
+  gtk_widget_get_size_request(text_panel_content, &content_width_request, NULL);
   g_assert_cmpint(width_request, ==, 280);
+  g_assert_cmpint(content_width_request, ==, 256);
   g_assert_cmpint(gtk_scrolled_window_get_min_content_width(GTK_SCROLLED_WINDOW(text_panel)), ==, 280);
   g_assert_cmpint(gtk_scrolled_window_get_max_content_width(GTK_SCROLLED_WINDOW(text_panel)), ==, 280);
   g_assert_false(gtk_scrolled_window_get_propagate_natural_width(GTK_SCROLLED_WINDOW(text_panel)));
+  g_assert_true(gtk_scrolled_window_get_overlay_scrolling(GTK_SCROLLED_WINDOW(text_panel)));
   gtk_scrolled_window_get_policy(GTK_SCROLLED_WINDOW(text_panel), &horizontal_policy, &vertical_policy);
-  g_assert_cmpuint(horizontal_policy, ==, GTK_POLICY_AUTOMATIC);
+  g_assert_cmpuint(horizontal_policy, ==, GTK_POLICY_EXTERNAL);
   g_assert_cmpuint(vertical_policy, ==, GTK_POLICY_AUTOMATIC);
 
   homeworlds_view_free(view);
@@ -737,11 +778,13 @@ static void test_homeworlds_view_text_panel_has_fixed_width(void) {
   window = test_homeworlds_create_window(&app, &window_model);
   window_view = test_homeworlds_get_window_view(window);
   window_text_panel = test_homeworlds_find_widget_named(GTK_WIDGET(window), "homeworlds-text-panel");
+  window_text_panel_content = test_homeworlds_find_widget_named(GTK_WIDGET(window), "homeworlds-text-panel-content");
   window_board = test_homeworlds_find_widget_named(GTK_WIDGET(window), "homeworlds-board");
   window_board_scroller = test_homeworlds_find_widget_named(GTK_WIDGET(window), "homeworlds-board-scroller");
   window_bank = test_homeworlds_find_widget_named(GTK_WIDGET(window), "homeworlds-board-bank");
   g_assert_nonnull(window_view);
   g_assert_nonnull(window_text_panel);
+  g_assert_nonnull(window_text_panel_content);
   g_assert_nonnull(window_board);
   g_assert_true(GTK_IS_DRAWING_AREA(window_board));
   g_assert_nonnull(window_board_scroller);
@@ -760,10 +803,29 @@ static void test_homeworlds_view_text_panel_has_fixed_width(void) {
   g_assert_cmpfloat(bank_bounds.origin.x + bank_bounds.size.width, <=, (double)board_viewport_width + 1.0);
   allocated_width = gtk_widget_get_width(window_text_panel);
   g_assert_cmpint(allocated_width, >, 0);
+  g_assert_true(gtk_widget_compute_bounds(window_text_panel_content, window_text_panel, &content_bounds));
+  g_assert_cmpfloat(content_bounds.origin.x, >=, 0.0);
+  g_assert_cmpfloat(content_bounds.origin.x + content_bounds.size.width, <=, (double)allocated_width + 1.0);
+  visual_choice_label = test_homeworlds_find_label_with_text(window_text_panel_content,
+                                                            "Click a highlighted pyramid in the bank on the board.");
+  g_assert_nonnull(visual_choice_label);
+  test_homeworlds_assert_text_panel_label_wraps(visual_choice_label);
+  g_assert_true(gtk_widget_compute_bounds(visual_choice_label, window_text_panel, &label_bounds));
+  g_assert_cmpfloat(label_bounds.origin.x + label_bounds.size.width, <=, (double)allocated_width + 1.0);
   for (guint step = 0; step < 3; step++) {
     g_assert_true(homeworlds_view_apply_candidate_at(window_view, 0));
     test_homeworlds_drain_main_context(64);
     g_assert_cmpint(gtk_widget_get_width(window_text_panel), ==, allocated_width);
+    g_assert_true(gtk_widget_compute_bounds(window_text_panel_content, window_text_panel, &content_bounds));
+    g_assert_cmpfloat(content_bounds.origin.x + content_bounds.size.width, <=, (double)allocated_width + 1.0);
+    if (step == 0) {
+      catastrophe_reset_label = test_homeworlds_find_label_with_text(window_text_panel_content,
+                                                                     "Reset the partial move before catastrophes.");
+      g_assert_nonnull(catastrophe_reset_label);
+      test_homeworlds_assert_text_panel_label_wraps(catastrophe_reset_label);
+      g_assert_true(gtk_widget_compute_bounds(catastrophe_reset_label, window_text_panel, &label_bounds));
+      g_assert_cmpfloat(label_bounds.origin.x + label_bounds.size.width, <=, (double)allocated_width + 1.0);
+    }
   }
 
   gtk_window_destroy(GTK_WINDOW(window));

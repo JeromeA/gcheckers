@@ -760,3 +760,16 @@ viewport even when the rows fit, or too short when several tall rows needed more
 The fix replaces the width-only content calculation with a single content-size calculation for both axes. It keeps the
 viewport size when all visible row boxes fit, expands width for horizontally crowded rows, and expands height when row
 boxes would clip or overlap vertically. The scroller now tracks both horizontal and vertical viewport adjustments.
+
+## Homeworlds text panel could expose tiny horizontal scrolling
+
+The Homeworlds text panel should have one fixed width and scroll only vertically. Its scrolled window had fixed content
+width bounds, but the horizontal scrollbar policy still allowed automatic scrolling when labels or selectable text
+reported a natural width a few pixels wider than the panel. Some panel messages also still used GTK's default label
+sizing, so once horizontal scrolling was hidden they could be clipped instead of wrapping inside the panel.
+
+The fix makes horizontal scrolling external, so no horizontal scrollbar is shown and horizontal content size no longer
+drives the panel allocation. The panel also uses overlay scrolling and gives the inner text box a fixed width inside the
+panel margins, so textual content and the vertical scrollbar cannot change the panel's horizontal behavior. Text panel
+labels use GTK's word-based natural wrapping without a character-width minimum, and all catastrophe status text goes
+through the same label helper. Vertical scrolling remains automatic.
