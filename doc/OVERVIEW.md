@@ -417,8 +417,8 @@ Role: perform libcurl requests to fetch `requestToken` from `https://en.boardgam
 `https://boardgamearena.com/gamestats?...` and refresh `requestToken` from that page before fetching checkers history
 from `https://boardgamearena.com/gamestats/gamestats/getGames.html` for the authenticated user/session.
 All BoardGameArena HTTP response bodies are saved to `/tmp/gcheckers-bga-*.txt` for debugging.
-History parsing extracts each table's `table_id`, start timestamp (rendered as `YYYY-MM-DD HH:MM`, UTC), and player
-names. Numeric JSON fields are parsed with explicit range checks before narrowing to local integer types.
+History parsing extracts each table's `table_id`, start timestamp (rendered as `YYYY-MM-DD HH:MM`, UTC), and trimmed
+player names. Numeric JSON fields are parsed with explicit range checks before narrowing to local integer types.
 Collaborates with: import dialog flow for "Fetch game history" and `tests/test_bga_client.c` (token/login/history
 parsing + live login smoke test with env-provided credentials).
 

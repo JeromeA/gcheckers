@@ -1031,3 +1031,11 @@ a 64-bit integer and then narrowed them to `int` without checking the target ran
 
 Malformed or unexpected oversized values could wrap before the login-response state machine inspected them. The fix
 rejects parse failures, range errors, and values outside the local `int` range before assignment.
+
+## BoardGameArena history kept whitespace around player names
+
+BoardGameArena history entries provide both player names in one comma-separated JSON field. The importer split that
+field into two names but kept any surrounding whitespace from the response.
+
+That made formatted history rows depend on response spacing. The fix strips leading and trailing whitespace from both
+names after splitting the field.

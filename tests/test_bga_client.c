@@ -110,7 +110,7 @@ static void test_bga_client_parse_checkers_history_games(void) {
       "{"
       "\"table_id\":\"769024787\","
       "\"start\":\"1764696665\","
-      "\"player_names\":\"capable ladybug,JeromeLon\""
+      "\"player_names\":\" capable ladybug , JeromeLon \""
       "},"
       "{"
       "\"table_id\":\"761272836\","

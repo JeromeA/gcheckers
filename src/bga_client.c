@@ -138,6 +138,12 @@ static char *bga_client_format_history_start_at(const char *start_unix_text) {
   return g_date_time_format(timestamp, "%Y-%m-%d %H:%M");
 }
 
+static char *bga_client_strdup_stripped(const char *text) {
+  g_autofree char *copy = g_strdup(text != NULL ? text : "");
+  g_strstrip(copy);
+  return g_steal_pointer(&copy);
+}
+
 static gboolean bga_client_global_init(void) {
   static gsize initialized = 0;
   static gboolean init_ok = FALSE;
@@ -596,8 +602,8 @@ gboolean bga_client_parse_checkers_history_games(const char *body, GPtrArray **o
     BgaHistoryGameSummary *summary = g_new0(BgaHistoryGameSummary, 1);
     summary->table_id = g_strdup(table_id);
     summary->start_at = bga_client_format_history_start_at(start);
-    summary->player_one = g_strdup(split_names[0] != NULL ? split_names[0] : "");
-    summary->player_two = g_strdup(split_names[1] != NULL ? split_names[1] : "");
+    summary->player_one = bga_client_strdup_stripped(split_names[0]);
+    summary->player_two = bga_client_strdup_stripped(split_names[1]);
     g_ptr_array_add(games, summary);
 
     if (!g_match_info_next(info, NULL)) {
