@@ -41,7 +41,6 @@ gives you one action, medium two, large three.
 A system is overpopulated if it has four or more pieces of same color.
 
 At any point on your turn, you can trigger catastrophes in overpopulated systems. Return all pieces of the overpopulated
-color from that system to the bank. If one of these pieces was the star itself, then all ships there are returned to the
-bank.
+color from that system to the bank. If a star system is destroyed, then all ships there are returned to the bank.
 
 Homeworlds are binary star systems and can survive one of their two stars being destroyed.

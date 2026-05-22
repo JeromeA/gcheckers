@@ -531,10 +531,12 @@ and pyramid. Build steps are canonicalized further: they store only the source s
 Rules covered: setup, build, trade, attack, move, discover, sacrifice, catastrophe resolution, empty-system
 cleanup, end-of-turn homeworld loss detection for either side, static evaluation, terminal scoring, hashing, compact
 move formatting/parsing, structural move equality, ordered unique all-move generation, and whole-position SGF snapshots
-in `homeworlds_sgf_position.c`. Move notation uses pyramid letters and sizes directly, such as `Y2B1g3`, `H1g+`,
-`G3y2>G2 G3y!`, and `pass`; multi-step moves are formatted with spaces between complete steps and no internal slash
-separator, while the parser also accepts older saved `H1 g+` and slash-separated step notation. The public parser only
-writes the output move after the whole notation succeeds. Static evaluation counts ship material and repeats the largest
+in `homeworlds_sgf_position.c`. Catastrophes return remaining ships only when the affected star system has no stars
+left after removing the overpopulated color, so binary-star systems survive losing one star. Move notation uses pyramid
+letters and sizes directly, such as `Y2B1g3`, `H1g+`, `G3y2>G2 G3y!`, and `pass`; multi-step moves are formatted with
+spaces between complete steps and no internal slash separator, while the parser also accepts older saved `H1 g+` and
+slash-separated step notation. The public parser only writes the output move after the whole notation succeeds. Static
+evaluation counts ship material and repeats the largest
 own ship at each player's homeworld. Applying a move is transactional: setup and turn moves are resolved against a
 working copy and only replace the original position after the full move succeeds, and malformed turn moves with
 overlong step counts are rejected before step storage is read. Sacrifice-granted actions reuse the normal action

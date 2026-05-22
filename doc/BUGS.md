@@ -1023,6 +1023,15 @@ thread could spend all its time scanning the report text and stop responding.
 The fix replaces the report label with a read-only, wrapped `GtkTextView` backed by a `GtkTextBuffer`, so the report is
 handled by GTK's text widget instead of label measurement.
 
+## Homeworlds catastrophes collapsed binary-star systems after one star was destroyed
+
+When a catastrophe removed a star, Homeworlds returned all remaining ships in that system to the bank immediately. That
+treated a binary-star homeworld like a destroyed star system even when its second star survived.
+
+The fix only returns all remaining ships when the system has no stars left after the catastrophe color is removed. A
+binary-star system can now survive losing one star, and the rules text says ships are returned when a star system is
+destroyed rather than when any one star is destroyed.
+
 ## Homeworlds depth-0 AI generated child move lists only to detect forced moves
 
 Depth-0 AI should score each candidate move by applying it once and statically evaluating the child position for games
