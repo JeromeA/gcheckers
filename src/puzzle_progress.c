@@ -301,8 +301,9 @@ static gboolean checkers_puzzle_progress_parse_int64(const char **cursor, gint64
 
   checkers_puzzle_progress_skip_ws(cursor);
   char *end = NULL;
+  errno = 0;
   gint64 value = g_ascii_strtoll(*cursor, &end, 10);
-  if (end == *cursor) {
+  if (end == *cursor || errno == ERANGE) {
     return FALSE;
   }
   *cursor = end;

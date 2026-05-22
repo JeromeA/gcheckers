@@ -180,6 +180,39 @@ static void test_puzzle_progress_rejects_raw_control_character_in_string(void) {
   g_unsetenv("GCHECKERS_PUZZLE_PROGRESS_DIR");
 }
 
+static void test_puzzle_progress_rejects_oversized_history_number(void) {
+  g_autofree char *state_dir = test_puzzle_progress_make_state_dir();
+  GGamePuzzleProgressStore *store = ggame_puzzle_progress_store_new(state_dir);
+
+  GGamePuzzleAttemptRecord record =
+      test_puzzle_progress_make_record("attempt-large-number", GGAME_PUZZLE_ATTEMPT_RESULT_SUCCESS);
+  g_autoptr(GError) error = NULL;
+  g_assert_true(ggame_puzzle_progress_store_append_attempt(store, &record, &error));
+  g_assert_no_error(error);
+
+  g_autofree char *history_path = ggame_puzzle_progress_store_get_history_path(store);
+  g_autofree char *contents = NULL;
+  g_assert_true(g_file_get_contents(history_path, &contents, NULL, &error));
+  g_assert_no_error(error);
+
+  const char *timestamp = strstr(contents, "1713300000000");
+  g_assert_nonnull(timestamp);
+
+  g_autoptr(GString) invalid = g_string_new_len(contents, (gssize)(timestamp - contents));
+  g_string_append(invalid, "999999999999999999999999999999");
+  g_string_append(invalid, timestamp + strlen("1713300000000"));
+  g_assert_true(g_file_set_contents(history_path, invalid->str, -1, &error));
+  g_assert_no_error(error);
+
+  g_autoptr(GPtrArray) history = ggame_puzzle_progress_store_load_attempt_history(store, &error);
+  g_assert_null(history);
+  g_assert_error(error, G_FILE_ERROR, G_FILE_ERROR_INVAL);
+
+  ggame_puzzle_attempt_record_clear(&record);
+  ggame_puzzle_progress_store_unref(store);
+  g_unsetenv("GCHECKERS_PUZZLE_PROGRESS_DIR");
+}
+
 static void test_puzzle_progress_analyze_persists(void) {
   g_autofree char *state_dir = test_puzzle_progress_make_state_dir();
   GGamePuzzleProgressStore *store = ggame_puzzle_progress_store_new(state_dir);
@@ -467,6 +500,8 @@ int main(int argc, char **argv) {
                   test_puzzle_progress_json_unicode_escape_roundtrip);
   g_test_add_func("/puzzle-progress/rejects-raw-control-character",
                   test_puzzle_progress_rejects_raw_control_character_in_string);
+  g_test_add_func("/puzzle-progress/rejects-oversized-history-number",
+                  test_puzzle_progress_rejects_oversized_history_number);
   g_test_add_func("/puzzle-progress/analyze-persists", test_puzzle_progress_analyze_persists);
   g_test_add_func("/puzzle-progress/unsent-and-thresholds", test_puzzle_progress_collect_unsent_and_thresholds);
   g_test_add_func("/puzzle-progress/mark-reported", test_puzzle_progress_mark_reported_without_deleting_history);

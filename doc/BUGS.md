@@ -1054,3 +1054,11 @@ Puzzle progress history is JSON lines, so strings must not contain unescaped con
 
 The custom JSON reader accepted raw control characters in strings even though the writer would always escape them.
 The fix rejects malformed raw control characters while still accepting the writer's escaped form.
+
+## Puzzle progress accepted oversized JSON numbers
+
+Puzzle progress history stores timestamps and counters as JSON numbers. The reader used `g_ascii_strtoll()` but did not
+check for range errors.
+
+Oversized values could therefore be clamped by the C library and accepted as real history data. The fix rejects numeric
+conversion range errors while loading history.
