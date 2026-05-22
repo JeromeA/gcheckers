@@ -151,6 +151,17 @@ static void test_apply_notation(HomeworldsPosition *position, const char *notati
   assert(homeworlds_position_apply_move(position, &move));
 }
 
+static void test_remove_all_from_bank(HomeworldsPosition *position, HomeworldsPyramid pyramid) {
+  assert(position != NULL);
+  assert(homeworlds_pyramid_is_valid(pyramid));
+
+  for (guint i = 0; i < HOMEWORLDS_BANK_SLOT_COUNT; ++i) {
+    if (position->bank[i] == pyramid) {
+      position->bank[i] = 0;
+    }
+  }
+}
+
 static void test_prepare_player_two_yellow_sacrifice_position(HomeworldsPosition *position) {
   const char *prefix[] = {
     "Y2G3r3",
@@ -1128,6 +1139,55 @@ static void test_backend_good_moves_skip_redundant_yellow_sacrifice_hops(void) {
   backend->move_list_free(&good_moves);
 }
 
+static void test_backend_good_moves_order_commutative_blue_sacrifice_trades(void) {
+  const GameBackend *backend = &homeworlds_game_backend;
+  HomeworldsPosition position = {0};
+  GameBackendMoveList good_moves = {0};
+  const char *canonical_move = "H1b2- H1r1=g H1y1=r";
+  const char *redundant_move = "H1b2- H1y1=r H1r1=g";
+
+  test_prepare_position(&position);
+  position.systems[0].ships[0][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_MEDIUM);
+  position.systems[0].ships[0][1] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL);
+  position.systems[0].ships[0][2] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL);
+  for (guint slot = 3; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
+    position.systems[0].ships[0][slot] = 0;
+  }
+
+  test_assert_move_notation_is_legal(&position, canonical_move);
+  test_assert_move_notation_is_legal(&position, redundant_move);
+
+  good_moves = backend->list_good_moves(&position, 0);
+  assert(good_moves.count > 0);
+  assert(test_good_moves_contains_notation(backend, &good_moves, canonical_move));
+  assert(!test_good_moves_contains_notation(backend, &good_moves, redundant_move));
+  backend->move_list_free(&good_moves);
+}
+
+static void test_backend_good_moves_keep_dependent_blue_sacrifice_trades(void) {
+  const GameBackend *backend = &homeworlds_game_backend;
+  HomeworldsPosition position = {0};
+  GameBackendMoveList good_moves = {0};
+  HomeworldsPyramid yellow_small = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL);
+  const char *dependent_move = "H1b2- H1y1=g H1r1=y";
+
+  test_prepare_position(&position);
+  position.systems[0].ships[0][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_MEDIUM);
+  position.systems[0].ships[0][1] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL);
+  position.systems[0].ships[0][2] = yellow_small;
+  for (guint slot = 3; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
+    position.systems[0].ships[0][slot] = 0;
+  }
+  test_remove_all_from_bank(&position, yellow_small);
+
+  test_assert_move_notation_is_legal(&position, dependent_move);
+
+  good_moves = backend->list_good_moves(&position, 0);
+  assert(good_moves.count > 0);
+  assert(test_good_moves_contains_notation(backend, &good_moves, dependent_move));
+  backend->move_list_free(&good_moves);
+}
+
 static void test_backend_good_moves_skip_unsafe_build_catastrophe(void) {
   const GameBackend *backend = &homeworlds_game_backend;
   HomeworldsPosition position = {0};
@@ -1624,6 +1684,8 @@ int main(void) {
   test_backend_good_moves_keep_last_homeworld_ship();
   test_backend_good_moves_keep_last_homeworld_ship_after_yellow_sacrifice();
   test_backend_good_moves_skip_redundant_yellow_sacrifice_hops();
+  test_backend_good_moves_order_commutative_blue_sacrifice_trades();
+  test_backend_good_moves_keep_dependent_blue_sacrifice_trades();
   test_backend_good_moves_skip_unsafe_build_catastrophe();
   test_backend_good_moves_skip_unfavorable_move_catastrophe();
   test_backend_good_moves_skip_redundant_small_sacrifice();

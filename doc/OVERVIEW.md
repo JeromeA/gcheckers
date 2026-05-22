@@ -632,7 +632,8 @@ appends a turn step, the AI applies the same safety checks to ordinary actions a
 the last own homeworld ship in place, rejects moves into unfavorable catastrophes, rejects builds that create
 unfavorable catastrophes, and skips one-action sacrifices when that color action is already available at the selected
 system. It also prunes yellow-sacrifice move chains when a ship returns to its original source or reaches a system the
-original source could already reach directly.
+original source could already reach directly. During blue sacrifices, independent adjacent trades are kept in canonical
+order only when a swapped order is legal, position-equivalent, and catastrophe-free.
 Profitable catastrophes available at the start of a turn are required somewhere in the final move, while profitable
 catastrophes created by an earlier step are forced immediately in the staged walk.
 `doc/homeworlds-move-generation.md` describes how the legal builder, diagnostic move report, profiling CLI,

@@ -59,6 +59,9 @@ The staged builder therefore offers build only from the first selectable source 
 same-color ships can still be selected for actions where size matters.
 During a blue sacrifice, ship selection also skips any pyramid that was created by an earlier trade in that same
 system, so `H1r2=g H1g2=y` is represented canonically as `H1r2=y pass`.
+The `good_moves()` policy also canonicalizes adjacent blue-sacrifice trades when they are provably commutative: the
+later trade is pruned if swapping it with the previous trade is legal, reaches the same position, and no catastrophe is
+available before, between, or after the two trades. Bank-dependent trade chains are left alone.
 
 The AI collector still guards against duplicates when it finishes a move, but only as a diagnostic safety net.
 `homeworlds_backend_move_buffer_append()` records structural move hashes in a `GHashTable`; if the same symbolic move
@@ -82,6 +85,9 @@ ordinary actions and sacrifice-granted actions. The AI does not move or sacrific
 rejects builds that create an unfavorable catastrophe, and rejects a small sacrifice when the sacrificed color's action
 was already available at that system. During yellow sacrifices, it also rejects repeated hops by the same ship when the
 ship returns to its original source or reaches a destination the original source could already have reached directly.
+During blue sacrifices, independent adjacent trades are kept in canonical order so equivalent trade permutations are
+not searched more than once. The check is conservative: trades are considered reorderable only if the swapped order is
+legal, position-equivalent, and catastrophe-free at every boundary.
 
 The catastrophe policy distinguishes profitable and unfavorable catastrophes from the moving side's perspective. A
 profitable catastrophe destroys more opponent ship pips than own ship pips. If such a catastrophe exists at the start
