@@ -1,6 +1,6 @@
+#include "ai_search.h"
 #include "games/homeworlds/homeworlds_backend.h"
 #include "games/homeworlds/homeworlds_game.h"
-#include "games/homeworlds/homeworlds_move_report.h"
 #include "games/homeworlds/homeworlds_position_text.h"
 #include "games/homeworlds/homeworlds_sgf_position.h"
 #include "game_app_profile.h"
@@ -8,6 +8,11 @@
 #include "sgf_move_props.h"
 
 #include <stdio.h>
+
+enum {
+  HOMEWORLDS_PROFILE_DEFAULT_DEPTH = 1,
+  HOMEWORLDS_PROFILE_TT_SIZE_MB = 256,
+};
 
 static gboolean homeworlds_profile_apply_random_good_move(HomeworldsPosition *position,
                                                           GRand *random,
@@ -172,8 +177,75 @@ static gboolean homeworlds_profile_replay_file_moves(HomeworldsPosition *positio
   return TRUE;
 }
 
+static gboolean homeworlds_profile_print_ai_analysis(const HomeworldsPosition *position,
+                                                     guint applied_moves,
+                                                     gboolean replayed,
+                                                     guint depth) {
+  GameAiScoredMoveList moves = {0};
+  GameAiSearchStats stats = {0};
+  GameAiTranspositionTable *tt = NULL;
+
+  g_return_val_if_fail(position != NULL, FALSE);
+
+  tt = game_ai_tt_new(HOMEWORLDS_PROFILE_TT_SIZE_MB, homeworlds_game_backend.move_size);
+  game_ai_search_stats_clear(&stats);
+  if (!game_ai_search_analyze_moves_cancellable_with_tt(&homeworlds_game_backend,
+                                                        position,
+                                                        depth,
+                                                        &moves,
+                                                        NULL,
+                                                        NULL,
+                                                        NULL,
+                                                        NULL,
+                                                        tt,
+                                                        &stats)) {
+    if (tt != NULL) {
+      game_ai_tt_free(tt);
+    }
+    g_printerr("Failed to analyze moves at depth %u.\n", depth);
+    return FALSE;
+  }
+
+  g_print("\nAI analysis after %u %s moves at depth %u:\n",
+          applied_moves,
+          replayed ? "replayed" : "generated",
+          depth);
+  g_print("Nodes: %" G_GUINT64_FORMAT "\n", stats.nodes);
+  g_print("TT probes: %" G_GUINT64_FORMAT "\n", stats.tt_probes);
+  g_print("TT hits: %" G_GUINT64_FORMAT "\n", stats.tt_hits);
+  g_print("TT cutoffs: %" G_GUINT64_FORMAT "\n", stats.tt_cutoffs);
+  g_print("Moves: %" G_GSIZE_FORMAT "\n\n", moves.count);
+
+  for (gsize i = 0; i < moves.count; ++i) {
+    char notation[128] = {0};
+    const HomeworldsMove *move = moves.moves[i].move;
+
+    if (move == NULL || !homeworlds_move_format(move, notation, sizeof(notation))) {
+      game_ai_scored_move_list_free(&moves);
+      if (tt != NULL) {
+        game_ai_tt_free(tt);
+      }
+      g_printerr("Failed to format analyzed move %" G_GSIZE_FORMAT ".\n", i + 1);
+      return FALSE;
+    }
+
+    g_print("%" G_GSIZE_FORMAT ". %s score=%d nodes=%" G_GUINT64_FORMAT "\n",
+            i + 1,
+            notation,
+            moves.moves[i].score,
+            moves.moves[i].nodes);
+  }
+
+  game_ai_scored_move_list_free(&moves);
+  if (tt != NULL) {
+    game_ai_tt_free(tt);
+  }
+  return TRUE;
+}
+
 int main(int argc, char **argv) {
   gint requested_moves = 2;
+  gint analysis_depth = HOMEWORLDS_PROFILE_DEFAULT_DEPTH;
   gint seed = 1;
   g_autofree gchar *file_path = NULL;
   GOptionEntry options[] = {
@@ -183,8 +255,17 @@ int main(int argc, char **argv) {
       .flags = 0,
       .arg = G_OPTION_ARG_INT,
       .arg_data = &requested_moves,
-      .description = "Number of moves to apply before printing the report",
+      .description = "Number of moves to apply before running AI analysis",
       .arg_description = "N",
+    },
+    {
+      .long_name = "depth",
+      .short_name = 'd',
+      .flags = 0,
+      .arg = G_OPTION_ARG_INT,
+      .arg_data = &analysis_depth,
+      .description = "AI search depth to run after reaching the requested move",
+      .arg_description = "DEPTH",
     },
     {
       .long_name = "seed",
@@ -210,11 +291,10 @@ int main(int argc, char **argv) {
   g_autoptr(GError) error = NULL;
   GRand *random = NULL;
   g_autofree char *board = NULL;
-  g_autofree char *report = NULL;
   HomeworldsPosition position = {0};
   guint applied_moves = 0;
 
-  context = g_option_context_new("- generate or replay a Homeworlds position and print the move report");
+  context = g_option_context_new("- generate or replay a Homeworlds position and run AI analysis");
   g_option_context_add_main_entries(context, options, NULL);
   if (!g_option_context_parse(context, &argc, &argv, &error)) {
     g_printerr("%s\n", error->message);
@@ -222,6 +302,10 @@ int main(int argc, char **argv) {
   }
   if (requested_moves < 0) {
     g_printerr("--moves must be non-negative.\n");
+    return 2;
+  }
+  if (analysis_depth < 0) {
+    g_printerr("--depth must be non-negative.\n");
     return 2;
   }
   if (seed < 0) {
@@ -265,15 +349,6 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  report = homeworlds_move_report_format(&position);
-  if (report == NULL) {
-    g_printerr("Failed to format move report.\n");
-    if (random != NULL) {
-      g_rand_free(random);
-    }
-    return 1;
-  }
-
   g_print("\nCurrent position after %u %s moves:\n%s",
           applied_moves,
           file_path != NULL ? "replayed" : "generated",
@@ -282,12 +357,14 @@ int main(int argc, char **argv) {
     g_print("\n");
   }
 
-  g_print("\nMove report after %u %s moves:\n%s",
-          applied_moves,
-          file_path != NULL ? "replayed" : "generated",
-          report);
-  if (!g_str_has_suffix(report, "\n")) {
-    g_print("\n");
+  if (!homeworlds_profile_print_ai_analysis(&position,
+                                            applied_moves,
+                                            file_path != NULL,
+                                            (guint)analysis_depth)) {
+    if (random != NULL) {
+      g_rand_free(random);
+    }
+    return 1;
   }
   if (random != NULL) {
     g_rand_free(random);

@@ -609,11 +609,10 @@ duplicate raw candidate-field tests. During play, the side panel also reports th
 by the remaining legal moves from the core
 all-move generator, after a header that counts both groups. The report subtracts the good moves with a structural hash
 set, deduplicates canonical moves, but does not cap the backend-good or diagnostic collectors. The `View` -> `Move
-report` action disables this report before either collector runs. The same
-non-UI report module is linked by `build/tools/homeworlds_profile_moves`, which applies `--moves` random good moves
-from a `--seed` or replays the first moves of a Homeworlds SGF main line with `--file`, prints an ASCII board
-snapshot, and then prints the final report for profiling. The Homeworlds board
-host also syncs its
+report` action disables this report before either collector runs. The separate `build/tools/homeworlds_profile_moves`
+CLI applies `--moves` random good moves from a `--seed` or replays the first moves of a Homeworlds SGF main line with
+`--file`, prints an ASCII board snapshot, and then runs the AI at `--depth` and prints the scored moves plus search
+stats. The Homeworlds board host also syncs its
 last-move label from SGF current-node changes so timeline
 navigation and direct play report the same move. Human interaction
 advances

@@ -33,8 +33,9 @@ deduplicated and not used by the AI. When
 
 `build/tools/homeworlds_profile_moves` applies `--moves` random `good_moves()` choices from the initial position using
 `--seed`, or replays the first `--moves` main-line moves from an existing Homeworlds SGF with `--file`. It prints a
-non-GTK ASCII board snapshot, then prints that same shared report. The Makefile's default `callgrind-run` target
-profiles this command so move-report generation can be measured without starting GTK.
+non-GTK ASCII board snapshot, then runs the AI at `--depth` and prints the scored moves plus search stats. The
+Makefile's default `callgrind-run` target profiles this command so Homeworlds AI search can be measured without
+starting GTK.
 
 ## Legal Moves Versus AI Moves
 
