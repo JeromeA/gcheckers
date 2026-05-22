@@ -562,6 +562,39 @@ static void test_ggame_sgf_controller_select_node_emits_node_changed(void) {
   g_clear_object(&board_view);
 }
 
+static void test_ggame_sgf_controller_delete_current_node(void) {
+  BoardView *board_view = board_view_new();
+  GCheckersModel *model = gcheckers_model_new();
+  GGameSgfController *controller = ggame_sgf_controller_new(board_view);
+  ggame_sgf_controller_set_model(controller, model);
+
+  CheckersMove move = {0};
+  g_assert_false(ggame_sgf_controller_delete_current_node(controller));
+  g_assert_true(apply_first_move(controller, model, &move));
+  g_assert_true(apply_first_move(controller, model, &move));
+
+  SgfTree *tree = ggame_sgf_controller_get_tree(controller);
+  const SgfNode *root = sgf_tree_get_root(tree);
+  const SgfNode *first = sgf_tree_get_first_child(tree);
+  g_assert_nonnull(root);
+  g_assert_nonnull(first);
+  g_assert_true(ggame_sgf_controller_select_node(controller, first));
+  g_assert_true(ggame_sgf_controller_delete_current_node(controller));
+  g_assert_true(sgf_tree_get_current(tree) == root);
+
+  const GPtrArray *children = sgf_node_get_children(root);
+  g_assert_nonnull(children);
+  g_assert_cmpuint(children->len, ==, 0);
+
+  const GameState *state = gcheckers_model_peek_state(model);
+  g_assert_nonnull(state);
+  g_assert_cmpuint(state->turn, ==, CHECKERS_COLOR_WHITE);
+
+  g_clear_object(&controller);
+  g_clear_object(&model);
+  g_clear_object(&board_view);
+}
+
 static void test_ggame_sgf_controller_load_applies_setup_properties(void) {
   BoardView *board_view = board_view_new();
   GCheckersModel *model = gcheckers_model_new();
@@ -1352,6 +1385,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/sgf-controller/current-node-move", test_ggame_sgf_controller_skip);
     g_test_add_func("/sgf-controller/navigation-forward-to-branch-and-end", test_ggame_sgf_controller_skip);
     g_test_add_func("/sgf-controller/select-node-emits-node-changed", test_ggame_sgf_controller_skip);
+    g_test_add_func("/sgf-controller/delete-current-node", test_ggame_sgf_controller_skip);
     g_test_add_func("/sgf-controller/load-applies-setup-properties", test_ggame_sgf_controller_skip);
     g_test_add_func("/sgf-controller/load-file-requires-ru", test_ggame_sgf_controller_skip);
     g_test_add_func("/sgf-controller/replay-node-into-game-applies-setup-root", test_ggame_sgf_controller_skip);
@@ -1376,6 +1410,7 @@ int main(int argc, char **argv) {
                       test_ggame_sgf_controller_boop_navigation_forward_to_branch_and_end);
       g_test_add_func("/sgf-controller/select-node-emits-node-changed",
                       test_ggame_sgf_controller_boop_select_node_emits_node_changed);
+      g_test_add_func("/sgf-controller/delete-current-node", test_ggame_sgf_controller_skip);
       g_test_add_func("/sgf-controller/load-file-without-ru",
                       test_ggame_sgf_controller_boop_load_file_without_ru);
       g_test_add_func("/sgf-controller/load-applies-setup-properties", test_ggame_sgf_controller_skip);
@@ -1400,6 +1435,7 @@ int main(int argc, char **argv) {
                       test_ggame_sgf_controller_navigation_forward_to_branch_and_end);
       g_test_add_func("/sgf-controller/select-node-emits-node-changed",
                       test_ggame_sgf_controller_select_node_emits_node_changed);
+      g_test_add_func("/sgf-controller/delete-current-node", test_ggame_sgf_controller_delete_current_node);
       g_test_add_func("/sgf-controller/load-applies-setup-properties",
                       test_ggame_sgf_controller_load_applies_setup_properties);
       g_test_add_func("/sgf-controller/load-file-requires-ru", test_ggame_sgf_controller_load_file_requires_ru);
@@ -1419,6 +1455,7 @@ int main(int argc, char **argv) {
       g_test_add_func("/sgf-controller/current-node-move", test_ggame_sgf_controller_skip);
       g_test_add_func("/sgf-controller/navigation-forward-to-branch-and-end", test_ggame_sgf_controller_skip);
       g_test_add_func("/sgf-controller/select-node-emits-node-changed", test_ggame_sgf_controller_skip);
+      g_test_add_func("/sgf-controller/delete-current-node", test_ggame_sgf_controller_skip);
       g_test_add_func("/sgf-controller/load-applies-setup-properties", test_ggame_sgf_controller_skip);
       g_test_add_func("/sgf-controller/load-file-requires-ru", test_ggame_sgf_controller_skip);
       g_test_add_func("/sgf-controller/replay-node-into-game-applies-setup-root", test_ggame_sgf_controller_skip);

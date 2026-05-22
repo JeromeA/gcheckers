@@ -108,7 +108,8 @@ Puzzle mode also owns the toplevel default width while active, so foreign GTK/de
 to the puzzle layout instead of expanding the window to the normal three-pane width.
 Mode dropdown supports `Play` and `Edit`. In `Edit`, board clicks mutate SGF setup properties on the current node:
 left click cycles empty->white man->white king->empty (with black pieces and any king clearing to empty), right click
-mirrors this for black. SGF navigation and `Force move` actions are disabled while `Edit` is active.
+mirrors this for black. SGF navigation, SGF node deletion, and `Force move` actions are disabled while `Edit` is
+active.
 Worker output is staged through a mutex-protected shared report buffer, and the GTK text view is refreshed from the
 main thread every 100ms while analysis is active. During iterative deepening, intermediate node-count snapshots are
 published and shown with a temporary `(searching...)` marker. Completed results are converted to `SgfNodeAnalysis` and
@@ -130,7 +131,7 @@ full-game analysis, the latest node that received analysis is highlighted in yel
 branch.
 Top-level menu actions are
 also exposed in a toolbar
-(`New game...`, `Force move`, SGF timeline rewind/step/skip actions, and analysis actions) via GTK actions.
+(`New game...`, `Force move`, SGF timeline rewind/step/skip/delete actions, and analysis actions) via GTK actions.
 Owns modal flows for `New game` and `Import games` wizards.
 `New game` now builds its optional `Variant` dropdown and summary label from the active backend metadata rather than
 hard-coding checkers names in the dialog. `GGameWindow`'s public new-game and puzzle APIs now take backend variants,
@@ -181,6 +182,9 @@ actual snapshot encoding backend-owned.
 backward, step forward on main line, step to next branch point, and step to main-line end. Navigation-driven model
 synchronization runs under the replay guard so the shared window does not treat stepping through the tree as a newly
 played move.
+Deleting the current non-root SGF node removes that node and all descendants, selects the parent node, replays the
+model back to that parent, refreshes the SGF view, and saves the edited SGF through the same autosave path as move
+application.
 Selection-only navigation updates SGF view selection in place (`sgf_view_set_selected`) instead of rebuilding the
 entire SGF layout.
 Exposes a current-node refresh helper that replays SGF state into the model after setup-property edits on the current
@@ -739,12 +743,12 @@ for the separate Homeworlds prototype.
 Role: define the GTK application type and activation flow that creates the main window and model, installs app actions
 (`app.new-game`, `app.import`, `app.quit`, `app.settings`), installs window game/SGF/navigation/analysis/puzzle/view
 actions, and publishes one shared menubar model (`File` -> `New game...`, `Import...`, `Load...`, `Save as...`,
-`Save position...`, `Settings`, `Quit`; `Game` -> `Force move` + navigation section; `Analysis` -> current-position
-and whole-game analysis; `Puzzle` -> `Play puzzles`; `View` -> drawer toggles plus profile-specific items such as the
-Homeworlds move report) with keyboard accelerators. Both `gcheckers` and `gboop` are built from this same shell and
-diverge through `GGameAppProfile` feature flags and boop's optional board-host hook. Unsupported actions stay in the
-same shared shell but are disabled for profiles that do not support them. `src/ghomeworlds.c` selects the Homeworlds
-profile and opens the same shared shell with the Homeworlds
+`Save position...`, `Settings`, `Quit`; `Move` -> `Force move` + SGF navigation/delete-node section; `Analysis` ->
+current-position and whole-game analysis; `Puzzle` -> `Play puzzles`; `View` -> drawer toggles plus profile-specific
+items such as the Homeworlds move report) with keyboard accelerators, including Delete for SGF node deletion. Both
+`gcheckers` and `gboop` are built from this same shell and diverge through `GGameAppProfile` feature flags and boop's
+optional board-host hook. Unsupported actions stay in the same shared shell but are disabled for profiles that do not
+support them. `src/ghomeworlds.c` selects the Homeworlds profile and opens the same shared shell with the Homeworlds
 board-host hook.
 The active application ID, display strings, settings schema ID, and backend all come from `GGameAppProfile`, with the
 current profiles selecting `io.github.jeromea.gcheckers`, `io.github.jeromea.gboop`, or
@@ -839,6 +843,8 @@ used as the source of truth for move chronology/navigation. Nodes also carry opt
 (`SgfNodeAnalysis`) containing depth, search stats, and best-to-worst scored legal moves.
 Traversal helpers include root-to-node path construction, main-line collection from arbitrary nodes, current-branch
 construction for graphing, and deterministic preorder collection for full-tree analysis jobs.
+The tree also supports deleting a non-root node and its whole descendant subtree while keeping current selection on
+the deleted node's parent when needed.
 Collaborates with: SGF view and controller modules.
 
 ### SGF move properties (`src/sgf_move_props.c`, `src/sgf_move_props.h`)

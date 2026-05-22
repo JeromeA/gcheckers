@@ -934,6 +934,57 @@ gboolean ggame_sgf_controller_select_node(GGameSgfController *self, const SgfNod
   return ggame_sgf_controller_navigate_to(self, node);
 }
 
+gboolean ggame_sgf_controller_delete_current_node(GGameSgfController *self) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
+  g_return_val_if_fail(SGF_IS_TREE(self->sgf_tree), FALSE);
+
+  const SgfNode *current = sgf_tree_get_current(self->sgf_tree);
+  if (current == NULL) {
+    g_debug("Missing SGF current node");
+    return FALSE;
+  }
+
+  const SgfNode *parent = sgf_node_get_parent(current);
+  if (parent == NULL) {
+    return FALSE;
+  }
+
+  gboolean was_replaying = self->is_replaying;
+  self->is_replaying = TRUE;
+  if (!sgf_tree_set_current(self->sgf_tree, parent)) {
+    self->is_replaying = was_replaying;
+    return FALSE;
+  }
+
+  gboolean synced = TRUE;
+  if (GCHECKERS_IS_MODEL(self->checkers_model) || GGAME_IS_MODEL(self->game_model)) {
+    synced = ggame_sgf_controller_sync_model_for_transition(self, current, parent);
+  }
+  self->is_replaying = was_replaying;
+  if (!synced) {
+    (void)sgf_tree_set_current(self->sgf_tree, current);
+    return FALSE;
+  }
+
+  if (!sgf_tree_delete_subtree(self->sgf_tree, current)) {
+    return FALSE;
+  }
+
+  ggame_sgf_controller_emit_node_changed(self, parent);
+  g_signal_emit(self, controller_signals[SIGNAL_MANUAL_REQUESTED], 0, parent);
+  sgf_view_set_selected(self->sgf_view, parent);
+  sgf_view_refresh(self->sgf_view);
+
+  GGameModel *game_model = ggame_sgf_controller_peek_active_game_model(self);
+  if (GGAME_IS_MODEL(game_model)) {
+    const GameBackend *backend = ggame_model_peek_backend(game_model);
+    if (backend != NULL) {
+      ggame_sgf_controller_autosave_current_sgf(self, backend);
+    }
+  }
+  return TRUE;
+}
+
 gboolean ggame_sgf_controller_refresh_current_node(GGameSgfController *self) {
   g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(SGF_IS_TREE(self->sgf_tree), FALSE);

@@ -1121,6 +1121,7 @@ static void test_ggame_window_toolbar_actions_exist(void) {
   g_assert_nonnull(g_action_map_lookup_action(G_ACTION_MAP(window), "sgf-load"));
   g_assert_nonnull(g_action_map_lookup_action(G_ACTION_MAP(window), "sgf-save-as"));
   g_assert_nonnull(g_action_map_lookup_action(G_ACTION_MAP(window), "sgf-save-position"));
+  g_assert_nonnull(g_action_map_lookup_action(G_ACTION_MAP(window), "sgf-delete-node"));
   g_assert_nonnull(g_action_map_lookup_action(G_ACTION_MAP(window), "analysis-current-position"));
   g_assert_nonnull(g_action_map_lookup_action(G_ACTION_MAP(window), "analysis-whole-game"));
 
@@ -1170,6 +1171,18 @@ static void test_ggame_window_settings_dialog_persists_preferences(void) {
   GMenuModel *file_menu = test_ggame_window_find_submenu(menubar, "File");
   g_assert_nonnull(file_menu);
   g_assert_true(test_ggame_window_menu_contains_item(file_menu, "Settings..."));
+
+  GMenuModel *move_menu = test_ggame_window_find_submenu(menubar, "Move");
+  g_assert_nonnull(move_menu);
+  g_assert_null(test_ggame_window_find_submenu(menubar, "Game"));
+  g_assert_true(test_ggame_window_menu_contains_item(move_menu, "Force move"));
+  g_assert_true(test_ggame_window_menu_contains_item(move_menu, "Delete node"));
+
+  g_auto(GStrv) delete_accels =
+      gtk_application_get_accels_for_action(GTK_APPLICATION(app), "win.sgf-delete-node");
+  g_assert_nonnull(delete_accels);
+  g_assert_cmpstr(delete_accels[0], ==, "Delete");
+  g_assert_null(delete_accels[1]);
 
   g_action_group_activate_action(G_ACTION_GROUP(app), "settings", NULL);
   test_ggame_window_drain_main_context(32);
@@ -1256,6 +1269,15 @@ static void test_ggame_window_sgf_actions_navigate_timeline(void) {
 
   g_action_group_activate_action(G_ACTION_GROUP(window), "navigation-rewind", NULL);
   g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 0);
+
+  g_action_group_activate_action(G_ACTION_GROUP(window), "navigation-step-forward", NULL);
+  g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 1);
+  g_action_group_activate_action(G_ACTION_GROUP(window), "sgf-delete-node", NULL);
+  g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 0);
+
+  const GPtrArray *children = sgf_node_get_children(sgf_tree_get_root(tree));
+  g_assert_nonnull(children);
+  g_assert_cmpuint(children->len, ==, 0);
 
   g_clear_object(&window);
   g_clear_object(&model);
@@ -2013,6 +2035,7 @@ static void test_ggame_window_edit_mode_disables_navigation_and_force_move(void)
   g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "navigation-step-forward"));
   g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "navigation-step-forward-to-branch"));
   g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "navigation-step-forward-to-end"));
+  g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "sgf-delete-node"));
   g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "game-force-move"));
 
   gtk_drop_down_set_selected(mode_dropdown, 1);
@@ -2023,6 +2046,7 @@ static void test_ggame_window_edit_mode_disables_navigation_and_force_move(void)
   g_assert_false(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "navigation-step-forward"));
   g_assert_false(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "navigation-step-forward-to-branch"));
   g_assert_false(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "navigation-step-forward-to-end"));
+  g_assert_false(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "sgf-delete-node"));
   g_assert_false(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "game-force-move"));
 
   const GameState *state = gcheckers_model_peek_state(model);
@@ -2042,6 +2066,7 @@ static void test_ggame_window_edit_mode_disables_navigation_and_force_move(void)
   g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "navigation-step-forward"));
   g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "navigation-step-forward-to-branch"));
   g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "navigation-step-forward-to-end"));
+  g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "sgf-delete-node"));
   g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "game-force-move"));
 
   g_clear_object(&window);

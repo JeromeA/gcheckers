@@ -1262,6 +1262,7 @@ static void ggame_window_sync_mode_ui(GGameWindow *self) {
   ggame_window_set_action_enabled(G_ACTION_MAP(self), "navigation-step-forward", allow_navigation);
   ggame_window_set_action_enabled(G_ACTION_MAP(self), "navigation-step-forward-to-branch", allow_navigation);
   ggame_window_set_action_enabled(G_ACTION_MAP(self), "navigation-step-forward-to-end", allow_navigation);
+  ggame_window_set_action_enabled(G_ACTION_MAP(self), "sgf-delete-node", allow_navigation);
   ggame_window_set_action_enabled(G_ACTION_MAP(self), "sgf-load", allow_sgf_file_actions);
   ggame_window_set_action_enabled(G_ACTION_MAP(self), "sgf-save-as", allow_sgf_file_actions);
   ggame_window_set_action_enabled(G_ACTION_MAP(self),
@@ -3260,6 +3261,22 @@ static void ggame_window_on_sgf_step_forward_to_end(GSimpleAction * /*action*/,
   }
 }
 
+static void ggame_window_on_sgf_delete_node(GSimpleAction * /*action*/,
+                                            GVariant * /*parameter*/,
+                                            gpointer user_data) {
+  GGameWindow *self = GGAME_WINDOW(user_data);
+
+  g_return_if_fail(GGAME_IS_WINDOW(self));
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self->sgf_controller));
+  if (ggame_window_is_edit_mode(self)) {
+    return;
+  }
+
+  if (!ggame_sgf_controller_delete_current_node(self->sgf_controller)) {
+    g_debug("SGF delete node ignored");
+  }
+}
+
 static GtkWidget *ggame_window_new_toolbar_action_button(const char *icon_name,
                                                              const char *tooltip_text,
                                                              const char *action_name) {
@@ -3656,6 +3673,14 @@ static void ggame_window_init(GGameWindow *self) {
       {
           .name = "navigation-step-forward-to-end",
           .activate = ggame_window_on_sgf_step_forward_to_end,
+          .parameter_type = NULL,
+          .state = NULL,
+          .change_state = NULL,
+          .padding = {0},
+      },
+      {
+          .name = "sgf-delete-node",
+          .activate = ggame_window_on_sgf_delete_node,
           .parameter_type = NULL,
           .state = NULL,
           .change_state = NULL,

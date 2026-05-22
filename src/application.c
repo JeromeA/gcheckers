@@ -372,6 +372,7 @@ static void ggame_application_startup(GApplication *app) {
   g_menu_append(game_navigation_menu, "Forward one move", "win.navigation-step-forward");
   g_menu_append(game_navigation_menu, "Forward to next branch", "win.navigation-step-forward-to-branch");
   g_menu_append(game_navigation_menu, "Forward to main line end", "win.navigation-step-forward-to-end");
+  g_menu_append(game_navigation_menu, "Delete node", "win.sgf-delete-node");
   g_menu_append_section(game_menu, NULL, G_MENU_MODEL(game_navigation_menu));
   g_menu_append(analysis_menu, "Analyse this move", "win.analysis-current-position");
   g_menu_append(analysis_menu, "Analyse whole game", "win.analysis-whole-game");
@@ -382,7 +383,7 @@ static void ggame_application_startup(GApplication *app) {
     g_menu_append(view_menu, "Move report", "win.view-show-move-report");
   }
   g_menu_append_submenu(menubar, "File", G_MENU_MODEL(file_menu));
-  g_menu_append_submenu(menubar, "Game", G_MENU_MODEL(game_menu));
+  g_menu_append_submenu(menubar, "Move", G_MENU_MODEL(game_menu));
   g_menu_append_submenu(menubar, "Analysis", G_MENU_MODEL(analysis_menu));
   g_menu_append_submenu(menubar, "Puzzle", G_MENU_MODEL(puzzle_menu));
   g_menu_append_submenu(menubar, "View", G_MENU_MODEL(view_menu));
@@ -417,6 +418,9 @@ static void ggame_application_startup(GApplication *app) {
   gtk_application_set_accels_for_action(GTK_APPLICATION(app),
                                         "win.navigation-step-forward-to-end",
                                         (const char *[]){"End", NULL});
+  gtk_application_set_accels_for_action(GTK_APPLICATION(app),
+                                        "win.sgf-delete-node",
+                                        (const char *[]){"Delete", NULL});
 
   self->puzzle_progress_startup_flush_source_id =
       g_timeout_add(250, ggame_application_request_startup_flush_cb, self);

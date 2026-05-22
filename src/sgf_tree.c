@@ -280,6 +280,43 @@ gboolean sgf_tree_set_current(SgfTree *self, const SgfNode *node) {
   return TRUE;
 }
 
+gboolean sgf_tree_delete_subtree(SgfTree *self, const SgfNode *node) {
+  g_return_val_if_fail(SGF_IS_TREE(self), FALSE);
+  g_return_val_if_fail(node != NULL, FALSE);
+  g_return_val_if_fail(self->root != NULL, FALSE);
+
+  if (node == self->root) {
+    return FALSE;
+  }
+  if (!sgf_node_is_descendant(node, self->root)) {
+    g_debug("Attempted to delete SGF node not in tree");
+    return FALSE;
+  }
+
+  SgfNode *target = (SgfNode *)node;
+  SgfNode *parent = target->parent;
+  if (parent == NULL || parent->children == NULL) {
+    g_debug("Attempted to delete SGF node without a parent link");
+    return FALSE;
+  }
+
+  for (guint i = 0; i < parent->children->len; ++i) {
+    if (g_ptr_array_index(parent->children, i) != target) {
+      continue;
+    }
+
+    if (self->current != NULL && sgf_node_is_descendant(self->current, target)) {
+      self->current = parent;
+    }
+    g_ptr_array_remove_index(parent->children, i);
+    sgf_node_free(target);
+    return TRUE;
+  }
+
+  g_debug("Attempted to delete SGF node missing from parent children");
+  return FALSE;
+}
+
 GPtrArray *sgf_tree_build_main_line(SgfTree *self) {
   g_return_val_if_fail(SGF_IS_TREE(self), NULL);
 
