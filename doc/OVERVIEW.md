@@ -540,9 +540,10 @@ left after removing the overpopulated color, so binary-star systems survive losi
 letters and sizes directly, such as `Y2B1g3`, `H1g+`, `G3y2>G2 G3y!`, and `pass`; multi-step moves are formatted with
 spaces between complete steps and no internal slash separator, while the parser also accepts older saved `H1 g+` and
 slash-separated step notation. The public parser only writes the output move after the whole notation succeeds. Static
-evaluation counts ship material, homeworld health, and build access: an empty homeworld is scored as likely setup
-material, a single-star homeworld is penalized, the largest own ship at each player's homeworld is repeated, and each
-buildable ship color is rewarded once. Applying a move is transactional: setup and turn moves are resolved against a
+evaluation counts ship material, homeworld health, and build access: an empty homeworld is scored like a simple
+three-pip setup system with one buildable color, a single-star homeworld is penalized, the largest own ship at each
+player's homeworld is repeated, and each buildable ship color is rewarded once. Applying a move is transactional: setup
+and turn moves are resolved against a
 working copy and only replace the original position after the full move succeeds, and malformed turn moves with
 overlong step counts are rejected before step storage is read. Sacrifice-granted actions reuse the normal action
 application code but bypass local color-access checks because the sacrificed ship supplies the action color. Public

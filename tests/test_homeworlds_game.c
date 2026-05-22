@@ -561,7 +561,7 @@ static void test_static_evaluation_assumes_empty_homeworld_setup_value(void) {
   assert(test_system_add_star(&position, 1, homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_MEDIUM)));
   assert(test_system_add_ship(&position, 1, 1, homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL)));
 
-  assert(homeworlds_position_evaluate_static(&position) == 40);
+  assert(homeworlds_position_evaluate_static(&position) == 60);
 }
 
 static void test_static_evaluation_penalizes_single_star_homeworld(void) {

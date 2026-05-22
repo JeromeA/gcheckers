@@ -1038,7 +1038,7 @@ static gint homeworlds_homeworld_static_value_for_side(const HomeworldsSystem *h
 
   guint star_count = homeworlds_system_star_count(homeworld);
   if (star_count == 0 && homeworlds_system_ship_count_total(homeworld) == 0) {
-    return 60;
+    return 80;
   }
 
   gint value = homeworlds_system_largest_ship_value_for_side(homeworld, side);
