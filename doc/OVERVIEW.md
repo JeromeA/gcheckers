@@ -492,7 +492,8 @@ lists, where "single correct move" means the best score is ahead of the second-b
 plus an attacker/defender move-clarity helper, a collector for all scored moves that qualify as mistakes under a given
 threshold, and next puzzle file index discovery from existing `puzzle-####.sgf` files, plus pure predicates for
 rejecting boring solution-line shapes, insufficient comeback swings from badly losing positions, and immediate
-recaptures after the solution.
+recaptures after the solution. Indexed output paths are built through GLib filename helpers instead of manual
+separator concatenation.
 Collaborates with: `checkers_create_puzzles.c` and `tests/test_puzzle_generation.c`.
 
 ## File dialog history helpers (`src/file_dialog_history.c`, `src/file_dialog_history.h`)

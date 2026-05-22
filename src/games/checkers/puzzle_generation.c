@@ -299,7 +299,9 @@ gboolean checkers_puzzle_find_next_index(const char *dir_path, guint *out_next_i
 char *checkers_puzzle_build_indexed_path(const char *dir_path, const char *prefix, guint index) {
   g_return_val_if_fail(dir_path != NULL, NULL);
   g_return_val_if_fail(prefix != NULL, NULL);
-  return g_strdup_printf("%s/%s-%04u.sgf", dir_path, prefix, index);
+
+  g_autofree char *basename = g_strdup_printf("%s-%04u.sgf", prefix, index);
+  return g_build_filename(dir_path, basename, NULL);
 }
 
 CheckersPuzzleArgType checkers_puzzle_parse_arg(const char *arg, guint *out_count) {
