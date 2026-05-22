@@ -204,6 +204,27 @@ static gboolean checkers_puzzle_progress_consume_char(const char **cursor, char 
   return TRUE;
 }
 
+static gboolean checkers_puzzle_progress_parse_hex4(const char *text, gunichar *out_value) {
+  g_return_val_if_fail(text != NULL, FALSE);
+  g_return_val_if_fail(out_value != NULL, FALSE);
+
+  gunichar value = 0;
+  for (guint i = 0; i < 4; i++) {
+    gint digit = g_ascii_xdigit_value(text[i]);
+    if (digit < 0) {
+      return FALSE;
+    }
+    value = (value << 4) | (gunichar)digit;
+  }
+
+  if (value == 0 || !g_unichar_validate(value) || (value >= 0xd800 && value <= 0xdfff)) {
+    return FALSE;
+  }
+
+  *out_value = value;
+  return TRUE;
+}
+
 static gboolean checkers_puzzle_progress_parse_json_string(const char **cursor, char **out_value) {
   g_return_val_if_fail(cursor != NULL, FALSE);
   g_return_val_if_fail(*cursor != NULL, FALSE);
@@ -240,6 +261,16 @@ static gboolean checkers_puzzle_progress_parse_json_string(const char **cursor, 
         case 't':
           g_string_append_c(buffer, '\t');
           break;
+        case 'u': {
+          gunichar value = 0;
+          if (!checkers_puzzle_progress_parse_hex4(*cursor + 1, &value)) {
+            g_string_free(buffer, TRUE);
+            return FALSE;
+          }
+          g_string_append_unichar(buffer, value);
+          *cursor += 4;
+          break;
+        }
         default:
           g_string_free(buffer, TRUE);
           return FALSE;
@@ -976,8 +1007,8 @@ char *ggame_puzzle_progress_store_get_or_create_user_id(GGamePuzzleProgressStore
     }
   }
 
-  g_autofree char *fallback_path = ggame_puzzle_progress_store_build_path(store,
-                                                                              checkers_puzzle_progress_user_id_fallback_name);
+  g_autofree char *fallback_path =
+      ggame_puzzle_progress_store_build_path(store, checkers_puzzle_progress_user_id_fallback_name);
   g_autofree char *fallback_text = NULL;
   if (g_file_get_contents(fallback_path, &fallback_text, NULL, NULL)) {
     g_strstrip(fallback_text);
@@ -1260,7 +1291,8 @@ char *ggame_puzzle_progress_build_upload_json(const char *user_id, const GPtrArr
 
   g_autoptr(GString) json = g_string_new("{\"schema_version\":1,\"user_id\":");
   checkers_puzzle_progress_append_json_string(json, user_id);
-  g_string_append(json, ",\"client\":{\"app_id\":\"io.github.jeromea.gcheckers\",\"app_version\":\"dev\"},\"attempts\":[");
+  g_string_append(json,
+                  ",\"client\":{\"app_id\":\"io.github.jeromea.gcheckers\",\"app_version\":\"dev\"},\"attempts\":[");
 
   gboolean first = TRUE;
   for (guint i = 0; i < attempt_history->len; i++) {

@@ -1039,3 +1039,11 @@ field into two names but kept any surrounding whitespace from the response.
 
 That made formatted history rows depend on response spacing. The fix strips leading and trailing whitespace from both
 names after splitting the field.
+
+## Puzzle progress could write JSON strings it could not read
+
+Puzzle progress history is stored as JSON lines. The writer escaped control characters as `\u00xx`, but the custom
+reader rejected all `\u` escapes.
+
+Any stored string containing one of those escaped control characters made the history unreadable. The fix decodes
+four-digit JSON unicode escapes and rejects invalid code points.

@@ -295,7 +295,8 @@ lives beside it as `puzzle-status.json` in the same directory; no extra nested p
 History format: one JSON object per line with schema version, puzzle identity, timestamps, terminal result,
 first-wrong-move metadata, and local report metadata (`first_reported_unix_ms`, `report_count`). The history is never
 deleted after successful upload; successful sends only mark previously unreported resolved attempts as reported. The
-settings dialog can explicitly clear local progress, which rewrites both the history and status cache as empty.
+reader accepts the escaped control characters that the writer emits in JSON strings. The settings dialog can explicitly
+clear local progress, which rewrites both the history and status cache as empty.
 Status-cache format: one JSON document keyed by stable `puzzle_id` values such as
 `checkers/russian/puzzle-0007.sgf`, storing reduced `untried`/`failed`/`solved` state plus minimal metadata. If the
 cache is missing or corrupt,
