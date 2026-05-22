@@ -996,6 +996,14 @@ callback size could wrap before the append.
 
 The fix checks the multiplication and the `gssize` range before appending response bytes.
 
+## Puzzle upload response discard trusted unchecked curl chunk sizes
+
+The application discards puzzle-progress upload response bodies through a libcurl write callback, but it still returns
+`size * nmemb` to tell libcurl how many bytes were consumed. That product was returned directly, so an impossible
+callback size could wrap and report the wrong byte count.
+
+The fix validates the multiplication before returning the consumed byte count.
+
 ## Homeworlds move report froze the UI when it contained tens of thousands of lines
 
 The Homeworlds move report should remain scrollable and selectable even when a position has a very large number of

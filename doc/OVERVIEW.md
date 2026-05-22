@@ -261,7 +261,8 @@ URL (`GCHECKERS_PUZZLE_REPORT_URL`), the privacy/settings action, and the single
 Collaborates with: `GGameAppProfile` for app ID and feature availability, `GGameWindow`, which asks for the shared
 store indirectly by attaching to this application, and `puzzle_progress.c`, which provides history storage, threshold
 decisions, and upload JSON formatting. Puzzle uploads are also gated by the `send-puzzle-usage-data` application
-setting before any network request is attempted. The shared progress store accessor refreshes the store if
+setting before any network request is attempted, and the upload response discard callback validates libcurl byte
+counts before returning them. The shared progress store accessor refreshes the store if
 `GCHECKERS_PUZZLE_PROGRESS_DIR` resolves to a different state directory, which keeps test and manual override sessions
 isolated.
 

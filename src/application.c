@@ -44,10 +44,14 @@ static void ggame_application_set_action_enabled(GActionMap *map, const char *na
 }
 
 static size_t ggame_application_discard_upload_response(char *ptr,
-                                                            size_t size,
-                                                            size_t nmemb,
-                                                            void * /*user_data*/) {
+                                                        size_t size,
+                                                        size_t nmemb,
+                                                        void * /*user_data*/) {
   g_return_val_if_fail(ptr != NULL || size == 0 || nmemb == 0, 0);
+
+  if (size != 0 && nmemb > G_MAXSIZE / size) {
+    return 0;
+  }
   return size * nmemb;
 }
 
