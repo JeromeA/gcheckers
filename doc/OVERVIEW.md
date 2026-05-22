@@ -377,8 +377,9 @@ This is now an optional backend capability: backends that opt into `supports_ai_
 records plus either `list_good_moves` or the full move-list API. The search layer now prefers `list_good_moves`, so a
 backend can expose heuristic best-first subsets to AI without also exposing exhaustive move lists to shared code. Any
 candidate truncation is backend-owned; the generic search does not pass a caller-selected cap.
-Depth accounting treats forced plies (`exactly one legal move`) as free extensions: depth is consumed only on
-decision nodes with multiple legal moves.
+Backends can opt into forced-ply extension through `extends_forced_moves`; checkers uses this so forced continuations
+do not consume depth, while boop and Homeworlds use ordinary depth accounting and can statically evaluate depth-0 child
+positions without generating their candidate moves first.
 Score convention: search scores are white-centric at all plies (`+` good for white, `-` good for black). Root move
 lists are ordered by side to move preference (white: high to low, black: low to high) so index 0 remains the best move
 for the player to act.
@@ -700,12 +701,12 @@ move-building, square-grid rendering, AI search, notation formatting/parsing, ha
 snapshot hooks.
 Scope: shared application code still has some checkers-native compatibility layers, but the physical checkers source
 ownership boundary is now explicit under `src/games/checkers/`.
-Backends now advertise whether they support full move-list enumeration, incremental move-building, AI search, and
-backend-owned move parsing/formatting for SGF. Each SGF-capable backend also maps its own side numbers to SGF
-`B`/`W` colors, which keeps shared controller code from assuming that side 0 means the same color in every game.
-Move-builder backends can also expose preview positions, builder-owned selection paths, and selection reset behavior
-for multi-stage interactions such as boop promotion choices. Backend outcome banner text is reserved for terminal
-outcomes; ongoing positions should return no banner text. They can also optionally expose SGF setup-node and
+Backends now advertise whether they support full move-list enumeration, incremental move-building, AI search, forced
+move extension, and backend-owned move parsing/formatting for SGF. Each SGF-capable backend also maps its own side
+numbers to SGF `B`/`W` colors, which keeps shared controller code from assuming that side 0 means the same color in
+every game. Move-builder backends can also expose preview positions, builder-owned selection paths, and selection reset
+behavior for multi-stage interactions such as boop promotion choices. Backend outcome banner text is reserved for
+terminal outcomes; ongoing positions should return no banner text. They can also optionally expose SGF setup-node and
 root-position snapshot hooks so the shared controller can replay setup-root SGFs and save position-only SGFs without
 game-specific branches.
 Collaborates with: `Makefile` backend selection, `tests/test_game_backend.c`, and future generic model/search work.

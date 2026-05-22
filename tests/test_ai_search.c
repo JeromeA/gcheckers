@@ -16,6 +16,9 @@ typedef struct {
   gint delta;
 } TestGoodMoveOnlyMove;
 
+static guint test_good_move_only_list_good_moves_calls = 0;
+static guint test_good_move_only_static_evaluate_calls = 0;
+
 static void test_init_game_with_ruleset(Game *game, PlayerRuleset ruleset) {
   const CheckersRules *rules = checkers_ruleset_get_rules(ruleset);
 
@@ -225,14 +228,19 @@ static GameBackendMoveList test_good_move_only_list_good_moves(gconstpointer pos
 
   g_return_val_if_fail(good_position != NULL, (GameBackendMoveList){0});
 
+  test_good_move_only_list_good_moves_calls++;
   if (good_position->total >= 2) {
     return (GameBackendMoveList){0};
   }
 
   moves = g_new0(TestGoodMoveOnlyMove, 2);
   g_return_val_if_fail(moves != NULL, (GameBackendMoveList){0});
-  moves[count++].delta = 2;
-  moves[count++].delta = 1;
+  if (good_position->total == 0) {
+    moves[count++].delta = 2;
+    moves[count++].delta = 1;
+  } else {
+    moves[count++].delta = 1;
+  }
 
   return (GameBackendMoveList){
     .moves = moves,
@@ -285,6 +293,7 @@ static gint test_good_move_only_evaluate_static(gconstpointer position) {
 
   g_return_val_if_fail(good_position != NULL, 0);
 
+  test_good_move_only_static_evaluate_calls++;
   return good_position->total * 10;
 }
 
@@ -302,42 +311,77 @@ static guint64 test_good_move_only_hash_position(gconstpointer position) {
   return ((guint64) (good_position->total + 7) << 8) | good_position->turn;
 }
 
+static const GameBackend test_good_move_only_backend = {
+  .id = "good-move-only",
+  .display_name = "Good Move Only",
+  .variant_count = 0,
+  .position_size = sizeof(TestGoodMoveOnlyPosition),
+  .move_size = sizeof(TestGoodMoveOnlyMove),
+  .supports_move_list = FALSE,
+  .supports_move_builder = FALSE,
+  .supports_ai_search = TRUE,
+  .position_init = test_good_move_only_position_init,
+  .position_clear = test_good_move_only_position_clear,
+  .position_copy = test_good_move_only_position_copy,
+  .position_outcome = test_good_move_only_position_outcome,
+  .position_turn = test_good_move_only_position_turn,
+  .list_good_moves = test_good_move_only_list_good_moves,
+  .move_list_free = test_good_move_only_move_list_free,
+  .move_list_get = test_good_move_only_move_list_get,
+  .moves_equal = test_good_move_only_moves_equal,
+  .apply_move = test_good_move_only_apply_move,
+  .evaluate_static = test_good_move_only_evaluate_static,
+  .terminal_score = test_good_move_only_terminal_score,
+  .hash_position = test_good_move_only_hash_position,
+};
+
 static void test_ai_search_accepts_good_move_only_backend(void) {
-  static const GameBackend good_move_only_backend = {
-    .id = "good-move-only",
-    .display_name = "Good Move Only",
-    .variant_count = 0,
-    .position_size = sizeof(TestGoodMoveOnlyPosition),
-    .move_size = sizeof(TestGoodMoveOnlyMove),
-    .supports_move_list = FALSE,
-    .supports_move_builder = FALSE,
-    .supports_ai_search = TRUE,
-    .position_init = test_good_move_only_position_init,
-    .position_clear = test_good_move_only_position_clear,
-    .position_copy = test_good_move_only_position_copy,
-    .position_outcome = test_good_move_only_position_outcome,
-    .position_turn = test_good_move_only_position_turn,
-    .list_good_moves = test_good_move_only_list_good_moves,
-    .move_list_free = test_good_move_only_move_list_free,
-    .move_list_get = test_good_move_only_move_list_get,
-    .moves_equal = test_good_move_only_moves_equal,
-    .apply_move = test_good_move_only_apply_move,
-    .evaluate_static = test_good_move_only_evaluate_static,
-    .terminal_score = test_good_move_only_terminal_score,
-    .hash_position = test_good_move_only_hash_position,
-  };
   TestGoodMoveOnlyPosition position = {0};
   GameAiScoredMoveList scored_moves = {0};
   TestGoodMoveOnlyMove selected = {0};
 
   test_good_move_only_position_init(&position, NULL);
-  assert(game_ai_search_analyze_moves(&good_move_only_backend, &position, 2, &scored_moves));
+  assert(game_ai_search_analyze_moves(&test_good_move_only_backend, &position, 2, &scored_moves));
   assert(scored_moves.count == 2);
   assert(((TestGoodMoveOnlyMove *) scored_moves.moves[0].move)->delta == 2);
   game_ai_scored_move_list_free(&scored_moves);
 
-  assert(game_ai_search_choose_move(&good_move_only_backend, &position, 2, &selected));
+  assert(game_ai_search_choose_move(&test_good_move_only_backend, &position, 2, &selected));
   assert(selected.delta == 2);
+}
+
+static void test_ai_search_depth_zero_skips_child_moves_without_forced_extension(void) {
+  TestGoodMoveOnlyPosition position = {0};
+  GameAiScoredMoveList scored_moves = {0};
+
+  test_good_move_only_position_init(&position, NULL);
+  test_good_move_only_list_good_moves_calls = 0;
+  test_good_move_only_static_evaluate_calls = 0;
+
+  assert(game_ai_search_analyze_moves(&test_good_move_only_backend, &position, 0, &scored_moves));
+  assert(scored_moves.count == 2);
+  assert(test_good_move_only_list_good_moves_calls == 1);
+  assert(test_good_move_only_static_evaluate_calls == 1);
+
+  game_ai_scored_move_list_free(&scored_moves);
+}
+
+static void test_ai_search_forced_extension_is_backend_opt_in(void) {
+  GameBackend forced_backend = test_good_move_only_backend;
+  TestGoodMoveOnlyPosition position = {0};
+  GameAiScoredMoveList scored_moves = {0};
+
+  forced_backend.extends_forced_moves = TRUE;
+  test_good_move_only_position_init(&position, NULL);
+  test_good_move_only_list_good_moves_calls = 0;
+  test_good_move_only_static_evaluate_calls = 0;
+
+  assert(game_ai_search_analyze_moves(&forced_backend, &position, 0, &scored_moves));
+  assert(scored_moves.count == 2);
+  assert(test_good_move_only_list_good_moves_calls == 2);
+  assert(test_good_move_only_static_evaluate_calls == 0);
+
+  game_ai_scored_move_list_free(&scored_moves);
 }
 
 int main(int argc, char **argv) {
@@ -348,6 +392,8 @@ int main(int argc, char **argv) {
   test_ai_search_tt_roundtrip_and_reuse();
   test_ai_search_rejects_backend_without_ai();
   test_ai_search_accepts_good_move_only_backend();
+  test_ai_search_depth_zero_skips_child_moves_without_forced_extension();
+  test_ai_search_forced_extension_is_backend_opt_in();
 
   return 0;
 }

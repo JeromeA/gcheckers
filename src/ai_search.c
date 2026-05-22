@@ -347,6 +347,12 @@ static gint game_ai_search_recursive(gpointer position,
     return score;
   }
 
+  if (depth_remaining == 0 && !backend->extends_forced_moves) {
+    gint score = backend->evaluate_static(position);
+    game_ai_search_store_result(ctx, key, depth_remaining, score, GAME_AI_TT_BOUND_EXACT, NULL);
+    return score;
+  }
+
   GameBackendMoveList moves = game_ai_search_list_candidate_moves(backend, position, depth_remaining);
   if (moves.count == 0) {
     gint score = backend->terminal_score(position, game_ai_search_derived_outcome(backend, position), ply_depth);
@@ -355,7 +361,7 @@ static gint game_ai_search_recursive(gpointer position,
     return score;
   }
 
-  gboolean is_forced = moves.count == 1;
+  gboolean is_forced = backend->extends_forced_moves && moves.count == 1;
   if (depth_remaining == 0 && !is_forced) {
     gint score = backend->evaluate_static(position);
     backend->move_list_free(&moves);
@@ -647,7 +653,8 @@ gboolean game_ai_search_analyze_moves_cancellable_with_tt(const GameBackend *bac
       continue;
     }
 
-    guint next_depth = (moves.count == 1 || max_depth == 0) ? max_depth : max_depth - 1;
+    gboolean is_forced = backend->extends_forced_moves && moves.count == 1;
+    guint next_depth = (is_forced || max_depth == 0) ? max_depth : max_depth - 1;
     guint64 nodes_before = out_stats->nodes;
     gint score = game_ai_search_recursive(child, next_depth, 1, INT_MIN, INT_MAX, &ctx, &cancelled);
 

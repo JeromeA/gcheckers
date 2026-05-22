@@ -987,3 +987,16 @@ SGF analysis move entries are stored as `GCAN[move:score:nodes]`. The parser rej
 not reject an empty `move` portion when the value started with a colon, such as `GCAN[:12:345]`.
 
 The fix rejects empty analysis move text before accepting the scored move entry.
+
+## Homeworlds depth-0 AI generated child move lists only to detect forced moves
+
+Depth-0 AI should score each candidate move by applying it once and statically evaluating the child position for games
+that do not have checkers-style forced continuations.
+
+The generic search treated every backend as if a single legal move should extend the search without consuming depth.
+To detect that, it generated the child position's legal moves before static evaluation even when `depth_remaining == 0`.
+For Homeworlds, choosing a move from a position with tens of thousands of good moves therefore generated another good
+move list for each child position and could block the UI for minutes.
+
+The fix makes forced-ply extension an explicit backend flag. Checkers opts in, while boop and Homeworlds leave it off,
+so their depth-0 child positions are statically evaluated immediately after terminal-outcome checks.
