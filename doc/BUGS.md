@@ -1047,3 +1047,10 @@ reader rejected all `\u` escapes.
 
 Any stored string containing one of those escaped control characters made the history unreadable. The fix decodes
 four-digit JSON unicode escapes and rejects invalid code points.
+
+## Puzzle progress accepted raw control characters in JSON strings
+
+Puzzle progress history is JSON lines, so strings must not contain unescaped control characters.
+
+The custom JSON reader accepted raw control characters in strings even though the writer would always escape them.
+The fix rejects malformed raw control characters while still accepting the writer's escaped form.

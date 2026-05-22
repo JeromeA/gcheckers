@@ -275,6 +275,9 @@ static gboolean checkers_puzzle_progress_parse_json_string(const char **cursor, 
           g_string_free(buffer, TRUE);
           return FALSE;
       }
+    } else if ((guchar)**cursor < 0x20) {
+      g_string_free(buffer, TRUE);
+      return FALSE;
     } else {
       g_string_append_c(buffer, **cursor);
     }
