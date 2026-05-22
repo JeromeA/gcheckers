@@ -63,7 +63,9 @@ The `good_moves()` policy also canonicalizes adjacent blue-sacrifice trades when
 later trade is pruned if swapping it with the previous trade is legal, reaches the same position, and no catastrophe is
 available before, between, or after the two trades. Green-sacrifice builds use the same proof: adjacent builds are kept
 in canonical system/color order only when the swapped order consumes the same bank pieces and reaches the same
-position. Bank-dependent trade and build chains are left alone.
+position. Reversing a green build may have several plausible predecessors when the target system already contains
+same-color ships, so the proof tries every reversible built-ship candidate. Bank-dependent trade and build chains are
+left alone.
 
 The AI collector still guards against duplicates when it finishes a move, but only as a diagnostic safety net.
 `homeworlds_backend_move_buffer_append()` records structural move hashes in a `GHashTable`; if the same symbolic move

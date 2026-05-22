@@ -1106,3 +1106,16 @@ builds by reversing the previous build, trying the swapped order, and pruning on
 position-equivalent, and catastrophe-free. Yellow-sacrifice route tests also cover the existing rule that repeated
 moves of the same ship do not keep an irrelevant intermediate system when the original source could have reached the
 final system directly.
+
+## Homeworlds green-build commutation stopped at the first reversible predecessor
+
+The green-sacrifice build commutation proof reconstructs the position before the previous build, then tries the swapped
+order. Reversing a build can be ambiguous when the built system already had smaller same-color ships: removing one of
+those pre-existing ships and reapplying the build can recreate the same intermediate position even though it is not the
+real predecessor needed for the swap proof.
+
+The proof stopped after the first reversible build predecessor. That could leave genuinely equivalent build
+permutations in `good_moves()`. The fix tries every reversible built-ship candidate and accepts the commutation if any
+candidate makes the swapped order legal and position-equivalent. A regression also records that the saved position
+containing `H1g3- H1g+ H1g+ B2g+` and `H1g3- H1g+ B2g+ H1g+` is bank-dependent: those two moves are both kept because
+they put the returned `g3` at different systems.

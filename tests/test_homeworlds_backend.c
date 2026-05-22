@@ -243,6 +243,30 @@ static void test_prepare_green_sacrifice_build_order_position(HomeworldsPosition
   };
 }
 
+static void test_prepare_green_sacrifice_ambiguous_build_order_position(HomeworldsPosition *position) {
+  const char *prefix[] = {
+    "B1Y3g3",
+    "G2Y3b3",
+    "H1g+",
+    "H2b+",
+    "H1g+",
+    "H2b+",
+    "H1g1>B2",
+    "H2b1=y",
+    "B2g+",
+    "H2y+",
+  };
+
+  assert(position != NULL);
+
+  homeworlds_position_init(position);
+  for (guint i = 0; i < G_N_ELEMENTS(prefix); ++i) {
+    test_apply_notation(position, prefix[i]);
+  }
+  assert(position->phase == HOMEWORLDS_PHASE_PLAY);
+  assert(position->turn == 0);
+}
+
 static void test_prepare_yellow_sacrifice_route_position(HomeworldsPosition *position,
                                                          gboolean direct_target_is_reachable) {
   assert(position != NULL);
@@ -321,6 +345,27 @@ static void test_assert_move_notation_is_legal(const HomeworldsPosition *positio
   copy = *position;
   assert(homeworlds_move_parse(notation, &move));
   assert(homeworlds_position_apply_move(&copy, &move));
+}
+
+static void test_assert_move_notations_reach_different_positions(const HomeworldsPosition *position,
+                                                                 const char *left_notation,
+                                                                 const char *right_notation) {
+  HomeworldsPosition left = {0};
+  HomeworldsPosition right = {0};
+  HomeworldsMove left_move = {0};
+  HomeworldsMove right_move = {0};
+
+  assert(position != NULL);
+  assert(left_notation != NULL);
+  assert(right_notation != NULL);
+
+  left = *position;
+  right = *position;
+  assert(homeworlds_move_parse(left_notation, &left_move));
+  assert(homeworlds_move_parse(right_notation, &right_move));
+  assert(homeworlds_position_apply_move(&left, &left_move));
+  assert(homeworlds_position_apply_move(&right, &right_move));
+  assert(memcmp(&left, &right, sizeof(left)) != 0);
 }
 
 static const HomeworldsMoveCandidate *test_find_setup_candidate(const GameBackend *backend,
@@ -1342,6 +1387,25 @@ static void test_backend_good_moves_order_commutative_green_sacrifice_builds(voi
   backend->move_list_free(&good_moves);
 }
 
+static void test_backend_good_moves_keep_bank_dependent_green_sacrifice_builds(void) {
+  const GameBackend *backend = &homeworlds_game_backend;
+  HomeworldsPosition position = {0};
+  GameBackendMoveList good_moves = {0};
+  const char *first_move = "H1g3- H1g+ H1g+ B2g+";
+  const char *second_move = "H1g3- H1g+ B2g+ H1g+";
+
+  test_prepare_green_sacrifice_ambiguous_build_order_position(&position);
+  test_assert_move_notation_is_legal(&position, first_move);
+  test_assert_move_notation_is_legal(&position, second_move);
+  test_assert_move_notations_reach_different_positions(&position, first_move, second_move);
+
+  good_moves = backend->list_good_moves(&position, 0);
+  assert(good_moves.count > 0);
+  assert(test_good_moves_contains_notation(backend, &good_moves, first_move));
+  assert(test_good_moves_contains_notation(backend, &good_moves, second_move));
+  backend->move_list_free(&good_moves);
+}
+
 static void test_backend_good_moves_keep_dependent_green_sacrifice_builds(void) {
   const GameBackend *backend = &homeworlds_game_backend;
   HomeworldsPosition position = {0};
@@ -1864,6 +1928,7 @@ int main(void) {
   test_backend_good_moves_order_commutative_blue_sacrifice_trades();
   test_backend_good_moves_keep_dependent_blue_sacrifice_trades();
   test_backend_good_moves_order_commutative_green_sacrifice_builds();
+  test_backend_good_moves_keep_bank_dependent_green_sacrifice_builds();
   test_backend_good_moves_keep_dependent_green_sacrifice_builds();
   test_backend_good_moves_skip_unsafe_build_catastrophe();
   test_backend_good_moves_skip_unfavorable_move_catastrophe();

@@ -636,7 +636,8 @@ unfavorable catastrophes, and skips one-action sacrifices when that color action
 system. It also prunes yellow-sacrifice move chains when a ship returns to its original source or reaches a system the
 original source could already reach directly without crossing a catastrophe boundary. During blue and green sacrifices,
 independent adjacent trades and builds are kept in canonical order only when a swapped order is legal,
-position-equivalent, and catastrophe-free.
+position-equivalent, and catastrophe-free; green build reversal tries every reversible built-ship candidate because bank
+supply can make the built size ambiguous.
 Profitable catastrophes available at the start of a turn are required somewhere in the final move, while profitable
 catastrophes created by an earlier step are forced immediately in the staged walk.
 `doc/homeworlds-move-generation.md` describes how the legal builder, diagnostic move report, profiling CLI,

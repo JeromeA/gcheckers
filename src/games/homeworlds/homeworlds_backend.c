@@ -955,58 +955,69 @@ static gboolean homeworlds_backend_reverse_trade_step(HomeworldsPosition *positi
   return FALSE;
 }
 
-static gboolean homeworlds_backend_reverse_build_step(HomeworldsPosition *position,
-                                                      const HomeworldsTurnStep *step) {
-  HomeworldsPosition original = {0};
-  guint system_index = HOMEWORLDS_INVALID_INDEX;
+static gboolean homeworlds_backend_reverse_build_step_at_slot(const HomeworldsPosition *position,
+                                                              const HomeworldsTurnStep *step,
+                                                              guint system_index,
+                                                              guint ship_slot,
+                                                              HomeworldsPosition *out_before) {
+  HomeworldsPosition before = {0};
+  HomeworldsPosition reapplied = {0};
+  HomeworldsPyramid *ship = NULL;
 
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(step != NULL, FALSE);
   g_return_val_if_fail(step->kind == HOMEWORLDS_STEP_BUILD, FALSE);
+  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
+  g_return_val_if_fail(ship_slot < HOMEWORLDS_SHIP_SLOT_COUNT, FALSE);
+  g_return_val_if_fail(out_before != NULL, FALSE);
 
-  if (step->target_color > HOMEWORLDS_COLOR_BLUE ||
-      !homeworlds_position_resolve_system_ref(position, &step->actor.system, &system_index)) {
+  before = *position;
+  ship = &before.systems[system_index].ships[before.turn][ship_slot];
+  if (!homeworlds_pyramid_is_valid(*ship) ||
+      homeworlds_pyramid_color(*ship) != (HomeworldsColor) step->target_color) {
     return FALSE;
   }
 
-  original = *position;
-  for (guint ship_slot = 0; ship_slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++ship_slot) {
-    HomeworldsPosition before = original;
-    HomeworldsPosition reapplied = {0};
-    HomeworldsPyramid *ship = &before.systems[system_index].ships[before.turn][ship_slot];
-
-    if (!homeworlds_pyramid_is_valid(*ship) ||
-        homeworlds_pyramid_color(*ship) != (HomeworldsColor) step->target_color) {
-      continue;
-    }
-
-    HomeworldsPyramid built = *ship;
-    *ship = 0;
-    if (!homeworlds_backend_bank_put(&before, built)) {
-      continue;
-    }
-
-    reapplied = before;
-    if (!homeworlds_position_apply_forced_action_step(&reapplied, step) ||
-        !homeworlds_backend_positions_equal(&reapplied, &original)) {
-      continue;
-    }
-
-    *position = before;
-    return TRUE;
+  HomeworldsPyramid built = *ship;
+  *ship = 0;
+  if (!homeworlds_backend_bank_put(&before, built)) {
+    return FALSE;
   }
 
-  return FALSE;
+  reapplied = before;
+  if (!homeworlds_position_apply_forced_action_step(&reapplied, step) ||
+      !homeworlds_backend_positions_equal(&reapplied, position)) {
+    return FALSE;
+  }
+
+  *out_before = before;
+  return TRUE;
 }
 
 static gboolean homeworlds_backend_reverse_forced_action_step(HomeworldsPosition *position,
                                                               const HomeworldsTurnStep *step) {
+  guint system_index = HOMEWORLDS_INVALID_INDEX;
+
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(step != NULL, FALSE);
 
   switch ((HomeworldsStepKind) step->kind) {
     case HOMEWORLDS_STEP_BUILD:
-      return homeworlds_backend_reverse_build_step(position, step);
+      if (step->target_color > HOMEWORLDS_COLOR_BLUE ||
+          !homeworlds_position_resolve_system_ref(position, &step->actor.system, &system_index)) {
+        return FALSE;
+      }
+      for (guint ship_slot = 0; ship_slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++ship_slot) {
+        HomeworldsPosition before = {0};
+
+        if (!homeworlds_backend_reverse_build_step_at_slot(position, step, system_index, ship_slot, &before)) {
+          continue;
+        }
+
+        *position = before;
+        return TRUE;
+      }
+      return FALSE;
     case HOMEWORLDS_STEP_TRADE:
       return homeworlds_backend_reverse_trade_step(position, step);
     default:
@@ -1014,31 +1025,27 @@ static gboolean homeworlds_backend_reverse_forced_action_step(HomeworldsPosition
   }
 }
 
-static gboolean homeworlds_backend_forced_steps_commute_without_catastrophe(
+static gboolean homeworlds_backend_forced_steps_commute_from_before_previous(
     const HomeworldsMoveBuilderState *state,
     const HomeworldsMoveBuilderState *child_state,
     const HomeworldsTurnStep *previous_step,
-    const HomeworldsTurnStep *new_step) {
-  HomeworldsPosition before_previous = {0};
+    const HomeworldsTurnStep *new_step,
+    const HomeworldsPosition *before_previous) {
   HomeworldsPosition swapped = {0};
 
   g_return_val_if_fail(state != NULL, FALSE);
   g_return_val_if_fail(child_state != NULL, FALSE);
   g_return_val_if_fail(previous_step != NULL, FALSE);
   g_return_val_if_fail(new_step != NULL, FALSE);
+  g_return_val_if_fail(before_previous != NULL, FALSE);
 
-  before_previous = state->working_position;
-  if (!homeworlds_backend_reverse_forced_action_step(&before_previous, previous_step)) {
-    return FALSE;
-  }
-
-  if (homeworlds_backend_position_has_catastrophe(&before_previous) ||
+  if (homeworlds_backend_position_has_catastrophe(before_previous) ||
       homeworlds_backend_position_has_catastrophe(&state->working_position) ||
       homeworlds_backend_position_has_catastrophe(&child_state->working_position)) {
     return FALSE;
   }
 
-  swapped = before_previous;
+  swapped = *before_previous;
   if (!homeworlds_position_apply_forced_action_step(&swapped, new_step) ||
       homeworlds_backend_position_has_catastrophe(&swapped) ||
       !homeworlds_position_apply_forced_action_step(&swapped, previous_step)) {
@@ -1046,6 +1053,59 @@ static gboolean homeworlds_backend_forced_steps_commute_without_catastrophe(
   }
 
   return homeworlds_backend_positions_equal(&swapped, &child_state->working_position);
+}
+
+static gboolean homeworlds_backend_forced_steps_commute_without_catastrophe(
+    const HomeworldsMoveBuilderState *state,
+    const HomeworldsMoveBuilderState *child_state,
+    const HomeworldsTurnStep *previous_step,
+    const HomeworldsTurnStep *new_step) {
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(child_state != NULL, FALSE);
+  g_return_val_if_fail(previous_step != NULL, FALSE);
+  g_return_val_if_fail(new_step != NULL, FALSE);
+
+  if (previous_step->kind == HOMEWORLDS_STEP_BUILD) {
+    guint system_index = HOMEWORLDS_INVALID_INDEX;
+
+    if (previous_step->target_color > HOMEWORLDS_COLOR_BLUE ||
+        !homeworlds_position_resolve_system_ref(&state->working_position,
+                                                &previous_step->actor.system,
+                                                &system_index)) {
+      return FALSE;
+    }
+
+    for (guint ship_slot = 0; ship_slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++ship_slot) {
+      HomeworldsPosition before_previous = {0};
+
+      if (!homeworlds_backend_reverse_build_step_at_slot(&state->working_position,
+                                                         previous_step,
+                                                         system_index,
+                                                         ship_slot,
+                                                         &before_previous)) {
+        continue;
+      }
+      if (homeworlds_backend_forced_steps_commute_from_before_previous(state,
+                                                                       child_state,
+                                                                       previous_step,
+                                                                       new_step,
+                                                                       &before_previous)) {
+        return TRUE;
+      }
+    }
+    return FALSE;
+  }
+
+  HomeworldsPosition before_previous = state->working_position;
+  if (!homeworlds_backend_reverse_forced_action_step(&before_previous, previous_step)) {
+    return FALSE;
+  }
+
+  return homeworlds_backend_forced_steps_commute_from_before_previous(state,
+                                                                      child_state,
+                                                                      previous_step,
+                                                                      new_step,
+                                                                      &before_previous);
 }
 
 static gboolean homeworlds_backend_step_is_redundant_commutative_blue_trade(
