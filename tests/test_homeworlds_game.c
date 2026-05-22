@@ -544,11 +544,59 @@ static void test_static_evaluation_counts_largest_homeworld_ship_twice(void) {
 
   assert(test_system_add_ship(&position, 0, 0, homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL)));
   assert(test_system_add_ship(&position, 0, 0, homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE)));
-  assert(test_system_add_ship(&position, 1, 1, homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL)));
+  assert(test_system_add_ship(&position, 1, 1, homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL)));
   assert(test_system_add_ship(&position, 1, 1, homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW,
                                                                        HOMEWORLDS_SIZE_MEDIUM)));
 
   assert(homeworlds_position_evaluate_static(&position) == 20);
+}
+
+static void test_static_evaluation_assumes_empty_homeworld_setup_value(void) {
+  HomeworldsPosition position = {0};
+
+  homeworlds_position_init(&position);
+  position.phase = HOMEWORLDS_PHASE_PLAY;
+
+  assert(test_system_add_star(&position, 1, homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL)));
+  assert(test_system_add_star(&position, 1, homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_MEDIUM)));
+  assert(test_system_add_ship(&position, 1, 1, homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL)));
+
+  assert(homeworlds_position_evaluate_static(&position) == 40);
+}
+
+static void test_static_evaluation_penalizes_single_star_homeworld(void) {
+  HomeworldsPosition position = {0};
+
+  homeworlds_position_init(&position);
+  position.phase = HOMEWORLDS_PHASE_PLAY;
+
+  assert(test_system_add_star(&position, 0, homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL)));
+  assert(test_system_add_star(&position, 1, homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL)));
+  assert(test_system_add_star(&position, 1, homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_MEDIUM)));
+
+  assert(homeworlds_position_evaluate_static(&position) == -30);
+}
+
+static void test_static_evaluation_counts_buildable_colors_once_per_green_system(void) {
+  HomeworldsPosition position = {0};
+
+  homeworlds_position_init(&position);
+  position.phase = HOMEWORLDS_PHASE_PLAY;
+
+  assert(test_system_add_star(&position, 0, homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL)));
+  assert(test_system_add_star(&position, 0, homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_MEDIUM)));
+  assert(test_system_add_star(&position, 1, homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL)));
+  assert(test_system_add_star(&position, 1, homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_MEDIUM)));
+  assert(test_system_add_ship(&position, 0, 0, homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN,
+                                                                       HOMEWORLDS_SIZE_SMALL)));
+  assert(test_system_add_ship(&position, 0, 0, homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL)));
+  assert(test_system_add_ship(&position, 0, 0, homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE)));
+  assert(test_system_add_star(&position, 2, homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_MEDIUM)));
+  assert(test_system_add_star(&position, 2, homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_LARGE)));
+  assert(test_system_add_ship(&position, 2, 0, homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE,
+                                                                       HOMEWORLDS_SIZE_LARGE)));
+
+  assert(homeworlds_position_evaluate_static(&position) == 150);
 }
 
 static void test_position_ascii_formats_systems_by_reachability(void) {
@@ -741,6 +789,9 @@ int main(void) {
   test_ship_catastrophe_returns_orphaned_stars_to_bank();
   test_symbolic_catastrophe_move_does_not_finish_turn();
   test_static_evaluation_counts_largest_homeworld_ship_twice();
+  test_static_evaluation_assumes_empty_homeworld_setup_value();
+  test_static_evaluation_penalizes_single_star_homeworld();
+  test_static_evaluation_counts_buildable_colors_once_per_green_system();
   test_position_ascii_formats_systems_by_reachability();
   test_position_ascii_formats_empty_position();
   test_move_parse_failure_leaves_output_unchanged();
