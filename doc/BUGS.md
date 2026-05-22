@@ -1012,3 +1012,14 @@ move list for each child position and could block the UI for minutes.
 
 The fix makes forced-ply extension an explicit backend flag. Checkers opts in, while boop and Homeworlds leave it off,
 so their depth-0 child positions are statically evaluated immediately after terminal-outcome checks.
+
+## Settings dialog close left a hidden window pending destruction
+
+The settings dialog should disappear from GTK's toplevel window list as soon as the user saves or cancels it.
+
+The close path hid the dialog first and scheduled the actual destroy on a low-priority idle. Tests and users could open
+another settings dialog while the hidden one still existed, and order-sensitive GTK teardown could later trip over that
+stale toplevel.
+
+The fix destroys the modal directly from the save and cancel handlers, matching the simpler dialog lifecycle used by
+the other shared dialogs.

@@ -276,8 +276,9 @@ UI: the settings dialog is a small modal window with two checkboxes and `Cancel`
 simple GTK window pattern as the new-game and import dialogs. When the active profile also exposes a puzzle catalog,
 it adds a `Puzzle Progress` section with the number of solved puzzles out of the currently available puzzle catalog and
 a `Clear Progress` button that clears local attempt history plus the chooser status cache. Checkers counts every
-variant catalog; boop counts the zero-variant `puzzles/boop/` catalog. On first launch, `GGameApplication` presents
-this dialog automatically after
+variant catalog; boop counts the zero-variant `puzzles/boop/` catalog. Save and cancel destroy the modal immediately
+so repeated openings do not leave hidden settings windows pending in the GTK toplevel list. On first launch,
+`GGameApplication` presents this dialog automatically after
 creating the main window so the user can review the privacy controls before continuing.
 
 ## Puzzle Progress Reporting (`src/puzzle_progress.c`, `data/schemas/io.github.jeromea.gcheckers.gschema.xml`,

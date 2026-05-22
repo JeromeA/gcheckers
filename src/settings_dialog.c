@@ -25,23 +25,10 @@ static void ggame_window_settings_dialog_data_free(GGameWindowSettingsDialogData
   g_free(data);
 }
 
-static gboolean ggame_window_settings_dialog_destroy_hidden_cb(gpointer user_data) {
-  GtkWindow *dialog = user_data;
-  g_return_val_if_fail(GTK_IS_WINDOW(dialog), G_SOURCE_REMOVE);
-
-  gtk_window_destroy(dialog);
-  g_object_unref(dialog);
-  return G_SOURCE_REMOVE;
-}
-
 static void ggame_window_settings_dialog_close(GtkWindow *dialog) {
   g_return_if_fail(GTK_IS_WINDOW(dialog));
 
-  gtk_widget_set_visible(GTK_WIDGET(dialog), FALSE);
-  g_idle_add_full(G_PRIORITY_LOW,
-                  ggame_window_settings_dialog_destroy_hidden_cb,
-                  g_object_ref(dialog),
-                  NULL);
+  gtk_window_destroy(dialog);
 }
 
 static guint ggame_window_settings_dialog_add_catalog_entries(GHashTable *known_puzzle_ids, GPtrArray *entries) {
