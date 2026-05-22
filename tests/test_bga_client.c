@@ -88,6 +88,19 @@ static void test_bga_client_parse_login_response_success_true(void) {
   bga_login_result_clear(&result);
 }
 
+static void test_bga_client_parse_login_response_rejects_oversized_status(void) {
+  const char *body = "{\"status\":999999999999999999999,\"data\":{\"success\":true}}";
+  BgaLoginResult result = {0};
+  g_autoptr(GError) error = NULL;
+
+  gboolean ok = bga_client_parse_login_response(body, &result, &error);
+  g_assert_false(ok);
+  g_assert_error(error, g_quark_from_static_string("bga-client-error"), 12);
+  g_assert_cmpint(result.kind, ==, BGA_LOGIN_RESULT_PARSE_ERROR);
+
+  bga_login_result_clear(&result);
+}
+
 static void test_bga_client_parse_checkers_history_games(void) {
   const char *body =
       "{"
@@ -206,6 +219,8 @@ int main(int argc, char **argv) {
                   test_bga_client_parse_login_response_success_false);
   g_test_add_func("/bga-client/parse-login-response-success-true",
                   test_bga_client_parse_login_response_success_true);
+  g_test_add_func("/bga-client/parse-login-response-rejects-oversized-status",
+                  test_bga_client_parse_login_response_rejects_oversized_status);
   g_test_add_func("/bga-client/parse-checkers-history-games",
                   test_bga_client_parse_checkers_history_games);
   g_test_add_func("/bga-client/live-login-logs-response", test_bga_client_live_login_logs_response);

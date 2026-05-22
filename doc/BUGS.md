@@ -1023,3 +1023,11 @@ stale toplevel.
 
 The fix destroys the modal directly from the save and cancel handlers, matching the simpler dialog lifecycle used by
 the other shared dialogs.
+
+## BoardGameArena integer parsing narrowed oversized values
+
+BoardGameArena login responses include integer fields such as `status`. The parser extracted decimal JSON values into
+a 64-bit integer and then narrowed them to `int` without checking the target range.
+
+Malformed or unexpected oversized values could wrap before the login-response state machine inspected them. The fix
+rejects parse failures, range errors, and values outside the local `int` range before assignment.

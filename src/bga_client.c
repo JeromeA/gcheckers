@@ -1,6 +1,7 @@
 #include "bga_client.h"
 
 #include <curl/curl.h>
+#include <errno.h>
 
 static const char *bga_client_home_url = "https://en.boardgamearena.com/";
 static const char *bga_client_login_url = "https://en.boardgamearena.com/account/auth/loginUserWithPassword.html";
@@ -87,7 +88,15 @@ static gboolean bga_client_json_extract_int(const char *body, const char *key, i
     return FALSE;
   }
 
-  *out_value = (int)g_ascii_strtoll(value, NULL, 10);
+  errno = 0;
+  char *end = NULL;
+  gint64 parsed = g_ascii_strtoll(value, &end, 10);
+  if (end == value || end == NULL || *end != '\0' || errno == ERANGE ||
+      parsed < G_MININT || parsed > G_MAXINT) {
+    return FALSE;
+  }
+
+  *out_value = (int)parsed;
   return TRUE;
 }
 
