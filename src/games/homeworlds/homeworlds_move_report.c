@@ -29,6 +29,22 @@ static GHashTable *homeworlds_move_report_build_move_set(const GameBackendMoveLi
   return move_set;
 }
 
+static const char *homeworlds_move_report_count_word(gsize count) {
+  return count == 1 ? "move" : "moves";
+}
+
+static void homeworlds_move_report_append_count_header(GString *text, gsize good_move_count, gsize all_move_count) {
+  g_return_if_fail(text != NULL);
+
+  g_string_append(text, "Move counts:\n");
+  g_string_append_printf(text, "good_moves(): %zu %s\n",
+                         good_move_count,
+                         homeworlds_move_report_count_word(good_move_count));
+  g_string_append_printf(text, "all moves: %zu %s\n\n",
+                         all_move_count,
+                         homeworlds_move_report_count_word(all_move_count));
+}
+
 static void homeworlds_move_report_append_move_list_text(GString *text,
                                                          const GameBackendMoveList *moves,
                                                          const char *title,
@@ -65,8 +81,6 @@ char *homeworlds_move_report_format(const HomeworldsPosition *position) {
   GameBackendMoveList all_moves = {0};
   GString *text = NULL;
   g_autoptr(GHashTable) good_move_set = NULL;
-  g_autofree char *good_title = NULL;
-  g_autofree char *other_title = NULL;
 
   g_return_val_if_fail(position != NULL, NULL);
 
@@ -83,11 +97,13 @@ char *homeworlds_move_report_format(const HomeworldsPosition *position) {
   text = g_string_new(NULL);
   g_return_val_if_fail(text != NULL, NULL);
 
-  good_title = g_strdup_printf("good_moves() (%zu)", good_moves.count);
-  other_title = g_strdup_printf("all possible moves minus good_moves() (%zu total before filtering)", all_moves.count);
-  homeworlds_move_report_append_move_list_text(text, &good_moves, good_title, NULL);
+  homeworlds_move_report_append_count_header(text, good_moves.count, all_moves.count);
+  homeworlds_move_report_append_move_list_text(text, &good_moves, "good_moves()", NULL);
   g_string_append_c(text, '\n');
-  homeworlds_move_report_append_move_list_text(text, &all_moves, other_title, good_move_set);
+  homeworlds_move_report_append_move_list_text(text,
+                                               &all_moves,
+                                               "all possible moves minus good_moves()",
+                                               good_move_set);
 
   homeworlds_game_backend.move_list_free(&good_moves);
   homeworlds_move_list_free(&all_moves);

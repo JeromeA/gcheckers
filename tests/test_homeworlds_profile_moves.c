@@ -31,6 +31,7 @@ static void test_homeworlds_profile_moves_prints_report(void) {
   g_assert_nonnull(strstr(stdout_text, "Current position after 2 generated moves:"));
   g_assert_nonnull(strstr(stdout_text, "b3 R2G1 -\n\n- B1R3 g3"));
   g_assert_nonnull(strstr(stdout_text, "Move report after 2 generated moves:"));
+  g_assert_nonnull(strstr(stdout_text, "Move counts:\ngood_moves(): 1 move\nall moves: 6 moves\n\n"));
   g_assert_nonnull(strstr(stdout_text, "good_moves()"));
   g_assert_nonnull(strstr(stdout_text, "all possible moves minus good_moves()"));
   g_assert_true(strstr(stdout_text, "Generated moves (2 requested):") <

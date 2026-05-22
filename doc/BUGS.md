@@ -988,6 +988,18 @@ not reject an empty `move` portion when the value started with a colon, such as 
 
 The fix rejects empty analysis move text before accepting the scored move entry.
 
+## Homeworlds move report froze the UI when it contained tens of thousands of lines
+
+The Homeworlds move report should remain scrollable and selectable even when a position has a very large number of
+diagnostic legal moves.
+
+The side panel rendered the whole report as one selectable, wrapped `GtkLabel`. Large reports could reach tens of
+thousands of lines, and GTK/Pango repeatedly measured that single wrapped label during layout. In practice the main
+thread could spend all its time scanning the report text and stop responding.
+
+The fix replaces the report label with a read-only, wrapped `GtkTextView` backed by a `GtkTextBuffer`, so the report is
+handled by GTK's text widget instead of label measurement.
+
 ## Homeworlds depth-0 AI generated child move lists only to detect forced moves
 
 Depth-0 AI should score each candidate move by applying it once and statically evaluating the child position for games

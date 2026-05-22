@@ -52,6 +52,20 @@ static GtkWidget *test_homeworlds_find_widget_named(GtkWidget *root, const char 
   return NULL;
 }
 
+static char *test_homeworlds_get_text_view_text(GtkWidget *text_view) {
+  GtkTextBuffer *buffer = NULL;
+  GtkTextIter start_iter;
+  GtkTextIter end_iter;
+
+  g_return_val_if_fail(GTK_IS_TEXT_VIEW(text_view), NULL);
+
+  buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(text_view));
+  g_return_val_if_fail(GTK_IS_TEXT_BUFFER(buffer), NULL);
+
+  gtk_text_buffer_get_bounds(buffer, &start_iter, &end_iter);
+  return gtk_text_buffer_get_text(buffer, &start_iter, &end_iter, FALSE);
+}
+
 static GtkWidget *test_homeworlds_find_widget_for_action(GtkWidget *root, const char *action_name) {
   g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
   g_return_val_if_fail(action_name != NULL, NULL);
@@ -1647,17 +1661,37 @@ static void test_homeworlds_view_move_report_lists_good_and_other_moves(void) {
   GtkWidget *root = homeworlds_view_get_widget(view);
   GtkWidget *move_report = NULL;
   HomeworldsPosition position = {0};
-  const char *text = NULL;
+  g_autofree char *text = NULL;
+  const char *count_header = NULL;
+  const char *good_count = NULL;
+  const char *all_count = NULL;
+  const char *good_list = NULL;
+  const char *other_list = NULL;
 
   test_homeworlds_prepare_play_position(&position);
   g_assert_true(ggame_model_set_position(model, &position));
   move_report = test_homeworlds_find_widget_named(root, "homeworlds-move-report");
   g_assert_nonnull(move_report);
-  g_assert_true(GTK_IS_LABEL(move_report));
+  g_assert_true(GTK_IS_TEXT_VIEW(move_report));
+  g_assert_false(gtk_text_view_get_editable(GTK_TEXT_VIEW(move_report)));
+  g_assert_false(gtk_text_view_get_cursor_visible(GTK_TEXT_VIEW(move_report)));
+  g_assert_cmpint(gtk_text_view_get_wrap_mode(GTK_TEXT_VIEW(move_report)), ==, GTK_WRAP_WORD_CHAR);
 
-  text = gtk_label_get_text(GTK_LABEL(move_report));
-  g_assert_nonnull(strstr(text, "good_moves()"));
-  g_assert_nonnull(strstr(text, "all possible moves minus good_moves()"));
+  text = test_homeworlds_get_text_view_text(move_report);
+  count_header = strstr(text, "Move counts:\n");
+  good_count = strstr(text, "good_moves(): ");
+  all_count = strstr(text, "all moves: ");
+  good_list = strstr(text, "\ngood_moves():\n");
+  other_list = strstr(text, "\nall possible moves minus good_moves():\n");
+  g_assert_nonnull(count_header);
+  g_assert_nonnull(good_count);
+  g_assert_nonnull(all_count);
+  g_assert_nonnull(good_list);
+  g_assert_nonnull(other_list);
+  g_assert_true(count_header < good_list);
+  g_assert_true(good_count < good_list);
+  g_assert_true(all_count < good_list);
+  g_assert_true(good_list < other_list);
   g_assert_nonnull(strstr(text, "pass"));
   g_assert_nonnull(strstr(text, "H1g3- pass pass pass"));
 
@@ -1671,25 +1705,26 @@ static void test_homeworlds_view_move_report_can_be_disabled(void) {
   GtkWidget *root = homeworlds_view_get_widget(view);
   GtkWidget *move_report = NULL;
   HomeworldsPosition position = {0};
-  const char *text = NULL;
+  g_autofree char *text = NULL;
 
   move_report = test_homeworlds_find_widget_named(root, "homeworlds-move-report");
   g_assert_nonnull(move_report);
-  g_assert_true(GTK_IS_LABEL(move_report));
+  g_assert_true(GTK_IS_TEXT_VIEW(move_report));
 
   homeworlds_view_set_move_report_enabled(view, FALSE);
   g_assert_false(homeworlds_view_get_move_report_enabled(view));
   test_homeworlds_prepare_play_position(&position);
   g_assert_true(ggame_model_set_position(model, &position));
 
-  text = gtk_label_get_text(GTK_LABEL(move_report));
+  text = test_homeworlds_get_text_view_text(move_report);
   g_assert_cmpstr(text, ==, "Move report disabled.");
   g_assert_null(strstr(text, "good_moves()"));
   g_assert_null(strstr(text, "H1g3- pass pass pass"));
 
   homeworlds_view_set_move_report_enabled(view, TRUE);
   g_assert_true(homeworlds_view_get_move_report_enabled(view));
-  text = gtk_label_get_text(GTK_LABEL(move_report));
+  g_clear_pointer(&text, g_free);
+  text = test_homeworlds_get_text_view_text(move_report);
   g_assert_nonnull(strstr(text, "good_moves()"));
   g_assert_nonnull(strstr(text, "H1g3- pass pass pass"));
 
@@ -1706,7 +1741,7 @@ static void test_homeworlds_board_host_initial_move_report_state_is_applied(void
   HomeworldsView *view = NULL;
   GtkWidget *move_report = NULL;
   HomeworldsPosition position = {0};
-  const char *text = NULL;
+  g_autofree char *text = NULL;
 
   test_homeworlds_prepare_play_position(&position);
   g_assert_true(ggame_model_set_position(model, &position));
@@ -1721,9 +1756,9 @@ static void test_homeworlds_board_host_initial_move_report_state_is_applied(void
 
   move_report = test_homeworlds_find_widget_named(host, "homeworlds-move-report");
   g_assert_nonnull(move_report);
-  g_assert_true(GTK_IS_LABEL(move_report));
+  g_assert_true(GTK_IS_TEXT_VIEW(move_report));
 
-  text = gtk_label_get_text(GTK_LABEL(move_report));
+  text = test_homeworlds_get_text_view_text(move_report);
   g_assert_cmpstr(text, ==, "Move report disabled.");
   g_assert_null(strstr(text, "good_moves()"));
   g_assert_null(strstr(text, "H1g3- pass pass pass"));
@@ -1742,14 +1777,14 @@ static void test_homeworlds_window_move_report_action_toggles_view(void) {
   HomeworldsPosition position = {0};
   GAction *action = NULL;
   g_autoptr(GVariant) state = NULL;
-  const char *text = NULL;
+  g_autofree char *text = NULL;
 
   test_homeworlds_prepare_play_position(&position);
   g_assert_true(ggame_model_set_position(model, &position));
 
   move_report = test_homeworlds_find_widget_named(root, "homeworlds-move-report");
   g_assert_nonnull(move_report);
-  g_assert_true(GTK_IS_LABEL(move_report));
+  g_assert_true(GTK_IS_TEXT_VIEW(move_report));
   action = g_action_map_lookup_action(G_ACTION_MAP(window), "view-show-move-report");
   g_assert_nonnull(action);
   state = g_action_get_state(action);
@@ -1757,17 +1792,20 @@ static void test_homeworlds_window_move_report_action_toggles_view(void) {
   g_assert_true(g_variant_get_boolean(state));
   g_assert_true(g_action_get_enabled(action));
   g_assert_true(homeworlds_view_get_move_report_enabled(view));
-  g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(move_report)), "good_moves()"));
+  text = test_homeworlds_get_text_view_text(move_report);
+  g_assert_nonnull(strstr(text, "good_moves()"));
 
   g_action_group_change_action_state(G_ACTION_GROUP(window),
                                      "view-show-move-report",
                                      g_variant_new_boolean(FALSE));
   g_assert_false(homeworlds_view_get_move_report_enabled(view));
-  text = gtk_label_get_text(GTK_LABEL(move_report));
+  g_clear_pointer(&text, g_free);
+  text = test_homeworlds_get_text_view_text(move_report);
   g_assert_cmpstr(text, ==, "Move report disabled.");
 
   g_assert_true(ggame_model_set_position(model, &position));
-  text = gtk_label_get_text(GTK_LABEL(move_report));
+  g_clear_pointer(&text, g_free);
+  text = test_homeworlds_get_text_view_text(move_report);
   g_assert_cmpstr(text, ==, "Move report disabled.");
   g_assert_null(strstr(text, "good_moves()"));
 
@@ -1775,7 +1813,8 @@ static void test_homeworlds_window_move_report_action_toggles_view(void) {
                                      "view-show-move-report",
                                      g_variant_new_boolean(TRUE));
   g_assert_true(homeworlds_view_get_move_report_enabled(view));
-  text = gtk_label_get_text(GTK_LABEL(move_report));
+  g_clear_pointer(&text, g_free);
+  text = test_homeworlds_get_text_view_text(move_report);
   g_assert_nonnull(strstr(text, "good_moves()"));
   g_assert_nonnull(strstr(text, "H1g3- pass pass pass"));
 

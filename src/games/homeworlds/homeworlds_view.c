@@ -131,7 +131,7 @@ struct _HomeworldsView {
   GtkWidget *candidate_box;
   GtkWidget *catastrophe_box;
   GtkWidget *last_move_label;
-  GtkWidget *move_report_label;
+  GtkWidget *move_report_view;
   gboolean move_report_enabled;
   GameBackendMoveBuilder builder;
   gboolean builder_ready;
@@ -488,6 +488,55 @@ static GtkWidget *homeworlds_view_new_text_panel_button(const char *label) {
   button = gtk_button_new_with_label(label);
   homeworlds_view_constrain_text_panel_button(button);
   return button;
+}
+
+static GtkWidget *homeworlds_view_new_move_report_view(void) {
+  GtkWidget *text_view = NULL;
+
+  text_view = gtk_text_view_new();
+  gtk_widget_set_name(text_view, "homeworlds-move-report");
+  gtk_widget_set_halign(text_view, GTK_ALIGN_FILL);
+  gtk_widget_set_hexpand(text_view, TRUE);
+  gtk_text_view_set_editable(GTK_TEXT_VIEW(text_view), FALSE);
+  gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(text_view), FALSE);
+  gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(text_view), GTK_WRAP_WORD_CHAR);
+  gtk_text_view_set_monospace(GTK_TEXT_VIEW(text_view), TRUE);
+  return text_view;
+}
+
+static GtkWidget *homeworlds_view_new_move_report_scroller(GtkWidget **out_text_view) {
+  GtkWidget *scroller = NULL;
+  GtkWidget *text_view = NULL;
+
+  g_return_val_if_fail(out_text_view != NULL, NULL);
+
+  scroller = gtk_scrolled_window_new();
+  gtk_widget_set_name(scroller, "homeworlds-move-report-scroller");
+  gtk_widget_set_halign(scroller, GTK_ALIGN_FILL);
+  gtk_widget_set_hexpand(scroller, TRUE);
+  gtk_widget_set_vexpand(scroller, TRUE);
+  gtk_scrolled_window_set_min_content_width(GTK_SCROLLED_WINDOW(scroller), HOMEWORLDS_VIEW_TEXT_PANEL_CONTENT_WIDTH);
+  gtk_scrolled_window_set_max_content_width(GTK_SCROLLED_WINDOW(scroller), HOMEWORLDS_VIEW_TEXT_PANEL_CONTENT_WIDTH);
+  gtk_scrolled_window_set_min_content_height(GTK_SCROLLED_WINDOW(scroller), 220);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroller), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+
+  text_view = homeworlds_view_new_move_report_view();
+  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroller), text_view);
+  *out_text_view = text_view;
+  return scroller;
+}
+
+static void homeworlds_view_set_move_report_text(HomeworldsView *view, const char *text) {
+  GtkTextBuffer *buffer = NULL;
+
+  g_return_if_fail(view != NULL);
+  g_return_if_fail(GTK_IS_TEXT_VIEW(view->move_report_view));
+  g_return_if_fail(text != NULL);
+
+  buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view->move_report_view));
+  g_return_if_fail(GTK_IS_TEXT_BUFFER(buffer));
+
+  gtk_text_buffer_set_text(buffer, text, -1);
 }
 
 static gboolean homeworlds_view_stage_uses_bank_choices(const HomeworldsView *view) {
@@ -2491,20 +2540,20 @@ static void homeworlds_view_update_move_report(HomeworldsView *view) {
   g_autofree char *text = NULL;
 
   g_return_if_fail(view != NULL);
-  g_return_if_fail(GTK_IS_LABEL(view->move_report_label));
+  g_return_if_fail(GTK_IS_TEXT_VIEW(view->move_report_view));
 
   if (!view->move_report_enabled) {
-    gtk_label_set_text(GTK_LABEL(view->move_report_label), "Move report disabled.");
+    homeworlds_view_set_move_report_text(view, "Move report disabled.");
     return;
   }
 
   position = ggame_model_peek_position(view->model);
   if (position == NULL) {
-    gtk_label_set_text(GTK_LABEL(view->move_report_label), "No moves.");
+    homeworlds_view_set_move_report_text(view, "No moves.");
     return;
   }
   text = homeworlds_move_report_format(position);
-  gtk_label_set_text(GTK_LABEL(view->move_report_label), text != NULL ? text : "No moves.");
+  homeworlds_view_set_move_report_text(view, text != NULL ? text : "No moves.");
 }
 
 static GtkWidget *homeworlds_view_create_bank_button(HomeworldsView *view, HomeworldsPyramid pyramid, guint count) {
@@ -2715,6 +2764,7 @@ static HomeworldsView *homeworlds_view_new_with_move_report(GGameModel *model, g
   GtkWidget *bank_frame = NULL;
   GtkWidget *side_panel = NULL;
   GtkWidget *side_scroller = NULL;
+  GtkWidget *move_report_scroller = NULL;
   GtkWidget *heading = NULL;
   GtkWidget *section = NULL;
 
@@ -2862,12 +2912,8 @@ static HomeworldsView *homeworlds_view_new_with_move_report(GGameModel *model, g
   gtk_label_set_xalign(GTK_LABEL(section), 0.0f);
   gtk_box_append(GTK_BOX(side_panel), section);
 
-  view->move_report_label = gtk_label_new("");
-  gtk_widget_set_name(view->move_report_label, "homeworlds-move-report");
-  gtk_label_set_selectable(GTK_LABEL(view->move_report_label), TRUE);
-  homeworlds_view_constrain_text_panel_label(view->move_report_label);
-  gtk_label_set_xalign(GTK_LABEL(view->move_report_label), 0.0f);
-  gtk_box_append(GTK_BOX(side_panel), view->move_report_label);
+  move_report_scroller = homeworlds_view_new_move_report_scroller(&view->move_report_view);
+  gtk_box_append(GTK_BOX(side_panel), move_report_scroller);
 
   homeworlds_view_refresh(view);
   return view;
