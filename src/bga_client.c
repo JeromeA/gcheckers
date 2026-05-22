@@ -160,9 +160,16 @@ static size_t bga_client_write_cb(void *contents, size_t size, size_t nmemb, voi
   BgaCurlWriteContext *ctx = user_data;
   g_return_val_if_fail(ctx != NULL, 0);
   g_return_val_if_fail(ctx->buffer != NULL, 0);
+  g_return_val_if_fail(contents != NULL || size == 0 || nmemb == 0, 0);
 
+  if (size != 0 && nmemb > G_MAXSIZE / size) {
+    return 0;
+  }
   size_t bytes = size * nmemb;
   if (bytes == 0) {
+    return 0;
+  }
+  if (bytes > (size_t)G_MAXSSIZE) {
     return 0;
   }
 

@@ -988,6 +988,14 @@ not reject an empty `move` portion when the value started with a colon, such as 
 
 The fix rejects empty analysis move text before accepting the scored move entry.
 
+## BGA response buffering trusted unchecked curl chunk sizes
+
+The BoardGameArena client appends response data from libcurl using the callback's `size * nmemb` byte count. That
+product was computed directly and then narrowed to `gssize` for `g_string_append_len()`, so a malformed or impossible
+callback size could wrap before the append.
+
+The fix checks the multiplication and the `gssize` range before appending response bytes.
+
 ## Homeworlds move report froze the UI when it contained tens of thousands of lines
 
 The Homeworlds move report should remain scrollable and selectable even when a position has a very large number of
