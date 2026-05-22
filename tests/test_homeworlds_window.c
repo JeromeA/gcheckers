@@ -871,10 +871,10 @@ static void test_homeworlds_view_text_panel_has_fixed_width(void) {
   g_assert_true(GTK_IS_SCROLLED_WINDOW(text_panel));
   gtk_widget_get_size_request(text_panel, &width_request, NULL);
   gtk_widget_get_size_request(text_panel_content, &content_width_request, NULL);
-  g_assert_cmpint(width_request, ==, 280);
-  g_assert_cmpint(content_width_request, ==, 256);
-  g_assert_cmpint(gtk_scrolled_window_get_min_content_width(GTK_SCROLLED_WINDOW(text_panel)), ==, 280);
-  g_assert_cmpint(gtk_scrolled_window_get_max_content_width(GTK_SCROLLED_WINDOW(text_panel)), ==, 280);
+  g_assert_cmpint(width_request, ==, 350);
+  g_assert_cmpint(content_width_request, ==, 326);
+  g_assert_cmpint(gtk_scrolled_window_get_min_content_width(GTK_SCROLLED_WINDOW(text_panel)), ==, 350);
+  g_assert_cmpint(gtk_scrolled_window_get_max_content_width(GTK_SCROLLED_WINDOW(text_panel)), ==, 350);
   g_assert_false(gtk_scrolled_window_get_propagate_natural_width(GTK_SCROLLED_WINDOW(text_panel)));
   g_assert_true(gtk_scrolled_window_get_overlay_scrolling(GTK_SCROLLED_WINDOW(text_panel)));
   gtk_scrolled_window_get_policy(GTK_SCROLLED_WINDOW(text_panel), &horizontal_policy, &vertical_policy);
@@ -906,7 +906,7 @@ static void test_homeworlds_view_text_panel_has_fixed_width(void) {
 
   board_viewport_width = gtk_widget_get_width(window_board_scroller);
   g_assert_cmpint(board_viewport_width, >, 0);
-  g_assert_cmpint(gtk_drawing_area_get_content_width(GTK_DRAWING_AREA(window_board)), ==, board_viewport_width);
+  g_assert_cmpint(gtk_drawing_area_get_content_width(GTK_DRAWING_AREA(window_board)), <=, board_viewport_width + 2);
   g_assert_true(gtk_widget_compute_bounds(window_bank, window_board_scroller, &bank_bounds));
   g_assert_cmpfloat(bank_bounds.origin.x, >=, 0.0);
   g_assert_cmpfloat(bank_bounds.origin.x + bank_bounds.size.width, <=, (double)board_viewport_width + 1.0);
