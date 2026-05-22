@@ -1094,3 +1094,15 @@ check for range errors.
 
 Oversized values could therefore be clamped by the C library and accepted as real history data. The fix rejects numeric
 conversion range errors while loading history.
+
+## Homeworlds good moves kept equivalent sacrifice follow-ups
+
+Large green sacrifices can generate equivalent build permutations, such as building twice at one system and once at
+another system in different adjacent orders. Those permutations should not all be searched when the bank supply makes
+the swapped order reach the same final position.
+
+The good-move filter only had a commutation proof for blue-sacrifice trades. The fix generalizes that proof to green
+builds by reversing the previous build, trying the swapped order, and pruning only when the swap is legal,
+position-equivalent, and catastrophe-free. Yellow-sacrifice route tests also cover the existing rule that repeated
+moves of the same ship do not keep an irrelevant intermediate system when the original source could have reached the
+final system directly.

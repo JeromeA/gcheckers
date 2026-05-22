@@ -189,6 +189,25 @@ static gint homeworlds_backend_compare_trade_steps(const HomeworldsTurnStep *lef
   return 0;
 }
 
+static gint homeworlds_backend_compare_build_steps(const HomeworldsTurnStep *left,
+                                                   const HomeworldsTurnStep *right) {
+  gint system_order = 0;
+
+  g_return_val_if_fail(left != NULL, 0);
+  g_return_val_if_fail(right != NULL, 0);
+  g_return_val_if_fail(left->kind == HOMEWORLDS_STEP_BUILD, 0);
+  g_return_val_if_fail(right->kind == HOMEWORLDS_STEP_BUILD, 0);
+
+  system_order = homeworlds_backend_compare_system_refs(&left->actor.system, &right->actor.system);
+  if (system_order != 0) {
+    return system_order;
+  }
+  if (left->target_color != right->target_color) {
+    return left->target_color < right->target_color ? -1 : 1;
+  }
+  return 0;
+}
+
 static gboolean homeworlds_backend_count_pyramid(HomeworldsPyramid pyramid, guint counts[13]) {
   g_return_val_if_fail(counts != NULL, FALSE);
 
@@ -829,6 +848,7 @@ static gboolean homeworlds_backend_system_for_ref_or_star(const HomeworldsPositi
 
 static gboolean homeworlds_backend_step_is_redundant_yellow_sacrifice_hop(
     const HomeworldsMoveBuilderState *state,
+    const HomeworldsMoveBuilderState *child_state,
     const HomeworldsTurnStep *step) {
   HomeworldsSystemRef origin_ref = {0};
   HomeworldsSystem origin_system = {0};
@@ -837,7 +857,13 @@ static gboolean homeworlds_backend_step_is_redundant_yellow_sacrifice_hop(
   guint target_system_index = HOMEWORLDS_INVALID_INDEX;
 
   g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(child_state != NULL, FALSE);
   g_return_val_if_fail(step != NULL, FALSE);
+
+  if (homeworlds_backend_position_has_catastrophe(&state->working_position) ||
+      homeworlds_backend_position_has_catastrophe(&child_state->working_position)) {
+    return FALSE;
+  }
 
   if (!homeworlds_backend_find_yellow_sacrifice_move_origin(state, step, &origin_ref)) {
     return FALSE;
@@ -929,7 +955,66 @@ static gboolean homeworlds_backend_reverse_trade_step(HomeworldsPosition *positi
   return FALSE;
 }
 
-static gboolean homeworlds_backend_blue_trades_commute_without_catastrophe(
+static gboolean homeworlds_backend_reverse_build_step(HomeworldsPosition *position,
+                                                      const HomeworldsTurnStep *step) {
+  HomeworldsPosition original = {0};
+  guint system_index = HOMEWORLDS_INVALID_INDEX;
+
+  g_return_val_if_fail(position != NULL, FALSE);
+  g_return_val_if_fail(step != NULL, FALSE);
+  g_return_val_if_fail(step->kind == HOMEWORLDS_STEP_BUILD, FALSE);
+
+  if (step->target_color > HOMEWORLDS_COLOR_BLUE ||
+      !homeworlds_position_resolve_system_ref(position, &step->actor.system, &system_index)) {
+    return FALSE;
+  }
+
+  original = *position;
+  for (guint ship_slot = 0; ship_slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++ship_slot) {
+    HomeworldsPosition before = original;
+    HomeworldsPosition reapplied = {0};
+    HomeworldsPyramid *ship = &before.systems[system_index].ships[before.turn][ship_slot];
+
+    if (!homeworlds_pyramid_is_valid(*ship) ||
+        homeworlds_pyramid_color(*ship) != (HomeworldsColor) step->target_color) {
+      continue;
+    }
+
+    HomeworldsPyramid built = *ship;
+    *ship = 0;
+    if (!homeworlds_backend_bank_put(&before, built)) {
+      continue;
+    }
+
+    reapplied = before;
+    if (!homeworlds_position_apply_forced_action_step(&reapplied, step) ||
+        !homeworlds_backend_positions_equal(&reapplied, &original)) {
+      continue;
+    }
+
+    *position = before;
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
+static gboolean homeworlds_backend_reverse_forced_action_step(HomeworldsPosition *position,
+                                                              const HomeworldsTurnStep *step) {
+  g_return_val_if_fail(position != NULL, FALSE);
+  g_return_val_if_fail(step != NULL, FALSE);
+
+  switch ((HomeworldsStepKind) step->kind) {
+    case HOMEWORLDS_STEP_BUILD:
+      return homeworlds_backend_reverse_build_step(position, step);
+    case HOMEWORLDS_STEP_TRADE:
+      return homeworlds_backend_reverse_trade_step(position, step);
+    default:
+      return FALSE;
+  }
+}
+
+static gboolean homeworlds_backend_forced_steps_commute_without_catastrophe(
     const HomeworldsMoveBuilderState *state,
     const HomeworldsMoveBuilderState *child_state,
     const HomeworldsTurnStep *previous_step,
@@ -941,11 +1026,9 @@ static gboolean homeworlds_backend_blue_trades_commute_without_catastrophe(
   g_return_val_if_fail(child_state != NULL, FALSE);
   g_return_val_if_fail(previous_step != NULL, FALSE);
   g_return_val_if_fail(new_step != NULL, FALSE);
-  g_return_val_if_fail(previous_step->kind == HOMEWORLDS_STEP_TRADE, FALSE);
-  g_return_val_if_fail(new_step->kind == HOMEWORLDS_STEP_TRADE, FALSE);
 
   before_previous = state->working_position;
-  if (!homeworlds_backend_reverse_trade_step(&before_previous, previous_step)) {
+  if (!homeworlds_backend_reverse_forced_action_step(&before_previous, previous_step)) {
     return FALSE;
   }
 
@@ -988,7 +1071,33 @@ static gboolean homeworlds_backend_step_is_redundant_commutative_blue_trade(
     return FALSE;
   }
 
-  return homeworlds_backend_blue_trades_commute_without_catastrophe(state, child_state, previous_step, step);
+  return homeworlds_backend_forced_steps_commute_without_catastrophe(state, child_state, previous_step, step);
+}
+
+static gboolean homeworlds_backend_step_is_redundant_commutative_green_build(
+    const HomeworldsMoveBuilderState *state,
+    const HomeworldsMoveBuilderState *child_state,
+    const HomeworldsTurnStep *step) {
+  const HomeworldsTurnStep *previous_step = NULL;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(child_state != NULL, FALSE);
+  g_return_val_if_fail(step != NULL, FALSE);
+
+  if (step->kind != HOMEWORLDS_STEP_BUILD ||
+      state->pending_actions_remaining == 0 ||
+      state->forced_action_color != HOMEWORLDS_COLOR_GREEN ||
+      state->move.step_count == 0) {
+    return FALSE;
+  }
+
+  previous_step = &state->move.steps[state->move.step_count - 1];
+  if (previous_step->kind != HOMEWORLDS_STEP_BUILD ||
+      homeworlds_backend_compare_build_steps(previous_step, step) <= 0) {
+    return FALSE;
+  }
+
+  return homeworlds_backend_forced_steps_commute_without_catastrophe(state, child_state, previous_step, step);
 }
 
 static gboolean homeworlds_backend_child_state_is_good_after_step(
@@ -1008,8 +1117,9 @@ static gboolean homeworlds_backend_child_state_is_good_after_step(
          !homeworlds_backend_step_is_redundant_small_sacrifice(state, step) &&
          !homeworlds_backend_step_creates_unfavorable_build_catastrophe(state, child_state, step) &&
          !homeworlds_backend_step_enters_unfavorable_catastrophe(state, child_state, step) &&
-         !homeworlds_backend_step_is_redundant_yellow_sacrifice_hop(state, step) &&
-         !homeworlds_backend_step_is_redundant_commutative_blue_trade(state, child_state, step);
+         !homeworlds_backend_step_is_redundant_yellow_sacrifice_hop(state, child_state, step) &&
+         !homeworlds_backend_step_is_redundant_commutative_blue_trade(state, child_state, step) &&
+         !homeworlds_backend_step_is_redundant_commutative_green_build(state, child_state, step);
 }
 
 static gboolean homeworlds_backend_move_has_pass(const HomeworldsMove *move) {
