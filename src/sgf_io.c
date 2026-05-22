@@ -405,7 +405,7 @@ static gboolean sgf_io_parse_analysis_stats(const char *stats_text, SgfNodeAnaly
   g_auto(GStrv) fields = g_strsplit(stats_text, ";", -1);
   for (guint i = 0; fields[i] != NULL; ++i) {
     if (fields[i][0] == '\0') {
-      continue;
+      return FALSE;
     }
 
     g_auto(GStrv) pair = g_strsplit(fields[i], "=", 2);

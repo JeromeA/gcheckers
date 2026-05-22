@@ -515,6 +515,17 @@ static void test_sgf_io_rejects_negative_analysis_stats(void) {
   g_assert_error(error, g_quark_from_static_string("sgf-io-error"), 2);
 }
 
+static void test_sgf_io_rejects_empty_analysis_stats_field(void) {
+  const char *content =
+      "(;FF[4]CA[UTF-8]AP[gcheckers]GM[40]GCAS[nodes=1;tt_probes=0;])";
+
+  g_autoptr(SgfTree) loaded = NULL;
+  g_autoptr(GError) error = NULL;
+  gboolean ok = sgf_io_load_data(content, &loaded, &error);
+  g_assert_false(ok);
+  g_assert_error(error, g_quark_from_static_string("sgf-io-error"), 2);
+}
+
 static void test_sgf_io_rejects_empty_analysis_move_text(void) {
   const char *content =
       "(;FF[4]CA[UTF-8]AP[gcheckers]GM[40]GCAN[:12:345])";
@@ -661,6 +672,8 @@ int main(int argc, char **argv) {
       g_test_add_func("/sgf-io/analysis-roundtrip", test_sgf_io_roundtrip_node_analysis_properties);
       g_test_add_func("/sgf-io/load-legacy-analysis-move", test_sgf_io_load_legacy_analysis_move_properties);
       g_test_add_func("/sgf-io/reject-negative-analysis-stats", test_sgf_io_rejects_negative_analysis_stats);
+      g_test_add_func("/sgf-io/reject-empty-analysis-stats-field",
+                      test_sgf_io_rejects_empty_analysis_stats_field);
       g_test_add_func("/sgf-io/reject-empty-analysis-move-text",
                       test_sgf_io_rejects_empty_analysis_move_text);
       g_test_add_func("/sgf-io/load-setup-and-pl", test_sgf_io_load_setup_and_player_to_play_properties);

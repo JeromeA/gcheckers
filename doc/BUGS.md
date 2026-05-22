@@ -1004,6 +1004,13 @@ callback size could wrap and report the wrong byte count.
 
 The fix validates the multiplication before returning the consumed byte count.
 
+## SGF analysis stats accepted empty fields
+
+Analysis stats are stored as semicolon-separated `key=value` fields in `GCAS[...]`. The parser skipped empty fields,
+so malformed data such as `GCAS[nodes=1;]` loaded as if the trailing separator was not present.
+
+The fix rejects empty `GCAS` fields instead of silently ignoring them.
+
 ## Homeworlds move report froze the UI when it contained tens of thousands of lines
 
 The Homeworlds move report should remain scrollable and selectable even when a position has a very large number of
