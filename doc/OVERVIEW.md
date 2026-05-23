@@ -877,9 +877,10 @@ Collaborates with: `sgf_io` and `GGameSgfController`.
 ### SGF IO (`src/sgf_io.c`, `src/sgf_io.h`)
 Module: SGF load/save core.
 Role: serialize and deserialize SGF trees using SGF syntax (`(`, `)`, `;`, `PROP[...]`) with move properties
-`B[...]`/`W[...]` and standard SGF variation nesting for branches. gcheckers writes SGF metadata (`FF`, `CA`, `AP`,
-`GM`, `RU`) and does not persist current UI selection. `RU` stores the active backend variant short name when the
-backend has variants, and is omitted/accepted as missing for zero-variant games such as boop. Node
+`B[...]`/`W[...]` and standard SGF variation nesting for branches. Move properties are treated as single-value
+properties. gcheckers writes SGF metadata (`FF`, `CA`, `AP`, `GM`, `RU`) and does not persist current UI selection.
+`RU` stores the active backend variant short name when the backend has variants, and is omitted/accepted as missing for
+zero-variant games such as boop. Node
 analysis persists through custom properties:
 `GCAD[depth]`, `GCAS[nodes=...;tt_probes=...;tt_hits=...;tt_cutoffs=...]`, and repeated
 `GCAN[move:score:nodes]` for scored moves, while still accepting older `GCAN[move:score]` data when loading. `GCAN`

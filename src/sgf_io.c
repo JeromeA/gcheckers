@@ -785,11 +785,17 @@ static gboolean sgf_io_parse_tree(SgfIoParser *p,
         return FALSE;
       }
 
+      const GPtrArray *black_values = sgf_io_property_bag_get_values(props, "B");
+      const GPtrArray *white_values = sgf_io_property_bag_get_values(props, "W");
       const char *black_move = sgf_io_property_bag_get_first(props, "B");
       const char *white_move = sgf_io_property_bag_get_first(props, "W");
       const SgfNode *node = NULL;
       if (black_move != NULL && white_move != NULL) {
         g_set_error_literal(error, sgf_io_error_quark(), 15, "SGF node cannot contain both B[] and W[]");
+        return FALSE;
+      }
+      if ((black_values != NULL && black_values->len > 1) || (white_values != NULL && white_values->len > 1)) {
+        g_set_error_literal(error, sgf_io_error_quark(), 27, "SGF move property cannot contain multiple values");
         return FALSE;
       }
       if (black_move != NULL || white_move != NULL) {

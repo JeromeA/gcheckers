@@ -271,6 +271,16 @@ static void test_sgf_io_load_rejects_empty_variation(void) {
   g_assert_error(error, g_quark_from_static_string("sgf-io-error"), 26);
 }
 
+static void test_sgf_io_load_rejects_repeated_move_values(void) {
+  g_autoptr(SgfTree) loaded = NULL;
+  g_autoptr(GError) error = NULL;
+  gboolean ok = sgf_io_load_data("(;FF[4]CA[UTF-8]AP[gcheckers]GM[40]RU[american];B[12-16][11-15])",
+                                 &loaded,
+                                 &error);
+  g_assert_false(ok);
+  g_assert_error(error, g_quark_from_static_string("sgf-io-error"), 27);
+}
+
 static void test_sgf_io_invalid_move_parse_preserves_output(void) {
   const guint8 path[] = {12, 16};
   const CheckersMove before = test_sgf_io_make_move(path, 2, 0);
@@ -672,6 +682,7 @@ int main(int argc, char **argv) {
       g_test_add_func("/sgf-io/load-invalid-header", test_sgf_io_load_rejects_invalid_header);
       g_test_add_func("/sgf-io/load-trailing-content", test_sgf_io_load_rejects_trailing_content);
       g_test_add_func("/sgf-io/load-empty-variation", test_sgf_io_load_rejects_empty_variation);
+      g_test_add_func("/sgf-io/load-repeated-move-values", test_sgf_io_load_rejects_repeated_move_values);
       g_test_add_func("/sgf-io/invalid-move-parse-preserves-output",
                       test_sgf_io_invalid_move_parse_preserves_output);
       g_test_add_func("/sgf-io/repeated-property-values", test_sgf_io_preserves_repeated_property_values);

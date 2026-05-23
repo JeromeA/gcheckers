@@ -1212,3 +1212,10 @@ An SGF variation must contain at least one node. The parser accepted `()` after 
 meant malformed tree structure could disappear silently during load/save roundtrips.
 
 The parser now rejects any SGF tree or nested variation that closes before a node sequence has been read.
+
+## SGF loading accepted repeated move-property values
+
+`B[]` and `W[]` are single-value move properties. The loader accepted nodes such as `B[12-16][11-15]`, built the tree
+from the first move, and then copied both values onto the node.
+
+That left later replay code with ambiguous move data. The parser now rejects move properties with more than one value.
