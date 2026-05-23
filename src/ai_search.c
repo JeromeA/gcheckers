@@ -537,13 +537,22 @@ void game_ai_search_stats_add(GameAiSearchStats *dest, const GameAiSearchStats *
   dest->tt_cutoffs += src->tt_cutoffs;
 }
 
+static void game_ai_scored_move_array_free(GameAiScoredMove *moves, gsize count) {
+  if (moves == NULL) {
+    return;
+  }
+
+  for (gsize i = 0; i < count; ++i) {
+    g_clear_pointer(&moves[i].move, g_free);
+  }
+  g_free(moves);
+}
+
 void game_ai_scored_move_list_free(GameAiScoredMoveList *list) {
   g_return_if_fail(list != NULL);
 
-  for (gsize i = 0; i < list->count; ++i) {
-    g_clear_pointer(&list->moves[i].move, g_free);
-  }
-  g_clear_pointer(&list->moves, g_free);
+  game_ai_scored_move_array_free(list->moves, list->count);
+  list->moves = NULL;
   list->count = 0;
 }
 
@@ -674,12 +683,12 @@ gboolean game_ai_search_analyze_moves_cancellable_with_tt(const GameBackend *bac
 
   backend->move_list_free(&moves);
   if (cancelled) {
-    g_free(scored_moves);
+    game_ai_scored_move_array_free(scored_moves, write);
     return FALSE;
   }
 
   if (write == 0) {
-    g_free(scored_moves);
+    game_ai_scored_move_array_free(scored_moves, write);
     g_debug("Alpha-beta analysis found no valid root moves");
     return FALSE;
   }

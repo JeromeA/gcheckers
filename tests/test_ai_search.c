@@ -16,9 +16,23 @@ typedef struct {
   gint delta;
 } TestGoodMoveOnlyMove;
 
+typedef struct {
+  guint calls;
+  guint cancel_after;
+} TestAiCancelState;
+
 static guint test_good_move_only_list_good_moves_calls = 0;
 static guint test_good_move_only_static_evaluate_calls = 0;
 static GPtrArray *test_good_move_only_retired_move_lists = NULL;
+
+static gboolean test_ai_cancel_after_n_calls(gpointer user_data) {
+  TestAiCancelState *state = user_data;
+
+  g_return_val_if_fail(state != NULL, TRUE);
+
+  state->calls++;
+  return state->calls > state->cancel_after;
+}
 
 static void test_init_game_with_ruleset(Game *game, PlayerRuleset ruleset) {
   const CheckersRules *rules = checkers_ruleset_get_rules(ruleset);
@@ -399,6 +413,27 @@ static void test_ai_search_forced_extension_is_backend_opt_in(void) {
   test_good_move_only_release_retired_move_lists();
 }
 
+static void test_ai_search_cancellation_clears_partial_root_results(void) {
+  TestGoodMoveOnlyPosition position = {0};
+  TestAiCancelState cancel_state = {
+    .cancel_after = 1,
+  };
+  GameAiScoredMoveList scored_moves = {0};
+
+  test_good_move_only_position_init(&position, NULL);
+
+  assert(!game_ai_search_analyze_moves_cancellable(&test_good_move_only_backend,
+                                                   &position,
+                                                   0,
+                                                   &scored_moves,
+                                                   test_ai_cancel_after_n_calls,
+                                                   &cancel_state));
+  assert(cancel_state.calls == 2);
+  assert(scored_moves.moves == NULL);
+  assert(scored_moves.count == 0);
+  test_good_move_only_release_retired_move_lists();
+}
+
 static void test_ai_search_tt_stores_best_move_before_freeing_move_list(void) {
   TestGoodMoveOnlyPosition position = {0};
   TestGoodMoveOnlyPosition child_position = {
@@ -449,6 +484,7 @@ int main(int argc, char **argv) {
   test_ai_search_accepts_good_move_only_backend();
   test_ai_search_depth_zero_skips_child_moves_without_forced_extension();
   test_ai_search_forced_extension_is_backend_opt_in();
+  test_ai_search_cancellation_clears_partial_root_results();
   test_ai_search_tt_stores_best_move_before_freeing_move_list();
 
   return 0;

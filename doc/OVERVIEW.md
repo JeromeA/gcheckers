@@ -380,7 +380,8 @@ Role: choose a move and analyze all legal moves via depth-limited alpha-beta usi
 move generation, position copying, applying moves, static evaluation, terminal scoring, side-to-move inspection, and
 hashing. Root move choice randomizes among all equal best-scoring moves, so repeated games can vary without lowering
 evaluation quality. Analysis APIs can report searched node counts and TT stats (probes/hits/cutoffs), and TT stats
-accumulate when callers reuse the same `GameAiSearchStats` across calls.
+accumulate when callers reuse the same `GameAiSearchStats` across calls. Cancellable analysis owns any copied partial
+root results until the call succeeds and frees them on cancellation.
 This is now an optional backend capability: backends that opt into `supports_ai_search` must provide backend-sized move
 records plus either `list_good_moves` or the full move-list API. The search layer now prefers `list_good_moves`, so a
 backend can expose heuristic best-first subsets to AI without also exposing exhaustive move lists to shared code. Any

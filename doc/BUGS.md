@@ -1139,3 +1139,15 @@ already decided by the destroyed homeworld.
 The builder now records the homeworld ship counts from the start of the move. If a staged action or catastrophe reduces
 either side from a non-empty homeworld to no homeworld ships, the staged move completes immediately. The move validator
 accepts that same early terminal condition, including during a sacrifice with unused actions remaining.
+
+## Generic AI search leaked partial analysis moves on cancellation
+
+Cancellable root-move analysis should leave no owned move copies behind when the caller cancels partway through the
+root move loop.
+
+The analysis code copied each scored root move into a result array as it went, but the cancellation path freed only the
+array itself. Any copied move payloads already stored in the array leaked.
+
+The fix routes both successful result cleanup and failed partial-result cleanup through the same helper that frees each
+copied move before freeing the array. A regression cancels after one root move has been scored and verifies that no
+partial result list is returned.
