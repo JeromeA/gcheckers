@@ -1205,3 +1205,10 @@ checkpoints.
 The loader already rejected ships without a star, but it still accepted the opposite invalid shape: a system with a
 star and no ships. The fix treats only empty systems and systems with both a star and at least one ship as valid
 snapshots.
+
+## SGF loading accepted empty variations
+
+An SGF variation must contain at least one node. The parser accepted `()` after a valid node and discarded it, which
+meant malformed tree structure could disappear silently during load/save roundtrips.
+
+The parser now rejects any SGF tree or nested variation that closes before a node sequence has been read.

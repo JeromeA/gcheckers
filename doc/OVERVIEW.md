@@ -885,7 +885,8 @@ analysis persists through custom properties:
 `GCAN[move:score:nodes]` for scored moves, while still accepting older `GCAN[move:score]` data when loading. `GCAN`
 values are formatted dynamically so long analysis move labels are not truncated, and empty analysis move labels are
 rejected on load. Analysis stat lists reject empty fields, and unsigned SGF numeric fields reject signed text and range
-errors. This layer is GTK-free so it can be reused by both GUI actions and future CLI commands.
+errors. Empty SGF trees and empty nested variations are rejected instead of being discarded. This layer is GTK-free so
+it can be reused by both GUI actions and future CLI commands.
 Collaborates with: `GGameSgfController` load/save entry points and `tests/test_sgf_io.c`.
 
 ### SGF autosave (`src/sgf_autosave.c`, `src/sgf_autosave.h`)

@@ -263,6 +263,14 @@ static void test_sgf_io_load_rejects_trailing_content(void) {
   g_assert_error(error, g_quark_from_static_string("sgf-io-error"), 25);
 }
 
+static void test_sgf_io_load_rejects_empty_variation(void) {
+  g_autoptr(SgfTree) loaded = NULL;
+  g_autoptr(GError) error = NULL;
+  gboolean ok = sgf_io_load_data("(;FF[4]CA[UTF-8]AP[gcheckers]GM[40]())", &loaded, &error);
+  g_assert_false(ok);
+  g_assert_error(error, g_quark_from_static_string("sgf-io-error"), 26);
+}
+
 static void test_sgf_io_invalid_move_parse_preserves_output(void) {
   const guint8 path[] = {12, 16};
   const CheckersMove before = test_sgf_io_make_move(path, 2, 0);
@@ -663,6 +671,7 @@ int main(int argc, char **argv) {
       g_test_add_func("/sgf-io/roundtrip-branches", test_sgf_io_roundtrip_branches);
       g_test_add_func("/sgf-io/load-invalid-header", test_sgf_io_load_rejects_invalid_header);
       g_test_add_func("/sgf-io/load-trailing-content", test_sgf_io_load_rejects_trailing_content);
+      g_test_add_func("/sgf-io/load-empty-variation", test_sgf_io_load_rejects_empty_variation);
       g_test_add_func("/sgf-io/invalid-move-parse-preserves-output",
                       test_sgf_io_invalid_move_parse_preserves_output);
       g_test_add_func("/sgf-io/repeated-property-values", test_sgf_io_preserves_repeated_property_values);
@@ -684,6 +693,7 @@ int main(int argc, char **argv) {
       g_test_add_func("/sgf-io/boop-padded-promotion-mask", test_sgf_io_boop_promotion_masks_use_padded_rows);
       g_test_add_func("/sgf-io/load-invalid-header", test_sgf_io_load_rejects_invalid_header);
       g_test_add_func("/sgf-io/load-trailing-content", test_sgf_io_load_rejects_trailing_content);
+      g_test_add_func("/sgf-io/load-empty-variation", test_sgf_io_load_rejects_empty_variation);
       g_test_add_func("/sgf-io/repeated-property-values", test_sgf_io_boop_preserves_repeated_property_values);
       g_test_add_func("/sgf-io/ruleset-missing", test_sgf_io_boop_accepts_missing_ruleset_property);
       g_test_add_func("/sgf-io/ruleset-invalid", test_sgf_io_boop_rejects_ruleset_property);
@@ -691,6 +701,7 @@ int main(int argc, char **argv) {
     case GGAME_APP_KIND_HOMEWORLDS:
       g_test_add_func("/sgf-io/load-invalid-header", test_sgf_io_load_rejects_invalid_header);
       g_test_add_func("/sgf-io/load-trailing-content", test_sgf_io_load_rejects_trailing_content);
+      g_test_add_func("/sgf-io/load-empty-variation", test_sgf_io_load_rejects_empty_variation);
       break;
     default:
       g_assert_not_reached();

@@ -847,6 +847,10 @@ static gboolean sgf_io_parse_tree(SgfIoParser *p,
     }
 
     if (next == ')') {
+      if (!has_sequence_node) {
+        g_set_error_literal(error, sgf_io_error_quark(), 26, "Empty SGF tree");
+        return FALSE;
+      }
       p->pos++;
       return TRUE;
     }
