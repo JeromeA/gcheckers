@@ -9,7 +9,7 @@ backend. `src/games/boop/` contains both the boop rules/backend and the boop-onl
 plug into the shared window, while `src/games/homeworlds/` provides the rules/backend plus a profile-owned toplevel
 board host and SGF snapshot codec for the shared window. Homeworlds SGF snapshots are strict replay checkpoints:
 numeric fields must be plain decimal digits, the pyramid supply must add up exactly, and duplicate system entries or
-non-empty systems without a star are rejected instead of being normalized into impossible positions.
+systems missing either a star or ships are rejected instead of being normalized into impossible positions.
 
 The default build now compiles one shared object graph and links all three application binaries. Each process selects
 exactly one `GGameAppProfile` at startup through its launcher, then shared code queries

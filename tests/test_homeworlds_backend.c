@@ -755,6 +755,32 @@ static void test_backend_sgf_snapshot_rejects_ship_without_star(void) {
   g_clear_error(&error);
 }
 
+static void test_backend_sgf_snapshot_rejects_star_without_ship(void) {
+  const GameBackend *backend = &homeworlds_game_backend;
+  HomeworldsPosition saved = {0};
+  HomeworldsPosition loaded = {0};
+  g_autoptr(SgfTree) tree = NULL;
+  SgfNode *root = NULL;
+  GError *error = NULL;
+
+  test_prepare_position(&saved);
+  saved.systems[2].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_MEDIUM);
+  homeworlds_system_rebuild_color_counts(&saved.systems[2]);
+  test_take_one_from_bank(&saved, saved.systems[2].stars[0]);
+
+  tree = sgf_tree_new();
+  assert(SGF_IS_TREE(tree));
+  root = (SgfNode *)sgf_tree_get_root(tree);
+  assert(root != NULL);
+
+  assert(backend->sgf_write_position_node(&saved, root, NULL));
+
+  homeworlds_position_init(&loaded);
+  assert(!backend->sgf_apply_setup_node(&loaded, root, &error));
+  assert(error != NULL);
+  g_clear_error(&error);
+}
+
 static void test_backend_sgf_snapshot_rejects_loose_numbers(void) {
   const GameBackend *backend = &homeworlds_game_backend;
   HomeworldsPosition saved = {0};
@@ -2250,6 +2276,7 @@ int main(void) {
   test_backend_sgf_snapshot_roundtrips_position();
   test_backend_sgf_snapshot_rejects_duplicate_systems();
   test_backend_sgf_snapshot_rejects_ship_without_star();
+  test_backend_sgf_snapshot_rejects_star_without_ship();
   test_backend_sgf_snapshot_rejects_loose_numbers();
   test_backend_sgf_snapshot_rejects_overfull_supply();
   test_backend_move_builder_completes_setup();

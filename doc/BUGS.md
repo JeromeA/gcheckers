@@ -1196,3 +1196,12 @@ A Homeworlds position must account for exactly three copies of each pyramid type
 The snapshot loader parsed the bank and systems independently, then trusted the result. A malformed snapshot could keep
 all pieces in the bank while also placing those same pieces on the board. The fix validates the full pyramid supply
 before installing the loaded position.
+
+## Homeworlds SGF snapshots accepted orphaned stars
+
+Star systems without ships are immediately destroyed by the Homeworlds rules and should not appear in saved position
+checkpoints.
+
+The loader already rejected ships without a star, but it still accepted the opposite invalid shape: a system with a
+star and no ships. The fix treats only empty systems and systems with both a star and at least one ship as valid
+snapshots.

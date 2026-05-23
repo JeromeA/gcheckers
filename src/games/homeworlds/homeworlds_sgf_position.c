@@ -62,7 +62,8 @@ static gboolean homeworlds_sgf_position_parse_uint8_list(const char *text,
 static gboolean homeworlds_sgf_position_system_is_valid_snapshot(const HomeworldsSystem *system) {
   g_return_val_if_fail(system != NULL, FALSE);
 
-  return homeworlds_system_has_star(system) || !homeworlds_system_has_any_ship(system);
+  return homeworlds_system_is_empty(system) ||
+         (homeworlds_system_has_star(system) && homeworlds_system_has_any_ship(system));
 }
 
 static gboolean homeworlds_sgf_position_count_pyramid(HomeworldsPyramid pyramid,
