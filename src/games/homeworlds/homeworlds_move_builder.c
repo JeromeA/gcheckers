@@ -209,10 +209,42 @@ static gboolean homeworlds_builder_consume_pending_action(HomeworldsMoveBuilderS
   return TRUE;
 }
 
+static gboolean homeworlds_builder_homeworld_ship_loss_ends_turn(const HomeworldsMoveBuilderState *state) {
+  g_return_val_if_fail(state != NULL, FALSE);
+
+  for (guint side = 0; side < 2; ++side) {
+    if (state->initial_homeworld_ship_counts[side] == 0) {
+      continue;
+    }
+    if (homeworlds_system_ship_count_for_side(&state->working_position.systems[side], side) == 0) {
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
+static gboolean homeworlds_builder_complete_terminal_turn(HomeworldsMoveBuilderState *state) {
+  g_return_val_if_fail(state != NULL, FALSE);
+
+  if (!homeworlds_builder_homeworld_ship_loss_ends_turn(state)) {
+    return FALSE;
+  }
+
+  state->pending_actions_remaining = 0;
+  state->stage = HOMEWORLDS_BUILDER_STAGE_COMPLETE;
+  state->selected_system_index = HOMEWORLDS_INVALID_INDEX;
+  state->selected_ship_pyramid = 0;
+  state->pending_action_kind = HOMEWORLDS_STEP_NONE;
+  return TRUE;
+}
+
 static gboolean homeworlds_builder_finish_or_continue(HomeworldsMoveBuilderState *state) {
   g_return_val_if_fail(state != NULL, FALSE);
 
-  if (state->pending_actions_remaining > 0) {
+  if (homeworlds_builder_complete_terminal_turn(state)) {
+    return TRUE;
+  } else if (state->pending_actions_remaining > 0) {
     state->stage = HOMEWORLDS_BUILDER_STAGE_SELECT_SHIP;
   } else {
     state->stage = HOMEWORLDS_BUILDER_STAGE_COMPLETE;
@@ -348,6 +380,9 @@ static gboolean homeworlds_builder_start_selected_action(HomeworldsMoveBuilderSt
     state->forced_action_color = homeworlds_pyramid_color(selected_ship);
     if (!homeworlds_builder_apply_prefix_step(state, &step)) {
       return FALSE;
+    }
+    if (homeworlds_builder_complete_terminal_turn(state)) {
+      return TRUE;
     }
     state->stage = HOMEWORLDS_BUILDER_STAGE_SELECT_SHIP;
     return TRUE;
@@ -727,6 +762,8 @@ gboolean homeworlds_move_builder_init(const HomeworldsPosition *position, GameBa
   state->selected_system_index = HOMEWORLDS_INVALID_INDEX;
   state->selected_ship_pyramid = 0;
   state->forced_action_color = HOMEWORLDS_INVALID_COLOR;
+  state->initial_homeworld_ship_counts[0] = homeworlds_system_ship_count_for_side(&position->systems[0], 0);
+  state->initial_homeworld_ship_counts[1] = homeworlds_system_ship_count_for_side(&position->systems[1], 1);
   out_builder->builder_state = state;
   out_builder->builder_state_size = sizeof(*state);
   return TRUE;
@@ -764,6 +801,10 @@ gboolean homeworlds_move_builder_apply_catastrophe(GameBackendMoveBuilder *build
     return FALSE;
   }
 
+  if (homeworlds_builder_complete_terminal_turn(state)) {
+    return TRUE;
+  }
+
   state->stage = HOMEWORLDS_BUILDER_STAGE_SELECT_SHIP;
   state->selected_system_index = HOMEWORLDS_INVALID_INDEX;
   state->selected_ship_pyramid = 0;
@@ -798,6 +839,7 @@ gboolean homeworlds_move_builder_apply_catastrophe_step(GameBackendMoveBuilder *
     state->move.step_count--;
     return FALSE;
   }
+  homeworlds_builder_complete_terminal_turn(state);
   return TRUE;
 }
 

@@ -31,9 +31,10 @@ gboolean homeworlds_position_resolve_system_ref(const HomeworldsPosition *positi
                                                 const HomeworldsSystemRef *ref,
                                                 guint *out_system_index);
 
+void homeworlds_system_rebuild_color_counts(HomeworldsSystem *system);
+void homeworlds_position_rebuild_color_counts(HomeworldsPosition *position);
 gboolean homeworlds_system_is_connected(const HomeworldsSystem *left, const HomeworldsSystem *right);
 guint homeworlds_system_ship_count_for_side(const HomeworldsSystem *system, guint side);
-guint homeworlds_system_color_count(const HomeworldsSystem *system, HomeworldsColor color);
 gboolean homeworlds_system_has_access_to_color(const HomeworldsSystem *system, guint side, HomeworldsColor color);
 gboolean homeworlds_system_find_smallest_bank_ship(const HomeworldsPosition *position,
                                                    HomeworldsColor color,

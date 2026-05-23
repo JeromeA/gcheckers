@@ -585,6 +585,7 @@ static void test_homeworlds_prepare_compact_row_position(HomeworldsPosition *pos
   position->systems[0].ships[0][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE);
   position->systems[1].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL);
   position->systems[1].ships[1][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE);
+  homeworlds_position_rebuild_color_counts(position);
 }
 
 static void test_homeworlds_prepare_connected_sparse_row_position(HomeworldsPosition *position) {
@@ -605,6 +606,7 @@ static void test_homeworlds_prepare_connected_sparse_row_position(HomeworldsPosi
   position->systems[0].stars[1] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_MEDIUM);
   position->systems[0].ships[0][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE);
   position->systems[0].ships[0][1] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL);
+  homeworlds_position_rebuild_color_counts(position);
 }
 
 static void test_homeworlds_make_wide_system(HomeworldsSystem *system, HomeworldsColor star_color) {
@@ -615,6 +617,7 @@ static void test_homeworlds_make_wide_system(HomeworldsSystem *system, Homeworld
   for (guint slot = 0; slot < 6; ++slot) {
     system->ships[0][slot] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE);
   }
+  homeworlds_system_rebuild_color_counts(system);
 }
 
 static void test_homeworlds_view_homeworld_layout_uses_player_perspective(void) {
@@ -661,6 +664,7 @@ static void test_homeworlds_view_system_layout_groups_by_reachability(void) {
   position.systems[2].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE);
   position.systems[3].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL);
   position.systems[4].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_MEDIUM);
+  homeworlds_position_rebuild_color_counts(&position);
 
   g_assert_true(homeworlds_view_calculate_system_center(&position, 0, 900.0, 600.0, &player_1_x, &player_1_y));
   g_assert_true(homeworlds_view_calculate_system_center(&position, 1, 900.0, 600.0, &player_2_x, &player_2_y));
@@ -675,6 +679,7 @@ static void test_homeworlds_view_system_layout_groups_by_reachability(void) {
 
   position.systems[1].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL);
   position.systems[1].stars[1] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_MEDIUM);
+  homeworlds_system_rebuild_color_counts(&position.systems[1]);
   g_assert_true(homeworlds_view_calculate_system_center(&position, 2, 900.0, 600.0, &compact_a_x, &compact_a_y));
   g_assert_true(homeworlds_view_calculate_system_center(&position, 3, 900.0, 600.0, &compact_b_x, &compact_b_y));
   g_assert_true(homeworlds_view_calculate_system_center(&position, 4, 900.0, 600.0, &compact_c_x, &compact_c_y));
@@ -714,6 +719,7 @@ static void test_homeworlds_view_connected_sparse_rows_skip_empty_middle_gap(voi
   g_assert_cmpfloat_with_epsilon(yellow_to_blue, blue_to_player_1, 0.001);
 
   position.systems[4].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_MEDIUM);
+  homeworlds_system_rebuild_color_counts(&position.systems[4]);
   g_assert_true(homeworlds_view_calculate_system_center(&position, 2, 900.0, 600.0, &yellow_small_x, &yellow_small_y));
   g_assert_true(homeworlds_view_calculate_system_center(&position, 3, 900.0, 600.0, &blue_large_x, &blue_large_y));
   g_assert_true(homeworlds_view_calculate_system_center(&position, 4, 900.0, 600.0, &medium_x, &medium_y));
@@ -732,6 +738,7 @@ static void test_homeworlds_view_row_layout_accounts_for_system_width(void) {
   test_homeworlds_make_wide_system(&position.systems[2], HOMEWORLDS_COLOR_RED);
   position.systems[3].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL);
   position.systems[3].ships[0][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL);
+  homeworlds_system_rebuild_color_counts(&position.systems[3]);
 
   g_assert_true(homeworlds_view_calculate_system_center(&position, 2, 1000.0, 600.0, &wide_x, &wide_y));
   g_assert_true(homeworlds_view_calculate_system_center(&position, 3, 1000.0, 600.0, &narrow_x, &narrow_y));
@@ -794,6 +801,7 @@ static void test_homeworlds_view_board_content_height_expands_for_tall_rows(void
   test_homeworlds_make_wide_system(&position.systems[2], HOMEWORLDS_COLOR_RED);
   test_homeworlds_make_wide_system(&position.systems[3], HOMEWORLDS_COLOR_RED);
   test_homeworlds_make_wide_system(&position.systems[4], HOMEWORLDS_COLOR_GREEN);
+  homeworlds_position_rebuild_color_counts(&position);
 
   g_assert_true(homeworlds_view_calculate_board_content_size(&position,
                                                             1200.0,
@@ -1168,6 +1176,7 @@ static void test_homeworlds_window_catastrophe_prefix_records_single_sgf_move(vo
   position.systems[2].ships[0][1] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_MEDIUM);
   position.systems[2].ships[1][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE);
   position.systems[2].ships[1][1] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL);
+  homeworlds_system_rebuild_color_counts(&position.systems[2]);
   g_assert_true(ggame_model_set_position(model, &position));
 
   catastrophe_button = test_homeworlds_find_catastrophe_button(root, 2, HOMEWORLDS_COLOR_BLUE);
@@ -1246,6 +1255,7 @@ static void test_homeworlds_window_end_move_catastrophe_requires_choice(void) {
       },
     },
   };
+  homeworlds_position_rebuild_color_counts(&position);
   test_homeworlds_remove_bank_piece(&position, green_small);
   test_homeworlds_remove_bank_piece(&position, red_medium);
   test_homeworlds_remove_bank_piece(&position, red_large);
@@ -1448,6 +1458,7 @@ static void test_homeworlds_view_action_buttons_use_plain_labels(void) {
   memset(position.systems[0].ships[0], 0, sizeof(position.systems[0].ships[0]));
   position.systems[0].ships[0][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_LARGE);
   position.systems[0].ships[0][1] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE);
+  homeworlds_system_rebuild_color_counts(&position.systems[0]);
   g_assert_true(ggame_model_set_position(model, &position));
 
   test_homeworlds_assert_action_button_label(root, HOMEWORLDS_STEP_PASS, "Pass");
@@ -1475,6 +1486,7 @@ static void test_homeworlds_view_build_action_is_available_from_each_green_ship(
   memset(position.systems[0].ships[0], 0, sizeof(position.systems[0].ships[0]));
   position.systems[0].ships[0][0] = green_large;
   position.systems[0].ships[0][1] = green_small;
+  homeworlds_system_rebuild_color_counts(&position.systems[0]);
   g_assert_true(ggame_model_set_position(model, &position));
 
   button = test_homeworlds_find_ship_button_for(root, 0, green_large);
@@ -1580,6 +1592,7 @@ static void test_homeworlds_view_attack_targets_use_board_buttons(void) {
 
   test_homeworlds_prepare_play_position(&position);
   position.systems[0].ships[1][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL);
+  homeworlds_system_rebuild_color_counts(&position.systems[0]);
   g_assert_true(ggame_model_set_position(model, &position));
 
   g_assert_true(homeworlds_view_apply_candidate_at(view, 0));
@@ -1611,6 +1624,7 @@ static void test_homeworlds_view_move_targets_use_board_and_bank_buttons(void) {
   test_homeworlds_prepare_play_position(&position);
   position.systems[0].ships[0][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_LARGE);
   position.systems[2].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE);
+  homeworlds_position_rebuild_color_counts(&position);
   g_assert_true(ggame_model_set_position(model, &position));
 
   g_assert_true(homeworlds_view_apply_candidate_at(view, 0));
@@ -1693,7 +1707,7 @@ static void test_homeworlds_view_move_report_lists_good_and_other_moves(void) {
   g_assert_true(all_count < good_list);
   g_assert_true(good_list < other_list);
   g_assert_nonnull(strstr(text, "pass"));
-  g_assert_nonnull(strstr(text, "H1g3- pass pass pass"));
+  g_assert_nonnull(strstr(text, "H1g3-"));
 
   homeworlds_view_free(view);
   g_object_unref(model);
@@ -1719,14 +1733,14 @@ static void test_homeworlds_view_move_report_can_be_disabled(void) {
   text = test_homeworlds_get_text_view_text(move_report);
   g_assert_cmpstr(text, ==, "Move report disabled.");
   g_assert_null(strstr(text, "good_moves()"));
-  g_assert_null(strstr(text, "H1g3- pass pass pass"));
+  g_assert_null(strstr(text, "H1g3-"));
 
   homeworlds_view_set_move_report_enabled(view, TRUE);
   g_assert_true(homeworlds_view_get_move_report_enabled(view));
   g_clear_pointer(&text, g_free);
   text = test_homeworlds_get_text_view_text(move_report);
   g_assert_nonnull(strstr(text, "good_moves()"));
-  g_assert_nonnull(strstr(text, "H1g3- pass pass pass"));
+  g_assert_nonnull(strstr(text, "H1g3-"));
 
   homeworlds_view_free(view);
   g_object_unref(model);
@@ -1761,7 +1775,7 @@ static void test_homeworlds_board_host_initial_move_report_state_is_applied(void
   text = test_homeworlds_get_text_view_text(move_report);
   g_assert_cmpstr(text, ==, "Move report disabled.");
   g_assert_null(strstr(text, "good_moves()"));
-  g_assert_null(strstr(text, "H1g3- pass pass pass"));
+  g_assert_null(strstr(text, "H1g3-"));
 
   g_object_unref(host);
   g_object_unref(model);
@@ -1816,7 +1830,7 @@ static void test_homeworlds_window_move_report_action_toggles_view(void) {
   g_clear_pointer(&text, g_free);
   text = test_homeworlds_get_text_view_text(move_report);
   g_assert_nonnull(strstr(text, "good_moves()"));
-  g_assert_nonnull(strstr(text, "H1g3- pass pass pass"));
+  g_assert_nonnull(strstr(text, "H1g3-"));
 
   gtk_window_destroy(GTK_WINDOW(window));
   g_object_unref(model);

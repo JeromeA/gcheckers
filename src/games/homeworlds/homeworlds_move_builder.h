@@ -27,6 +27,7 @@ typedef struct {
   guint8 pending_action_kind;
   guint8 forced_action_color;
   guint8 pending_actions_remaining;
+  guint8 initial_homeworld_ship_counts[2];
 } HomeworldsMoveBuilderState;
 
 gboolean homeworlds_move_builder_init(const HomeworldsPosition *position, GameBackendMoveBuilder *out_builder);

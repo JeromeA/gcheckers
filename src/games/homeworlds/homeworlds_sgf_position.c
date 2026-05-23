@@ -1,5 +1,7 @@
 #include "homeworlds_sgf_position.h"
 
+#include "homeworlds_game.h"
+
 #include <string.h>
 
 static GQuark homeworlds_sgf_position_error_quark(void) {
@@ -138,6 +140,7 @@ gboolean homeworlds_sgf_position_apply_setup_node(gpointer position, const SgfNo
       }
     }
   }
+  homeworlds_position_rebuild_color_counts(&parsed);
 
   *homeworlds_position = parsed;
   return TRUE;

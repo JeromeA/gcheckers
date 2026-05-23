@@ -1129,3 +1129,13 @@ When the search stored a transposition-table entry, it freed the move list first
 move. Homeworlds depth-2 analysis could therefore read freed move-list memory and crash while profiling
 `game-homeworlds.sgf` after 19 moves. The fix stores the TT entry before releasing the move list, and the regression
 uses a test backend that poisons retired move lists to prove the copied best move was taken while still valid.
+
+## Homeworlds asked for pass after a terminal homeworld catastrophe
+
+When a catastrophe destroyed the last ship at a homeworld during a staged turn, the move builder still followed the
+normal sacrifice/pass completion path. A player could therefore be asked to add pass steps even though the game was
+already decided by the destroyed homeworld.
+
+The builder now records the homeworld ship counts from the start of the move. If a staged action or catastrophe reduces
+either side from a non-empty homeworld to no homeworld ships, the staged move completes immediately. The move validator
+accepts that same early terminal condition, including during a sacrifice with unused actions remaining.

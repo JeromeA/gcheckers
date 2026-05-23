@@ -68,6 +68,7 @@ typedef enum {
 } HomeworldsCandidateKind;
 
 typedef struct {
+  guint8 color_counts[HOMEWORLDS_COLOR_BLUE + 1];
   HomeworldsPyramid stars[HOMEWORLDS_STAR_SLOT_COUNT];
   HomeworldsPyramid ships[2][HOMEWORLDS_SHIP_SLOT_COUNT];
 } HomeworldsSystem;

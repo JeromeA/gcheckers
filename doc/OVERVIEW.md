@@ -528,9 +528,11 @@ Module: slot-based Homeworlds rules engine.
 Role: represent Homeworlds positions as fixed-size slots: a 36-slot bank, 16 system slots (systems `0` and `1` are
 the players' homeworlds), two star slots per system, and fourteen ship slots per side per system. Inline helpers in
 `homeworlds_types.h` own pyramid encoding/decoding and low-level slot semantics so the representation can change in
-one place later if needed. `HomeworldsMove` does not store physical slot indexes or an acting side; it stores the same
-symbolic system and ship references used by notation (`H1`, `G3'`, `g2`, etc.), and the rules engine resolves those
-references against the current position at apply time. Failed system-reference resolution returns
+one place later if needed. Each star system caches per-color pyramid totals; gameplay mutators update those totals
+incrementally, while SGF snapshot loading and raw test fixtures rebuild them after direct slot construction.
+`HomeworldsMove` does not store physical slot indexes or an acting side; it stores the same symbolic system and ship
+references used by notation (`H1`, `G3'`, `g2`, etc.), and the rules engine resolves those references against the
+current position at apply time. Failed system-reference resolution returns
 `HOMEWORLDS_INVALID_INDEX` through the output index, and failed ship-reference resolution clears its resolved indexes
 and pyramid. Build steps are canonicalized further: they store only the source system plus the build color in
 `target_color`, because the exact source ship size does not change the move.
@@ -568,6 +570,8 @@ Sacrifices are modeled as a prefix step that fixes the remaining action color an
 back through source-ship selection for each granted action. Choosing a ship for a sacrificed action immediately starts
 that forced action instead of showing the normal action picker again. Passing while those actions remain appends passes
 for every remaining sacrificed action and completes the move; only a pass with no pending sacrifice is a top-level pass.
+If a staged action or catastrophe destroys a homeworld that still had ships at the start of the move, the builder
+completes the move immediately instead of asking for sacrifice-fill or catastrophe-pass steps.
 Candidate data can still use transient slot indexes for UI selection, but committed move steps are converted to
 symbolic references before they are applied or saved to SGF. Committed build steps are converted to system-plus-color
 form so two same-color source ships produce the same internal move and notation. The interactive action list still
