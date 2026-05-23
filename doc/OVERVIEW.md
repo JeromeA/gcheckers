@@ -644,6 +644,8 @@ independent adjacent trades and builds are kept in canonical order only when a s
 position-equivalent, and catastrophe-free; blue trade commutation is proven from local ship, bank, and color counts,
 while green build reversal tries every reversible built-ship candidate because bank supply can make the built size
 ambiguous.
+During play, `good_moves()` scores each candidate by the one-ply static or terminal value, orders it from the current
+player's perspective, and keeps only the first 512 moves that are within 50 points of the best one.
 Profitable catastrophes available at the start of a turn are required somewhere in the final move, while profitable
 catastrophes created by an earlier step are forced immediately in the staged walk.
 `doc/homeworlds-move-generation.md` describes how the legal builder, diagnostic move report, profiling CLI,
