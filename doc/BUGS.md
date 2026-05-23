@@ -1172,3 +1172,11 @@ system index, the later value silently overwrote the earlier one instead of trea
 
 The fix records which system indices have already been seen while parsing a snapshot and rejects duplicate entries. A
 regression writes a valid snapshot, duplicates one system property, and verifies that loading it fails.
+
+## Homeworlds SGF snapshots accepted ships without a star
+
+Loaded Homeworlds snapshots should never contain ships in a system that has no star. Such a system is not a legal
+star system and cannot be produced by the writer.
+
+The parser accepted that shape and rebuilt cached color counts for it, leaving later rules code to work with an
+impossible position. The fix rejects starless non-empty systems while parsing each `GHS` value.

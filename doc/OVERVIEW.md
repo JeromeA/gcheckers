@@ -1,13 +1,15 @@
 # Project overview
 
 This repository contains the `ggame` application framework plus three branded GTK targets, `gcheckers`, `gboop`, and
-`ghomeworlds`. The shared code in top-level `src/` owns the
-application shell, GTK UI, SGF workflows, puzzle/import/reporting flows, and the generic AI/model/backend interfaces.
+`ghomeworlds`. The shared code in top-level `src/` owns the application shell, GTK UI, SGF workflows,
+puzzle/import/reporting flows, and the generic AI/model/backend interfaces.
 Game-specific code lives under `src/games/<game>/` and provides the rules, position and move types, search
 evaluation, notation helpers, optional puzzle tooling, and any board-specific callbacks needed by the selected
 backend. `src/games/boop/` contains both the boop rules/backend and the boop-only supply/promotion controls that now
 plug into the shared window, while `src/games/homeworlds/` provides the rules/backend plus a profile-owned toplevel
-board host and SGF snapshot codec for the shared window.
+board host and SGF snapshot codec for the shared window. Homeworlds SGF snapshots are strict replay checkpoints:
+duplicate system entries and non-empty systems without a star are rejected instead of being normalized into impossible
+positions.
 
 The default build now compiles one shared object graph and links all three application binaries. Each process selects
 exactly one `GGameAppProfile` at startup through its launcher, then shared code queries

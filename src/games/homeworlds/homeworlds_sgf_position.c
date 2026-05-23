@@ -47,6 +47,12 @@ static gboolean homeworlds_sgf_position_parse_uint8_list(const char *text,
   return fields[expected_count] == NULL;
 }
 
+static gboolean homeworlds_sgf_position_system_is_valid_snapshot(const HomeworldsSystem *system) {
+  g_return_val_if_fail(system != NULL, FALSE);
+
+  return homeworlds_system_has_star(system) || !homeworlds_system_has_any_ship(system);
+}
+
 static char *homeworlds_sgf_position_format_uint8_list(const guint8 *values, guint count) {
   GString *text = NULL;
 
@@ -92,7 +98,7 @@ static gboolean homeworlds_sgf_position_parse_system_value(const char *value,
     return FALSE;
   }
 
-  return TRUE;
+  return homeworlds_sgf_position_system_is_valid_snapshot(system);
 }
 
 gboolean homeworlds_sgf_position_apply_setup_node(gpointer position, const SgfNode *node, GError **error) {
