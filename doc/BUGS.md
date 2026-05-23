@@ -1219,3 +1219,11 @@ The parser now rejects any SGF tree or nested variation that closes before a nod
 from the first move, and then copied both values onto the node.
 
 That left later replay code with ambiguous move data. The parser now rejects move properties with more than one value.
+
+## SGF root loading skipped move-property validation
+
+The SGF loader validated child nodes so they could not contain both `B[]` and `W[]`, but root-node properties used a
+separate path that copied properties directly.
+
+A malformed root such as `B[12-16]W[23-18]` could therefore load even though no later replay path can treat it
+unambiguously. The fix shares the move-property validation between root and child nodes.

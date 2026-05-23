@@ -398,6 +398,24 @@ static gboolean sgf_io_node_apply_property_values(SgfNode *node, const char *ide
   return TRUE;
 }
 
+static gboolean sgf_io_validate_move_properties(const SgfIoPropertyBag *props, GError **error) {
+  g_return_val_if_fail(props != NULL, FALSE);
+
+  const GPtrArray *black_values = sgf_io_property_bag_get_values(props, "B");
+  const GPtrArray *white_values = sgf_io_property_bag_get_values(props, "W");
+
+  if (black_values != NULL && white_values != NULL) {
+    g_set_error_literal(error, sgf_io_error_quark(), 15, "SGF node cannot contain both B[] and W[]");
+    return FALSE;
+  }
+  if ((black_values != NULL && black_values->len > 1) || (white_values != NULL && white_values->len > 1)) {
+    g_set_error_literal(error, sgf_io_error_quark(), 27, "SGF move property cannot contain multiple values");
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
 static gboolean sgf_io_parse_analysis_stats(const char *stats_text, SgfNodeAnalysis *analysis) {
   g_return_val_if_fail(stats_text != NULL, FALSE);
   g_return_val_if_fail(analysis != NULL, FALSE);
@@ -764,6 +782,9 @@ static gboolean sgf_io_parse_tree(SgfIoParser *p,
         *seen_root = TRUE;
         cursor = sgf_tree_get_root(tree);
         SgfNode *root_node = (SgfNode *)cursor;
+        if (!sgf_io_validate_move_properties(props, error)) {
+          return FALSE;
+        }
         g_ptr_array_sort(props->idents, sgf_io_sort_strings);
         for (guint i = 0; i < props->idents->len; ++i) {
           const char *ident = g_ptr_array_index(props->idents, i);
@@ -785,17 +806,10 @@ static gboolean sgf_io_parse_tree(SgfIoParser *p,
         return FALSE;
       }
 
-      const GPtrArray *black_values = sgf_io_property_bag_get_values(props, "B");
-      const GPtrArray *white_values = sgf_io_property_bag_get_values(props, "W");
       const char *black_move = sgf_io_property_bag_get_first(props, "B");
       const char *white_move = sgf_io_property_bag_get_first(props, "W");
       const SgfNode *node = NULL;
-      if (black_move != NULL && white_move != NULL) {
-        g_set_error_literal(error, sgf_io_error_quark(), 15, "SGF node cannot contain both B[] and W[]");
-        return FALSE;
-      }
-      if ((black_values != NULL && black_values->len > 1) || (white_values != NULL && white_values->len > 1)) {
-        g_set_error_literal(error, sgf_io_error_quark(), 27, "SGF move property cannot contain multiple values");
+      if (!sgf_io_validate_move_properties(props, error)) {
         return FALSE;
       }
       if (black_move != NULL || white_move != NULL) {
