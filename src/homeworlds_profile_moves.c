@@ -34,6 +34,7 @@ static gboolean homeworlds_profile_apply_random_good_move(HomeworldsPosition *po
   moves = homeworlds_game_backend.list_good_moves(position, 0);
   if (moves.count == 0) {
     g_printerr("No good moves after %u moves.\n", move_number);
+    homeworlds_game_backend.move_list_free(&moves);
     return FALSE;
   }
   if (moves.count > G_MAXINT32) {

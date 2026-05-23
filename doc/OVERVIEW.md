@@ -619,7 +619,7 @@ set, deduplicates canonical moves, but does not cap the backend-good or diagnost
 report` action disables this report before either collector runs. The separate `build/tools/homeworlds_profile_moves`
 CLI applies `--moves` random good moves from a `--seed` or replays the first moves of a Homeworlds SGF main line with
 `--file`, prints an ASCII board snapshot, and then runs the AI at `--depth` and prints the scored moves plus search
-stats. The Homeworlds board host also syncs its
+stats. It frees any generated candidate list before leaving an error path. The Homeworlds board host also syncs its
 last-move label from SGF current-node changes so timeline
 navigation and direct play report the same move. Human interaction
 advances

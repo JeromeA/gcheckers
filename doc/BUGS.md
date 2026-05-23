@@ -1151,3 +1151,14 @@ array itself. Any copied move payloads already stored in the array leaked.
 The fix routes both successful result cleanup and failed partial-result cleanup through the same helper that frees each
 copied move before freeing the array. A regression cancels after one root move has been scored and verifies that no
 partial result list is returned.
+
+## Homeworlds profiling leaked an empty random-move candidate list
+
+The profiling CLI should release the move list returned by the backend even when random source-game generation cannot
+continue.
+
+The random-generation path handled the normal success path and the oversized-list path, but the `moves.count == 0`
+error path printed an error and returned without calling the backend move-list free callback. That could leak an owned
+empty candidate list if a backend returned one.
+
+The fix calls the Homeworlds backend move-list cleanup before returning from the empty-list path.
