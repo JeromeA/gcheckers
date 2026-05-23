@@ -65,12 +65,15 @@ static char *homeworlds_sgf_position_format_uint8_list(const guint8 *values, gui
   return g_string_free(text, FALSE);
 }
 
-static gboolean homeworlds_sgf_position_parse_system_value(const char *value, HomeworldsPosition *position) {
+static gboolean homeworlds_sgf_position_parse_system_value(const char *value,
+                                                           HomeworldsPosition *position,
+                                                           guint *out_system_index) {
   g_auto(GStrv) fields = NULL;
   guint8 system_index = 0;
 
   g_return_val_if_fail(value != NULL, FALSE);
   g_return_val_if_fail(position != NULL, FALSE);
+  g_return_val_if_fail(out_system_index != NULL, FALSE);
 
   fields = g_strsplit(value, "|", 4);
   if (fields == NULL || fields[0] == NULL || fields[1] == NULL || fields[2] == NULL || fields[3] == NULL ||
@@ -80,6 +83,7 @@ static gboolean homeworlds_sgf_position_parse_system_value(const char *value, Ho
   if (!homeworlds_sgf_position_parse_uint8(fields[0], HOMEWORLDS_SYSTEM_SLOT_COUNT - 1, &system_index)) {
     return FALSE;
   }
+  *out_system_index = system_index;
 
   HomeworldsSystem *system = &position->systems[system_index];
   if (!homeworlds_sgf_position_parse_uint8_list(fields[1], HOMEWORLDS_STAR_SLOT_COUNT, 12, system->stars) ||
@@ -97,6 +101,7 @@ gboolean homeworlds_sgf_position_apply_setup_node(gpointer position, const SgfNo
   const char *turn_text = NULL;
   const char *bank_text = NULL;
   const GPtrArray *systems = NULL;
+  gboolean seen_systems[HOMEWORLDS_SYSTEM_SLOT_COUNT] = {FALSE};
   HomeworldsPosition parsed = {0};
 
   g_return_val_if_fail(homeworlds_position != NULL, FALSE);
@@ -131,13 +136,18 @@ gboolean homeworlds_sgf_position_apply_setup_node(gpointer position, const SgfNo
   if (systems != NULL) {
     for (guint i = 0; i < systems->len; ++i) {
       const char *system_value = g_ptr_array_index((GPtrArray *)systems, i);
-      if (system_value == NULL || !homeworlds_sgf_position_parse_system_value(system_value, &parsed)) {
+      guint system_index = HOMEWORLDS_INVALID_INDEX;
+
+      if (system_value == NULL ||
+          !homeworlds_sgf_position_parse_system_value(system_value, &parsed, &system_index) ||
+          seen_systems[system_index]) {
         g_set_error_literal(error,
                             homeworlds_sgf_position_error_quark(),
                             3,
                             "Invalid Homeworlds SGF system snapshot");
         return FALSE;
       }
+      seen_systems[system_index] = TRUE;
     }
   }
   homeworlds_position_rebuild_color_counts(&parsed);

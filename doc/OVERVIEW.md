@@ -631,6 +631,8 @@ the user can trigger one or pass before a SGF node is emitted. In the app, compl
 Homeworlds intentionally does not expose a
 full legal move list, so the
 shared SGF controller validates completed moves by applying them to a copied position before appending the node.
+Homeworlds SGF position snapshots reject duplicate per-system entries instead of letting a later `GHS` property
+silently replace an earlier snapshot for the same system.
 `homeworlds_backend.c` walks the same staged builder to feed the shared alpha-beta search with backend-good moves. That
 AI path deduplicates completed symbolic moves, rejects pass moves while non-pass good moves remain, keeps pass as a
 top-level fallback when every non-pass branch is filtered away before a primary action is staged, applies

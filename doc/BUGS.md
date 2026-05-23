@@ -1162,3 +1162,13 @@ error path printed an error and returned without calling the backend move-list f
 empty candidate list if a backend returned one.
 
 The fix calls the Homeworlds backend move-list cleanup before returning from the empty-list path.
+
+## Homeworlds SGF snapshots accepted duplicate system entries
+
+A Homeworlds SGF position snapshot should contain at most one `GHS` value for each system index.
+
+The parser applied each `GHS` value directly into the parsed position. If a node contained two values for the same
+system index, the later value silently overwrote the earlier one instead of treating the snapshot as malformed.
+
+The fix records which system indices have already been seen while parsing a snapshot and rejects duplicate entries. A
+regression writes a valid snapshot, duplicates one system property, and verifies that loading it fails.

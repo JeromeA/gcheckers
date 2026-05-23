@@ -686,6 +686,33 @@ static void test_backend_sgf_snapshot_roundtrips_position(void) {
   assert(memcmp(&saved, &loaded, sizeof(saved)) == 0);
 }
 
+static void test_backend_sgf_snapshot_rejects_duplicate_systems(void) {
+  const GameBackend *backend = &homeworlds_game_backend;
+  HomeworldsPosition saved = {0};
+  HomeworldsPosition loaded = {0};
+  g_autoptr(SgfTree) tree = NULL;
+  SgfNode *root = NULL;
+  const GPtrArray *systems = NULL;
+  GError *error = NULL;
+
+  test_prepare_position(&saved);
+  tree = sgf_tree_new();
+  assert(SGF_IS_TREE(tree));
+  root = (SgfNode *)sgf_tree_get_root(tree);
+  assert(root != NULL);
+
+  assert(backend->sgf_write_position_node(&saved, root, NULL));
+  systems = sgf_node_get_property_values(root, "GHS");
+  assert(systems != NULL);
+  assert(systems->len > 0);
+  assert(sgf_node_add_property(root, "GHS", g_ptr_array_index((GPtrArray *)systems, 0)));
+
+  homeworlds_position_init(&loaded);
+  assert(!backend->sgf_apply_setup_node(&loaded, root, &error));
+  assert(error != NULL);
+  g_clear_error(&error);
+}
+
 static void test_backend_move_builder_completes_setup(void) {
   const GameBackend *backend = &homeworlds_game_backend;
   HomeworldsPosition position = {0};
@@ -2127,6 +2154,7 @@ int main(void) {
   test_backend_move_equality_uses_symbolic_build_identity();
   test_backend_move_codec_roundtrips_setup_and_turn();
   test_backend_sgf_snapshot_roundtrips_position();
+  test_backend_sgf_snapshot_rejects_duplicate_systems();
   test_backend_move_builder_completes_setup();
   test_backend_move_builder_setup_accepts_all_pyramid_sizes();
   test_backend_move_builder_completes_turn();
