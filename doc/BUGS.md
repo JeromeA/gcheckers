@@ -1180,3 +1180,11 @@ star system and cannot be produced by the writer.
 
 The parser accepted that shape and rebuilt cached color counts for it, leaving later rules code to work with an
 impossible position. The fix rejects starless non-empty systems while parsing each `GHS` value.
+
+## Homeworlds SGF snapshots accepted loose numeric fields
+
+Homeworlds snapshot numbers should be written and read as plain unsigned decimal digits. The loader used
+`g_ascii_strtoull()` directly, which accepts leading ASCII whitespace and signs.
+
+That meant malformed properties such as a turn value with a leading space could be accepted as valid state. The fix
+requires every character in a numeric snapshot field to be a digit before converting it.

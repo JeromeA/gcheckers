@@ -15,6 +15,15 @@ static gboolean homeworlds_sgf_position_parse_uint8(const char *text, guint max_
   g_return_val_if_fail(text != NULL, FALSE);
   g_return_val_if_fail(out_value != NULL, FALSE);
 
+  if (*text == '\0') {
+    return FALSE;
+  }
+  for (const char *p = text; *p != '\0'; ++p) {
+    if (!g_ascii_isdigit(*p)) {
+      return FALSE;
+    }
+  }
+
   value = g_ascii_strtoull(text, &end_ptr, 10);
   if (end_ptr == text || end_ptr == NULL || *end_ptr != '\0' || value > max_value || value > G_MAXUINT8) {
     return FALSE;
