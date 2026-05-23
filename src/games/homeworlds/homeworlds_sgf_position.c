@@ -4,6 +4,9 @@
 
 #include <string.h>
 
+#define HOMEWORLDS_PYRAMID_KIND_COUNT 12
+#define HOMEWORLDS_PYRAMID_SUPPLY_COUNT 3
+
 static GQuark homeworlds_sgf_position_error_quark(void) {
   return g_quark_from_static_string("homeworlds-sgf-position-error");
 }
@@ -60,6 +63,54 @@ static gboolean homeworlds_sgf_position_system_is_valid_snapshot(const Homeworld
   g_return_val_if_fail(system != NULL, FALSE);
 
   return homeworlds_system_has_star(system) || !homeworlds_system_has_any_ship(system);
+}
+
+static gboolean homeworlds_sgf_position_count_pyramid(HomeworldsPyramid pyramid,
+                                                      guint counts[HOMEWORLDS_PYRAMID_KIND_COUNT + 1]) {
+  g_return_val_if_fail(counts != NULL, FALSE);
+
+  if (!homeworlds_pyramid_is_valid(pyramid)) {
+    return pyramid == 0;
+  }
+
+  counts[pyramid]++;
+  return counts[pyramid] <= HOMEWORLDS_PYRAMID_SUPPLY_COUNT;
+}
+
+static gboolean homeworlds_sgf_position_validate_pyramid_supply(const HomeworldsPosition *position) {
+  guint counts[HOMEWORLDS_PYRAMID_KIND_COUNT + 1] = {0};
+
+  g_return_val_if_fail(position != NULL, FALSE);
+
+  for (guint i = 0; i < HOMEWORLDS_BANK_SLOT_COUNT; ++i) {
+    if (!homeworlds_sgf_position_count_pyramid(position->bank[i], counts)) {
+      return FALSE;
+    }
+  }
+  for (guint system_index = 0; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
+    const HomeworldsSystem *system = &position->systems[system_index];
+
+    for (guint star_slot = 0; star_slot < HOMEWORLDS_STAR_SLOT_COUNT; ++star_slot) {
+      if (!homeworlds_sgf_position_count_pyramid(system->stars[star_slot], counts)) {
+        return FALSE;
+      }
+    }
+    for (guint side = 0; side < 2; ++side) {
+      for (guint ship_slot = 0; ship_slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++ship_slot) {
+        if (!homeworlds_sgf_position_count_pyramid(system->ships[side][ship_slot], counts)) {
+          return FALSE;
+        }
+      }
+    }
+  }
+
+  for (HomeworldsPyramid pyramid = 1; pyramid <= HOMEWORLDS_PYRAMID_KIND_COUNT; ++pyramid) {
+    if (counts[pyramid] != HOMEWORLDS_PYRAMID_SUPPLY_COUNT) {
+      return FALSE;
+    }
+  }
+
+  return TRUE;
 }
 
 static char *homeworlds_sgf_position_format_uint8_list(const guint8 *values, guint count) {
@@ -164,6 +215,13 @@ gboolean homeworlds_sgf_position_apply_setup_node(gpointer position, const SgfNo
       }
       seen_systems[system_index] = TRUE;
     }
+  }
+  if (!homeworlds_sgf_position_validate_pyramid_supply(&parsed)) {
+    g_set_error_literal(error,
+                        homeworlds_sgf_position_error_quark(),
+                        6,
+                        "Invalid Homeworlds SGF pyramid supply");
+    return FALSE;
   }
   homeworlds_position_rebuild_color_counts(&parsed);
 

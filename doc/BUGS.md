@@ -1188,3 +1188,11 @@ Homeworlds snapshot numbers should be written and read as plain unsigned decimal
 
 That meant malformed properties such as a turn value with a leading space could be accepted as valid state. The fix
 requires every character in a numeric snapshot field to be a digit before converting it.
+
+## Homeworlds SGF snapshots accepted impossible pyramid supplies
+
+A Homeworlds position must account for exactly three copies of each pyramid type across the bank and every star system.
+
+The snapshot loader parsed the bank and systems independently, then trusted the result. A malformed snapshot could keep
+all pieces in the bank while also placing those same pieces on the board. The fix validates the full pyramid supply
+before installing the loaded position.

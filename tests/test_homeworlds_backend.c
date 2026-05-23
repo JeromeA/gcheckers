@@ -213,6 +213,22 @@ static void test_remove_all_from_bank(HomeworldsPosition *position, HomeworldsPy
   }
 }
 
+static void test_take_one_from_bank(HomeworldsPosition *position, HomeworldsPyramid pyramid) {
+  assert(position != NULL);
+  assert(homeworlds_pyramid_is_valid(pyramid));
+
+  for (guint i = 0; i < HOMEWORLDS_BANK_SLOT_COUNT; ++i) {
+    if (position->bank[i] != pyramid) {
+      continue;
+    }
+
+    position->bank[i] = 0;
+    return;
+  }
+
+  assert(FALSE);
+}
+
 static void test_add_to_bank(HomeworldsPosition *position, HomeworldsPyramid pyramid) {
   assert(position != NULL);
   assert(homeworlds_pyramid_is_valid(pyramid));
@@ -673,7 +689,8 @@ static void test_backend_sgf_snapshot_roundtrips_position(void) {
   saved.systems[2].stars[0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL);
   saved.systems[2].ships[0][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_MEDIUM);
   homeworlds_system_rebuild_color_counts(&saved.systems[2]);
-  saved.bank[0] = 0;
+  test_take_one_from_bank(&saved, saved.systems[2].stars[0]);
+  test_take_one_from_bank(&saved, saved.systems[2].ships[0][0]);
 
   tree = sgf_tree_new();
   assert(SGF_IS_TREE(tree));
@@ -755,6 +772,34 @@ static void test_backend_sgf_snapshot_rejects_loose_numbers(void) {
   assert(backend->sgf_write_position_node(&saved, root, NULL));
   assert(sgf_node_clear_property(root, "GHT"));
   assert(sgf_node_add_property(root, "GHT", " 0"));
+
+  homeworlds_position_init(&loaded);
+  assert(!backend->sgf_apply_setup_node(&loaded, root, &error));
+  assert(error != NULL);
+  g_clear_error(&error);
+}
+
+static void test_backend_sgf_snapshot_rejects_overfull_supply(void) {
+  const GameBackend *backend = &homeworlds_game_backend;
+  HomeworldsPosition saved = {0};
+  HomeworldsPosition loaded = {0};
+  g_autoptr(SgfTree) tree = NULL;
+  SgfNode *root = NULL;
+  GError *error = NULL;
+
+  test_prepare_position(&saved);
+  tree = sgf_tree_new();
+  assert(SGF_IS_TREE(tree));
+  root = (SgfNode *)sgf_tree_get_root(tree);
+  assert(root != NULL);
+
+  assert(backend->sgf_write_position_node(&saved, root, NULL));
+  assert(sgf_node_clear_property(root, "GHB"));
+  assert(sgf_node_add_property(root,
+                               "GHB",
+                               "1,2,3,4,5,6,7,8,9,10,11,12,"
+                               "1,2,3,4,5,6,7,8,9,10,11,12,"
+                               "1,2,3,4,5,6,7,8,9,10,11,12"));
 
   homeworlds_position_init(&loaded);
   assert(!backend->sgf_apply_setup_node(&loaded, root, &error));
@@ -2206,6 +2251,7 @@ int main(void) {
   test_backend_sgf_snapshot_rejects_duplicate_systems();
   test_backend_sgf_snapshot_rejects_ship_without_star();
   test_backend_sgf_snapshot_rejects_loose_numbers();
+  test_backend_sgf_snapshot_rejects_overfull_supply();
   test_backend_move_builder_completes_setup();
   test_backend_move_builder_setup_accepts_all_pyramid_sizes();
   test_backend_move_builder_completes_turn();
