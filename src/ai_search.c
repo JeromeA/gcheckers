@@ -473,8 +473,8 @@ static gint game_ai_search_recursive(gpointer position,
     }
   }
 
-  backend->move_list_free(&moves);
   if (*cancelled) {
+    backend->move_list_free(&moves);
     return 0;
   }
 
@@ -491,6 +491,7 @@ static gint game_ai_search_recursive(gpointer position,
   }
   game_ai_search_store_result(ctx, key, depth_remaining, best, bound, best_move);
 
+  backend->move_list_free(&moves);
   return best;
 }
 

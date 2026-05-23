@@ -1119,3 +1119,13 @@ permutations in `good_moves()`. The fix tries every reversible built-ship candid
 candidate makes the swapped order legal and position-equivalent. A regression also records that the saved position
 containing `H1g3- H1g+ H1g+ B2g+` and `H1g3- H1g+ B2g+ H1g+` is bank-dependent: those two moves are both kept because
 they put the returned `g3` at different systems.
+
+## Generic AI search stored a best-move pointer after freeing its move list
+
+The generic alpha-beta search remembered the current best move as a pointer returned by `move_list_get()`. That pointer
+belongs to the backend move list and is only valid until `move_list_free()`.
+
+When the search stored a transposition-table entry, it freed the move list first and then asked the TT to copy the best
+move. Homeworlds depth-2 analysis could therefore read freed move-list memory and crash while profiling
+`game-homeworlds.sgf` after 19 moves. The fix stores the TT entry before releasing the move list, and the regression
+uses a test backend that poisons retired move lists to prove the copied best move was taken while still valid.

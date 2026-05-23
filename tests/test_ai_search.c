@@ -18,6 +18,7 @@ typedef struct {
 
 static guint test_good_move_only_list_good_moves_calls = 0;
 static guint test_good_move_only_static_evaluate_calls = 0;
+static GPtrArray *test_good_move_only_retired_move_lists = NULL;
 
 static void test_init_game_with_ruleset(Game *game, PlayerRuleset ruleset) {
   const CheckersRules *rules = checkers_ruleset_get_rules(ruleset);
@@ -191,6 +192,10 @@ static void test_good_move_only_position_init(gpointer position, const GameBacke
 static void test_good_move_only_position_clear(gpointer /*position*/) {
 }
 
+static void test_good_move_only_release_retired_move_lists(void) {
+  g_clear_pointer(&test_good_move_only_retired_move_lists, g_ptr_array_unref);
+}
+
 static void test_good_move_only_position_copy(gpointer dest, gconstpointer src) {
   TestGoodMoveOnlyPosition *dest_position = dest;
   const TestGoodMoveOnlyPosition *src_position = src;
@@ -251,7 +256,14 @@ static GameBackendMoveList test_good_move_only_list_good_moves(gconstpointer pos
 static void test_good_move_only_move_list_free(GameBackendMoveList *moves) {
   g_return_if_fail(moves != NULL);
 
-  g_clear_pointer(&moves->moves, g_free);
+  if (moves->moves != NULL) {
+    memset(moves->moves, 0x7f, moves->count * sizeof(TestGoodMoveOnlyMove));
+    if (test_good_move_only_retired_move_lists == NULL) {
+      test_good_move_only_retired_move_lists = g_ptr_array_new_with_free_func(g_free);
+    }
+    g_ptr_array_add(test_good_move_only_retired_move_lists, moves->moves);
+  }
+  moves->moves = NULL;
   moves->count = 0;
 }
 
@@ -348,6 +360,7 @@ static void test_ai_search_accepts_good_move_only_backend(void) {
 
   assert(game_ai_search_choose_move(&test_good_move_only_backend, &position, 2, &selected));
   assert(selected.delta == 2);
+  test_good_move_only_release_retired_move_lists();
 }
 
 static void test_ai_search_depth_zero_skips_child_moves_without_forced_extension(void) {
@@ -364,6 +377,7 @@ static void test_ai_search_depth_zero_skips_child_moves_without_forced_extension
   assert(test_good_move_only_static_evaluate_calls == 1);
 
   game_ai_scored_move_list_free(&scored_moves);
+  test_good_move_only_release_retired_move_lists();
 }
 
 static void test_ai_search_forced_extension_is_backend_opt_in(void) {
@@ -382,6 +396,47 @@ static void test_ai_search_forced_extension_is_backend_opt_in(void) {
   assert(test_good_move_only_static_evaluate_calls == 0);
 
   game_ai_scored_move_list_free(&scored_moves);
+  test_good_move_only_release_retired_move_lists();
+}
+
+static void test_ai_search_tt_stores_best_move_before_freeing_move_list(void) {
+  TestGoodMoveOnlyPosition position = {0};
+  TestGoodMoveOnlyPosition child_position = {
+    .total = 1,
+    .turn = 1,
+  };
+  GameAiTranspositionTable *tt = NULL;
+  GameAiSearchStats stats = {0};
+  GameAiScoredMoveList scored_moves = {0};
+  GameAiTtEntry entry = {0};
+
+  test_good_move_only_position_init(&position, NULL);
+  tt = game_ai_tt_new(1, test_good_move_only_backend.move_size);
+  assert(tt != NULL);
+
+  game_ai_search_stats_clear(&stats);
+  assert(game_ai_search_analyze_moves_cancellable_with_tt(&test_good_move_only_backend,
+                                                          &position,
+                                                          2,
+                                                          &scored_moves,
+                                                          NULL,
+                                                          NULL,
+                                                          NULL,
+                                                          NULL,
+                                                          tt,
+                                                          &stats));
+  assert(scored_moves.count == 2);
+  assert(game_ai_tt_lookup(tt, test_good_move_only_hash_position(&child_position), &entry));
+  assert(entry.valid);
+  assert(entry.depth == 1);
+  assert(entry.best_move_size == sizeof(TestGoodMoveOnlyMove));
+  assert(entry.best_move != NULL);
+  assert(((const TestGoodMoveOnlyMove *)entry.best_move)->delta == 1);
+
+  game_ai_tt_entry_clear(&entry);
+  game_ai_scored_move_list_free(&scored_moves);
+  game_ai_tt_free(tt);
+  test_good_move_only_release_retired_move_lists();
 }
 
 int main(int argc, char **argv) {
@@ -394,6 +449,7 @@ int main(int argc, char **argv) {
   test_ai_search_accepts_good_move_only_backend();
   test_ai_search_depth_zero_skips_child_moves_without_forced_extension();
   test_ai_search_forced_extension_is_backend_opt_in();
+  test_ai_search_tt_stores_best_move_before_freeing_move_list();
 
   return 0;
 }

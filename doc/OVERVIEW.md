@@ -392,7 +392,9 @@ Score convention: search scores are white-centric at all plies (`+` good for whi
 lists are ordered by side to move preference (white: high to low, black: low to high) so index 0 remains the best move
 for the player to act.
 Search integrates backend hashing plus a depth/bound/age transposition table and uses stored best moves for local move
-ordering. Exposes both searched position scoring and pure static scoring through generic APIs.
+ordering. Best moves are copied into the transposition table before the backend move list is released, because
+`move_list_get()` pointers are only valid while their owner list is alive. Exposes both searched position scoring and
+pure static scoring through generic APIs.
 Collaborates with: `game_backend.h`, `tests/test_ai_search.c`, and the checkers compatibility wrapper.
 
 ## AI alpha-beta compatibility wrapper (`src/games/checkers/ai_alpha_beta.c`,
