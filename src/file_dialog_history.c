@@ -1,41 +1,9 @@
 #include "file_dialog_history.h"
 
-#include "game_app_profile.h"
+#include "common_settings.h"
 
 GSettings *ggame_file_dialog_history_create_settings(void) {
-  const GGameAppProfile *profile = ggame_active_app_profile();
-  const char *schema_id = profile != NULL ? profile->settings_schema_id : NULL;
-  GSettingsSchemaSource *default_source = g_settings_schema_source_get_default();
-  GSettingsSchema *schema = NULL;
-  if (schema_id == NULL || schema_id[0] == '\0') {
-    g_debug("No file-dialog-history schema configured for the active profile");
-    return NULL;
-  }
-  if (default_source != NULL) {
-    schema = g_settings_schema_source_lookup(default_source, schema_id, TRUE);
-  }
-
-  g_autoptr(GSettingsSchemaSource) local_source = NULL;
-  if (schema == NULL) {
-    g_autoptr(GError) error = NULL;
-    local_source =
-        g_settings_schema_source_new_from_directory("data/schemas", default_source, FALSE, &error);
-    if (!local_source) {
-      g_debug("Unable to load local GSettings schemas: %s", error != NULL ? error->message : "unknown error");
-      return NULL;
-    }
-
-    schema = g_settings_schema_source_lookup(local_source, schema_id, FALSE);
-  }
-
-  if (schema == NULL) {
-    g_debug("Missing GSettings schema %s", schema_id);
-    return NULL;
-  }
-
-  GSettings *settings = g_settings_new_full(schema, NULL, NULL);
-  g_settings_schema_unref(schema);
-  return settings;
+  return ggame_common_settings_create();
 }
 
 GFile *ggame_file_dialog_history_get_initial_folder(GSettings *settings, const char *key) {

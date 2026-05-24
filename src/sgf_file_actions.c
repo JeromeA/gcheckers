@@ -1,9 +1,8 @@
 #include "sgf_file_actions.h"
 
+#include "common_settings.h"
 #include "file_dialog_history.h"
 #include "sgf_io.h"
-
-static const char *gcheckers_sgf_last_folder_key = "sgf-last-folder";
 
 static void ggame_window_show_file_error_dialog(GGameWindow *self, const char *title, const char *message) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
@@ -80,7 +79,7 @@ static void ggame_window_on_sgf_load_dialog_finish(GObject *source_object,
 
   g_autoptr(GSettings) settings = ggame_file_dialog_history_create_settings();
   if (G_IS_SETTINGS(settings)) {
-    (void)ggame_file_dialog_history_remember_parent(settings, gcheckers_sgf_last_folder_key, file);
+    (void)ggame_file_dialog_history_remember_parent(settings, GGAME_COMMON_SETTINGS_KEY_SGF_LAST_FOLDER, file);
   }
 
   GGameSgfController *controller = ggame_window_get_sgf_controller(self);
@@ -130,7 +129,7 @@ static void ggame_window_on_sgf_save_dialog_finish(GObject *source_object,
 
   g_autoptr(GSettings) settings = ggame_file_dialog_history_create_settings();
   if (G_IS_SETTINGS(settings)) {
-    (void)ggame_file_dialog_history_remember_parent(settings, gcheckers_sgf_last_folder_key, file);
+    (void)ggame_file_dialog_history_remember_parent(settings, GGAME_COMMON_SETTINGS_KEY_SGF_LAST_FOLDER, file);
   }
 
   GGameSgfController *controller = ggame_window_get_sgf_controller(self);
@@ -172,7 +171,7 @@ static void ggame_window_on_sgf_save_position_dialog_finish(GObject *source_obje
 
   g_autoptr(GSettings) settings = ggame_file_dialog_history_create_settings();
   if (G_IS_SETTINGS(settings)) {
-    (void)ggame_file_dialog_history_remember_parent(settings, gcheckers_sgf_last_folder_key, file);
+    (void)ggame_file_dialog_history_remember_parent(settings, GGAME_COMMON_SETTINGS_KEY_SGF_LAST_FOLDER, file);
   }
 
   GGameSgfController *controller = ggame_window_get_sgf_controller(self);
@@ -197,7 +196,7 @@ static void ggame_window_on_sgf_load_action(GSimpleAction * /*action*/,
   g_autoptr(GSettings) settings = ggame_file_dialog_history_create_settings();
   if (G_IS_SETTINGS(settings)) {
     g_autoptr(GFile) folder =
-        ggame_file_dialog_history_get_initial_folder(settings, gcheckers_sgf_last_folder_key);
+        ggame_file_dialog_history_get_initial_folder(settings, GGAME_COMMON_SETTINGS_KEY_SGF_LAST_FOLDER);
     if (folder != NULL) {
       gtk_file_dialog_set_initial_folder(dialog, folder);
     }
@@ -219,7 +218,7 @@ static void ggame_window_on_sgf_save_as_action(GSimpleAction * /*action*/,
   g_autoptr(GSettings) settings = ggame_file_dialog_history_create_settings();
   if (G_IS_SETTINGS(settings)) {
     g_autoptr(GFile) folder =
-        ggame_file_dialog_history_get_initial_folder(settings, gcheckers_sgf_last_folder_key);
+        ggame_file_dialog_history_get_initial_folder(settings, GGAME_COMMON_SETTINGS_KEY_SGF_LAST_FOLDER);
     if (folder != NULL) {
       gtk_file_dialog_set_initial_folder(dialog, folder);
     }
@@ -241,7 +240,7 @@ static void ggame_window_on_sgf_save_position_action(GSimpleAction * /*action*/,
   g_autoptr(GSettings) settings = ggame_file_dialog_history_create_settings();
   if (G_IS_SETTINGS(settings)) {
     g_autoptr(GFile) folder =
-        ggame_file_dialog_history_get_initial_folder(settings, gcheckers_sgf_last_folder_key);
+        ggame_file_dialog_history_get_initial_folder(settings, GGAME_COMMON_SETTINGS_KEY_SGF_LAST_FOLDER);
     if (folder != NULL) {
       gtk_file_dialog_set_initial_folder(dialog, folder);
     }

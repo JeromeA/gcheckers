@@ -7,6 +7,7 @@
 #include "app_paths.h"
 #include "analysis_graph.h"
 #include "board_view.h"
+#include "common_settings.h"
 #include "puzzle_dialog.h"
 #include "puzzle_catalog.h"
 #include "games/checkers/rulesets.h"
@@ -197,11 +198,15 @@ static gboolean ggame_window_start_next_puzzle_mode(GGameWindow *self);
 static char *ggame_window_analysis_format_complete(const SgfNodeAnalysis *analysis);
 static void ggame_window_rebuild_board_host(GGameWindow *self);
 static void ggame_window_sync_drawer_action_states(GGameWindow *self);
+static void ggame_window_load_default_size(gint *out_width, gint *out_height);
+static void ggame_window_save_default_size(GGameWindow *self);
+static gboolean ggame_window_on_close_request(GtkWindow *window, gpointer user_data);
 
 enum {
   GGAME_WINDOW_DEFAULT_BOARD_PANEL_WIDTH = 500,
   GGAME_WINDOW_DEFAULT_NAVIGATION_PANEL_WIDTH = 300,
   GGAME_WINDOW_DEFAULT_ANALYSIS_PANEL_WIDTH = 300,
+  GGAME_WINDOW_DEFAULT_WIDTH = 1100,
   GGAME_WINDOW_DEFAULT_HEIGHT = 700,
   GGAME_WINDOW_ANALYSIS_PROGRESS_INTERVAL_MS = 100,
   GGAME_WINDOW_ANALYSIS_TT_SIZE_MB = 256,
@@ -3041,6 +3046,56 @@ static void ggame_window_on_mode_selected_notify(GObject * /*object*/,
   ggame_window_sync_mode_ui(self);
 }
 
+static void ggame_window_load_default_size(gint *out_width, gint *out_height) {
+  g_return_if_fail(out_width != NULL);
+  g_return_if_fail(out_height != NULL);
+
+  *out_width = GGAME_WINDOW_DEFAULT_WIDTH;
+  *out_height = GGAME_WINDOW_DEFAULT_HEIGHT;
+
+  g_autoptr(GSettings) settings = ggame_common_settings_create();
+  if (!G_IS_SETTINGS(settings)) {
+    return;
+  }
+
+  gint saved_width = g_settings_get_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_WIDTH);
+  gint saved_height = g_settings_get_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_HEIGHT);
+  if (saved_width > 0 && saved_height > 0) {
+    *out_width = saved_width;
+    *out_height = saved_height;
+  }
+}
+
+static void ggame_window_save_default_size(GGameWindow *self) {
+  g_return_if_fail(GGAME_IS_WINDOW(self));
+
+  gint width = gtk_widget_get_width(GTK_WIDGET(self));
+  gint height = gtk_widget_get_height(GTK_WIDGET(self));
+  if (width <= 0 || height <= 0) {
+    gtk_window_get_default_size(GTK_WINDOW(self), &width, &height);
+  }
+  if (width <= 0 || height <= 0) {
+    return;
+  }
+
+  g_autoptr(GSettings) settings = ggame_common_settings_create();
+  if (!G_IS_SETTINGS(settings)) {
+    return;
+  }
+
+  g_settings_set_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_WIDTH, width);
+  g_settings_set_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_HEIGHT, height);
+}
+
+static gboolean ggame_window_on_close_request(GtkWindow *window, gpointer user_data) {
+  GGameWindow *self = GGAME_WINDOW(user_data);
+  g_return_val_if_fail(GGAME_IS_WINDOW(self), FALSE);
+  g_return_val_if_fail(GTK_IS_WINDOW(window), FALSE);
+
+  ggame_window_save_default_size(self);
+  return FALSE;
+}
+
 static void ggame_window_on_default_size_notify(GObject *object,
                                                     GParamSpec *pspec,
                                                     gpointer user_data) {
@@ -3747,7 +3802,11 @@ static void ggame_window_init(GGameWindow *self) {
                                   self);
   ggame_window_install_sgf_file_actions(self);
   ggame_window_sync_title(self);
-  gtk_window_set_default_size(GTK_WINDOW(self), 1100, 700);
+  gint default_width = 0;
+  gint default_height = 0;
+  ggame_window_load_default_size(&default_width, &default_height);
+  gtk_window_set_default_size(GTK_WINDOW(self), default_width, default_height);
+  g_signal_connect(self, "close-request", G_CALLBACK(ggame_window_on_close_request), self);
 
   ggame_style_init();
 

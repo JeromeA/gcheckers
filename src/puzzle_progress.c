@@ -1,6 +1,6 @@
 #include "puzzle_progress.h"
 
-#include "file_dialog_history.h"
+#include "app_settings.h"
 #include "games/checkers/game.h"
 #include "games/checkers/rulesets.h"
 
@@ -996,7 +996,7 @@ char *ggame_puzzle_progress_store_get_or_create_user_id(GGamePuzzleProgressStore
 
   g_mutex_lock(&store->mutex);
 
-  g_autoptr(GSettings) settings = ggame_file_dialog_history_create_settings();
+  g_autoptr(GSettings) settings = ggame_app_settings_create();
   if (settings != NULL) {
     g_autofree char *user_id = g_settings_get_string(settings, checkers_puzzle_progress_user_id_key);
     if (user_id != NULL && user_id[0] != '\0') {

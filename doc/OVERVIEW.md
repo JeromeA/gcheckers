@@ -20,7 +20,8 @@ matter of adding a new backend directory plus the corresponding profile and pack
 
 ## `GGameAppProfile` (`src/game_app_profile.c`, `src/game_app_profile.h`)
 Module: runtime app-profile registry and descriptors.
-Role: describe each branded target, including app ID, display strings, settings schema ID, the profile-owned
+Role: describe each branded target, including app ID, display strings, optional app-specific settings schema ID, the
+profile-owned
 `GameBackend *`, feature flags, derived helpers such as puzzle-catalog support, shared-window layout and computer-depth
 defaults, and an optional board-host hook. Launchers select one of these profiles at startup, and
 `ggame_active_app_profile()`
@@ -49,7 +50,9 @@ shared window actions exposed in the `Analysis` menubar submenu: current-positio
 node, and full-game analysis always processes nodes in reverse order so TT state is reused from later positions
 first. Current-position analysis now runs through the generic backend AI API for every shared-shell build, while
 full-game analysis keeps the checkers setup-aware replay path for checkers and uses backend-position SGF replay for
-boop and Homeworlds.
+boop and Homeworlds. The toplevel window default size is loaded from and saved to the shared `ggame` settings schema
+under the active profile path, so checkers, boop, and Homeworlds retain separate dimensions without per-game schema
+keys.
 Shared pane and computer-depth defaults also come from the active profile. Checkers keeps the historical `500/300/300`
 board, navigation, and analysis widths with both drawers visible by default, while boop starts with a wider `760` board
 pane and the analysis drawer hidden by default so its square board host can reach the same practical size as the old
@@ -289,6 +292,16 @@ so repeated openings do not leave hidden settings windows pending in the GTK top
 `GGameApplication` presents this dialog automatically after
 creating the main window so the user can review the privacy controls before continuing.
 
+## Common Settings (`src/common_settings.c`, `src/common_settings.h`,
+`data/schemas/io.github.jeromea.ggame.gschema.xml`)
+Module: shared GSettings access for shell-level state.
+Role: load the relocatable `io.github.jeromea.ggame` schema and bind it to a per-profile path such as
+`/io/github/jeromea/ggame/checkers/` or `/io/github/jeromea/ggame/homeworlds/`. It stores state that belongs to the
+shared application shell rather than a specific game schema, currently the last SGF folder and toplevel window
+dimensions. Adding a new game profile therefore reuses these settings automatically without adding another schema
+copy.
+Collaborates with: `file_dialog_history.c`, `window.c`, `GGameAppProfile`, and `tests/test_file_dialog_history.c`.
+
 ## Puzzle Progress Reporting (`src/puzzle_progress.c`, `data/schemas/io.github.jeromea.gcheckers.gschema.xml`,
 `data/schemas/io.github.jeromea.gboop.gschema.xml`)
 Module: persistent puzzle attempt storage and report payload preparation.
@@ -512,10 +525,10 @@ Collaborates with: `checkers_create_puzzles.c` and `tests/test_puzzle_generation
 
 ## File dialog history helpers (`src/file_dialog_history.c`, `src/file_dialog_history.h`)
 Module: SGF file dialog folder persistence helpers.
-Role: create `GSettings` with the app schema, read the remembered SGF folder as a `GFile`, and store the parent folder
-of a chosen SGF file so future dialogs can reopen there. The helper uses the active profile's schema ID, then falls
-back to the in-tree `data/schemas` directory for local builds/tests.
-Collaborates with: `sgf_file_actions.c` and `tests/test_file_dialog_history.c`.
+Role: create the common `ggame` settings object, read the remembered SGF folder as a `GFile`, and store the parent
+folder of a chosen SGF file so future dialogs can reopen there. The common settings helper falls back to the in-tree
+`data/schemas` directory for local builds/tests.
+Collaborates with: `common_settings.c`, `sgf_file_actions.c`, and `tests/test_file_dialog_history.c`.
 
 ## App data path helpers (`src/app_paths.c`, `src/app_paths.h`)
 Module: application data directory lookup helpers.

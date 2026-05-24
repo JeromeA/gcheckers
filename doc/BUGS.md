@@ -1238,3 +1238,16 @@ scores such as 997 were shown as regular numeric evaluations instead of `W#3`.
 
 The fix teaches the formatter about all current terminal score scales and keeps tests for the Homeworlds, checkers, and
 Boop bands.
+
+## Homeworlds did not persist shared shell settings
+
+SGF file dialogs should reopen in the last SGF folder, and top-level windows should restore their last size, for every
+shared-shell game.
+
+The SGF folder history helper used the active profile's app-specific settings schema. Checkers and boop had schemas,
+but Homeworlds intentionally did not, so `ghomeworlds` skipped folder history entirely. Window dimensions were not
+persisted anywhere, so they had the same cross-game wiring problem waiting to happen.
+
+The fix adds one relocatable `io.github.jeromea.ggame` schema for shared shell settings. File-dialog history and window
+size now use that common schema under a per-profile path, so new games inherit the behavior without copying settings
+keys into another app schema.

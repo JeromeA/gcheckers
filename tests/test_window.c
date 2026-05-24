@@ -4,6 +4,7 @@
 #include "active_game_backend.h"
 #include "app_settings.h"
 #include "application.h"
+#include "common_settings.h"
 #include "games/checkers/checkers_model.h"
 #include "puzzle_progress.h"
 #include "sgf_controller.h"
@@ -901,6 +902,42 @@ static void test_ggame_window_dispose_without_external_panel_ref(void) {
 
   g_object_run_dispose(G_OBJECT(window));
 
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
+static void test_ggame_window_persists_default_size(void) {
+  g_setenv("GSETTINGS_BACKEND", "memory", TRUE);
+
+  g_autoptr(GSettings) settings = ggame_common_settings_create();
+  g_assert_nonnull(settings);
+  g_assert_true(g_settings_set_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_WIDTH, 0));
+  g_assert_true(g_settings_set_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_HEIGHT, 0));
+
+  GtkApplication *app = test_ggame_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GGameWindow *window = test_ggame_window_new(app, model);
+  gtk_window_set_default_size(GTK_WINDOW(window), 1234, 678);
+
+  gboolean handled = TRUE;
+  g_signal_emit_by_name(window, "close-request", &handled);
+  g_assert_false(handled);
+  g_assert_cmpint(g_settings_get_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_WIDTH), ==, 1234);
+  g_assert_cmpint(g_settings_get_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_HEIGHT), ==, 678);
+
+  GCheckersModel *second_model = gcheckers_model_new();
+  GGameWindow *second_window = test_ggame_window_new(app, second_model);
+  gint restored_width = 0;
+  gint restored_height = 0;
+  gtk_window_get_default_size(GTK_WINDOW(second_window), &restored_width, &restored_height);
+  g_assert_cmpint(restored_width, ==, 1234);
+  g_assert_cmpint(restored_height, ==, 678);
+
+  g_assert_true(g_settings_set_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_WIDTH, 0));
+  g_assert_true(g_settings_set_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_HEIGHT, 0));
+  g_clear_object(&second_window);
+  g_clear_object(&second_model);
   g_clear_object(&window);
   g_clear_object(&model);
   g_clear_object(&app);
@@ -2449,6 +2486,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/analysis-graph/progress-node-accessors", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/dispose-unparents-controls", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/dispose-without-panel-ref", test_ggame_window_skip);
+    g_test_add_func("/gcheckers-window/window-size-settings", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/dispose-after-panel-removed", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/computer-selection-keeps-board-enabled", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/auto-move-next-player-computer", test_ggame_window_skip);
@@ -2493,6 +2531,7 @@ int main(int argc, char **argv) {
     g_clear_object(&test_app);
     g_test_add_func("/gcheckers-window/dispose-unparents-controls", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/dispose-without-panel-ref", test_ggame_window_skip);
+    g_test_add_func("/gcheckers-window/window-size-settings", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/dispose-after-panel-removed", test_ggame_window_skip);
     return g_test_run();
   }
@@ -2501,6 +2540,8 @@ int main(int argc, char **argv) {
                   test_ggame_window_unparents_controls_panel_on_dispose);
   g_test_add_func("/gcheckers-window/dispose-without-panel-ref",
                   test_ggame_window_dispose_without_external_panel_ref);
+  g_test_add_func("/gcheckers-window/window-size-settings",
+                  test_ggame_window_persists_default_size);
   g_test_add_func("/gcheckers-window/dispose-after-panel-removed",
                   test_ggame_window_dispose_after_panel_removed);
   g_test_add_func("/gcheckers-window/computer-selection-keeps-board-enabled",

@@ -19,6 +19,7 @@ BOOP_DIR := src/games/boop
 CHECKERS_APP_ID := io.github.jeromea.gcheckers
 BOOP_APP_ID := io.github.jeromea.gboop
 HOMEWORLDS_APP_ID := io.github.jeromea.ghomeworlds
+GGAME_SETTINGS_ID := io.github.jeromea.ggame
 CHECKERS_APP_BIN_NAME := gcheckers
 BOOP_APP_BIN_NAME := gboop
 HOMEWORLDS_APP_BIN_NAME := ghomeworlds
@@ -65,6 +66,7 @@ OBJ_DIR := $(BUILD_DIR)/obj
 CALLGRIND_DIR := $(BUILD_DIR)/callgrind
 
 APP_PATHS_SRCS := src/app_paths.c
+COMMON_SETTINGS_SRCS := src/common_settings.c
 CREATE_PUZZLES_RUNNER_SRCS := src/create_puzzles_runner.c
 CREATE_PUZZLES_PROGRESS_SRCS := src/create_puzzles_progress.c
 PUZZLE_PROGRESS_SRCS := src/puzzle_progress.c
@@ -103,7 +105,8 @@ COV_OBJS := $(SRCS:%.c=$(COV_OBJ_DIR)/%.o)
 COV_BOARD_OBJS := $(BOARD_SRCS:%.c=$(COV_OBJ_DIR)/%.o)
 GSETTINGS_SCHEMA_DIR := data/schemas
 GSETTINGS_SCHEMA_XMLS := $(GSETTINGS_SCHEMA_DIR)/$(CHECKERS_APP_ID).gschema.xml \
-	$(GSETTINGS_SCHEMA_DIR)/$(BOOP_APP_ID).gschema.xml
+	$(GSETTINGS_SCHEMA_DIR)/$(BOOP_APP_ID).gschema.xml \
+	$(GSETTINGS_SCHEMA_DIR)/$(GGAME_SETTINGS_ID).gschema.xml
 GSETTINGS_SCHEMA_COMPILED := $(GSETTINGS_SCHEMA_DIR)/gschemas.compiled
 PUZZLE_VARIANTS := american international russian
 PREFIX ?= /usr/local
@@ -188,7 +191,8 @@ TEST_CHECKERS_PROFILE_BINS := $(TEST_AI_SEARCH_BIN) $(TEST_APP_SETTINGS_BIN) $(T
 TEST_BOOP_PROFILE_BINS := $(TEST_APP_SETTINGS_BIN) $(TEST_FILE_DIALOG_HISTORY_BIN) $(TEST_GAME_BACKEND_BIN) \
 	$(TEST_GAME_MODEL_BIN) $(TEST_SGF_IO_BIN) $(TEST_BOARD_VIEW_BIN) $(TEST_SGF_CONTROLLER_BIN) \
 	$(TEST_CREATE_PUZZLES_RUNNER_BIN) $(TEST_PUZZLE_CATALOG_BIN) $(TEST_WINDOW_BOOP_BIN)
-TEST_HOMEWORLDS_PROFILE_BINS := $(TEST_GAME_BACKEND_BIN) $(TEST_GAME_MODEL_BIN) $(TEST_SGF_IO_BIN)
+TEST_HOMEWORLDS_PROFILE_BINS := $(TEST_FILE_DIALOG_HISTORY_BIN) $(TEST_GAME_BACKEND_BIN) $(TEST_GAME_MODEL_BIN) \
+	$(TEST_SGF_IO_BIN)
 TEST_PROFILE_BINS := $(sort $(TEST_CHECKERS_PROFILE_BINS) $(TEST_BOOP_PROFILE_BINS) $(TEST_HOMEWORLDS_PROFILE_BINS))
 TEST_NO_PROFILE_BINS := $(filter-out $(TEST_PROFILE_BINS),$(TEST_BINS))
 
@@ -285,7 +289,8 @@ $(TEST_HOMEWORLDS_PROFILE_MOVES_BIN): tests/test_homeworlds_profile_moves.c $(HO
 test_homeworlds_window: $(TEST_HOMEWORLDS_WINDOW_BIN)
 $(TEST_HOMEWORLDS_WINDOW_BIN): tests/test_homeworlds_window.c $(HOMEWORLDS_UI_SRCS) \
 	$(HOMEWORLDS_ALL_SRCS) src/application.c src/window.c $(APP_PATHS_SRCS) $(PUZZLE_PROGRESS_SRCS) \
-	$(PUZZLE_CATALOG_SRCS) src/app_settings.c src/app_settings.h src/settings_dialog.c src/settings_dialog.h \
+	$(PUZZLE_CATALOG_SRCS) src/app_settings.c src/app_settings.h $(COMMON_SETTINGS_SRCS) src/common_settings.h \
+	src/settings_dialog.c src/settings_dialog.h \
 	src/new_game_dialog.c src/puzzle_dialog.c src/puzzle_dialog.h $(CHECKERS_DIR)/rulesets.c \
 	$(CHECKERS_DIR)/rulesets.h src/import_dialog.c src/sgf_file_actions.c src/sgf_file_actions.h \
 	src/file_dialog_history.c src/file_dialog_history.h src/bga_client.c src/bga_client.h src/window.h \
@@ -303,7 +308,8 @@ $(TEST_HOMEWORLDS_WINDOW_BIN): tests/test_homeworlds_window.c $(HOMEWORLDS_UI_SR
 	$(HOMEWORLDS_DIR)/homeworlds_view.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_homeworlds_window.c $(TEST_PROFILE_UTILS_SRCS) \
-		src/application.c src/window.c $(APP_PATHS_SRCS) $(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) \
+		src/application.c src/window.c $(APP_PATHS_SRCS) $(COMMON_SETTINGS_SRCS) $(PUZZLE_PROGRESS_SRCS) \
+		$(PUZZLE_CATALOG_SRCS) \
 		src/app_settings.c src/settings_dialog.c src/new_game_dialog.c src/puzzle_dialog.c \
 		src/import_dialog.c src/sgf_file_actions.c src/file_dialog_history.c src/bga_client.c src/style.c \
 		src/player_controls_panel.c src/analysis_graph.c src/sgf_controller.c $(SGF_AUTOSAVE_SRCS) src/board_view.c \
@@ -423,11 +429,11 @@ $(TEST_BGA_CLIENT_BIN): tests/test_bga_client.c src/bga_client.c src/bga_client.
 
 test_file_dialog_history: $(TEST_FILE_DIALOG_HISTORY_BIN)
 $(TEST_FILE_DIALOG_HISTORY_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_file_dialog_history.c \
-	src/file_dialog_history.c src/file_dialog_history.h src/app_settings.c src/app_settings.h \
+	src/file_dialog_history.c src/file_dialog_history.h $(COMMON_SETTINGS_SRCS) src/common_settings.h \
 	$(TEST_PROFILE_UTILS_SRCS) $(BACKEND_CODEC_SRCS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_file_dialog_history.c $(TEST_PROFILE_UTILS_SRCS) src/file_dialog_history.c \
-		src/app_settings.c $(BACKEND_CODEC_SRCS) $(LDLIBS)
+		$(COMMON_SETTINGS_SRCS) $(BACKEND_CODEC_SRCS) $(LDLIBS)
 
 test_app_settings: $(TEST_APP_SETTINGS_BIN)
 $(TEST_APP_SETTINGS_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_app_settings.c src/app_settings.c \
@@ -443,14 +449,14 @@ $(TEST_APP_PATHS_BIN): tests/test_app_paths.c $(APP_PATHS_SRCS) src/app_paths.h
 
 test_puzzle_progress: $(TEST_PUZZLE_PROGRESS_BIN)
 $(TEST_PUZZLE_PROGRESS_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_puzzle_progress.c $(APP_PATHS_SRCS) \
-	src/puzzle_progress.c src/puzzle_progress.h src/file_dialog_history.c src/file_dialog_history.h \
+	src/puzzle_progress.c src/puzzle_progress.h src/app_settings.c src/app_settings.h \
 	$(TEST_PROFILE_UTILS_SRCS) \
 	$(CHECKERS_DIR)/rulesets.c $(CHECKERS_DIR)/rulesets.h $(CHECKERS_DIR)/game.h $(CHECKERS_DIR)/board.h \
 	$(BACKEND_CODEC_SRCS_NO_RULESETS) \
 	$(CHECKERS_DIR)/checkers_constants.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ tests/test_puzzle_progress.c $(TEST_PROFILE_UTILS_SRCS) $(APP_PATHS_SRCS) \
-		src/puzzle_progress.c src/file_dialog_history.c $(CHECKERS_DIR)/rulesets.c \
+		src/puzzle_progress.c src/app_settings.c $(CHECKERS_DIR)/rulesets.c \
 		$(BACKEND_CODEC_SRCS_NO_RULESETS) $(LDLIBS)
 
 test_puzzle_progress_report_server: $(TEST_PUZZLE_PROGRESS_REPORT_SERVER_BIN)
@@ -594,7 +600,7 @@ $(TEST_SGF_CONTROLLER_BIN): tests/test_sgf_controller.c src/sgf_controller.c src
 test_window: $(TEST_WINDOW_BIN)
 $(TEST_WINDOW_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_window.c src/window.c src/application.c \
 	src/application.h $(APP_PATHS_SRCS) $(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c \
-	src/app_settings.h \
+	src/app_settings.h $(COMMON_SETTINGS_SRCS) src/common_settings.h \
 	src/new_game_dialog.c src/puzzle_dialog.c src/puzzle_dialog.h $(CHECKERS_DIR)/rulesets.c $(CHECKERS_DIR)/rulesets.h \
 	src/import_dialog.c src/settings_dialog.c src/settings_dialog.h src/sgf_file_actions.c \
 	src/sgf_file_actions.h src/file_dialog_history.c src/file_dialog_history.h src/bga_client.c src/bga_client.h \
@@ -612,7 +618,7 @@ $(TEST_WINDOW_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_window.c src/window.
 	$(TEST_PROFILE_UTILS_SRCS) $(SRCS) $(BOOP_UI_SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_window.c $(TEST_PROFILE_UTILS_SRCS) src/application.c src/window.c \
-		$(APP_PATHS_SRCS) $(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c \
+		$(APP_PATHS_SRCS) $(COMMON_SETTINGS_SRCS) $(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c \
 		src/new_game_dialog.c src/puzzle_dialog.c src/import_dialog.c src/settings_dialog.c src/file_dialog_history.c \
 		src/sgf_file_actions.c src/bga_client.c src/style.c src/player_controls_panel.c \
 		src/sgf_controller.c $(SGF_AUTOSAVE_SRCS) src/analysis_graph.c src/board_view.c src/board_grid.c src/board_square.c \
@@ -624,7 +630,7 @@ $(TEST_WINDOW_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_window.c src/window.
 test_window_boop: $(TEST_WINDOW_BOOP_BIN)
 $(TEST_WINDOW_BOOP_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_window_boop.c src/window.c src/application.c \
 	src/application.h $(APP_PATHS_SRCS) $(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c \
-	src/app_settings.h \
+	src/app_settings.h $(COMMON_SETTINGS_SRCS) src/common_settings.h \
 	src/new_game_dialog.c src/puzzle_dialog.c src/puzzle_dialog.h $(CHECKERS_DIR)/rulesets.c $(CHECKERS_DIR)/rulesets.h \
 	src/import_dialog.c src/settings_dialog.c src/settings_dialog.h src/sgf_file_actions.c \
 	src/sgf_file_actions.h src/file_dialog_history.c src/file_dialog_history.h src/bga_client.c src/bga_client.h \
@@ -643,7 +649,7 @@ $(TEST_WINDOW_BOOP_BIN): $(GSETTINGS_SCHEMA_COMPILED) tests/test_window_boop.c s
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ tests/test_window_boop.c $(TEST_PROFILE_UTILS_SRCS) \
 		src/application.c src/window.c \
-		$(APP_PATHS_SRCS) $(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c \
+		$(APP_PATHS_SRCS) $(COMMON_SETTINGS_SRCS) $(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c \
 		src/new_game_dialog.c src/puzzle_dialog.c src/import_dialog.c src/settings_dialog.c src/file_dialog_history.c \
 		src/sgf_file_actions.c src/bga_client.c src/style.c src/player_controls_panel.c \
 		src/sgf_controller.c $(SGF_AUTOSAVE_SRCS) src/analysis_graph.c src/board_view.c src/board_grid.c src/board_square.c \
@@ -673,7 +679,7 @@ $(TEST_PIECE_PALETTE_BIN): tests/test_piece_palette.c src/piece_palette.c src/pi
 		src/man_paintable.c $(LDLIBS) $(GTK_LIBS)
 
 $(CHECKERS_APP_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c $(APP_MAIN_SRCS) src/application.c src/window.c \
-	$(APP_PATHS_SRCS) \
+	$(APP_PATHS_SRCS) $(COMMON_SETTINGS_SRCS) src/common_settings.h \
 	$(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c src/app_settings.h src/settings_dialog.c \
 	src/settings_dialog.h \
 	src/new_game_dialog.c src/puzzle_dialog.c src/puzzle_dialog.h $(CHECKERS_DIR)/rulesets.c $(CHECKERS_DIR)/rulesets.h \
@@ -693,7 +699,8 @@ $(CHECKERS_APP_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c $(APP_MAIN_SRC
 	$(SRCS) $(BOOP_UI_SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/gcheckers.c $(APP_MAIN_SRCS) src/application.c $(APP_PATHS_SRCS) \
-		$(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c src/window.c src/settings_dialog.c \
+		$(COMMON_SETTINGS_SRCS) $(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c src/window.c \
+		src/settings_dialog.c \
 		src/new_game_dialog.c src/puzzle_dialog.c src/import_dialog.c src/file_dialog_history.c src/style.c \
 		src/player_controls_panel.c src/analysis_graph.c src/sgf_file_actions.c src/bga_client.c \
 		src/sgf_controller.c $(SGF_AUTOSAVE_SRCS) src/board_view.c src/board_grid.c src/board_square.c \
@@ -703,7 +710,7 @@ $(CHECKERS_APP_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/gcheckers.c $(APP_MAIN_SRC
 		$(WIDGET_UTILS_SRCS) $(SRCS) $(BOOP_UI_SRCS) $(LDLIBS) $(GTK_LIBS)
 
 $(BOOP_APP_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/gboop.c $(APP_MAIN_SRCS) src/application.c src/window.c \
-	$(APP_PATHS_SRCS) \
+	$(APP_PATHS_SRCS) $(COMMON_SETTINGS_SRCS) src/common_settings.h \
 	$(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c src/app_settings.h src/settings_dialog.c \
 	src/settings_dialog.h \
 	src/new_game_dialog.c src/puzzle_dialog.c src/puzzle_dialog.h $(CHECKERS_DIR)/rulesets.c $(CHECKERS_DIR)/rulesets.h \
@@ -723,7 +730,8 @@ $(BOOP_APP_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/gboop.c $(APP_MAIN_SRCS) src/a
 	$(SRCS) $(BOOP_UI_SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/gboop.c $(APP_MAIN_SRCS) src/application.c $(APP_PATHS_SRCS) \
-		$(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c src/window.c src/settings_dialog.c \
+		$(COMMON_SETTINGS_SRCS) $(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c src/window.c \
+		src/settings_dialog.c \
 		src/new_game_dialog.c src/puzzle_dialog.c src/import_dialog.c src/file_dialog_history.c src/style.c \
 		src/player_controls_panel.c src/analysis_graph.c src/sgf_file_actions.c src/bga_client.c \
 		src/sgf_controller.c $(SGF_AUTOSAVE_SRCS) src/board_view.c src/board_grid.c src/board_square.c \
@@ -734,7 +742,8 @@ $(BOOP_APP_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/gboop.c $(APP_MAIN_SRCS) src/a
 
 $(HOMEWORLDS_APP_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/ghomeworlds.c $(APP_MAIN_SRCS) $(HOMEWORLDS_UI_SRCS) \
 	src/application.c src/window.c \
-	$(APP_PATHS_SRCS) $(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c src/app_settings.h \
+	$(APP_PATHS_SRCS) $(COMMON_SETTINGS_SRCS) src/common_settings.h $(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) \
+	src/app_settings.c src/app_settings.h \
 	src/settings_dialog.c src/settings_dialog.h src/new_game_dialog.c src/puzzle_dialog.c src/puzzle_dialog.h \
 	$(CHECKERS_DIR)/rulesets.c $(CHECKERS_DIR)/rulesets.h src/import_dialog.c src/sgf_file_actions.c \
 	src/sgf_file_actions.h src/file_dialog_history.c src/file_dialog_history.h src/bga_client.c src/bga_client.h \
@@ -753,7 +762,8 @@ $(HOMEWORLDS_APP_BIN): $(GSETTINGS_SCHEMA_COMPILED) src/ghomeworlds.c $(APP_MAIN
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ src/ghomeworlds.c $(APP_MAIN_SRCS) $(HOMEWORLDS_UI_SRCS) \
 		src/application.c $(APP_PATHS_SRCS) \
-		$(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c src/window.c src/settings_dialog.c \
+		$(COMMON_SETTINGS_SRCS) $(PUZZLE_PROGRESS_SRCS) $(PUZZLE_CATALOG_SRCS) src/app_settings.c src/window.c \
+		src/settings_dialog.c \
 		src/new_game_dialog.c src/puzzle_dialog.c src/import_dialog.c src/file_dialog_history.c src/style.c \
 		src/player_controls_panel.c src/analysis_graph.c src/sgf_file_actions.c src/bga_client.c \
 		src/sgf_controller.c $(SGF_AUTOSAVE_SRCS) src/board_view.c src/board_grid.c src/board_square.c \
@@ -815,6 +825,8 @@ install-schemas: $(GSETTINGS_SCHEMA_XMLS)
 		$(DESTDIR)$(SCHEMAS_INSTALL_DIR)/$(CHECKERS_APP_ID).gschema.xml
 	$(INSTALL) -m 644 $(GSETTINGS_SCHEMA_DIR)/$(BOOP_APP_ID).gschema.xml \
 		$(DESTDIR)$(SCHEMAS_INSTALL_DIR)/$(BOOP_APP_ID).gschema.xml
+	$(INSTALL) -m 644 $(GSETTINGS_SCHEMA_DIR)/$(GGAME_SETTINGS_ID).gschema.xml \
+		$(DESTDIR)$(SCHEMAS_INSTALL_DIR)/$(GGAME_SETTINGS_ID).gschema.xml
 	glib-compile-schemas $(DESTDIR)$(SCHEMAS_INSTALL_DIR)
 
 validate-desktop-metadata: $(DESKTOP_FILES) $(METAINFO_FILES)
