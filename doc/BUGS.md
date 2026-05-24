@@ -1227,3 +1227,14 @@ separate path that copied properties directly.
 
 A malformed root such as `B[12-16]W[23-18]` could therefore load even though no later replay path can treat it
 unambiguously. The fix shares the move-property validation between root and child nodes.
+
+## Homeworlds wins with the new score scale were not shown as win distances
+
+Homeworlds terminal positions should still render as compact `W#X` / `B#X` analysis scores after lowering the win
+score from 3000 to 1000.
+
+The generic analysis score formatter only recognized terminal score bands around 3000 and 100000, so Homeworlds
+scores such as 997 were shown as regular numeric evaluations instead of `W#3`.
+
+The fix teaches the formatter about all current terminal score scales and keeps tests for the Homeworlds, checkers, and
+Boop bands.

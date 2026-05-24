@@ -31,7 +31,7 @@ static void test_homeworlds_profile_moves_runs_ai_analysis(void) {
   g_assert_cmpstr(stderr_text, ==, "");
   g_assert_nonnull(strstr(stdout_text, "Generated moves (2 requested):"));
   g_assert_nonnull(strstr(stdout_text, "Current position after 2 generated moves:"));
-  g_assert_nonnull(strstr(stdout_text, "b3 R2G1 -\n\n- B1R3 g3"));
+  g_assert_nonnull(strstr(stdout_text, "g3 Y2B3 -\n\n- Y1G3 b3"));
   g_assert_nonnull(strstr(stdout_text, "AI analysis after 2 generated moves at depth 0:"));
   g_assert_nonnull(strstr(stdout_text, "Nodes:"));
   g_assert_nonnull(strstr(stdout_text, "TT probes:"));

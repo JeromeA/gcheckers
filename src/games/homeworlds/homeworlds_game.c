@@ -1201,9 +1201,9 @@ gint homeworlds_position_evaluate_static(const HomeworldsPosition *position) {
 gint homeworlds_position_terminal_score(GameBackendOutcome outcome, guint ply_depth) {
   switch (outcome) {
     case GAME_BACKEND_OUTCOME_SIDE_0_WIN:
-      return 3000 - (gint) ply_depth;
+      return 1000 - (gint) ply_depth;
     case GAME_BACKEND_OUTCOME_SIDE_1_WIN:
-      return -3000 + (gint) ply_depth;
+      return -1000 + (gint) ply_depth;
     case GAME_BACKEND_OUTCOME_DRAW:
       return 0;
     case GAME_BACKEND_OUTCOME_ONGOING:

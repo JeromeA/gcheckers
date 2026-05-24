@@ -41,11 +41,23 @@ static void test_analysis_score_formatting(void) {
   g_autofree char *negative = ggame_window_format_analysis_score(-200);
   g_assert_cmpstr(negative, ==, "-200");
 
+  g_autofree char *homeworlds_win = ggame_window_format_analysis_score(997);
+  g_assert_cmpstr(homeworlds_win, ==, "W#3");
+
+  g_autofree char *homeworlds_loss = ggame_window_format_analysis_score(-994);
+  g_assert_cmpstr(homeworlds_loss, ==, "B#6");
+
   g_autofree char *white_win = ggame_window_format_analysis_score(2997);
   g_assert_cmpstr(white_win, ==, "W#3");
 
   g_autofree char *black_win = ggame_window_format_analysis_score(-2994);
   g_assert_cmpstr(black_win, ==, "B#6");
+
+  g_autofree char *boop_current_positive_win = ggame_window_format_analysis_score(9998);
+  g_assert_cmpstr(boop_current_positive_win, ==, "W#2");
+
+  g_autofree char *boop_current_negative_win = ggame_window_format_analysis_score(-9995);
+  g_assert_cmpstr(boop_current_negative_win, ==, "B#5");
 
   g_autofree char *boop_positive_win = ggame_window_format_analysis_score(99998);
   g_assert_cmpstr(boop_positive_win, ==, "W#2");

@@ -2312,15 +2312,29 @@ static void ggame_window_refresh_analysis_graph(GGameWindow *self) {
   analysis_graph_clear_progress_node(self->analysis_graph);
 }
 
+typedef struct {
+  gint score;
+  gint max_distance;
+} GGameWindowAnalysisWinScore;
+
+static const GGameWindowAnalysisWinScore ggame_window_analysis_win_scores[] = {
+  {1000, 100},
+  {3000, 100},
+  {10000, 100},
+  {100000, 1000}
+};
+
 char *ggame_window_format_analysis_score(gint score) {
   gint abs_score = ABS(score);
-  if (abs_score >= 2900 && abs_score <= 3000) {
-    gint distance = 3000 - abs_score;
-    return g_strdup_printf("%c#%d", score > 0 ? 'W' : 'B', distance);
-  }
-  if (abs_score >= 99000 && abs_score <= 100000) {
-    gint distance = 100000 - abs_score;
-    return g_strdup_printf("%c#%d", score > 0 ? 'W' : 'B', distance);
+
+  for (guint i = 0; i < G_N_ELEMENTS(ggame_window_analysis_win_scores); ++i) {
+    gint win_score = ggame_window_analysis_win_scores[i].score;
+    gint min_score = win_score - ggame_window_analysis_win_scores[i].max_distance;
+
+    if (abs_score >= min_score && abs_score <= win_score) {
+      gint distance = win_score - abs_score;
+      return g_strdup_printf("%c#%d", score > 0 ? 'W' : 'B', distance);
+    }
   }
 
   return g_strdup_printf("%+d", score);

@@ -116,8 +116,9 @@ Worker output is staged through a mutex-protected shared report buffer, and the 
 main thread every 100ms while analysis is active. During iterative deepening, intermediate node-count snapshots are
 published and shown with a temporary `(searching...)` marker. Completed results are converted to `SgfNodeAnalysis` and
 attached to SGF nodes on the main thread, while text in the panel is formatted from that structured node analysis.
-Analysis score text always shows an explicit `+` sign for positive centipawn-style values and converts terminal
-`2900..3000` magnitudes into compact `W#X` / `B#X` mate-distance-style labels.
+Analysis score text always shows an explicit `+` sign for positive centipawn-style values and converts known terminal
+score bands, including Homeworlds `900..1000` and checkers `2900..3000`, into compact `W#X` / `B#X`
+mate-distance-style labels.
 Per-move analysis lines also include the root-search node count used to score that move, making TT-assisted shortcuts
 visible in the report text.
 Static material in search also values man advancement: men gain `+1/+2/+3` as they get within three rows of
@@ -549,8 +550,9 @@ spaces between complete steps and no internal slash separator, while the parser 
 slash-separated step notation. The public parser only writes the output move after the whole notation succeeds. Static
 evaluation counts ship material, homeworld health, and build access: an empty homeworld is scored like a simple
 three-pip setup system with one buildable color, a single-star homeworld is penalized, the largest own ship at each
-player's homeworld is repeated, and each buildable ship color is rewarded once. Applying a move is transactional: setup
-and turn moves are resolved against a
+player's homeworld is repeated, and each buildable ship color is rewarded once. Terminal Homeworlds wins score
+`1000 - ply_depth` for player 1 and the negated value for player 2. Applying a move is transactional: setup and turn
+moves are resolved against a
 working copy and only replace the original position after the full move succeeds, and malformed turn moves with
 overlong step counts are rejected before step storage is read. Sacrifice-granted actions reuse the normal action
 application code but bypass local color-access checks because the sacrificed ship supplies the action color. Public

@@ -646,6 +646,14 @@ static void test_static_evaluation_counts_buildable_colors_once_per_green_system
   assert(homeworlds_position_evaluate_static(&position) == 150);
 }
 
+static void test_terminal_score_uses_win_scale(void) {
+  assert(homeworlds_position_terminal_score(GAME_BACKEND_OUTCOME_SIDE_0_WIN, 0) == 1000);
+  assert(homeworlds_position_terminal_score(GAME_BACKEND_OUTCOME_SIDE_0_WIN, 3) == 997);
+  assert(homeworlds_position_terminal_score(GAME_BACKEND_OUTCOME_SIDE_1_WIN, 3) == -997);
+  assert(homeworlds_position_terminal_score(GAME_BACKEND_OUTCOME_DRAW, 3) == 0);
+  assert(homeworlds_position_terminal_score(GAME_BACKEND_OUTCOME_ONGOING, 3) == 0);
+}
+
 static void test_position_ascii_formats_systems_by_reachability(void) {
   HomeworldsPosition position = {0};
   char *text = NULL;
@@ -841,6 +849,7 @@ int main(void) {
   test_static_evaluation_assumes_empty_homeworld_setup_value();
   test_static_evaluation_penalizes_single_star_homeworld();
   test_static_evaluation_counts_buildable_colors_once_per_green_system();
+  test_terminal_score_uses_win_scale();
   test_position_ascii_formats_systems_by_reachability();
   test_position_ascii_formats_empty_position();
   test_move_parse_failure_leaves_output_unchanged();
