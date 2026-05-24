@@ -795,6 +795,31 @@ static gboolean homeworlds_backend_step_creates_unfavorable_build_catastrophe(
                                                                side);
 }
 
+static gboolean homeworlds_backend_step_creates_unfavorable_trade_catastrophe(
+    const HomeworldsMoveBuilderState *state,
+    const HomeworldsMoveBuilderState *child_state,
+    const HomeworldsTurnStep *step) {
+  guint side = 0;
+  guint system_index = HOMEWORLDS_INVALID_INDEX;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(child_state != NULL, FALSE);
+  g_return_val_if_fail(step != NULL, FALSE);
+
+  if (step->kind != HOMEWORLDS_STEP_TRADE ||
+      !homeworlds_backend_resolve_actor_system(state, step, &system_index)) {
+    return FALSE;
+  }
+
+  side = state->working_position.turn;
+  if (homeworlds_backend_system_has_unfavorable_catastrophe(&state->working_position.systems[system_index], side)) {
+    return FALSE;
+  }
+
+  return homeworlds_backend_system_has_unfavorable_catastrophe(&child_state->working_position.systems[system_index],
+                                                               side);
+}
+
 static gboolean homeworlds_backend_step_enters_unfavorable_catastrophe(
     const HomeworldsMoveBuilderState *state,
     const HomeworldsMoveBuilderState *child_state,
@@ -1536,6 +1561,7 @@ static gboolean homeworlds_backend_child_state_is_good_after_step(
   return !homeworlds_backend_step_removes_last_homeworld_ship(state, step) &&
          !homeworlds_backend_step_is_redundant_small_sacrifice(state, step) &&
          !homeworlds_backend_step_creates_unfavorable_build_catastrophe(state, child_state, step) &&
+         !homeworlds_backend_step_creates_unfavorable_trade_catastrophe(state, child_state, step) &&
          !homeworlds_backend_step_enters_unfavorable_catastrophe(state, child_state, step) &&
          !homeworlds_backend_step_is_redundant_yellow_sacrifice_hop(state, child_state, step) &&
          !homeworlds_backend_step_is_redundant_commutative_blue_trade(state, child_state, step) &&

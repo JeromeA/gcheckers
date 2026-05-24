@@ -174,6 +174,51 @@ static void test_prepare_static_prune_position(HomeworldsPosition *position, gui
   }
 }
 
+static void test_prepare_unfavorable_trade_catastrophe_position(HomeworldsPosition *position) {
+  static const char *moves[] = {
+    "B1Y2g3",
+    "Y3B2g3",
+    "H1g+",
+    "H2g+",
+    "H1g1>B3",
+    "H2g3=y",
+    "H1g+",
+    "H2g+",
+    "B3g+",
+    "H2g2=r",
+    "H1g1>B3'",
+    "H2g+",
+    "H1g+",
+    "H2g+",
+    "B3'g+",
+    "H2g3- H2r+ H2r+ H2g+",
+    "B3g2=y",
+    "H2r2=b",
+    "H1g3- B3g+ H1g+ B3y+",
+    "H2g3- H2r+ H2g+ H2b+",
+    "B3y2- B3g1>B1 B1g1>H2 H2g!",
+    "H2b2=g",
+    "H1g2=r",
+    "H2b+",
+    "H1r+",
+    "H2g+",
+    "H1g+",
+    "H2g+",
+    "B3g+",
+    "H2g2- H2y+ H2g+",
+    "B3'g1=y",
+  };
+
+  assert(position != NULL);
+
+  homeworlds_position_init(position);
+  for (guint i = 0; i < G_N_ELEMENTS(moves); ++i) {
+    test_apply_notation(position, moves[i]);
+  }
+  assert(position->phase == HOMEWORLDS_PHASE_PLAY);
+  assert(position->turn == 1);
+}
+
 static gint test_score_after_move(const HomeworldsPosition *position, const HomeworldsMove *move) {
   HomeworldsPosition child = {0};
   GameBackendOutcome outcome = GAME_BACKEND_OUTCOME_ONGOING;
@@ -1922,6 +1967,21 @@ static void test_backend_good_moves_skip_unfavorable_move_catastrophe(void) {
   backend->move_list_free(&good_moves);
 }
 
+static void test_backend_good_moves_skip_unfavorable_trade_catastrophe(void) {
+  const GameBackend *backend = &homeworlds_game_backend;
+  HomeworldsPosition position = {0};
+  GameBackendMoveList good_moves = {0};
+  const char *unsafe_trade = "H2g2=y";
+
+  test_prepare_unfavorable_trade_catastrophe_position(&position);
+  test_assert_move_notation_is_legal(&position, unsafe_trade);
+
+  good_moves = backend->list_good_moves(&position, 0);
+  assert(good_moves.count > 0);
+  assert(!test_good_moves_contains_notation(backend, &good_moves, unsafe_trade));
+  backend->move_list_free(&good_moves);
+}
+
 static void test_backend_good_moves_skip_redundant_small_sacrifice(void) {
   const GameBackend *backend = &homeworlds_game_backend;
   HomeworldsPosition position = {0};
@@ -2298,6 +2358,7 @@ int main(void) {
   test_backend_good_moves_keep_dependent_green_sacrifice_builds();
   test_backend_good_moves_skip_unsafe_build_catastrophe();
   test_backend_good_moves_skip_unfavorable_move_catastrophe();
+  test_backend_good_moves_skip_unfavorable_trade_catastrophe();
   test_backend_good_moves_skip_redundant_small_sacrifice();
   test_backend_good_moves_skip_green_sacrifice_unfavorable_build();
   test_backend_good_moves_trigger_initial_profitable_catastrophe_anywhere();

@@ -1260,3 +1260,12 @@ layout width/height, so a newly opened window could ignore the stored size.
 
 The fix derives the saved extra width from the loaded default size, preserves the loaded default height until the window
 has an allocation, and applies the initial drawer layout without capturing transient geometry.
+
+## Homeworlds good moves allowed unsafe trade catastrophes
+
+Homeworlds `good_moves()` filtered builds that create an unfavorable catastrophe and moves that enter one, but a trade
+could still convert a ship into the fourth piece of an owned color at the same system. In the reported game, Player 2
+could trade `H2g2=y` while already having two yellow ships and a yellow star at `H2`, creating an immediate yellow
+catastrophe that mostly destroyed Player 2's own material.
+
+The fix applies the same unfavorable-catastrophe check to trade steps after the staged builder applies them.
