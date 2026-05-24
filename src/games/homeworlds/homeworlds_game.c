@@ -16,6 +16,28 @@ typedef struct {
   HomeworldsColor color;
 } HomeworldsCatastropheChoice;
 
+static const HomeworldsEvalWeights homeworlds_default_eval_weights = {
+  .ship_values = {
+    [HOMEWORLDS_SIZE_SMALL] = 10,
+    [HOMEWORLDS_SIZE_MEDIUM] = 20,
+    [HOMEWORLDS_SIZE_LARGE] = 30,
+  },
+  .empty_homeworld_value = 80,
+  .single_star_homeworld_penalty = -30,
+  .buildable_color_value = 20,
+};
+
+static HomeworldsEvalWeights homeworlds_active_eval_weights = {
+  .ship_values = {
+    [HOMEWORLDS_SIZE_SMALL] = 10,
+    [HOMEWORLDS_SIZE_MEDIUM] = 20,
+    [HOMEWORLDS_SIZE_LARGE] = 30,
+  },
+  .empty_homeworld_value = 80,
+  .single_star_homeworld_penalty = -30,
+  .buildable_color_value = 20,
+};
+
 static gboolean homeworlds_bank_take(HomeworldsPosition *position, HomeworldsPyramid pyramid) {
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(homeworlds_pyramid_is_valid(pyramid), FALSE);
@@ -1094,11 +1116,38 @@ gboolean homeworlds_position_find_empty_system(const HomeworldsPosition *positio
   return FALSE;
 }
 
-static gint homeworlds_system_largest_ship_value_for_side(const HomeworldsSystem *system, guint side) {
+const HomeworldsEvalWeights *homeworlds_eval_weights_default(void) {
+  return &homeworlds_default_eval_weights;
+}
+
+void homeworlds_eval_weights_reset_active(void) {
+  homeworlds_active_eval_weights = homeworlds_default_eval_weights;
+}
+
+void homeworlds_eval_weights_set_active(const HomeworldsEvalWeights *weights) {
+  g_return_if_fail(weights != NULL);
+
+  homeworlds_active_eval_weights = *weights;
+}
+
+static gint homeworlds_eval_ship_value(const HomeworldsEvalWeights *weights, HomeworldsPyramid ship) {
+  g_return_val_if_fail(weights != NULL, 0);
+  g_return_val_if_fail(homeworlds_pyramid_is_valid(ship), 0);
+
+  HomeworldsSize size = homeworlds_pyramid_size(ship);
+  g_return_val_if_fail(size >= HOMEWORLDS_SIZE_SMALL && size <= HOMEWORLDS_SIZE_LARGE, 0);
+
+  return weights->ship_values[size];
+}
+
+static gint homeworlds_system_largest_ship_value_for_side(const HomeworldsSystem *system,
+                                                          guint side,
+                                                          const HomeworldsEvalWeights *weights) {
   gint best_value = 0;
 
   g_return_val_if_fail(system != NULL, 0);
   g_return_val_if_fail(side < 2, 0);
+  g_return_val_if_fail(weights != NULL, 0);
 
   for (guint slot = 0; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
     HomeworldsPyramid ship = system->ships[side][slot];
@@ -1106,7 +1155,7 @@ static gint homeworlds_system_largest_ship_value_for_side(const HomeworldsSystem
       continue;
     }
 
-    best_value = MAX(best_value, (gint) homeworlds_pyramid_size(ship) * 10);
+    best_value = MAX(best_value, homeworlds_eval_ship_value(weights, ship));
   }
 
   return best_value;
@@ -1122,18 +1171,21 @@ static guint homeworlds_system_star_count(const HomeworldsSystem *system) {
   return count;
 }
 
-static gint homeworlds_homeworld_static_value_for_side(const HomeworldsSystem *homeworld, guint side) {
+static gint homeworlds_homeworld_static_value_for_side(const HomeworldsSystem *homeworld,
+                                                       guint side,
+                                                       const HomeworldsEvalWeights *weights) {
   g_return_val_if_fail(homeworld != NULL, 0);
   g_return_val_if_fail(side < 2, 0);
+  g_return_val_if_fail(weights != NULL, 0);
 
   guint star_count = homeworlds_system_star_count(homeworld);
   if (star_count == 0 && homeworlds_system_ship_count_total(homeworld) == 0) {
-    return 80;
+    return weights->empty_homeworld_value;
   }
 
-  gint value = homeworlds_system_largest_ship_value_for_side(homeworld, side);
+  gint value = homeworlds_system_largest_ship_value_for_side(homeworld, side, weights);
   if (star_count == 1) {
-    value -= 30;
+    value += weights->single_star_homeworld_penalty;
   }
   return value;
 }
@@ -1167,8 +1219,10 @@ static guint homeworlds_position_buildable_color_count_for_side(const Homeworlds
   return count;
 }
 
-gint homeworlds_position_evaluate_static(const HomeworldsPosition *position) {
+gint homeworlds_position_evaluate_static_with_weights(const HomeworldsPosition *position,
+                                                       const HomeworldsEvalWeights *weights) {
   g_return_val_if_fail(position != NULL, 0);
+  g_return_val_if_fail(weights != NULL, 0);
 
   gint score = 0;
 
@@ -1183,7 +1237,7 @@ gint homeworlds_position_evaluate_static(const HomeworldsPosition *position) {
           continue;
         }
 
-        score += side_sign * ((gint) homeworlds_pyramid_size(ship) * 10);
+        score += side_sign * homeworlds_eval_ship_value(weights, ship);
       }
     }
   }
@@ -1192,10 +1246,15 @@ gint homeworlds_position_evaluate_static(const HomeworldsPosition *position) {
     gint side_sign = side == 0 ? 1 : -1;
     const HomeworldsSystem *homeworld = &position->systems[side];
 
-    score += side_sign * homeworlds_homeworld_static_value_for_side(homeworld, side);
-    score += side_sign * ((gint)homeworlds_position_buildable_color_count_for_side(position, side) * 20);
+    score += side_sign * homeworlds_homeworld_static_value_for_side(homeworld, side, weights);
+    score += side_sign * ((gint)homeworlds_position_buildable_color_count_for_side(position, side) *
+                          weights->buildable_color_value);
   }
   return score;
+}
+
+gint homeworlds_position_evaluate_static(const HomeworldsPosition *position) {
+  return homeworlds_position_evaluate_static_with_weights(position, &homeworlds_active_eval_weights);
 }
 
 gint homeworlds_position_terminal_score(GameBackendOutcome outcome, guint ply_depth) {

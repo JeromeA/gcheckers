@@ -8,6 +8,13 @@
 
 G_BEGIN_DECLS
 
+typedef struct {
+  gint ship_values[HOMEWORLDS_SIZE_LARGE + 1];
+  gint empty_homeworld_value;
+  gint single_star_homeworld_penalty;
+  gint buildable_color_value;
+} HomeworldsEvalWeights;
+
 void homeworlds_position_init(HomeworldsPosition *position);
 void homeworlds_position_clear(HomeworldsPosition *position);
 void homeworlds_position_copy(HomeworldsPosition *dest, const HomeworldsPosition *src);
@@ -41,6 +48,11 @@ gboolean homeworlds_system_find_smallest_bank_ship(const HomeworldsPosition *pos
                                                    HomeworldsPyramid *out_pyramid);
 gboolean homeworlds_position_find_empty_system(const HomeworldsPosition *position, guint *out_system_index);
 
+const HomeworldsEvalWeights *homeworlds_eval_weights_default(void);
+void homeworlds_eval_weights_reset_active(void);
+void homeworlds_eval_weights_set_active(const HomeworldsEvalWeights *weights);
+gint homeworlds_position_evaluate_static_with_weights(const HomeworldsPosition *position,
+                                                       const HomeworldsEvalWeights *weights);
 gint homeworlds_position_evaluate_static(const HomeworldsPosition *position);
 gint homeworlds_position_terminal_score(GameBackendOutcome outcome, guint ply_depth);
 guint64 homeworlds_position_hash(const HomeworldsPosition *position);

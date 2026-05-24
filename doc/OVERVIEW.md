@@ -563,7 +563,10 @@ spaces between complete steps and no internal slash separator, while the parser 
 slash-separated step notation. The public parser only writes the output move after the whole notation succeeds. Static
 evaluation counts ship material, homeworld health, and build access: an empty homeworld is scored like a simple
 three-pip setup system with one buildable color, a single-star homeworld is penalized, the largest own ship at each
-player's homeworld is repeated, and each buildable ship color is rewarded once. Terminal Homeworlds wins score
+player's homeworld is repeated, and each buildable ship color is rewarded once. Ship material uses separate static
+values for one-, two-, and three-pip ships instead of multiplying the size by one shared unit. The default weights are
+exposed through `HomeworldsEvalWeights`, and experimental callers can temporarily replace the active weights while the
+normal application path keeps the defaults. Terminal Homeworlds wins score
 `1000 - ply_depth` for player 1 and the negated value for player 2. Applying a move is transactional: setup and turn
 moves are resolved against a
 working copy and only replace the original position after the full move succeeds, and malformed turn moves with
@@ -636,7 +639,11 @@ set, deduplicates canonical moves, but does not cap the backend-good or diagnost
 report` action disables this report before either collector runs. The separate `build/tools/homeworlds_profile_moves`
 CLI applies `--moves` random good moves from a `--seed` or replays the first moves of a Homeworlds SGF main line with
 `--file`, prints an ASCII board snapshot, and then runs the AI at `--depth` and prints the scored moves plus search
-stats. It frees any generated candidate list before leaving an error path. The Homeworlds board host also syncs its
+stats. The `build/tools/homeworlds_eval_experiment` CLI varies one static-evaluation weight at a time and runs
+paired depth-1 self-play against the default weights. Each seed produces one game with the candidate starting and one
+with the baseline starting, and aggregate wins are counted from the side-aware outcome. It reports one CSV-style
+summary row per tested value. It frees any generated candidate list before leaving an error path. The Homeworlds board
+host also syncs its
 last-move label from SGF current-node changes so timeline
 navigation and direct play report the same move. Human interaction
 advances
@@ -673,7 +680,8 @@ catastrophes created by an earlier step are forced immediately in the staged wal
 `doc/homeworlds-move-generation.md` describes how the legal builder, diagnostic move report, profiling CLI,
 `good_moves()`, and generic alpha-beta search interact.
 Collaborates with: `GGameAppProfile`, `GGameWindow`, `GGameModel`, `GGameSgfController`, `homeworlds_game.c`,
-`homeworlds_move_builder.c`, `homeworlds_backend.c`, `tests/test_homeworlds_profile_moves.c`, and
+`homeworlds_move_builder.c`, `homeworlds_backend.c`, `src/homeworlds_eval_experiment.c`,
+`tests/test_homeworlds_profile_moves.c`, `tests/test_homeworlds_eval_experiment.c`, and
 `tests/test_homeworlds_window.c`.
 
 ## Boop engine (`src/games/boop/boop_types.h`, `src/games/boop/boop_game.c`,
