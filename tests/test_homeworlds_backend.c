@@ -57,26 +57,12 @@ static guint test_setup_star_size_mask(const HomeworldsMove *move) {
   return mask;
 }
 
-static gboolean test_setup_includes_green(const HomeworldsMove *move) {
-  assert(move != NULL);
-  assert(move->kind == HOMEWORLDS_MOVE_KIND_SETUP);
-
-  for (guint i = 0; i < HOMEWORLDS_STAR_SLOT_COUNT; ++i) {
-    if (homeworlds_pyramid_color(move->setup_stars[i]) == HOMEWORLDS_COLOR_GREEN) {
-      return TRUE;
-    }
-  }
-
-  return homeworlds_pyramid_color(move->setup_ship) == HOMEWORLDS_COLOR_GREEN;
-}
-
-static void test_assert_good_setup_policy(const HomeworldsMove *move, gboolean require_green) {
+static void test_assert_good_setup_policy(const HomeworldsMove *move) {
   gboolean seen_colors[4] = {FALSE};
 
   assert(move != NULL);
   assert(move->kind == HOMEWORLDS_MOVE_KIND_SETUP);
   assert(homeworlds_pyramid_size(move->setup_ship) == HOMEWORLDS_SIZE_LARGE);
-  assert(!require_green || test_setup_includes_green(move));
   assert(test_setup_star_size_mask(move) != 0);
   assert((test_setup_star_size_mask(move) & (test_setup_star_size_mask(move) - 1)) != 0);
 
@@ -88,6 +74,10 @@ static void test_assert_good_setup_policy(const HomeworldsMove *move, gboolean r
 
   HomeworldsColor ship_color = homeworlds_pyramid_color(move->setup_ship);
   assert(!seen_colors[ship_color]);
+  seen_colors[ship_color] = TRUE;
+  assert(seen_colors[HOMEWORLDS_COLOR_GREEN]);
+  assert(seen_colors[HOMEWORLDS_COLOR_BLUE]);
+  assert(seen_colors[HOMEWORLDS_COLOR_RED] || seen_colors[HOMEWORLDS_COLOR_YELLOW]);
 }
 
 static gboolean test_step_is_catastrophe_at(const HomeworldsPosition *position,
@@ -1372,7 +1362,7 @@ static void test_backend_good_moves_follow_setup_policy_without_truncation(void)
   good_moves = backend->list_good_moves(&position, 0);
   assert(good_moves.count > 16);
   for (gsize i = 0; i < good_moves.count; ++i) {
-    test_assert_good_setup_policy(backend->move_list_get(&good_moves, i), TRUE);
+    test_assert_good_setup_policy(backend->move_list_get(&good_moves, i));
   }
 
   player_one_move = backend->move_list_get(&good_moves, 0);
@@ -1386,7 +1376,7 @@ static void test_backend_good_moves_follow_setup_policy_without_truncation(void)
   for (gsize i = 0; i < player_two_good_moves.count; ++i) {
     const HomeworldsMove *move = backend->move_list_get(&player_two_good_moves, i);
 
-    test_assert_good_setup_policy(move, FALSE);
+    test_assert_good_setup_policy(move);
     assert(test_setup_star_size_mask(move) != player_one_star_sizes);
   }
   backend->move_list_free(&player_two_good_moves);

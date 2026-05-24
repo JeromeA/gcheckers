@@ -639,7 +639,9 @@ silently replace an earlier snapshot for the same system.
 AI path deduplicates completed symbolic moves, rejects pass moves while non-pass good moves remain, keeps pass as a
 top-level fallback when every non-pass branch is filtered away before a primary action is staged, applies
 Homeworlds-specific opening and safety heuristics, and lets dead-end choices such as attacks with no target naturally
-produce no completed move. When a builder choice
+produce no completed move. Opening setup candidates keep only large starting ships, distinct colors with green and blue
+both present plus either red or yellow, differently sized stars, and second-player star sizes that differ from player
+one's homeworld. When a builder choice
 appends a turn step, the AI applies the same safety checks to ordinary actions and sacrifice-granted actions: it keeps
 the last own homeworld ship in place, rejects moves into unfavorable catastrophes, rejects builds that create
 unfavorable catastrophes, and skips one-action sacrifices when that color action is already available at the selected

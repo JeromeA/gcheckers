@@ -4,10 +4,11 @@
 
 Each player builds their Homeworld by choosing two pyramids and stacking them upward to form a binary star system.
 
-They also choose a pyramid as their starting ship, and place it next to their Homeworld. Ships are placed
+They also choose a pyramid as their starting ship, and place it next to their Homeworld. Across the two stars and the
+starting ship, one pyramid must be green, one must be blue, and the third must be red or yellow.
 
-You lose if you don’t have any ships at your Homeworld at the start of your turn. Ships are non-vertical pyramids,
-pointing away from their owner.
+Ships are non-vertical pyramids, pointing away from their owner. You lose if you don’t have any ships at your Homeworld
+at the start of your turn.
 
 ## Action Types
 
@@ -41,4 +42,3 @@ At any point on your turn, you can trigger catastrophes in overpopulated systems
 color from that system to the bank. If a star system is destroyed, then all ships there are returned to the bank.
 
 Homeworlds are binary star systems and can survive one of their two stars being destroyed.
-

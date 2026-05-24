@@ -564,18 +564,28 @@ static gboolean homeworlds_backend_setup_colors_are_distinct(const HomeworldsMov
   return TRUE;
 }
 
-static gboolean homeworlds_backend_setup_includes_green(const HomeworldsMove *move) {
+static gboolean homeworlds_backend_setup_has_required_colors(const HomeworldsMove *move) {
+  gboolean seen_colors[4] = {FALSE};
+
   g_return_val_if_fail(move != NULL, FALSE);
 
   for (guint i = 0; i < HOMEWORLDS_STAR_SLOT_COUNT; ++i) {
     HomeworldsPyramid star = move->setup_stars[i];
-    if (homeworlds_pyramid_is_valid(star) && homeworlds_pyramid_color(star) == HOMEWORLDS_COLOR_GREEN) {
-      return TRUE;
+    if (!homeworlds_pyramid_is_valid(star)) {
+      return FALSE;
     }
+
+    seen_colors[homeworlds_pyramid_color(star)] = TRUE;
   }
 
-  return homeworlds_pyramid_is_valid(move->setup_ship) &&
-         homeworlds_pyramid_color(move->setup_ship) == HOMEWORLDS_COLOR_GREEN;
+  if (!homeworlds_pyramid_is_valid(move->setup_ship)) {
+    return FALSE;
+  }
+  seen_colors[homeworlds_pyramid_color(move->setup_ship)] = TRUE;
+
+  return seen_colors[HOMEWORLDS_COLOR_GREEN] &&
+         seen_colors[HOMEWORLDS_COLOR_BLUE] &&
+         (seen_colors[HOMEWORLDS_COLOR_RED] || seen_colors[HOMEWORLDS_COLOR_YELLOW]);
 }
 
 static gboolean homeworlds_backend_setup_move_is_good(const HomeworldsMoveBuilderState *state,
@@ -591,7 +601,7 @@ static gboolean homeworlds_backend_setup_move_is_good(const HomeworldsMoveBuilde
       homeworlds_pyramid_size(move->setup_ship) != HOMEWORLDS_SIZE_LARGE) {
     return FALSE;
   }
-  if (side == 0 && !homeworlds_backend_setup_includes_green(move)) {
+  if (!homeworlds_backend_setup_has_required_colors(move)) {
     return FALSE;
   }
 
