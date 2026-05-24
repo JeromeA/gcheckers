@@ -44,7 +44,7 @@ During Homeworlds multi-step actions, the source ship remains highlighted while 
 capture target, or move destination; build completes immediately and has no second selection step.
 Collaborates with: `ggame_style_init()` for CSS, model signals for refresh, profile feature flags to enable/disable
 actions, and SGF navigation signals to synchronize analysis and board-host state. Computer turns are routed by control
-mode with alpha-beta depth configured from the shared `Computer depth` slider (`0..16`). Uses a three-pane layout: board
+mode with alpha-beta depth configured from the shared `Computer depth` slider (`1..16`). Uses a three-pane layout: board
 and player controls (left), SGF mode selector and SGF view (middle), and analysis (right). Analysis is launched from
 shared window actions exposed in the `Analysis` menubar submenu: current-position analysis iterates on the selected
 node, and full-game analysis always processes nodes in reverse order so TT state is reused from later positions
@@ -60,7 +60,7 @@ pane and the analysis drawer hidden by default so its square board host can reac
 standalone `gboop` window. Homeworlds starts with a wider `960` board pane because the custom board host contains both
 the scrollable board viewport and Homeworlds action controls, but its profile uses a smaller board-pane minimum so the
 splitter can still move. The shared square-board height clamp only applies to square-grid profiles, so Homeworlds can
-use the full horizontal split while its own board viewport scrolls. It starts with computer depth `0` because its move
+use the full horizontal split while its own board viewport scrolls. It starts with computer depth `1` because its move
 search is expensive. Even with its hidden default, boop now enables the shared `Analysis` actions and populates the
 drawer on demand.
 The analysis pane owns its own `Analysis depth` slider; analysis no longer reuses the player `Computer depth`
@@ -224,7 +224,7 @@ Collaborates with: `GGameWindow` (data binding) and `GGameSgfController` (select
 ## `PlayerControlsPanel` (`src/player_controls_panel.c`)
 Class: `PlayerControlsPanel` (`GtkBox`).
 Role: encapsulate two-side player mode controls.
-Modes: side 0 / side 1 each select `User` or `Computer`, plus a shared `Computer depth` slider (`0..16`).
+Modes: side 0 / side 1 each select `User` or `Computer`, plus a shared `Computer depth` slider (`1..16`).
 Defaults: side 0 starts as `User`, side 1 starts as `Computer`, and the active profile supplies the initial computer
 depth. Labels are backend-supplied by the window (`White`/`Black` for the current checkers backend).
 Signals: `control-changed` for window-level coordination.

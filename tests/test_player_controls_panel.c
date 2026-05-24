@@ -47,8 +47,8 @@ static void test_player_controls_panel_control_signal(void) {
 static void test_player_controls_panel_computer_depth(void) {
   PlayerControlsPanel *panel = test_player_controls_panel_new_owned();
 
-  player_controls_panel_set_computer_depth(panel, 0);
-  g_assert_cmpuint(player_controls_panel_get_computer_depth(panel), ==, 0);
+  player_controls_panel_set_computer_depth(panel, PLAYER_COMPUTER_DEPTH_MIN);
+  g_assert_cmpuint(player_controls_panel_get_computer_depth(panel), ==, PLAYER_COMPUTER_DEPTH_MIN);
 
   player_controls_panel_set_computer_depth(panel, 16);
   g_assert_cmpuint(player_controls_panel_get_computer_depth(panel), ==, 16);

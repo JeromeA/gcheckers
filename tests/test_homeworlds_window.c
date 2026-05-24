@@ -1079,7 +1079,7 @@ static void test_homeworlds_view_board_content_size_tracks_viewport(void) {
   g_object_unref(model);
 }
 
-static void test_homeworlds_window_defaults_to_fast_computer(void) {
+static void test_homeworlds_window_defaults_to_minimum_computer_depth(void) {
   GtkApplication *app = NULL;
   GGameModel *model = NULL;
   GGameWindow *window = test_homeworlds_create_window(&app, &model);
@@ -1088,7 +1088,7 @@ static void test_homeworlds_window_defaults_to_fast_computer(void) {
   g_assert_nonnull(panel);
   g_assert_cmpuint(player_controls_panel_get_mode(panel, 0), ==, PLAYER_CONTROL_MODE_USER);
   g_assert_cmpuint(player_controls_panel_get_mode(panel, 1), ==, PLAYER_CONTROL_MODE_COMPUTER);
-  g_assert_cmpuint(player_controls_panel_get_computer_depth(panel), ==, 0);
+  g_assert_cmpuint(player_controls_panel_get_computer_depth(panel), ==, PLAYER_COMPUTER_DEPTH_MIN);
 
   gtk_window_destroy(GTK_WINDOW(window));
   g_object_unref(model);
@@ -1884,7 +1884,7 @@ int main(int argc, char **argv) {
   if (!gtk_init_check()) {
     g_test_add_func("/homeworlds/window/replaces-skeleton", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/window/main-split-can-exceed-height", test_homeworlds_window_skip);
-    g_test_add_func("/homeworlds/window/defaults-to-fast-computer", test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/window/defaults-to-minimum-computer-depth", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/window/setup-recorded-in-sgf", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/setup-bank-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/bank-layout", test_homeworlds_window_skip);
@@ -1914,7 +1914,8 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/window/replaces-skeleton", test_homeworlds_window_replaces_skeleton);
     g_test_add_func("/homeworlds/window/main-split-can-exceed-height",
                     test_homeworlds_window_main_split_can_exceed_height);
-    g_test_add_func("/homeworlds/window/defaults-to-fast-computer", test_homeworlds_window_defaults_to_fast_computer);
+    g_test_add_func("/homeworlds/window/defaults-to-minimum-computer-depth",
+                    test_homeworlds_window_defaults_to_minimum_computer_depth);
     g_test_add_func("/homeworlds/window/setup-recorded-in-sgf",
                     test_homeworlds_window_setup_moves_are_recorded_in_sgf);
     g_test_add_func("/homeworlds/view/setup-bank-buttons", test_homeworlds_view_setup_uses_board_bank_buttons);

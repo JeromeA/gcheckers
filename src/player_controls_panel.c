@@ -23,7 +23,7 @@ static gboolean player_controls_panel_mode_valid(PlayerControlMode mode) {
 }
 
 static gboolean player_controls_panel_computer_depth_valid(guint depth) {
-  return depth <= PLAYER_COMPUTER_DEPTH_MAX;
+  return depth >= PLAYER_COMPUTER_DEPTH_MIN && depth <= PLAYER_COMPUTER_DEPTH_MAX;
 }
 
 static GtkDropDown *player_controls_panel_get_control(PlayerControlsPanel *self, guint side) {
