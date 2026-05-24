@@ -1251,3 +1251,12 @@ persisted anywhere, so they had the same cross-game wiring problem waiting to ha
 The fix adds one relocatable `io.github.jeromea.ggame` schema for shared shell settings. File-dialog history and window
 size now use that common schema under a per-profile path, so new games inherit the behavior without copying settings
 keys into another app schema.
+
+## Restored window sizes were overwritten during initial layout
+
+Shared-shell windows loaded their saved default size from common GSettings, but the first drawer layout sync captured
+panel geometry before the window had an allocation. That reset the saved extra width to zero and reapplied the hardcoded
+layout width/height, so a newly opened window could ignore the stored size.
+
+The fix derives the saved extra width from the loaded default size, preserves the loaded default height until the window
+has an allocation, and applies the initial drawer layout without capturing transient geometry.

@@ -1028,7 +1028,10 @@ static void ggame_window_apply_saved_panel_widths(GGameWindow *self) {
 
   gint current_height = gtk_widget_get_height(GTK_WIDGET(self));
   if (current_height <= 0) {
-    current_height = GGAME_WINDOW_DEFAULT_HEIGHT;
+    gint default_width = 0;
+    gint default_height = 0;
+    gtk_window_get_default_size(GTK_WINDOW(self), &default_width, &default_height);
+    current_height = default_height > 0 ? default_height : GGAME_WINDOW_DEFAULT_HEIGHT;
   }
 
   self->syncing_layout_default_size = TRUE;
@@ -4115,7 +4118,7 @@ static void ggame_window_init(GGameWindow *self) {
   self->analysis_panel_width =
       layout != NULL && layout->default_analysis_panel_width > 0 ? layout->default_analysis_panel_width
                                                                  : GGAME_WINDOW_DEFAULT_ANALYSIS_PANEL_WIDTH;
-  self->extra_width = 0;
+  self->extra_width = MAX(0, default_width - ggame_window_expected_default_width(self));
   self->puzzle_board_panel_width = self->board_panel_width;
   self->puzzle_navigation_panel_width = self->navigation_panel_width;
   self->puzzle_analysis_panel_width = self->analysis_panel_width;
@@ -4129,7 +4132,7 @@ static void ggame_window_init(GGameWindow *self) {
   self->puzzle_attempt_started = FALSE;
   self->puzzle_attempt_made_player_move = FALSE;
   ggame_window_sync_drawer_action_states(self);
-  ggame_window_sync_drawer_ui(self);
+  ggame_window_sync_drawer_ui_with_capture(self, FALSE);
   ggame_window_sync_puzzle_ui(self);
   ggame_window_sync_mode_ui(self);
   ggame_window_analysis_sync_ui(self);

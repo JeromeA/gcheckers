@@ -52,7 +52,8 @@ first. Current-position analysis now runs through the generic backend AI API for
 full-game analysis keeps the checkers setup-aware replay path for checkers and uses backend-position SGF replay for
 boop and Homeworlds. The toplevel window default size is loaded from and saved to the shared `ggame` settings schema
 under the active profile path, so checkers, boop, and Homeworlds retain separate dimensions without per-game schema
-keys.
+keys. Initial drawer layout preserves that loaded size until GTK has allocated the window, so transient pre-allocation
+pane geometry does not overwrite the remembered dimensions.
 Shared pane and computer-depth defaults also come from the active profile. Checkers keeps the historical `500/300/300`
 board, navigation, and analysis widths with both drawers visible by default, while boop starts with a wider `760` board
 pane and the analysis drawer hidden by default so its square board host can reach the same practical size as the old
