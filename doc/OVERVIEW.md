@@ -561,7 +561,8 @@ in `homeworlds_sgf_position.c`. Catastrophes return remaining ships only when th
 left after removing the overpopulated color, so binary-star systems survive losing one star. Move notation uses pyramid
 letters and sizes directly, such as `Y2B1g3`, `H1g+`, `G3y2>G2 G3y!`, and `pass`; multi-step moves are formatted with
 spaces between complete steps and no internal slash separator, while the parser also accepts older saved `H1 g+` and
-slash-separated step notation. The public parser only writes the output move after the whole notation succeeds. Static
+slash-separated step notation. `src/games/homeworlds/TEXT_CONVENTIONS.md` is the source-local reference for move and
+ASCII-position text conventions. The public parser only writes the output move after the whole notation succeeds. Static
 evaluation counts ship material, homeworld health, and build access: an empty homeworld is scored like a simple
 three-pip setup system with one buildable color, a single-star homeworld is penalized, the largest own ship at each
 player's homeworld is repeated, and each buildable ship color is rewarded once. Ship material uses separate static
@@ -579,7 +580,7 @@ empty-system lookup returns `HOMEWORLDS_INVALID_INDEX` when no empty system slot
 `homeworlds_position_text.c` formats a non-GTK ASCII board snapshot, with each system shown as player 2 ships,
 stars, and player 1 ships in the same top-to-bottom reachability order as the board.
 Collaborates with: `homeworlds_move_builder.c`, `homeworlds_backend.c`, `homeworlds_sgf_position.c`,
-`homeworlds_view.c`, `homeworlds_position_text.c`, `tests/test_homeworlds_game.c`, and
+`homeworlds_view.c`, `homeworlds_position_text.c`, `TEXT_CONVENTIONS.md`, `tests/test_homeworlds_game.c`, and
 `tests/test_homeworlds_backend.c`.
 
 ## Homeworlds move builder (`src/games/homeworlds/homeworlds_move_builder.c`,
