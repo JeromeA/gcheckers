@@ -68,7 +68,8 @@ typedef enum {
 } HomeworldsCandidateKind;
 
 typedef struct {
-  guint8 color_counts[HOMEWORLDS_COLOR_BLUE + 1];
+  guint8 star_color_counts[HOMEWORLDS_COLOR_BLUE + 1];
+  guint8 ship_color_counts[2][HOMEWORLDS_COLOR_BLUE + 1];
   HomeworldsPyramid stars[HOMEWORLDS_STAR_SLOT_COUNT];
   HomeworldsPyramid ships[2][HOMEWORLDS_SHIP_SLOT_COUNT];
 } HomeworldsSystem;
@@ -156,24 +157,33 @@ static inline gboolean homeworlds_system_has_star(const HomeworldsSystem *system
   return system->stars[0] != 0 || system->stars[1] != 0;
 }
 
-static inline gboolean homeworlds_system_has_any_ship(const HomeworldsSystem *system) {
+static inline gboolean homeworlds_system_has_ships_for_side(const HomeworldsSystem *system, guint side) {
+  g_return_val_if_fail(system != NULL, FALSE);
+  g_return_val_if_fail(side < 2, FALSE);
+
+  return system->ship_color_counts[side][HOMEWORLDS_COLOR_RED] != 0 ||
+         system->ship_color_counts[side][HOMEWORLDS_COLOR_YELLOW] != 0 ||
+         system->ship_color_counts[side][HOMEWORLDS_COLOR_GREEN] != 0 ||
+         system->ship_color_counts[side][HOMEWORLDS_COLOR_BLUE] != 0;
+}
+
+static inline gboolean homeworlds_system_has_any_ships(const HomeworldsSystem *system) {
   g_return_val_if_fail(system != NULL, FALSE);
 
-  for (guint side = 0; side < 2; ++side) {
-    for (guint slot = 0; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
-      if (system->ships[side][slot] != 0) {
-        return TRUE;
-      }
-    }
-  }
-
-  return FALSE;
+  return system->ship_color_counts[0][HOMEWORLDS_COLOR_RED] != 0 ||
+         system->ship_color_counts[0][HOMEWORLDS_COLOR_YELLOW] != 0 ||
+         system->ship_color_counts[0][HOMEWORLDS_COLOR_GREEN] != 0 ||
+         system->ship_color_counts[0][HOMEWORLDS_COLOR_BLUE] != 0 ||
+         system->ship_color_counts[1][HOMEWORLDS_COLOR_RED] != 0 ||
+         system->ship_color_counts[1][HOMEWORLDS_COLOR_YELLOW] != 0 ||
+         system->ship_color_counts[1][HOMEWORLDS_COLOR_GREEN] != 0 ||
+         system->ship_color_counts[1][HOMEWORLDS_COLOR_BLUE] != 0;
 }
 
 static inline gboolean homeworlds_system_is_empty(const HomeworldsSystem *system) {
   g_return_val_if_fail(system != NULL, TRUE);
 
-  return !homeworlds_system_has_star(system) && !homeworlds_system_has_any_ship(system);
+  return !homeworlds_system_has_star(system) && !homeworlds_system_has_any_ships(system);
 }
 
 #endif

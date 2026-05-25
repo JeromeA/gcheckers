@@ -285,25 +285,34 @@ static void test_color_counts_track_position_mutations(void) {
   };
 
   test_prepare_basic_position(&position);
-  assert(position.systems[0].color_counts[HOMEWORLDS_COLOR_RED] == 1);
-  assert(position.systems[0].color_counts[HOMEWORLDS_COLOR_BLUE] == 1);
-  assert(position.systems[0].color_counts[HOMEWORLDS_COLOR_GREEN] == 1);
+  assert(homeworlds_system_color_count(&position.systems[0], HOMEWORLDS_COLOR_RED) == 1);
+  assert(homeworlds_system_color_count(&position.systems[0], HOMEWORLDS_COLOR_BLUE) == 1);
+  assert(homeworlds_system_color_count(&position.systems[0], HOMEWORLDS_COLOR_GREEN) == 1);
+  assert(homeworlds_system_has_any_ships(&position.systems[0]));
+  assert(homeworlds_system_has_ships_for_side(&position.systems[0], 0));
+  assert(!homeworlds_system_has_ships_for_side(&position.systems[0], 1));
+  assert(homeworlds_system_accessible_color_count(&position.systems[0], 0, HOMEWORLDS_COLOR_RED) == 1);
+  assert(homeworlds_system_accessible_color_count(&position.systems[0], 0, HOMEWORLDS_COLOR_BLUE) == 1);
+  assert(homeworlds_system_accessible_color_count(&position.systems[0], 0, HOMEWORLDS_COLOR_GREEN) == 1);
+  assert(homeworlds_system_accessible_color_count(&position.systems[0], 1, HOMEWORLDS_COLOR_GREEN) == 0);
 
   assert(homeworlds_position_apply_turn_step(&position, &build));
-  assert(position.systems[0].color_counts[HOMEWORLDS_COLOR_GREEN] == 2);
+  assert(homeworlds_system_color_count(&position.systems[0], HOMEWORLDS_COLOR_GREEN) == 2);
+  assert(homeworlds_system_accessible_color_count(&position.systems[0], 0, HOMEWORLDS_COLOR_GREEN) == 2);
 
   assert(homeworlds_position_apply_turn_step(&position, &trade));
-  assert(position.systems[0].color_counts[HOMEWORLDS_COLOR_GREEN] == 1);
-  assert(position.systems[0].color_counts[HOMEWORLDS_COLOR_BLUE] == 2);
+  assert(homeworlds_system_color_count(&position.systems[0], HOMEWORLDS_COLOR_GREEN) == 1);
+  assert(homeworlds_system_color_count(&position.systems[0], HOMEWORLDS_COLOR_BLUE) == 2);
+  assert(homeworlds_system_accessible_color_count(&position.systems[0], 0, HOMEWORLDS_COLOR_BLUE) == 2);
 
   assert(test_bank_remove(&position, blue_small));
   assert(test_system_add_ship(&position, 0, 0, blue_small));
   assert(test_bank_remove(&position, blue_small));
   assert(test_system_add_ship(&position, 0, 0, blue_small));
-  assert(position.systems[0].color_counts[HOMEWORLDS_COLOR_BLUE] == 4);
+  assert(homeworlds_system_color_count(&position.systems[0], HOMEWORLDS_COLOR_BLUE) == 4);
 
   assert(homeworlds_position_apply_catastrophe(&position, 0, HOMEWORLDS_COLOR_BLUE));
-  assert(position.systems[0].color_counts[HOMEWORLDS_COLOR_BLUE] == 0);
+  assert(homeworlds_system_color_count(&position.systems[0], HOMEWORLDS_COLOR_BLUE) == 0);
 }
 
 static void test_attack_requires_size_and_changes_owner(void) {
@@ -327,7 +336,7 @@ static void test_attack_requires_size_and_changes_owner(void) {
                                                                 HOMEWORLDS_SIZE_SMALL),
                                });
   assert(homeworlds_position_apply_move(&position, &move));
-  assert(homeworlds_system_ship_count_for_side(&position.systems[0], 1) == 0);
+  assert(!homeworlds_system_has_ships_for_side(&position.systems[0], 1));
   assert(homeworlds_system_ship_count_for_side(&position.systems[0], 0) == 2);
 }
 
@@ -355,7 +364,7 @@ static void test_move_and_discover_follow_connectivity(void) {
                                                                   0),
                                });
   assert(homeworlds_position_apply_move(&move_position, &move));
-  assert(homeworlds_system_ship_count_for_side(&move_position.systems[0], 0) == 0);
+  assert(!homeworlds_system_has_ships_for_side(&move_position.systems[0], 0));
   assert(homeworlds_system_ship_count_for_side(&move_position.systems[2], 0) == 1);
 
   test_prepare_basic_position(&discover_position);
@@ -487,7 +496,7 @@ static void test_catastrophe_removes_matching_color_and_collapses_star_system(vo
   assert(test_bank_remove(&position, homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_MEDIUM)));
   assert(test_bank_remove(&position, homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE)));
 
-  assert(position.systems[2].color_counts[HOMEWORLDS_COLOR_BLUE] == 4);
+  assert(homeworlds_system_color_count(&position.systems[2], HOMEWORLDS_COLOR_BLUE) == 4);
   assert(homeworlds_position_apply_catastrophe(&position, 2, HOMEWORLDS_COLOR_BLUE));
   assert(position.systems[2].stars[0] == 0);
   assert(position.systems[2].ships[0][0] == 0);
@@ -524,14 +533,14 @@ static void test_catastrophe_preserves_ships_when_binary_star_survives(void) {
   assert(test_system_add_ship(&position, 1, 1, homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE)));
   assert(test_system_add_ship(&position, 1, 1, homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL)));
 
-  assert(position.systems[1].color_counts[HOMEWORLDS_COLOR_GREEN] == 4);
+  assert(homeworlds_system_color_count(&position.systems[1], HOMEWORLDS_COLOR_GREEN) == 4);
   assert(homeworlds_position_apply_move(&position, &move));
   assert(position.phase == HOMEWORLDS_PHASE_PLAY);
   assert(position.turn == 1);
   assert(homeworlds_position_outcome(&position) == GAME_BACKEND_OUTCOME_ONGOING);
   assert(position.systems[1].stars[0] == 0);
   assert(position.systems[1].stars[1] == homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_LARGE));
-  assert(homeworlds_system_ship_count_for_side(&position.systems[1], 0) == 0);
+  assert(!homeworlds_system_has_ships_for_side(&position.systems[1], 0));
   assert(homeworlds_system_ship_count_for_side(&position.systems[1], 1) == 1);
   assert(position.systems[1].ships[1][2] == homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL));
 }
@@ -549,7 +558,7 @@ static void test_ship_catastrophe_returns_orphaned_stars_to_bank(void) {
   assert(test_system_add_ship(&position, 2, 1, homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE)));
   assert(test_system_add_ship(&position, 2, 1, homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL)));
 
-  assert(position.systems[2].color_counts[HOMEWORLDS_COLOR_BLUE] == 4);
+  assert(homeworlds_system_color_count(&position.systems[2], HOMEWORLDS_COLOR_BLUE) == 4);
   assert(homeworlds_position_apply_catastrophe(&position, 2, HOMEWORLDS_COLOR_BLUE));
   assert(homeworlds_system_is_empty(&position.systems[2]));
 }
@@ -576,7 +585,7 @@ static void test_symbolic_catastrophe_move_does_not_finish_turn(void) {
   assert(test_system_add_ship(&position, 2, 0, homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_MEDIUM)));
   assert(test_system_add_ship(&position, 2, 1, homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE)));
 
-  assert(position.systems[2].color_counts[HOMEWORLDS_COLOR_BLUE] == 4);
+  assert(homeworlds_system_color_count(&position.systems[2], HOMEWORLDS_COLOR_BLUE) == 4);
   assert(homeworlds_position_apply_move(&position, &move));
   assert(position.phase == HOMEWORLDS_PHASE_PLAY);
   assert(position.turn == 0);

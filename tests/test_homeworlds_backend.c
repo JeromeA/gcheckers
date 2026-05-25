@@ -404,7 +404,7 @@ static void test_prepare_terminal_homeworld_catastrophe_position(HomeworldsPosit
     },
   };
   homeworlds_position_rebuild_color_counts(position);
-  assert(position->systems[1].color_counts[HOMEWORLDS_COLOR_RED] == 4);
+  assert(homeworlds_system_color_count(&position->systems[1], HOMEWORLDS_COLOR_RED) == 4);
 }
 
 static void test_prepare_yellow_sacrifice_route_position(HomeworldsPosition *position,

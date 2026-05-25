@@ -272,8 +272,8 @@ static gboolean homeworlds_view_builder_has_catastrophe_choices(const Homeworlds
     return FALSE;
   }
   for (guint side = 0; side < 2; ++side) {
-    if (state->initial_homeworld_ship_counts[side] > 0 &&
-        homeworlds_system_ship_count_for_side(&state->working_position.systems[side], side) == 0) {
+    if (state->initial_homeworld_has_ships[side] &&
+        !homeworlds_system_has_ships_for_side(&state->working_position.systems[side], side)) {
       return FALSE;
     }
   }
@@ -282,7 +282,7 @@ static gboolean homeworlds_view_builder_has_catastrophe_choices(const Homeworlds
     const HomeworldsSystem *system = &state->working_position.systems[system_index];
 
     for (guint color = HOMEWORLDS_COLOR_RED; color <= HOMEWORLDS_COLOR_BLUE; ++color) {
-      if (system->color_counts[color] >= 4) {
+      if (homeworlds_system_color_count(system, (HomeworldsColor) color) >= 4) {
         return TRUE;
       }
     }
@@ -2438,7 +2438,7 @@ static void homeworlds_view_update_catastrophes(HomeworldsView *view) {
   for (guint system_index = 0; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
     const HomeworldsSystem *system = &position->systems[system_index];
     for (guint color = HOMEWORLDS_COLOR_RED; color <= HOMEWORLDS_COLOR_BLUE; ++color) {
-      if (system->color_counts[color] < 4) {
+      if (homeworlds_system_color_count(system, (HomeworldsColor) color) < 4) {
         continue;
       }
 

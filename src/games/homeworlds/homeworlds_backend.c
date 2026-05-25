@@ -246,19 +246,21 @@ static gboolean homeworlds_backend_pyramid_counts_equal(const guint left[13], co
   return TRUE;
 }
 
-static void homeworlds_backend_adjust_system_color_count(HomeworldsSystem *system,
-                                                         HomeworldsPyramid pyramid,
-                                                         gint delta) {
+static void homeworlds_backend_adjust_ship_color_count(HomeworldsSystem *system,
+                                                       guint side,
+                                                       HomeworldsPyramid pyramid,
+                                                       gint delta) {
   g_return_if_fail(system != NULL);
+  g_return_if_fail(side < 2);
   g_return_if_fail(homeworlds_pyramid_is_valid(pyramid));
   g_return_if_fail(delta == 1 || delta == -1);
 
   HomeworldsColor color = homeworlds_pyramid_color(pyramid);
   if (delta < 0) {
-    g_return_if_fail(system->color_counts[color] > 0);
-    system->color_counts[color]--;
+    g_return_if_fail(system->ship_color_counts[side][color] > 0);
+    system->ship_color_counts[side][color]--;
   } else {
-    system->color_counts[color]++;
+    system->ship_color_counts[side][color]++;
   }
 }
 
@@ -273,11 +275,11 @@ static void homeworlds_backend_set_ship_slot(HomeworldsSystem *system,
 
   HomeworldsPyramid old_pyramid = system->ships[side][slot];
   if (homeworlds_pyramid_is_valid(old_pyramid)) {
-    homeworlds_backend_adjust_system_color_count(system, old_pyramid, -1);
+    homeworlds_backend_adjust_ship_color_count(system, side, old_pyramid, -1);
   }
   system->ships[side][slot] = pyramid;
   if (homeworlds_pyramid_is_valid(pyramid)) {
-    homeworlds_backend_adjust_system_color_count(system, pyramid, 1);
+    homeworlds_backend_adjust_ship_color_count(system, side, pyramid, 1);
   }
 }
 
@@ -629,10 +631,10 @@ static gboolean homeworlds_backend_position_is_initial_turn(const HomeworldsPosi
   for (guint system_index = 0; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
     const HomeworldsSystem *system = &position->systems[system_index];
 
-    if (system_index != 0 && homeworlds_system_ship_count_for_side(system, 0) != 0) {
+    if (system_index != 0 && homeworlds_system_has_ships_for_side(system, 0)) {
       return FALSE;
     }
-    if (system_index != 1 && homeworlds_system_ship_count_for_side(system, 1) != 0) {
+    if (system_index != 1 && homeworlds_system_has_ships_for_side(system, 1)) {
       return FALSE;
     }
   }
@@ -668,7 +670,7 @@ static gboolean homeworlds_backend_position_has_catastrophe(const HomeworldsPosi
     const HomeworldsSystem *system = &position->systems[system_index];
 
     for (guint color = HOMEWORLDS_COLOR_RED; color <= HOMEWORLDS_COLOR_BLUE; ++color) {
-      if (system->color_counts[color] >= 4) {
+      if (homeworlds_system_color_count(system, (HomeworldsColor) color) >= 4) {
         return TRUE;
       }
     }
@@ -688,7 +690,7 @@ static gboolean homeworlds_backend_system_has_unfavorable_catastrophe(const Home
     guint own_pips = 0;
     guint opponent_pips = 0;
 
-    if (system->color_counts[color] < 4) {
+    if (homeworlds_system_color_count(system, (HomeworldsColor) color) < 4) {
       continue;
     }
 
@@ -1297,7 +1299,7 @@ static gint homeworlds_backend_system_color_count_before_trade(const HomeworldsP
   g_return_val_if_fail(reversed_step != NULL, -1);
   g_return_val_if_fail(reversed_step->kind == HOMEWORLDS_STEP_TRADE, -1);
 
-  count = position->systems[system_index].color_counts[color];
+  count = (gint) homeworlds_system_color_count(&position->systems[system_index], color);
   if (system_index != reversed_system_index) {
     return count;
   }
@@ -1667,7 +1669,7 @@ static guint homeworlds_backend_collect_profitable_catastrophes(const Homeworlds
       guint own_pips = 0;
       guint opponent_pips = 0;
 
-      if (system->color_counts[color] < 4) {
+      if (homeworlds_system_color_count(system, (HomeworldsColor) color) < 4) {
         continue;
       }
 

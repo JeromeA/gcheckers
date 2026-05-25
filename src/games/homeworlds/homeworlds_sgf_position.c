@@ -63,7 +63,7 @@ static gboolean homeworlds_sgf_position_system_is_valid_snapshot(const Homeworld
   g_return_val_if_fail(system != NULL, FALSE);
 
   return homeworlds_system_is_empty(system) ||
-         (homeworlds_system_has_star(system) && homeworlds_system_has_any_ship(system));
+         (homeworlds_system_has_star(system) && homeworlds_system_has_any_ships(system));
 }
 
 static gboolean homeworlds_sgf_position_count_pyramid(HomeworldsPyramid pyramid,
@@ -159,6 +159,7 @@ static gboolean homeworlds_sgf_position_parse_system_value(const char *value,
     return FALSE;
   }
 
+  homeworlds_system_rebuild_color_counts(system);
   return homeworlds_sgf_position_system_is_valid_snapshot(system);
 }
 

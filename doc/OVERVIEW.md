@@ -546,8 +546,10 @@ Module: slot-based Homeworlds rules engine.
 Role: represent Homeworlds positions as fixed-size slots: a 36-slot bank, 16 system slots (systems `0` and `1` are
 the players' homeworlds), two star slots per system, and fourteen ship slots per side per system. Inline helpers in
 `homeworlds_types.h` own pyramid encoding/decoding and low-level slot semantics so the representation can change in
-one place later if needed. Each star system caches per-color pyramid totals; gameplay mutators update those totals
-incrementally, while SGF snapshot loading and raw test fixtures rebuild them after direct slot construction.
+one place later if needed. Each star system caches per-color pyramid counts split between stars, player 0 ships, and
+player 1 ships; helper APIs derive total system counts, side-accessible counts, and side ship presence from those
+cached parts. Gameplay mutators update those counts incrementally, while SGF snapshot loading and raw test fixtures
+rebuild them after direct slot construction.
 `HomeworldsMove` does not store physical slot indexes or an acting side; it stores the same symbolic system and ship
 references used by notation (`H1`, `G3'`, `g2`, etc.), and the rules engine resolves those references against the
 current position at apply time. Failed system-reference resolution returns

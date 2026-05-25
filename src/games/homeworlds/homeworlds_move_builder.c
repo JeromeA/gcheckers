@@ -213,10 +213,10 @@ static gboolean homeworlds_builder_homeworld_ship_loss_ends_turn(const Homeworld
   g_return_val_if_fail(state != NULL, FALSE);
 
   for (guint side = 0; side < 2; ++side) {
-    if (state->initial_homeworld_ship_counts[side] == 0) {
+    if (!state->initial_homeworld_has_ships[side]) {
       continue;
     }
-    if (homeworlds_system_ship_count_for_side(&state->working_position.systems[side], side) == 0) {
+    if (!homeworlds_system_has_ships_for_side(&state->working_position.systems[side], side)) {
       return TRUE;
     }
   }
@@ -762,8 +762,8 @@ gboolean homeworlds_move_builder_init(const HomeworldsPosition *position, GameBa
   state->selected_system_index = HOMEWORLDS_INVALID_INDEX;
   state->selected_ship_pyramid = 0;
   state->forced_action_color = HOMEWORLDS_INVALID_COLOR;
-  state->initial_homeworld_ship_counts[0] = homeworlds_system_ship_count_for_side(&position->systems[0], 0);
-  state->initial_homeworld_ship_counts[1] = homeworlds_system_ship_count_for_side(&position->systems[1], 1);
+  state->initial_homeworld_has_ships[0] = homeworlds_system_has_ships_for_side(&position->systems[0], 0);
+  state->initial_homeworld_has_ships[1] = homeworlds_system_has_ships_for_side(&position->systems[1], 1);
   out_builder->builder_state = state;
   out_builder->builder_state_size = sizeof(*state);
   return TRUE;
