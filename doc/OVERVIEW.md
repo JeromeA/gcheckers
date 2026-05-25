@@ -103,9 +103,9 @@ leaves the current board orientation unchanged.
 Adds an `Analysis` menubar submenu for current-position and whole-game analysis, plus a `View` submenu with
 independent toggles for the navigation drawer and analysis drawer; Homeworlds also exposes a `Move report` toggle
 there. Hiding both drawers removes the entire right-side drawer split while preserving the board pane. The analysis
-drawer keeps the text report bound to the currently selected SGF node, and shows transient analysis progress in a
-separate status label under the graph instead of overwriting the report text. Full-game analysis status uses one shared
-formatter from the initial `0/n` state through later progress
+drawer keeps the text report bound to the currently selected SGF node, and shows only transient analysis depth/node
+progress in a separate status label under the graph instead of overwriting or duplicating the report text. Full-game
+analysis status uses one shared formatter from the initial `0/n` state through later progress
 updates instead of switching from a separate startup string, includes the cumulative explored-node count in the status
 label, and refreshes on the same 100 ms throttle used by current-position analysis while a node is being searched.
 Panel width state is retained for the board, navigation drawer, and analysis drawer, and drawer show/hide transitions

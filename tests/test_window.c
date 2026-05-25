@@ -84,6 +84,23 @@ static void test_analysis_report_includes_per_move_nodes(void) {
   g_assert_null(strstr(report, " nodes)"));
 }
 
+static void test_analysis_status_excludes_scored_moves(void) {
+  g_autoptr(SgfNodeAnalysis) analysis = sgf_node_analysis_new();
+  g_assert_nonnull(analysis);
+
+  analysis->depth = 7;
+  analysis->nodes = 123456;
+
+  g_assert_true(sgf_node_analysis_add_scored_move(analysis, "13-17", 42, 10));
+
+  g_autofree char *status = ggame_window_format_analysis_status(analysis);
+  g_assert_nonnull(status);
+  g_assert_nonnull(strstr(status, "Analysis depth: 7"));
+  g_assert_nonnull(strstr(status, "Nodes: 123456"));
+  g_assert_null(strstr(status, "+42"));
+  g_assert_null(strstr(status, "13-17"));
+}
+
 static void test_analysis_graph_axis_range_minimum_window(void) {
   double min_axis = 0.0;
   double max_axis = 0.0;
@@ -2480,6 +2497,7 @@ int main(int argc, char **argv) {
   g_test_add_func("/analysis-graph/score-compression", test_analysis_graph_score_compression);
   g_test_add_func("/analysis/score-formatting", test_analysis_score_formatting);
   g_test_add_func("/analysis/report-includes-per-move-nodes", test_analysis_report_includes_per_move_nodes);
+  g_test_add_func("/analysis/status-excludes-scored-moves", test_analysis_status_excludes_scored_moves);
   g_test_add_func("/analysis-graph/axis-range-minimum-window", test_analysis_graph_axis_range_minimum_window);
   g_test_add_func("/analysis-graph/axis-range-expands", test_analysis_graph_axis_range_expands_for_large_scores);
   if (!gtk_init_check()) {

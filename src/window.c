@@ -113,8 +113,6 @@ typedef struct {
   guint target_depth;
   gint64 last_progress_publish_us;
   GameAiSearchStats cumulative_stats;
-  guint last_completed_depth;
-  SgfNodeAnalysis *last_completed_analysis;
   const SgfNode *target_node;
 } GGameWindowAnalysisTask;
 
@@ -2395,6 +2393,12 @@ char *ggame_window_format_analysis_report(const SgfNodeAnalysis *analysis) {
   return g_string_free(text, FALSE);
 }
 
+char *ggame_window_format_analysis_status(const SgfNodeAnalysis *analysis) {
+  g_return_val_if_fail(analysis != NULL, NULL);
+
+  return g_strdup_printf("Analysis depth: %u\nNodes: %" G_GUINT64_FORMAT, analysis->depth, analysis->nodes);
+}
+
 static char *ggame_window_analysis_format_complete(const SgfNodeAnalysis *analysis) {
   return ggame_window_format_analysis_report(analysis);
 }
@@ -2427,15 +2431,6 @@ static char *ggame_window_analysis_format_progress(const GGameWindowAnalysisTask
   GString *text = g_string_new(NULL);
   g_string_append_printf(text, "Analysis depth: %u (searching)\n", task->current_depth);
   g_string_append_printf(text, "Nodes: %" G_GUINT64_FORMAT "\n", stats->nodes);
-
-  if (task->last_completed_analysis == NULL) {
-    g_string_append(text, "Best to worst:\n");
-    g_string_append(text, "(searching...)\n");
-    return g_string_free(text, FALSE);
-  }
-
-  g_string_append_printf(text, "Last completed depth: %u\n", task->last_completed_depth);
-  ggame_window_analysis_append_scored_moves(text, task->last_completed_analysis);
   return g_string_free(text, FALSE);
 }
 
@@ -2542,14 +2537,11 @@ static gpointer ggame_window_analysis_thread(gpointer user_data) {
       break;
     }
 
-    g_autofree char *text = ggame_window_analysis_format_complete(analysis);
+    g_autofree char *text = ggame_window_format_analysis_status(analysis);
     if (text == NULL) {
       break;
     }
 
-    sgf_node_analysis_free(task->last_completed_analysis);
-    task->last_completed_analysis = sgf_node_analysis_copy(analysis);
-    task->last_completed_depth = depth;
     ggame_window_analysis_publish_payload(task->self,
                                               task->generation,
                                               GGAME_WINDOW_ANALYSIS_MODE_CURRENT,
@@ -2574,7 +2566,6 @@ static gpointer ggame_window_analysis_thread(gpointer user_data) {
   game_ai_tt_free(task->tt);
   task->backend->position_clear(task->position);
   g_free(task->position);
-  sgf_node_analysis_free(task->last_completed_analysis);
   g_free(task);
   return NULL;
 }

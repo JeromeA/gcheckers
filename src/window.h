@@ -32,6 +32,7 @@ void ggame_window_set_loaded_variant(GGameWindow *self, const GameBackendVariant
 void ggame_window_force_move(GGameWindow *self);
 char *ggame_window_format_analysis_score(gint score);
 char *ggame_window_format_analysis_report(const SgfNodeAnalysis *analysis);
+char *ggame_window_format_analysis_status(const SgfNodeAnalysis *analysis);
 const GameBackendVariant *ggame_window_get_variant(GGameWindow *self);
 gboolean ggame_window_start_puzzle_mode_for_path(GGameWindow *self,
                                                  const GameBackendVariant *variant,

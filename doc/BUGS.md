@@ -1269,3 +1269,15 @@ could trade `H2g2=y` while already having two yellow ships and a yellow star at 
 catastrophe that mostly destroyed Player 2's own material.
 
 The fix applies the same unfavorable-catastrophe check to trade steps after the staged builder applies them.
+
+## Current-position analysis status duplicated the move report
+
+The analysis drawer has two separate text surfaces: the status label should show transient progress such as depth and
+node count, while the report view should show the selected node's saved move scores.
+
+Current-position analysis reused the full report formatter for the status label after each completed depth, and its
+in-progress formatter also copied the last completed scored moves into the status text. That made the status area show
+the same move list that belongs in the report below it.
+
+The fix adds a status-only formatter for completed current-position analysis, removes scored moves from progress
+updates, and leaves move-score formatting exclusively in the report view.
