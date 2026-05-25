@@ -1281,3 +1281,14 @@ the same move list that belongs in the report below it.
 
 The fix adds a status-only formatter for completed current-position analysis, removes scored moves from progress
 updates, and leaves move-score formatting exclusively in the report view.
+
+## Homeworlds board labels did not match move notation
+
+The Homeworlds move notation and ASCII position text refer to homeworlds as `H1`/`H2` and non-homeworld systems as
+`S0`, `S1`, and so on, where `S0` is internal system slot 2.
+
+The board and side-panel labels still displayed raw internal indexes, such as `System 2` or `system 2`, which made the
+same system appear under different names in the UI and move text.
+
+The fix shares one view-local formatter for visible system labels, so board labels, move-target labels, ship-selection
+labels, and catastrophe buttons all use the same notation-facing names.

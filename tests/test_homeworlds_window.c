@@ -1181,6 +1181,7 @@ static void test_homeworlds_window_catastrophe_prefix_records_single_sgf_move(vo
 
   catastrophe_button = test_homeworlds_find_catastrophe_button(root, 2, HOMEWORLDS_COLOR_BLUE);
   g_assert_nonnull(catastrophe_button);
+  g_assert_cmpstr(gtk_button_get_label(catastrophe_button), ==, "Catastrophe blue at S0");
   g_signal_emit_by_name(catastrophe_button, "clicked");
   g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 0);
 
@@ -1276,6 +1277,7 @@ static void test_homeworlds_window_end_move_catastrophe_requires_choice(void) {
   g_assert_nonnull(test_homeworlds_find_finish_catastrophes_pass_button(root));
   catastrophe_button = test_homeworlds_find_catastrophe_button(root, 0, HOMEWORLDS_COLOR_RED);
   g_assert_nonnull(catastrophe_button);
+  g_assert_cmpstr(gtk_button_get_label(catastrophe_button), ==, "Catastrophe red at H1");
   g_signal_emit_by_name(catastrophe_button, "clicked");
 
   g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 1);

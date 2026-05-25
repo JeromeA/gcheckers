@@ -624,9 +624,9 @@ connectivity-aware reachability-row placement between the two homeworlds that on
 disconnected row groups, measured-width row packing that reserves the bank footprint and expands inside a scroller only
 when needed, viewport-tracking drawing-area content size that expands width for crowded rows and height for vertically
 crowded row boxes, mapped-frame ticks that recheck startup allocation without replacing stable click targets, a fixed
-minimum board viewport, homeworld labels, pipped square stars, tall pipped ship pyramids, overlaid compact bank piles
-with a shared base button style, an in-panel title, staged legal-choice buttons, and catastrophe buttons that stage
-normal symbolic steps into the
+minimum board viewport, `H1`/`H2`/`S0`-style system labels matching move notation, pipped square stars, tall pipped
+ship pyramids, overlaid compact bank piles with a shared base button style, an in-panel title, staged legal-choice
+buttons, and catastrophe buttons that stage normal symbolic steps into the
 current move so SGF, model state, and the last-move label stay synchronized. Homeworld rendering keeps player 1 at the
 bottom, player 2 at
 the top, and lays out every system in one horizontal row with player 2 ships left of the stars and player 1 ships right

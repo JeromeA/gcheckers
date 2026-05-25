@@ -297,6 +297,16 @@ static const char *homeworlds_view_color_name(HomeworldsColor color) {
   return homeworlds_view_color_styles[color].name;
 }
 
+static char *homeworlds_view_system_label(guint system_index) {
+  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, NULL);
+
+  if (system_index < 2) {
+    return g_strdup_printf("H%u", system_index + 1);
+  }
+
+  return g_strdup_printf("S%u", system_index - 2);
+}
+
 static const char *homeworlds_view_size_name(HomeworldsSize size) {
   switch (size) {
     case HOMEWORLDS_SIZE_SMALL:
@@ -352,6 +362,7 @@ static gboolean homeworlds_view_candidate_is_discovery(const HomeworldsMoveCandi
 
 static char *homeworlds_view_candidate_label(const HomeworldsMoveCandidate *candidate) {
   char *pyramid_label = NULL;
+  char *system_label = NULL;
   char *label = NULL;
 
   g_return_val_if_fail(candidate != NULL, NULL);
@@ -369,9 +380,9 @@ static char *homeworlds_view_candidate_label(const HomeworldsMoveCandidate *cand
       return label;
     case HOMEWORLDS_CANDIDATE_SELECT_SHIP:
       pyramid_label = homeworlds_view_pyramid_label(candidate->data.pyramid);
-      label = g_strdup_printf("Select %s at system %u",
-                              pyramid_label,
-                              (guint) candidate->data.system_index);
+      system_label = homeworlds_view_system_label(candidate->data.system_index);
+      label = g_strdup_printf("Select %s at %s", pyramid_label, system_label);
+      g_free(system_label);
       g_free(pyramid_label);
       return label;
     case HOMEWORLDS_CANDIDATE_ACTION:
@@ -389,7 +400,10 @@ static char *homeworlds_view_candidate_label(const HomeworldsMoveCandidate *cand
         g_free(pyramid_label);
         return label;
       }
-      return g_strdup_printf("Move to system %u", (guint) candidate->data.target_system_index);
+      system_label = homeworlds_view_system_label(candidate->data.target_system_index);
+      label = g_strdup_printf("Move to %s", system_label);
+      g_free(system_label);
+      return label;
     case HOMEWORLDS_CANDIDATE_NONE:
     default:
       return g_strdup("Unknown choice");
@@ -1575,14 +1589,14 @@ static void homeworlds_view_draw_system(cairo_t *cr,
   cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
   cairo_set_font_size(cr, 12.0);
   cairo_set_source_rgba(cr, 0.96, 0.96, 0.90, 0.92);
-  if (system_index < 2) {
+  {
+    char *label = homeworlds_view_system_label(system_index);
+
     cairo_move_to(cr, x + 14.0, y + 22.0);
-    cairo_show_text(cr, system_index == 0 ? "Player 1 homeworld" : "Player 2 homeworld");
-  } else {
-    char label[32] = {0};
-    g_snprintf(label, sizeof(label), "System %u", system_index);
-    cairo_move_to(cr, x + 14.0, y + 22.0);
-    cairo_show_text(cr, label);
+    if (label != NULL) {
+      cairo_show_text(cr, label);
+    }
+    g_free(label);
   }
 
   for (guint i = 0; i < layout.piece_count; ++i) {
@@ -2442,14 +2456,16 @@ static void homeworlds_view_update_catastrophes(HomeworldsView *view) {
         continue;
       }
 
-      char *label = g_strdup_printf("Catastrophe %s at system %u",
+      char *system_label = homeworlds_view_system_label(system_index);
+      char *label = g_strdup_printf("Catastrophe %s at %s",
                                     homeworlds_view_color_name((HomeworldsColor) color),
-                                    system_index);
+                                    system_label);
       GtkWidget *button = homeworlds_view_new_text_panel_button(label);
       g_object_set_data(G_OBJECT(button), "homeworlds-system-index", GUINT_TO_POINTER(system_index + 1));
       g_object_set_data(G_OBJECT(button), "homeworlds-color", GUINT_TO_POINTER(color + 1));
       g_signal_connect(button, "clicked", G_CALLBACK(homeworlds_view_catastrophe_clicked), view);
       gtk_box_append(GTK_BOX(view->catastrophe_box), button);
+      g_free(system_label);
       g_free(label);
       appended = TRUE;
     }
