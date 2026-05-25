@@ -565,7 +565,8 @@ letters and sizes directly, such as `Y2B1g3`, `H1g+`, `G3y2>G2 G3y!`, and `pass`
 spaces between complete steps and no internal slash separator, while the parser also accepts older saved `H1 g+` and
 slash-separated step notation. `src/games/homeworlds/TEXT_CONVENTIONS.md` is the source-local reference for move and
 ASCII-position text conventions. The public parser only writes the output move after the whole notation succeeds. Static
-evaluation counts ship material, homeworld health, and build access: an empty homeworld is scored like a simple
+evaluation scores player 1's side and player 2's side separately, then subtracts player 2's score from player 1's.
+Each side score counts ship material, homeworld health, and build access: an empty homeworld is scored like a simple
 three-pip setup system with one buildable color, a single-star homeworld is penalized, the largest own ship at each
 player's homeworld is repeated, and each buildable ship color is rewarded once. Ship material uses separate static
 values for one-, two-, and three-pip ships instead of multiplying the size by one shared unit. The default weights are

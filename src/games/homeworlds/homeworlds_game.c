@@ -1198,9 +1198,11 @@ static guint homeworlds_position_buildable_color_count_for_side(const Homeworlds
   return count;
 }
 
-gint homeworlds_position_evaluate_static_with_weights(const HomeworldsPosition *position,
-                                                       const HomeworldsEvalWeights *weights) {
+static gint homeworlds_position_evaluate_static_for_side(const HomeworldsPosition *position,
+                                                         guint side,
+                                                         const HomeworldsEvalWeights *weights) {
   g_return_val_if_fail(position != NULL, 0);
+  g_return_val_if_fail(side < 2, 0);
   g_return_val_if_fail(weights != NULL, 0);
 
   gint score = 0;
@@ -1208,28 +1210,30 @@ gint homeworlds_position_evaluate_static_with_weights(const HomeworldsPosition *
   for (guint system_index = 0; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
     const HomeworldsSystem *system = &position->systems[system_index];
 
-    for (guint side = 0; side < 2; ++side) {
-      gint side_sign = side == 0 ? 1 : -1;
-      for (guint slot = 0; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
-        HomeworldsPyramid ship = system->ships[side][slot];
-        if (!homeworlds_pyramid_is_valid(ship)) {
-          continue;
-        }
-
-        score += side_sign * homeworlds_eval_ship_value(weights, ship);
+    for (guint slot = 0; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
+      HomeworldsPyramid ship = system->ships[side][slot];
+      if (!homeworlds_pyramid_is_valid(ship)) {
+        continue;
       }
+
+      score += homeworlds_eval_ship_value(weights, ship);
     }
   }
 
-  for (guint side = 0; side < 2; ++side) {
-    gint side_sign = side == 0 ? 1 : -1;
-    const HomeworldsSystem *homeworld = &position->systems[side];
-
-    score += side_sign * homeworlds_homeworld_static_value_for_side(homeworld, side, weights);
-    score += side_sign * ((gint)homeworlds_position_buildable_color_count_for_side(position, side) *
-                          weights->buildable_color_value);
-  }
+  const HomeworldsSystem *homeworld = &position->systems[side];
+  score += homeworlds_homeworld_static_value_for_side(homeworld, side, weights);
+  score += (gint)homeworlds_position_buildable_color_count_for_side(position, side) *
+           weights->buildable_color_value;
   return score;
+}
+
+gint homeworlds_position_evaluate_static_with_weights(const HomeworldsPosition *position,
+                                                       const HomeworldsEvalWeights *weights) {
+  g_return_val_if_fail(position != NULL, 0);
+  g_return_val_if_fail(weights != NULL, 0);
+
+  return homeworlds_position_evaluate_static_for_side(position, 0, weights) -
+         homeworlds_position_evaluate_static_for_side(position, 1, weights);
 }
 
 gint homeworlds_position_evaluate_static(const HomeworldsPosition *position) {
