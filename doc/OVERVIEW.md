@@ -548,22 +548,24 @@ the players' homeworlds), two star slots per system, and fourteen ship slots per
 `homeworlds_types.h` own pyramid encoding/decoding and low-level slot semantics so the representation can change in
 one place later if needed. Each star system caches per-color pyramid counts split between stars, player 0 ships, and
 player 1 ships; helper APIs derive total system counts, side-accessible counts, and side ship presence from those
-cached parts. Gameplay mutators update those counts incrementally, while SGF snapshot loading and raw test fixtures
-rebuild them after direct slot construction.
-`HomeworldsMove` does not store physical slot indexes or an acting side; it stores the same symbolic system and ship
-references used by notation (`H1`, `G3'`, `g2`, etc.), and the rules engine resolves those references against the
-current position at apply time. Failed system-reference resolution returns
-`HOMEWORLDS_INVALID_INDEX` through the output index, and failed ship-reference resolution clears its resolved indexes
-and pyramid. Build steps are canonicalized further: they store only the source system plus the build color in
-`target_color`, because the exact source ship size does not change the move.
+cached parts. Ship slots for each side are kept compact: adding a ship appends after the current cached count, removing
+a ship shifts the following occupied slots left, and readers stop at the first empty slot. Gameplay mutators update
+cached counts incrementally, while SGF snapshot loading and raw test fixtures compact direct slot construction before
+rebuilding those counts.
+`HomeworldsMove` does not store an acting side or ship slots. It stores notation-facing system references: `H1`/`H2`
+for homeworlds and `S0`, `S1`, and so on for non-homeworld slots, with discover targets also carrying the new star.
+The rules engine resolves those references against the current position at apply time. Failed system-reference
+resolution returns `HOMEWORLDS_INVALID_INDEX` through the output index, and failed ship-reference resolution clears its
+resolved indexes and pyramid. Build steps are canonicalized further: they store only the source system plus the build
+color in `target_color`, because the exact source ship size does not change the move.
 Rules covered: setup, build, trade, attack, move, discover, sacrifice, catastrophe resolution, empty-system
 cleanup, end-of-turn homeworld loss detection for either side, static evaluation, terminal scoring, hashing, compact
 move formatting/parsing, structural move equality, ordered unique all-move generation, and whole-position SGF snapshots
 in `homeworlds_sgf_position.c`. Catastrophes return remaining ships only when the affected star system has no stars
-left after removing the overpopulated color, so binary-star systems survive losing one star. Move notation uses pyramid
-letters and sizes directly, such as `Y2B1g3`, `H1g+`, `G3y2>G2 G3y!`, and `pass`; multi-step moves are formatted with
-spaces between complete steps and no internal slash separator, while the parser also accepts older saved `H1 g+` and
-slash-separated step notation. `src/games/homeworlds/TEXT_CONVENTIONS.md` is the source-local reference for move and
+left after removing the overpopulated color, so binary-star systems survive losing one star. Setup notation still
+names the two starting stars and ship directly, such as `Y2B1g3`; turn notation uses system slot labels for
+non-homeworld systems, such as `H1g+`, `S1g2>S2(Y2)`, `S1g2>S2`, and `pass`. Multi-step moves are formatted with
+spaces between complete steps. `src/games/homeworlds/TEXT_CONVENTIONS.md` is the source-local reference for move and
 ASCII-position text conventions. The public parser only writes the output move after the whole notation succeeds. Static
 evaluation scores player 1's side and player 2's side separately, then subtracts player 2's score from player 1's.
 Each side score counts ship material, homeworld health, and build access: an empty homeworld is scored like a simple
@@ -598,8 +600,8 @@ that forced action instead of showing the normal action picker again. Passing wh
 for every remaining sacrificed action and completes the move; only a pass with no pending sacrifice is a top-level pass.
 If a staged action or catastrophe destroys a homeworld that still had ships at the start of the move, the builder
 completes the move immediately instead of asking for sacrifice-fill or catastrophe-pass steps.
-Candidate data can still use transient slot indexes for UI selection, but committed move steps are converted to
-symbolic references before they are applied or saved to SGF. Committed build steps are converted to system-plus-color
+Candidate data can still use transient slot indexes for UI selection, and committed move steps are converted to stable
+notation references before they are applied or saved to SGF. Committed build steps are converted to system-plus-color
 form so two same-color source ships produce the same internal move and notation. The interactive action list still
 offers Build from every selected same-color ship; duplicate symbolic build moves are handled after complete moves are
 formed instead of hiding a legal action from the clicked ship.

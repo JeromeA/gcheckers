@@ -1470,7 +1470,7 @@ static gboolean homeworlds_view_collect_ship_row(const HomeworldsSystem *system,
   for (guint slot = 0; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
     HomeworldsPyramid ship = system->ships[side][slot];
     if (!homeworlds_pyramid_is_valid(ship)) {
-      continue;
+      break;
     }
     if (!homeworlds_view_piece_row_append(row, ship, TRUE, side, slot, points_up)) {
       return FALSE;

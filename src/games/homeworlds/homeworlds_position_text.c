@@ -163,9 +163,10 @@ static void homeworlds_position_text_append_ships(GString *text, const Homeworld
   for (guint slot = 0; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
     HomeworldsPyramid ship = system->ships[side][slot];
 
-    if (homeworlds_pyramid_is_valid(ship)) {
-      homeworlds_position_text_append_pyramid(text, ship, FALSE);
+    if (!homeworlds_pyramid_is_valid(ship)) {
+      break;
     }
+    homeworlds_position_text_append_pyramid(text, ship, FALSE);
   }
 
   if (text->len == start_len) {
@@ -173,10 +174,29 @@ static void homeworlds_position_text_append_ships(GString *text, const Homeworld
   }
 }
 
-static void homeworlds_position_text_append_system(GString *text, const HomeworldsSystem *system) {
+static gboolean homeworlds_position_text_append_system_label(GString *text, guint system_index) {
+  g_return_val_if_fail(text != NULL, FALSE);
+  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
+
+  if (system_index < 2) {
+    g_string_append_printf(text, "H%u: ", system_index + 1);
+    return TRUE;
+  }
+
+  g_string_append_printf(text, "S%u: ", system_index - 2);
+  return TRUE;
+}
+
+static void homeworlds_position_text_append_system(GString *text,
+                                                   const HomeworldsSystem *system,
+                                                   guint system_index) {
   g_return_if_fail(text != NULL);
   g_return_if_fail(system != NULL);
+  g_return_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT);
 
+  if (!homeworlds_position_text_append_system_label(text, system_index)) {
+    return;
+  }
   homeworlds_position_text_append_ships(text, system, 1);
   g_string_append_c(text, ' ');
   homeworlds_position_text_append_stars(text, system);
@@ -224,7 +244,8 @@ char *homeworlds_position_format_ascii(const HomeworldsPosition *position) {
     }
 
     for (guint system = 0; system < row->count; ++system) {
-      homeworlds_position_text_append_system(text, &position->systems[row->systems[system]]);
+      guint system_index = row->systems[system];
+      homeworlds_position_text_append_system(text, &position->systems[system_index], system_index);
       appended_any_system = TRUE;
     }
     previous_row = row;

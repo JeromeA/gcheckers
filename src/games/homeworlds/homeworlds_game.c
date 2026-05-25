@@ -112,6 +112,22 @@ static void homeworlds_system_set_ship_slot(HomeworldsSystem *system,
   g_return_if_fail(pyramid == 0 || homeworlds_pyramid_is_valid(pyramid));
 
   HomeworldsPyramid old_pyramid = system->ships[side][slot];
+  if (pyramid == 0) {
+    g_return_if_fail(homeworlds_pyramid_is_valid(old_pyramid));
+
+    homeworlds_system_count_pyramid(system->ship_color_counts[side], old_pyramid, -1);
+    for (guint next_slot = slot + 1; next_slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++next_slot) {
+      HomeworldsPyramid next_pyramid = system->ships[side][next_slot];
+
+      system->ships[side][next_slot - 1] = next_pyramid;
+      if (!homeworlds_pyramid_is_valid(next_pyramid)) {
+        return;
+      }
+    }
+    system->ships[side][HOMEWORLDS_SHIP_SLOT_COUNT - 1] = 0;
+    return;
+  }
+
   if (homeworlds_pyramid_is_valid(old_pyramid)) {
     homeworlds_system_count_pyramid(system->ship_color_counts[side], old_pyramid, -1);
   }
@@ -142,16 +158,17 @@ static gboolean homeworlds_system_add_ship(HomeworldsSystem *system, guint side,
   g_return_val_if_fail(side < 2, FALSE);
   g_return_val_if_fail(homeworlds_pyramid_is_valid(pyramid), FALSE);
 
-  for (guint i = 0; i < HOMEWORLDS_SHIP_SLOT_COUNT; ++i) {
-    if (system->ships[side][i] != 0) {
-      continue;
-    }
-
-    homeworlds_system_set_ship_slot(system, side, i, pyramid);
-    return TRUE;
+  guint ship_count = homeworlds_system_ship_count_for_side(system, side);
+  if (ship_count >= HOMEWORLDS_SHIP_SLOT_COUNT) {
+    return FALSE;
+  }
+  if (system->ships[side][ship_count] != 0) {
+    g_debug("Homeworlds ship slots are not compact for side %u", side);
+    return FALSE;
   }
 
-  return FALSE;
+  homeworlds_system_set_ship_slot(system, side, ship_count, pyramid);
+  return TRUE;
 }
 
 static gboolean homeworlds_system_remove_ship(HomeworldsSystem *system,
@@ -180,13 +197,10 @@ static void homeworlds_system_return_all_ships_to_bank(HomeworldsPosition *posit
 
   HomeworldsSystem *system = &position->systems[system_index];
   for (guint side = 0; side < 2; ++side) {
-    for (guint slot = 0; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
-      HomeworldsPyramid pyramid = system->ships[side][slot];
-      if (pyramid == 0) {
-        continue;
-      }
+    while (homeworlds_pyramid_is_valid(system->ships[side][0])) {
+      HomeworldsPyramid pyramid = system->ships[side][0];
 
-      homeworlds_system_set_ship_slot(system, side, slot, 0);
+      homeworlds_system_set_ship_slot(system, side, 0, 0);
       homeworlds_bank_put(position, pyramid);
     }
   }
@@ -212,19 +226,6 @@ static void homeworlds_system_cleanup_orphaned_stars(HomeworldsPosition *positio
   }
 }
 
-static gboolean homeworlds_system_contains_star(const HomeworldsSystem *system, HomeworldsPyramid star) {
-  g_return_val_if_fail(system != NULL, FALSE);
-  g_return_val_if_fail(homeworlds_pyramid_is_valid(star), FALSE);
-
-  for (guint i = 0; i < HOMEWORLDS_STAR_SLOT_COUNT; ++i) {
-    if (system->stars[i] == star) {
-      return TRUE;
-    }
-  }
-
-  return FALSE;
-}
-
 static gboolean homeworlds_system_find_ship_slot(const HomeworldsSystem *system,
                                                  guint side,
                                                  HomeworldsPyramid ship,
@@ -237,7 +238,12 @@ static gboolean homeworlds_system_find_ship_slot(const HomeworldsSystem *system,
   *out_ship_slot = HOMEWORLDS_INVALID_INDEX;
 
   for (guint slot = 0; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
-    if (system->ships[side][slot] != ship) {
+    HomeworldsPyramid candidate = system->ships[side][slot];
+
+    if (!homeworlds_pyramid_is_valid(candidate)) {
+      break;
+    }
+    if (candidate != ship) {
       continue;
     }
 
@@ -261,31 +267,12 @@ gboolean homeworlds_position_system_ref_for_index(const HomeworldsPosition *posi
     out_ref->homeworld_side = (guint8)system_index;
     return TRUE;
   }
-
-  const HomeworldsSystem *system = &position->systems[system_index];
-  HomeworldsPyramid star = 0;
-  for (guint i = 0; i < HOMEWORLDS_STAR_SLOT_COUNT; ++i) {
-    if (!homeworlds_pyramid_is_valid(system->stars[i])) {
-      continue;
-    }
-
-    star = system->stars[i];
-    break;
-  }
-  if (!homeworlds_pyramid_is_valid(star)) {
+  if (homeworlds_system_is_empty(&position->systems[system_index])) {
     return FALSE;
   }
 
-  guint duplicate_index = 0;
-  for (guint i = 2; i < system_index; ++i) {
-    if (homeworlds_system_contains_star(&position->systems[i], star)) {
-      duplicate_index++;
-    }
-  }
-
-  out_ref->kind = HOMEWORLDS_SYSTEM_REF_STAR;
-  out_ref->star = star;
-  out_ref->duplicate_index = (guint8)duplicate_index;
+  out_ref->kind = HOMEWORLDS_SYSTEM_REF_SYSTEM;
+  out_ref->system_index = (guint8)system_index;
   return TRUE;
 }
 
@@ -305,24 +292,15 @@ gboolean homeworlds_position_resolve_system_ref(const HomeworldsPosition *positi
       }
       *out_system_index = ref->homeworld_side;
       return TRUE;
-    case HOMEWORLDS_SYSTEM_REF_STAR: {
-      if (!homeworlds_pyramid_is_valid(ref->star)) {
+    case HOMEWORLDS_SYSTEM_REF_SYSTEM:
+      if (ref->system_index < 2 ||
+          ref->system_index >= HOMEWORLDS_SYSTEM_SLOT_COUNT ||
+          homeworlds_pyramid_is_valid(ref->star) ||
+          homeworlds_system_is_empty(&position->systems[ref->system_index])) {
         return FALSE;
       }
-
-      guint duplicate_index = 0;
-      for (guint i = 2; i < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++i) {
-        if (!homeworlds_system_contains_star(&position->systems[i], ref->star)) {
-          continue;
-        }
-        if (duplicate_index == ref->duplicate_index) {
-          *out_system_index = i;
-          return TRUE;
-        }
-        duplicate_index++;
-      }
-      return FALSE;
-    }
+      *out_system_index = ref->system_index;
+      return TRUE;
     case HOMEWORLDS_SYSTEM_REF_NONE:
     default:
       return FALSE;
@@ -465,15 +443,7 @@ static gboolean homeworlds_position_apply_build(HomeworldsPosition *position,
   }
 
   system = &position->systems[system_index];
-  for (guint ship_slot = 0; ship_slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++ship_slot) {
-    HomeworldsPyramid ship = system->ships[position->turn][ship_slot];
-
-    if (homeworlds_pyramid_is_valid(ship) &&
-        homeworlds_pyramid_color(ship) == (HomeworldsColor) step->target_color) {
-      has_source_color_ship = TRUE;
-      break;
-    }
-  }
+  has_source_color_ship = system->ship_color_counts[position->turn][step->target_color] > 0;
   if (!has_source_color_ship) {
     return FALSE;
   }
@@ -620,7 +590,8 @@ static gboolean homeworlds_position_apply_move_or_discover(HomeworldsPosition *p
     return FALSE;
   }
 
-  if (homeworlds_position_resolve_system_ref(position, &step->target_system, &target_system_index)) {
+  if (step->kind == HOMEWORLDS_STEP_MOVE &&
+      homeworlds_position_resolve_system_ref(position, &step->target_system, &target_system_index)) {
     HomeworldsSystem *to_system = &position->systems[target_system_index];
 
     if (target_system_index == from_system_index || !homeworlds_system_is_connected(from_system, to_system)) {
@@ -633,11 +604,15 @@ static gboolean homeworlds_position_apply_move_or_discover(HomeworldsPosition *p
                                                          target_system_index);
   }
 
-  if (step->target_system.kind != HOMEWORLDS_SYSTEM_REF_STAR ||
+  if (step->kind != HOMEWORLDS_STEP_DISCOVER ||
+      step->target_system.kind != HOMEWORLDS_SYSTEM_REF_SYSTEM ||
+      step->target_system.system_index < 2 ||
+      step->target_system.system_index >= HOMEWORLDS_SYSTEM_SLOT_COUNT ||
       !homeworlds_pyramid_is_valid(step->target_system.star)) {
     return FALSE;
   }
-  if (!homeworlds_position_find_empty_system(position, &target_system_index)) {
+  target_system_index = step->target_system.system_index;
+  if (!homeworlds_system_is_empty(&position->systems[target_system_index])) {
     return FALSE;
   }
   if (!homeworlds_bank_take(position, step->target_system.star)) {
@@ -966,9 +941,13 @@ gboolean homeworlds_position_apply_catastrophe(HomeworldsPosition *position,
   }
 
   for (guint side = 0; side < 2; ++side) {
-    for (guint slot = 0; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
+    for (guint slot = 0; slot < HOMEWORLDS_SHIP_SLOT_COUNT;) {
       HomeworldsPyramid ship = system->ships[side][slot];
-      if (!homeworlds_pyramid_is_valid(ship) || homeworlds_pyramid_color(ship) != color) {
+      if (!homeworlds_pyramid_is_valid(ship)) {
+        break;
+      }
+      if (homeworlds_pyramid_color(ship) != color) {
+        slot++;
         continue;
       }
 
@@ -1021,6 +1000,25 @@ guint homeworlds_system_ship_count_for_side(const HomeworldsSystem *system, guin
   return count;
 }
 
+static void homeworlds_system_compact_ship_slots(HomeworldsSystem *system, guint side) {
+  guint write_slot = 0;
+
+  g_return_if_fail(system != NULL);
+  g_return_if_fail(side < 2);
+
+  for (guint read_slot = 0; read_slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++read_slot) {
+    HomeworldsPyramid ship = system->ships[side][read_slot];
+    if (!homeworlds_pyramid_is_valid(ship)) {
+      continue;
+    }
+
+    system->ships[side][write_slot++] = ship;
+  }
+  while (write_slot < HOMEWORLDS_SHIP_SLOT_COUNT) {
+    system->ships[side][write_slot++] = 0;
+  }
+}
+
 void homeworlds_system_rebuild_color_counts(HomeworldsSystem *system) {
   g_return_if_fail(system != NULL);
 
@@ -1032,10 +1030,14 @@ void homeworlds_system_rebuild_color_counts(HomeworldsSystem *system) {
     }
   }
   for (guint side = 0; side < 2; ++side) {
+    homeworlds_system_compact_ship_slots(system, side);
     for (guint slot = 0; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
-      if (homeworlds_pyramid_is_valid(system->ships[side][slot])) {
-        system->ship_color_counts[side][homeworlds_pyramid_color(system->ships[side][slot])]++;
+      HomeworldsPyramid ship = system->ships[side][slot];
+      if (!homeworlds_pyramid_is_valid(ship)) {
+        break;
       }
+
+      system->ship_color_counts[side][homeworlds_pyramid_color(ship)]++;
     }
   }
 }
@@ -1134,7 +1136,7 @@ static gint homeworlds_system_largest_ship_value_for_side(const HomeworldsSystem
   for (guint slot = 0; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
     HomeworldsPyramid ship = system->ships[side][slot];
     if (!homeworlds_pyramid_is_valid(ship)) {
-      continue;
+      break;
     }
 
     best_value = MAX(best_value, homeworlds_eval_ship_value(weights, ship));
@@ -1213,7 +1215,7 @@ static gint homeworlds_position_evaluate_static_for_side(const HomeworldsPositio
     for (guint slot = 0; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
       HomeworldsPyramid ship = system->ships[side][slot];
       if (!homeworlds_pyramid_is_valid(ship)) {
-        continue;
+        break;
       }
 
       score += homeworlds_eval_ship_value(weights, ship);
@@ -1333,13 +1335,11 @@ static gboolean homeworlds_move_append_system_ref(GString *text, const Homeworld
       }
       g_string_append_printf(text, "H%u", (guint)ref->homeworld_side + 1);
       return TRUE;
-    case HOMEWORLDS_SYSTEM_REF_STAR:
-      if (!homeworlds_move_append_pyramid(text, ref->star, TRUE)) {
+    case HOMEWORLDS_SYSTEM_REF_SYSTEM:
+      if (ref->system_index < 2 || ref->system_index >= HOMEWORLDS_SYSTEM_SLOT_COUNT) {
         return FALSE;
       }
-      for (guint i = 0; i < ref->duplicate_index; ++i) {
-        g_string_append_c(text, '\'');
-      }
+      g_string_append_printf(text, "S%u", (guint)ref->system_index - 2);
       return TRUE;
     case HOMEWORLDS_SYSTEM_REF_NONE:
     default:
@@ -1347,7 +1347,32 @@ static gboolean homeworlds_move_append_system_ref(GString *text, const Homeworld
   }
 }
 
+static gboolean homeworlds_move_parse_system_number(const char **cursor, guint *out_system_index) {
+  guint64 value = 0;
+
+  g_return_val_if_fail(cursor != NULL, FALSE);
+  g_return_val_if_fail(*cursor != NULL, FALSE);
+  g_return_val_if_fail(out_system_index != NULL, FALSE);
+
+  if (!g_ascii_isdigit(**cursor)) {
+    return FALSE;
+  }
+
+  while (g_ascii_isdigit(**cursor)) {
+    value = (value * 10) + (guint64)(**cursor - '0');
+    if (value > HOMEWORLDS_SYSTEM_SLOT_COUNT - 3) {
+      return FALSE;
+    }
+    (*cursor)++;
+  }
+
+  *out_system_index = (guint)value + 2;
+  return TRUE;
+}
+
 static gboolean homeworlds_move_parse_system_ref(const char **cursor, HomeworldsSystemRef *out_ref) {
+  guint system_index = HOMEWORLDS_INVALID_INDEX;
+
   g_return_val_if_fail(cursor != NULL, FALSE);
   g_return_val_if_fail(*cursor != NULL, FALSE);
   g_return_val_if_fail(out_ref != NULL, FALSE);
@@ -1364,23 +1389,31 @@ static gboolean homeworlds_move_parse_system_ref(const char **cursor, Homeworlds
     return TRUE;
   }
 
-  out_ref->kind = HOMEWORLDS_SYSTEM_REF_STAR;
-  if (!homeworlds_move_parse_pyramid(cursor, TRUE, &out_ref->star)) {
+  if ((*cursor)[0] != 'S') {
+    return FALSE;
+  }
+  (*cursor)++;
+
+  if (!homeworlds_move_parse_system_number(cursor, &system_index)) {
     memset(out_ref, 0, sizeof(*out_ref));
     return FALSE;
   }
 
-  while (**cursor == '\'') {
-    if (out_ref->duplicate_index == G_MAXUINT8) {
-      return FALSE;
-    }
-    out_ref->duplicate_index++;
-    (*cursor)++;
-  }
+  out_ref->kind = HOMEWORLDS_SYSTEM_REF_SYSTEM;
+  out_ref->system_index = (guint8)system_index;
   return TRUE;
 }
 
-static void homeworlds_move_skip_spaces(const char **cursor) {
+static gboolean homeworlds_move_system_ref_is_discovery_target(const HomeworldsSystemRef *ref) {
+  g_return_val_if_fail(ref != NULL, FALSE);
+
+  return ref->kind == HOMEWORLDS_SYSTEM_REF_SYSTEM &&
+         ref->system_index >= 2 &&
+         ref->system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT &&
+         homeworlds_pyramid_is_valid(ref->star);
+}
+
+static void homeworlds_move_skip_turn_step_separators(const char **cursor) {
   g_return_if_fail(cursor != NULL);
   g_return_if_fail(*cursor != NULL);
 
@@ -1389,17 +1422,8 @@ static void homeworlds_move_skip_spaces(const char **cursor) {
   }
 }
 
-static void homeworlds_move_skip_turn_step_separators(const char **cursor) {
-  g_return_if_fail(cursor != NULL);
-  g_return_if_fail(*cursor != NULL);
-
-  while (**cursor == '/' || g_ascii_isspace(**cursor)) {
-    (*cursor)++;
-  }
-}
-
 static gboolean homeworlds_move_at_separator(char character) {
-  return character == '\0' || character == '/' || g_ascii_isspace(character);
+  return character == '\0' || g_ascii_isspace(character);
 }
 
 static gboolean homeworlds_move_append_turn_step(GString *text, const HomeworldsTurnStep *step) {
@@ -1450,12 +1474,28 @@ static gboolean homeworlds_move_append_turn_step(GString *text, const Homeworlds
       g_string_append_c(text, 'x');
       return homeworlds_move_append_pyramid(text, step->target_ship.ship, FALSE);
     case HOMEWORLDS_STEP_MOVE:
-    case HOMEWORLDS_STEP_DISCOVER:
       if (!homeworlds_move_append_pyramid(text, step->actor.ship, FALSE)) {
         return FALSE;
       }
       g_string_append_c(text, '>');
       return homeworlds_move_append_system_ref(text, &step->target_system);
+    case HOMEWORLDS_STEP_DISCOVER:
+      if (!homeworlds_move_append_pyramid(text, step->actor.ship, FALSE)) {
+        return FALSE;
+      }
+      if (!homeworlds_move_system_ref_is_discovery_target(&step->target_system)) {
+        return FALSE;
+      }
+      g_string_append_c(text, '>');
+      if (!homeworlds_move_append_system_ref(text, &step->target_system)) {
+        return FALSE;
+      }
+      g_string_append_c(text, '(');
+      if (!homeworlds_move_append_pyramid(text, step->target_system.star, TRUE)) {
+        return FALSE;
+      }
+      g_string_append_c(text, ')');
+      return TRUE;
     case HOMEWORLDS_STEP_SACRIFICE:
       if (!homeworlds_move_append_pyramid(text, step->actor.ship, FALSE)) {
         return FALSE;
@@ -1481,8 +1521,8 @@ static gboolean homeworlds_system_refs_equal(const HomeworldsSystemRef *left, co
   switch ((HomeworldsSystemRefKind)left->kind) {
     case HOMEWORLDS_SYSTEM_REF_HOMEWORLD:
       return left->homeworld_side == right->homeworld_side;
-    case HOMEWORLDS_SYSTEM_REF_STAR:
-      return left->star == right->star && left->duplicate_index == right->duplicate_index;
+    case HOMEWORLDS_SYSTEM_REF_SYSTEM:
+      return left->system_index == right->system_index && left->star == right->star;
     case HOMEWORLDS_SYSTEM_REF_NONE:
     default:
       return TRUE;
@@ -1546,9 +1586,9 @@ static void homeworlds_move_hash_system_ref(guint64 *hash, const HomeworldsSyste
     case HOMEWORLDS_SYSTEM_REF_HOMEWORLD:
       homeworlds_move_hash_byte(hash, ref->homeworld_side);
       break;
-    case HOMEWORLDS_SYSTEM_REF_STAR:
+    case HOMEWORLDS_SYSTEM_REF_SYSTEM:
+      homeworlds_move_hash_byte(hash, ref->system_index);
       homeworlds_move_hash_byte(hash, ref->star);
-      homeworlds_move_hash_byte(hash, ref->duplicate_index);
       break;
     case HOMEWORLDS_SYSTEM_REF_NONE:
     default:
@@ -1963,7 +2003,6 @@ static gboolean homeworlds_move_parse_turn_step(const char **cursor, HomeworldsT
     return FALSE;
   }
   out_step->target_system = out_step->actor.system;
-  homeworlds_move_skip_spaces(cursor);
 
   HomeworldsColor color = HOMEWORLDS_COLOR_RED;
   if (homeworlds_move_color_from_letter(**cursor, FALSE, &color) && (*cursor)[1] == '!') {
@@ -1983,12 +2022,10 @@ static gboolean homeworlds_move_parse_turn_step(const char **cursor, HomeworldsT
   if (!homeworlds_move_parse_pyramid(cursor, FALSE, &out_step->actor.ship)) {
     return FALSE;
   }
-  homeworlds_move_skip_spaces(cursor);
 
   switch (**cursor) {
     case '=':
       (*cursor)++;
-      homeworlds_move_skip_spaces(cursor);
       if (!homeworlds_move_color_from_letter(**cursor, FALSE, &color)) {
         return FALSE;
       }
@@ -1998,15 +2035,32 @@ static gboolean homeworlds_move_parse_turn_step(const char **cursor, HomeworldsT
       return TRUE;
     case 'x':
       (*cursor)++;
-      homeworlds_move_skip_spaces(cursor);
       out_step->kind = HOMEWORLDS_STEP_ATTACK;
       out_step->target_ship.system = out_step->actor.system;
       return homeworlds_move_parse_pyramid(cursor, FALSE, &out_step->target_ship.ship);
     case '>':
       (*cursor)++;
-      homeworlds_move_skip_spaces(cursor);
       out_step->kind = HOMEWORLDS_STEP_MOVE;
-      return homeworlds_move_parse_system_ref(cursor, &out_step->target_system);
+      if (!homeworlds_move_parse_system_ref(cursor, &out_step->target_system)) {
+        return FALSE;
+      }
+      if (**cursor != '(') {
+        return TRUE;
+      }
+      if (out_step->target_system.kind != HOMEWORLDS_SYSTEM_REF_SYSTEM) {
+        return FALSE;
+      }
+      (*cursor)++;
+      if (!homeworlds_move_parse_pyramid(cursor, TRUE, &out_step->target_system.star) ||
+          **cursor != ')') {
+        return FALSE;
+      }
+      (*cursor)++;
+      if (!homeworlds_move_system_ref_is_discovery_target(&out_step->target_system)) {
+        return FALSE;
+      }
+      out_step->kind = HOMEWORLDS_STEP_DISCOVER;
+      return TRUE;
     case '-':
       out_step->kind = HOMEWORLDS_STEP_SACRIFICE;
       (*cursor)++;

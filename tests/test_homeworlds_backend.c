@@ -15,11 +15,13 @@ static HomeworldsSystemRef test_homeworld_ref(guint side) {
   };
 }
 
-static HomeworldsSystemRef test_star_ref(HomeworldsColor color, HomeworldsSize size, guint duplicate_index) {
+static HomeworldsSystemRef test_system_ref(guint system_index) {
+  assert(system_index >= 2);
+  assert(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT);
+
   return (HomeworldsSystemRef){
-    .kind = HOMEWORLDS_SYSTEM_REF_STAR,
-    .duplicate_index = (guint8)duplicate_index,
-    .star = homeworlds_pyramid_make(color, size),
+    .kind = HOMEWORLDS_SYSTEM_REF_SYSTEM,
+    .system_index = (guint8)system_index,
   };
 }
 
@@ -147,21 +149,21 @@ static void test_prepare_static_prune_position(HomeworldsPosition *position, gui
     "R2B1g3",
     "H1g+",
     "H2g+",
-    "H1g1>B2",
+    "H1g1>S0(B2)",
     "H2g3=b",
-    "B2g+",
+    "S0g+",
     "H2g+",
     "H1g+",
     "H2g1=r",
-    "B2g1=y",
+    "S0g1=y",
     "H2r+",
-    "B2g1>B3",
+    "S0g1>S1(B3)",
     "H2r1=y",
-    "B3g+",
+    "S1g+",
     "H2b+",
-    "H1g3- H1g+ B3g+ H1g+",
+    "H1g3- H1g+ S1g+ H1g+",
     "H2g+",
-    "H1g3- H1g+ B2y+ B2y+",
+    "H1g3- H1g+ S0y+ S0y+",
     "H2g3- H2y+ H2g+ H2g+",
   };
 
@@ -180,23 +182,23 @@ static void test_prepare_unfavorable_trade_catastrophe_position(HomeworldsPositi
     "Y3B2g3",
     "H1g+",
     "H2g+",
-    "H1g1>B3",
+    "H1g1>S0(B3)",
     "H2g3=y",
     "H1g+",
     "H2g+",
-    "B3g+",
+    "S0g+",
     "H2g2=r",
-    "H1g1>B3'",
+    "H1g1>S1(B3)",
     "H2g+",
     "H1g+",
     "H2g+",
-    "B3'g+",
+    "S1g+",
     "H2g3- H2r+ H2r+ H2g+",
-    "B3g2=y",
+    "S0g2=y",
     "H2r2=b",
-    "H1g3- B3g+ H1g+ B3y+",
+    "H1g3- S0g+ H1g+ S0y+",
     "H2g3- H2r+ H2g+ H2b+",
-    "B3y2- B3g1>B1 B1g1>H2 H2g!",
+    "S0y2- S0g1>S2(B1) S2g1>H2 H2g!",
     "H2b2=g",
     "H1g2=r",
     "H2b+",
@@ -204,9 +206,9 @@ static void test_prepare_unfavorable_trade_catastrophe_position(HomeworldsPositi
     "H2g+",
     "H1g+",
     "H2g+",
-    "B3g+",
+    "S0g+",
     "H2g2- H2y+ H2g+",
-    "B3'g1=y",
+    "S1g1=y",
   };
 
   assert(position != NULL);
@@ -286,11 +288,11 @@ static void test_prepare_player_two_yellow_sacrifice_position(HomeworldsPosition
     "R2G1b3",
     "H1r+",
     "H2b+",
-    "H1r1>B1",
+    "H1r1>S0(B1)",
     "H2b+",
     "H1r+",
     "H2b3=y",
-    "H1r3>Y1",
+    "H1r3>S1(Y1)",
   };
 
   assert(position != NULL);
@@ -354,9 +356,9 @@ static void test_prepare_green_sacrifice_ambiguous_build_order_position(Homeworl
     "H2b+",
     "H1g+",
     "H2b+",
-    "H1g1>B2",
+    "H1g1>S0(B2)",
     "H2b1=y",
-    "B2g+",
+    "S0g+",
     "H2y+",
   };
 
@@ -627,7 +629,7 @@ static void test_backend_move_equality_uses_symbolic_build_identity(void) {
           .ship = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL),
         },
         .target_ship = {
-          .system = test_star_ref(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL, 0),
+          .system = test_system_ref(2),
           .ship = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL),
         },
         .target_color = HOMEWORLDS_COLOR_GREEN,
@@ -699,18 +701,18 @@ static void test_backend_move_codec_roundtrips_setup_and_turn(void) {
   assert(homeworlds_move_parse("Y2B1g3", &parsed));
   assert(homeworlds_move_format(&parsed, notation, sizeof(notation)));
   assert(strcmp(notation, "Y2B1g3") == 0);
-  assert(homeworlds_move_parse("G3y2>G2 G3y!", &parsed));
+  assert(homeworlds_move_parse("S1y2>S2(G2) S1y!", &parsed));
+  assert(parsed.steps[0].kind == HOMEWORLDS_STEP_DISCOVER);
+  assert(parsed.steps[0].target_system.kind == HOMEWORLDS_SYSTEM_REF_SYSTEM);
+  assert(parsed.steps[0].target_system.system_index == 4);
   assert(homeworlds_move_format(&parsed, notation, sizeof(notation)));
-  assert(strcmp(notation, "G3y2>G2 G3y!") == 0);
+  assert(strcmp(notation, "S1y2>S2(G2) S1y!") == 0);
   assert(homeworlds_move_parse("pass", &parsed));
   assert(homeworlds_move_format(&parsed, notation, sizeof(notation)));
   assert(strcmp(notation, "pass") == 0);
-  assert(homeworlds_move_parse("H1 g+", &parsed));
-  assert(homeworlds_move_format(&parsed, notation, sizeof(notation)));
-  assert(strcmp(notation, "H1g+") == 0);
-  assert(homeworlds_move_parse("H1g3-/H1r3=g", &parsed));
-  assert(homeworlds_move_format(&parsed, notation, sizeof(notation)));
-  assert(strcmp(notation, "H1g3- H1r3=g") == 0);
+  assert(!homeworlds_move_parse("H1 g+", &parsed));
+  assert(!homeworlds_move_parse("H1g3-/H1r3=g", &parsed));
+  assert(!homeworlds_move_parse("S1y2>H1(G2)", &parsed));
 }
 
 static void test_backend_sgf_snapshot_roundtrips_position(void) {
@@ -1350,8 +1352,8 @@ static void test_backend_good_moves_static_prunes_candidates(void) {
   good_moves = backend->list_good_moves(&position, 0);
   assert(good_moves.count == 119);
   assert(good_moves.count <= 512);
-  assert(test_good_moves_contains_notation(backend, &good_moves, "B2y2- H1g1>B2 B3g1>H2 H2g!"));
-  assert(!test_good_moves_contains_notation(backend, &good_moves, "H1g1>B2"));
+  assert(test_good_moves_contains_notation(backend, &good_moves, "S0y2- H1g1>S0 S1g1>H2 H2g!"));
+  assert(!test_good_moves_contains_notation(backend, &good_moves, "H1g1>S0"));
 
   for (gsize i = 0; i < good_moves.count; ++i) {
     const HomeworldsMove *move = backend->move_list_get(&good_moves, i);
@@ -1651,7 +1653,7 @@ static void test_backend_good_moves_keep_last_homeworld_ship_after_yellow_sacrif
 
     assert(move != NULL);
     assert(backend->format_move(move, notation, sizeof(notation)));
-    assert(strcmp(notation, "H2y3- H2b1>R3 H2b1>Y3 Y3b1>Y2") != 0);
+    assert(strcmp(notation, "H2y3- H2b1>S2(R3) H2b1>S3(Y3) S3b1>S4(Y2)") != 0);
   }
   backend->move_list_free(&good_moves);
 }
@@ -1659,8 +1661,8 @@ static void test_backend_good_moves_keep_last_homeworld_ship_after_yellow_sacrif
 static void test_backend_good_moves_skip_redundant_yellow_sacrifice_hops(void) {
   const GameBackend *backend = &homeworlds_game_backend;
   const char *bad_moves[] = {
-    "H2y3- H2b1>B3 B3b1>H2 H2b1>B3",
-    "H2y3- H2b1>B3 B3b1>B1 B1b1>Y3",
+    "H2y3- H2b1>S2(B3) S2b1>H2 H2b1>S2(B3)",
+    "H2y3- H2b1>S2(B3) S2b1>S0 S0b1>S2(Y3)",
   };
   HomeworldsPosition position = {0};
   GameBackendMoveList good_moves = {0};
@@ -1682,8 +1684,8 @@ static void test_backend_good_moves_skip_redundant_yellow_sacrifice_intermediate
   const GameBackend *backend = &homeworlds_game_backend;
   HomeworldsPosition position = {0};
   GameBackendMoveList good_moves = {0};
-  const char *direct_move = "H1y2- H1b1>G3 pass";
-  const char *redundant_move = "H1y2- H1b1>B2 B2b1>G3";
+  const char *direct_move = "H1y2- H1b1>S1 pass";
+  const char *redundant_move = "H1y2- H1b1>S0 S0b1>S1";
 
   test_prepare_yellow_sacrifice_route_position(&position, TRUE);
   test_assert_move_notation_is_legal(&position, direct_move);
@@ -1699,7 +1701,7 @@ static void test_backend_good_moves_keep_useful_yellow_sacrifice_intermediate(vo
   const GameBackend *backend = &homeworlds_game_backend;
   HomeworldsPosition position = {0};
   GameBackendMoveList all_moves = {0};
-  const char *needed_move = "H1y2- H1b1>B3 B3b1>G2";
+  const char *needed_move = "H1y2- H1b1>S0 S0b1>S1";
 
   test_prepare_yellow_sacrifice_route_position(&position, FALSE);
   test_assert_move_notation_is_legal(&position, needed_move);
@@ -1765,8 +1767,8 @@ static void test_backend_good_moves_order_commutative_green_sacrifice_builds(voi
   const GameBackend *backend = &homeworlds_game_backend;
   HomeworldsPosition position = {0};
   GameBackendMoveList good_moves = {0};
-  const char *canonical_move = "H1g3- H1g+ H1g+ B2g+";
-  const char *redundant_move = "H1g3- H1g+ B2g+ H1g+";
+  const char *canonical_move = "H1g3- H1g+ H1g+ S0g+";
+  const char *redundant_move = "H1g3- H1g+ S0g+ H1g+";
 
   test_prepare_green_sacrifice_build_order_position(&position);
   test_assert_move_notation_is_legal(&position, canonical_move);
@@ -1783,8 +1785,8 @@ static void test_backend_good_moves_keep_bank_dependent_green_sacrifice_builds(v
   const GameBackend *backend = &homeworlds_game_backend;
   HomeworldsPosition position = {0};
   GameBackendMoveList good_moves = {0};
-  const char *first_move = "H1g3- H1g+ H1g+ B2g+";
-  const char *second_move = "H1g3- H1g+ B2g+ H1g+";
+  const char *first_move = "H1g3- H1g+ H1g+ S0g+";
+  const char *second_move = "H1g3- H1g+ S0g+ H1g+";
 
   test_prepare_green_sacrifice_ambiguous_build_order_position(&position);
   test_assert_move_notation_is_legal(&position, first_move);
@@ -1802,7 +1804,7 @@ static void test_backend_good_moves_keep_dependent_green_sacrifice_builds(void) 
   const GameBackend *backend = &homeworlds_game_backend;
   HomeworldsPosition position = {0};
   GameBackendMoveList good_moves = {0};
-  const char *dependent_move = "H1g3- H1g+ B2g+ H1g+";
+  const char *dependent_move = "H1g3- H1g+ S0g+ H1g+";
 
   test_prepare_green_sacrifice_build_order_position(&position);
   test_remove_all_from_bank(&position, homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL));
@@ -1954,13 +1956,10 @@ static void test_backend_good_moves_skip_unfavorable_move_catastrophe(void) {
           step->actor.ship != homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_MEDIUM)) {
         continue;
       }
-      assert(step->target_system.kind != HOMEWORLDS_SYSTEM_REF_STAR ||
-             step->target_system.star != homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE) ||
-             step->target_system.duplicate_index != 0);
-      saw_safe_move = saw_safe_move ||
-                      (step->target_system.kind == HOMEWORLDS_SYSTEM_REF_STAR &&
-                       step->target_system.star == homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN,
-                                                                           HOMEWORLDS_SIZE_LARGE));
+      assert(step->target_system.kind != HOMEWORLDS_SYSTEM_REF_SYSTEM ||
+             step->target_system.system_index != 2 ||
+             homeworlds_pyramid_is_valid(step->target_system.star));
+      saw_safe_move = TRUE;
     }
   }
   assert(saw_safe_move);
@@ -2258,7 +2257,7 @@ static void test_backend_moving_last_ship_out_of_homeworld_loses_immediately(voi
       {
         .kind = HOMEWORLDS_STEP_MOVE,
         .actor = test_ship_ref(test_homeworld_ref(0), HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL),
-        .target_system = test_star_ref(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE, 0),
+        .target_system = test_system_ref(2),
       },
     },
   };

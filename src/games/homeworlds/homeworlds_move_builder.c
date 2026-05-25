@@ -78,7 +78,12 @@ static gboolean homeworlds_builder_find_selected_ship_slot(const HomeworldsMoveB
 
   system = &state->working_position.systems[state->selected_system_index];
   for (guint ship_slot = 0; ship_slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++ship_slot) {
-    if (system->ships[side][ship_slot] != state->selected_ship_pyramid) {
+    HomeworldsPyramid ship = system->ships[side][ship_slot];
+
+    if (!homeworlds_pyramid_is_valid(ship)) {
+      break;
+    }
+    if (ship != state->selected_ship_pyramid) {
       continue;
     }
 
@@ -153,38 +158,29 @@ static gboolean homeworlds_builder_selected_ship_ref(const HomeworldsMoveBuilder
   return TRUE;
 }
 
-static gboolean homeworlds_builder_system_contains_star(const HomeworldsSystem *system, HomeworldsPyramid star) {
-  g_return_val_if_fail(system != NULL, FALSE);
-  g_return_val_if_fail(homeworlds_pyramid_is_valid(star), FALSE);
-
-  for (guint i = 0; i < HOMEWORLDS_STAR_SLOT_COUNT; ++i) {
-    if (system->stars[i] == star) {
-      return TRUE;
-    }
-  }
-
-  return FALSE;
-}
-
-static HomeworldsSystemRef homeworlds_builder_discovery_ref(const HomeworldsPosition *position,
-                                                            HomeworldsPyramid star) {
+static gboolean homeworlds_builder_discovery_ref(const HomeworldsPosition *position,
+                                                 HomeworldsPyramid star,
+                                                 HomeworldsSystemRef *out_ref) {
   HomeworldsSystemRef ref = {
-    .kind = HOMEWORLDS_SYSTEM_REF_STAR,
+    .kind = HOMEWORLDS_SYSTEM_REF_SYSTEM,
     .star = star,
   };
 
-  g_return_val_if_fail(position != NULL, ref);
-  g_return_val_if_fail(homeworlds_pyramid_is_valid(star), ref);
+  g_return_val_if_fail(position != NULL, FALSE);
+  g_return_val_if_fail(homeworlds_pyramid_is_valid(star), FALSE);
+  g_return_val_if_fail(out_ref != NULL, FALSE);
 
   for (guint system_index = 2; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
-    if (!homeworlds_builder_system_contains_star(&position->systems[system_index], star)) {
+    if (!homeworlds_system_is_empty(&position->systems[system_index])) {
       continue;
     }
 
-    ref.duplicate_index++;
+    ref.system_index = (guint8)system_index;
+    *out_ref = ref;
+    return TRUE;
   }
 
-  return ref;
+  return FALSE;
 }
 
 static gboolean homeworlds_builder_append_step(HomeworldsMoveBuilderState *state, const HomeworldsTurnStep *step) {
@@ -524,7 +520,7 @@ static GameBackendMoveList homeworlds_builder_list_selectable_ships(const Homewo
       HomeworldsPyramid pyramid = system->ships[side][ship_slot];
 
       if (!homeworlds_pyramid_is_valid(pyramid)) {
-        continue;
+        break;
       }
       if (seen_pyramids[pyramid]) {
         continue;
@@ -667,7 +663,7 @@ static GameBackendMoveList homeworlds_builder_list_attack_targets(const Homeworl
   for (guint slot = 0; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
     HomeworldsPyramid target = system->ships[state->working_position.turn == 0 ? 1 : 0][slot];
     if (!homeworlds_pyramid_is_valid(target)) {
-      continue;
+      break;
     }
     if (seen_pyramids[target]) {
       continue;
@@ -924,8 +920,13 @@ gboolean homeworlds_move_builder_step(GameBackendMoveBuilder *builder, const Hom
       {
         gboolean found = FALSE;
         for (guint ship_slot = 0; ship_slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++ship_slot) {
-          if (state->working_position.systems[candidate->data.system_index]
-                  .ships[state->working_position.turn][ship_slot] != candidate->data.pyramid) {
+          HomeworldsPyramid ship = state->working_position.systems[candidate->data.system_index]
+                                       .ships[state->working_position.turn][ship_slot];
+
+          if (!homeworlds_pyramid_is_valid(ship)) {
+            break;
+          }
+          if (ship != candidate->data.pyramid) {
             continue;
           }
 
@@ -1018,7 +1019,12 @@ gboolean homeworlds_move_builder_step(GameBackendMoveBuilder *builder, const Hom
         if (!homeworlds_pyramid_is_valid(candidate->data.pyramid)) {
           return FALSE;
         }
-        step.target_system = homeworlds_builder_discovery_ref(&state->working_position, candidate->data.pyramid);
+        step.kind = HOMEWORLDS_STEP_DISCOVER;
+        if (!homeworlds_builder_discovery_ref(&state->working_position,
+                                              candidate->data.pyramid,
+                                              &step.target_system)) {
+          return FALSE;
+        }
       } else if (!homeworlds_position_system_ref_for_index(&state->working_position,
                                                            candidate->data.target_system_index,
                                                            &step.target_system)) {

@@ -31,7 +31,7 @@ static void test_homeworlds_profile_moves_runs_ai_analysis(void) {
   g_assert_cmpstr(stderr_text, ==, "");
   g_assert_nonnull(strstr(stdout_text, "Generated moves (2 requested):"));
   g_assert_nonnull(strstr(stdout_text, "Current position after 2 generated moves:"));
-  g_assert_nonnull(strstr(stdout_text, "g3 Y2B3 -\n\n- Y1G3 b3"));
+  g_assert_nonnull(strstr(stdout_text, "H2: g3 Y2B3 -\n\nH1: - Y1G3 b3"));
   g_assert_nonnull(strstr(stdout_text, "AI analysis after 2 generated moves at depth 0:"));
   g_assert_nonnull(strstr(stdout_text, "Nodes:"));
   g_assert_nonnull(strstr(stdout_text, "TT probes:"));
@@ -93,8 +93,7 @@ static void test_homeworlds_profile_moves_rejects_negative_depth(void) {
 
 static void test_homeworlds_profile_moves_replays_file(void) {
   const char *content =
-      "(;AP[gcheckers]CA[UTF-8]FF[4]GM[40];B[B1R3g3];W[R2G1b3];B[H1 r+]"
-      ";W[H2 g3-/B1 g+/H2 g+/B1 g+])";
+      "(;AP[gcheckers]CA[UTF-8]FF[4]GM[40];B[B1R3g3];W[R2G1b3];B[H1r+];W[H2g+])";
   g_autofree gchar *path = NULL;
   g_autofree gchar *stdout_text = NULL;
   g_autofree gchar *stderr_text = NULL;
@@ -129,7 +128,7 @@ static void test_homeworlds_profile_moves_replays_file(void) {
   g_assert_nonnull(strstr(stdout_text, " (2 requested):"));
   g_assert_nonnull(strstr(stdout_text, "1. B1R3g3\n2. R2G1b3"));
   g_assert_nonnull(strstr(stdout_text, "Current position after 2 replayed moves:"));
-  g_assert_nonnull(strstr(stdout_text, "b3 R2G1 -\n\n- B1R3 g3"));
+  g_assert_nonnull(strstr(stdout_text, "H2: b3 R2G1 -\n\nH1: - B1R3 g3"));
   g_assert_nonnull(strstr(stdout_text, "AI analysis after 2 replayed moves at depth 0:"));
   g_assert_nonnull(strstr(stdout_text, "score="));
   g_assert_null(strstr(stdout_text, "Move report after"));

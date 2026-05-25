@@ -98,6 +98,12 @@ static gboolean homeworlds_sgf_position_validate_pyramid_supply(const Homeworlds
     }
     for (guint side = 0; side < 2; ++side) {
       for (guint ship_slot = 0; ship_slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++ship_slot) {
+        if (!homeworlds_pyramid_is_valid(system->ships[side][ship_slot])) {
+          if (system->ships[side][ship_slot] != 0) {
+            return FALSE;
+          }
+          break;
+        }
         if (!homeworlds_sgf_position_count_pyramid(system->ships[side][ship_slot], counts)) {
           return FALSE;
         }

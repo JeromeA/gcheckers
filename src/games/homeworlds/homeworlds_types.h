@@ -53,7 +53,7 @@ typedef enum {
 typedef enum {
   HOMEWORLDS_SYSTEM_REF_NONE = 0,
   HOMEWORLDS_SYSTEM_REF_HOMEWORLD,
-  HOMEWORLDS_SYSTEM_REF_STAR,
+  HOMEWORLDS_SYSTEM_REF_SYSTEM,
 } HomeworldsSystemRefKind;
 
 typedef enum {
@@ -77,7 +77,7 @@ typedef struct {
 typedef struct {
   guint8 kind;
   guint8 homeworld_side;
-  guint8 duplicate_index;
+  guint8 system_index;
   HomeworldsPyramid star;
 } HomeworldsSystemRef;
 
