@@ -673,10 +673,10 @@ the last own homeworld ship in place, rejects moves into unfavorable catastrophe
 unfavorable catastrophes, rejects trades that create unfavorable catastrophes, and skips one-action sacrifices when
 that color action is already available at the selected system. It also prunes yellow-sacrifice move chains when a ship
 returns to its original source or reaches a system the original source could already reach directly without crossing a
-catastrophe boundary. During blue and green sacrifices, independent adjacent trades and builds are kept in canonical
-order only when a swapped order is legal, position-equivalent, and catastrophe-free; blue trade commutation is proven
-from local ship, bank, and color counts, while green build reversal tries every reversible built-ship candidate because
-bank supply can make the built size ambiguous.
+destination-system catastrophe boundary. During blue and green sacrifices, independent adjacent trades and builds are
+kept in canonical order only when a swapped order is legal, position-equivalent, and catastrophe-free; blue trade
+commutation is proven from local ship, bank, and color counts, while green build reversal tries every reversible
+built-ship candidate because bank supply can make the built size ambiguous.
 During play, `good_moves()` scores each candidate by the one-ply static or terminal value, orders it from the current
 player's perspective, and keeps only the first 512 moves that are within 50 points of the best one.
 Profitable catastrophes available at the start of a turn are required somewhere in the final move, while profitable

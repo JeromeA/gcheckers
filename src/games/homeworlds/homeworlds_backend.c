@@ -663,16 +663,24 @@ static guint homeworlds_backend_system_ship_pips_for_color(const HomeworldsSyste
   return pips;
 }
 
+static gboolean homeworlds_backend_system_has_catastrophe(const HomeworldsSystem *system) {
+  g_return_val_if_fail(system != NULL, FALSE);
+
+  for (guint color = HOMEWORLDS_COLOR_RED; color <= HOMEWORLDS_COLOR_BLUE; ++color) {
+    if (homeworlds_system_color_count(system, (HomeworldsColor) color) >= 4) {
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
 static gboolean homeworlds_backend_position_has_catastrophe(const HomeworldsPosition *position) {
   g_return_val_if_fail(position != NULL, FALSE);
 
   for (guint system_index = 0; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
-    const HomeworldsSystem *system = &position->systems[system_index];
-
-    for (guint color = HOMEWORLDS_COLOR_RED; color <= HOMEWORLDS_COLOR_BLUE; ++color) {
-      if (homeworlds_system_color_count(system, (HomeworldsColor) color) >= 4) {
-        return TRUE;
-      }
+    if (homeworlds_backend_system_has_catastrophe(&position->systems[system_index])) {
+      return TRUE;
     }
   }
 
@@ -937,19 +945,32 @@ static gboolean homeworlds_backend_step_is_redundant_yellow_sacrifice_hop(
   HomeworldsSystemRef origin_ref = {0};
   HomeworldsSystem origin_system = {0};
   HomeworldsSystem target_system = {0};
+  HomeworldsSystem child_target_system = {0};
   guint origin_system_index = HOMEWORLDS_INVALID_INDEX;
   guint target_system_index = HOMEWORLDS_INVALID_INDEX;
+  guint child_target_system_index = HOMEWORLDS_INVALID_INDEX;
 
   g_return_val_if_fail(state != NULL, FALSE);
   g_return_val_if_fail(child_state != NULL, FALSE);
   g_return_val_if_fail(step != NULL, FALSE);
 
-  if (homeworlds_backend_position_has_catastrophe(&state->working_position) ||
-      homeworlds_backend_position_has_catastrophe(&child_state->working_position)) {
+  if (!homeworlds_backend_find_yellow_sacrifice_move_origin(state, step, &origin_ref)) {
     return FALSE;
   }
 
-  if (!homeworlds_backend_find_yellow_sacrifice_move_origin(state, step, &origin_ref)) {
+  if (!homeworlds_backend_system_for_ref_or_star(&state->working_position,
+                                                 &step->target_system,
+                                                 &target_system,
+                                                 &target_system_index) ||
+      !homeworlds_backend_system_for_ref_or_star(&child_state->working_position,
+                                                 &step->target_system,
+                                                 &child_target_system,
+                                                 &child_target_system_index)) {
+    return FALSE;
+  }
+
+  if (homeworlds_backend_system_has_catastrophe(&target_system) ||
+      homeworlds_backend_system_has_catastrophe(&child_target_system)) {
     return FALSE;
   }
 
@@ -960,11 +981,7 @@ static gboolean homeworlds_backend_step_is_redundant_yellow_sacrifice_hop(
   if (!homeworlds_backend_system_for_ref_or_star(&state->working_position,
                                                  &origin_ref,
                                                  &origin_system,
-                                                 &origin_system_index) ||
-      !homeworlds_backend_system_for_ref_or_star(&state->working_position,
-                                                 &step->target_system,
-                                                 &target_system,
-                                                 &target_system_index)) {
+                                                 &origin_system_index)) {
     return FALSE;
   }
 
