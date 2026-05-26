@@ -1292,3 +1292,11 @@ same system appear under different names in the UI and move text.
 
 The fix shares one view-local formatter for visible system labels, so board labels, move-target labels, ship-selection
 labels, and catastrophe buttons all use the same notation-facing names.
+
+## Homeworlds good moves kept redundant green medium sacrifices
+
+Homeworlds `good_moves()` already skipped one-action sacrifices when the sacrificed color was available at the source
+system, but it still kept a two-action green sacrifice that built green again at the sacrificed `g2`'s system and then
+performed another build that was already legal before the sacrifice.
+
+The fix recognizes that exact two-build pattern and keeps the direct build instead of the redundant sacrifice sequence.

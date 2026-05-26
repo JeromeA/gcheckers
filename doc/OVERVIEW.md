@@ -674,9 +674,11 @@ one's homeworld. When a builder choice
 appends a turn step, the AI applies the same safety checks to ordinary actions and sacrifice-granted actions: it keeps
 the last own homeworld ship in place, rejects moves into unfavorable catastrophes, rejects builds that create
 unfavorable catastrophes, rejects trades that create unfavorable catastrophes, and skips one-action sacrifices when
-that color action is already available at the selected system. It also prunes yellow-sacrifice move chains when a ship
-returns to its original source or reaches a system the original source could already reach directly without crossing a
-destination-system catastrophe boundary. During blue and green sacrifices, independent adjacent trades and builds are
+that color action is already available at the selected system. It also skips two-action green sacrifices that only
+build green again at the sacrificed medium ship's source plus perform a build that was already legal before the
+sacrifice. It also prunes yellow-sacrifice move chains when a ship returns to its original source or reaches a system
+the original source could already reach directly without crossing a destination-system catastrophe boundary.
+During blue and green sacrifices, independent adjacent trades and builds are
 kept in canonical order only when a swapped order is legal, position-equivalent, and catastrophe-free; blue trade
 commutation is proven from local ship, bank, and color counts, while green build reversal tries every reversible
 built-ship candidate because bank supply can make the built size ambiguous.

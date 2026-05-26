@@ -372,6 +372,52 @@ static void test_prepare_green_sacrifice_ambiguous_build_order_position(Homeworl
   assert(position->turn == 0);
 }
 
+static void test_prepare_green_medium_rebuild_position(HomeworldsPosition *position) {
+  HomeworldsPyramid green_small = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL);
+
+  assert(position != NULL);
+
+  homeworlds_position_init(position);
+  position->phase = HOMEWORLDS_PHASE_PLAY;
+  position->turn = 0;
+  memset(position->systems, 0, sizeof(position->systems));
+  position->systems[0] = (HomeworldsSystem){
+    .stars = {
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL),
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_MEDIUM),
+    },
+    .ships = {
+      [0] = {
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_MEDIUM),
+        green_small,
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL),
+      },
+    },
+  };
+  position->systems[1] = (HomeworldsSystem){
+    .stars = {
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL),
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE),
+    },
+    .ships = {
+      [1] = {
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE),
+      },
+    },
+  };
+  position->systems[2] = (HomeworldsSystem){
+    .stars = {
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_LARGE),
+    },
+    .ships = {
+      [0] = {
+        green_small,
+      },
+    },
+  };
+  homeworlds_position_rebuild_color_counts(position);
+}
+
 static void test_prepare_terminal_homeworld_catastrophe_position(HomeworldsPosition *position) {
   assert(position != NULL);
 
@@ -1821,6 +1867,41 @@ static void test_backend_good_moves_keep_dependent_green_sacrifice_builds(void) 
   backend->move_list_free(&good_moves);
 }
 
+static void test_backend_good_moves_skip_redundant_green_medium_rebuild(void) {
+  const GameBackend *backend = &homeworlds_game_backend;
+  HomeworldsPosition position = {0};
+  GameBackendMoveList all_moves = {0};
+  GameBackendMoveList good_moves = {0};
+  const char *direct_move = "H1r+";
+  const char *direct_green_move = "S0g+";
+  const char *ordered_redundant_move = "H1g2- H1r+ H1g+";
+  const char *unordered_redundant_move = "H1g2- H1g+ H1r+";
+  const char *redundant_green_move = "H1g2- H1g+ S0g+";
+
+  test_prepare_green_medium_rebuild_position(&position);
+  test_assert_move_notation_is_legal(&position, direct_move);
+  test_assert_move_notation_is_legal(&position, direct_green_move);
+  test_assert_move_notation_is_legal(&position, ordered_redundant_move);
+  test_assert_move_notation_is_legal(&position, unordered_redundant_move);
+  test_assert_move_notation_is_legal(&position, redundant_green_move);
+  test_assert_move_notations_reach_different_positions(&position, direct_move, ordered_redundant_move);
+
+  all_moves = homeworlds_position_list_all_moves(&position);
+  assert(test_good_moves_contains_notation(backend, &all_moves, ordered_redundant_move));
+  assert(test_good_moves_contains_notation(backend, &all_moves, unordered_redundant_move));
+  assert(test_good_moves_contains_notation(backend, &all_moves, redundant_green_move));
+
+  good_moves = backend->list_good_moves(&position, 0);
+  assert(good_moves.count > 0);
+  assert(test_good_moves_contains_notation(backend, &good_moves, direct_move));
+  assert(test_good_moves_contains_notation(backend, &good_moves, direct_green_move));
+  assert(!test_good_moves_contains_notation(backend, &good_moves, ordered_redundant_move));
+  assert(!test_good_moves_contains_notation(backend, &good_moves, unordered_redundant_move));
+  assert(!test_good_moves_contains_notation(backend, &good_moves, redundant_green_move));
+  backend->move_list_free(&good_moves);
+  homeworlds_move_list_free(&all_moves);
+}
+
 static void test_backend_good_moves_skip_unsafe_build_catastrophe(void) {
   const GameBackend *backend = &homeworlds_game_backend;
   HomeworldsPosition position = {0};
@@ -2355,6 +2436,7 @@ int main(void) {
   test_backend_good_moves_order_commutative_green_sacrifice_builds();
   test_backend_good_moves_keep_bank_dependent_green_sacrifice_builds();
   test_backend_good_moves_keep_dependent_green_sacrifice_builds();
+  test_backend_good_moves_skip_redundant_green_medium_rebuild();
   test_backend_good_moves_skip_unsafe_build_catastrophe();
   test_backend_good_moves_skip_unfavorable_move_catastrophe();
   test_backend_good_moves_skip_unfavorable_trade_catastrophe();
