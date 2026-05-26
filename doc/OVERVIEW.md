@@ -50,10 +50,10 @@ shared window actions exposed in the `Analysis` menubar submenu: current-positio
 node, and full-game analysis always processes nodes in reverse order so TT state is reused from later positions
 first. Current-position analysis now runs through the generic backend AI API for every shared-shell build, while
 full-game analysis keeps the checkers setup-aware replay path for checkers and uses backend-position SGF replay for
-boop and Homeworlds. The toplevel window default size is loaded from and saved to the shared `ggame` settings schema
-under the active profile path, so checkers, boop, and Homeworlds retain separate dimensions without per-game schema
-keys. Initial drawer layout preserves that loaded size until GTK has allocated the window, so transient pre-allocation
-pane geometry does not overwrite the remembered dimensions.
+boop and Homeworlds. The toplevel window default size, pane separator positions, and shared panel visibility are loaded
+from and saved to the shared `ggame` settings schema under the active profile path, so checkers, boop, and Homeworlds
+retain separate layouts without per-game schema keys. Initial drawer layout preserves that loaded size until GTK has
+allocated the window, so transient pre-allocation pane geometry does not overwrite the remembered dimensions.
 Shared pane and computer-depth defaults also come from the active profile. Checkers keeps the historical `500/300/300`
 board, navigation, and analysis widths with both drawers visible by default, while boop starts with a wider `760` board
 pane and the analysis drawer hidden by default so its square board host can reach the same practical size as the old
@@ -298,9 +298,9 @@ creating the main window so the user can review the privacy controls before cont
 Module: shared GSettings access for shell-level state.
 Role: load the relocatable `io.github.jeromea.ggame` schema and bind it to a per-profile path such as
 `/io/github/jeromea/ggame/checkers/` or `/io/github/jeromea/ggame/homeworlds/`. It stores state that belongs to the
-shared application shell rather than a specific game schema, currently the last SGF folder and toplevel window
-dimensions. Adding a new game profile therefore reuses these settings automatically without adding another schema
-copy.
+shared application shell rather than a specific game schema, currently the last SGF folder, toplevel window dimensions,
+pane widths, and shared panel visibility. Adding a new game profile therefore reuses these settings automatically
+without adding another schema copy.
 Collaborates with: `file_dialog_history.c`, `window.c`, `GGameAppProfile`, and `tests/test_file_dialog_history.c`.
 
 ## Puzzle Progress Reporting (`src/puzzle_progress.c`, `data/schemas/io.github.jeromea.gcheckers.gschema.xml`,

@@ -16,5 +16,42 @@
       <summary>Window height</summary>
       <description>Most recently saved top-level window height.</description>
     </key>
+    <key name="window-layout-saved" type="b">
+      <default>false</default>
+      <summary>Window layout saved</summary>
+      <description>Whether the shared shell pane and panel visibility settings have been saved.</description>
+    </key>
+    <key name="window-board-panel-width" type="i">
+      <default>0</default>
+      <summary>Board panel width</summary>
+      <description>Most recently saved width for the board panel.</description>
+    </key>
+    <key name="window-navigation-panel-width" type="i">
+      <default>0</default>
+      <summary>Navigation panel width</summary>
+      <description>Most recently saved width for the SGF navigation panel.</description>
+    </key>
+    <key name="window-analysis-panel-width" type="i">
+      <default>0</default>
+      <summary>Analysis panel width</summary>
+      <description>Most recently saved width for the analysis panel.</description>
+    </key>
+    <key name="window-show-navigation-drawer" type="b">
+      <default>true</default>
+      <summary>Show navigation drawer</summary>
+      <description>Whether the SGF navigation drawer was visible when the window layout was saved.</description>
+    </key>
+    <key name="window-show-analysis-drawer" type="b">
+      <default>true</default>
+      <summary>Show analysis drawer</summary>
+      <description>Whether the analysis drawer was visible when the window layout was saved.</description>
+    </key>
+    <key name="window-show-move-report" type="b">
+      <default>true</default>
+      <summary>Show move report</summary>
+      <description>
+        Whether profile-specific move report panels were visible when the window layout was saved.
+      </description>
+    </key>
   </schema>
 </schemalist>

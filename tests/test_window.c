@@ -892,6 +892,20 @@ static gint test_ggame_window_get_size_request_width(GtkWidget *widget) {
   return width;
 }
 
+static void test_ggame_window_reset_common_window_settings(GSettings *settings) {
+  g_return_if_fail(G_IS_SETTINGS(settings));
+
+  g_assert_true(g_settings_set_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_WIDTH, 0));
+  g_assert_true(g_settings_set_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_HEIGHT, 0));
+  g_assert_true(g_settings_set_boolean(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_LAYOUT_SAVED, FALSE));
+  g_assert_true(g_settings_set_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_BOARD_PANEL_WIDTH, 0));
+  g_assert_true(g_settings_set_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_NAVIGATION_PANEL_WIDTH, 0));
+  g_assert_true(g_settings_set_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_ANALYSIS_PANEL_WIDTH, 0));
+  g_assert_true(g_settings_set_boolean(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_SHOW_NAVIGATION_DRAWER, TRUE));
+  g_assert_true(g_settings_set_boolean(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_SHOW_ANALYSIS_DRAWER, TRUE));
+  g_assert_true(g_settings_set_boolean(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_SHOW_MOVE_REPORT, TRUE));
+}
+
 static void test_ggame_window_unparents_controls_panel_on_dispose(void) {
   GtkApplication *app = test_ggame_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
@@ -929,12 +943,23 @@ static void test_ggame_window_persists_default_size(void) {
 
   g_autoptr(GSettings) settings = ggame_common_settings_create();
   g_assert_nonnull(settings);
-  g_assert_true(g_settings_set_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_WIDTH, 0));
-  g_assert_true(g_settings_set_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_HEIGHT, 0));
+  test_ggame_window_reset_common_window_settings(settings);
 
   GtkApplication *app = test_ggame_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
   GGameWindow *window = test_ggame_window_new(app, model);
+
+  GtkWidget *main_paned = test_ggame_window_get_named_widget(window, "main-paned");
+  GtkWidget *drawer_split = test_ggame_window_get_named_widget(window, "drawer-split");
+  g_assert_nonnull(main_paned);
+  g_assert_nonnull(drawer_split);
+  gtk_paned_set_position(GTK_PANED(main_paned), 456);
+  gtk_paned_set_position(GTK_PANED(drawer_split), 234);
+
+  g_action_group_change_action_state(G_ACTION_GROUP(window),
+                                     "view-show-analysis-drawer",
+                                     g_variant_new_boolean(FALSE));
+  test_ggame_window_drain_main_context(8);
   gtk_window_set_default_size(GTK_WINDOW(window), 1234, 678);
 
   gboolean handled = TRUE;
@@ -942,6 +967,10 @@ static void test_ggame_window_persists_default_size(void) {
   g_assert_false(handled);
   g_assert_cmpint(g_settings_get_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_WIDTH), ==, 1234);
   g_assert_cmpint(g_settings_get_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_HEIGHT), ==, 678);
+  g_assert_true(g_settings_get_boolean(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_LAYOUT_SAVED));
+  g_assert_cmpint(g_settings_get_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_BOARD_PANEL_WIDTH), ==, 456);
+  g_assert_cmpint(g_settings_get_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_NAVIGATION_PANEL_WIDTH), ==, 234);
+  g_assert_false(g_settings_get_boolean(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_SHOW_ANALYSIS_DRAWER));
 
   GCheckersModel *second_model = gcheckers_model_new();
   GGameWindow *second_window = test_ggame_window_new(app, second_model);
@@ -951,8 +980,22 @@ static void test_ggame_window_persists_default_size(void) {
   g_assert_cmpint(restored_width, ==, 1234);
   g_assert_cmpint(restored_height, ==, 678);
 
-  g_assert_true(g_settings_set_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_WIDTH, 0));
-  g_assert_true(g_settings_set_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_HEIGHT, 0));
+  GtkWidget *second_main_paned = test_ggame_window_get_named_widget(second_window, "main-paned");
+  GtkWidget *second_drawer_split = test_ggame_window_get_named_widget(second_window, "drawer-split");
+  GtkWidget *second_analysis_panel = test_ggame_window_get_named_widget(second_window, "analysis-panel");
+  g_assert_nonnull(second_main_paned);
+  g_assert_nonnull(second_drawer_split);
+  g_assert_nonnull(second_analysis_panel);
+  g_assert_cmpint(gtk_paned_get_position(GTK_PANED(second_main_paned)), ==, 456);
+  g_assert_null(gtk_widget_get_parent(second_analysis_panel));
+
+  g_action_group_change_action_state(G_ACTION_GROUP(second_window),
+                                     "view-show-analysis-drawer",
+                                     g_variant_new_boolean(TRUE));
+  test_ggame_window_drain_main_context(8);
+  g_assert_cmpint(gtk_paned_get_position(GTK_PANED(second_drawer_split)), ==, 234);
+
+  test_ggame_window_reset_common_window_settings(settings);
   g_clear_object(&second_window);
   g_clear_object(&second_model);
   g_clear_object(&window);
