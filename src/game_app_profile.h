@@ -28,6 +28,11 @@ typedef struct {
   gboolean supports_edit_mode;
 } GGameAppFeatures;
 
+typedef struct {
+  guint board_game_arena_game_id;
+  gboolean show_site_step;
+} GGameAppImport;
+
 typedef gboolean (*GGameAppMoveHandler)(gconstpointer move, gpointer user_data);
 
 typedef struct {
@@ -62,6 +67,7 @@ typedef struct {
   const char *settings_schema_id;
   const GameBackend *backend;
   GGameAppFeatures features;
+  GGameAppImport import;
   GGameAppUiHooks ui;
   GGameAppLayout layout;
   guint default_computer_depth;

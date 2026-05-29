@@ -52,10 +52,20 @@ gboolean bga_client_session_login_with_password(BgaClientSession *session,
                                                 const char *request_token,
                                                 BgaHttpResponse *out_response,
                                                 GError **error);
-gboolean bga_client_session_fetch_checkers_history(BgaClientSession *session,
-                                                   const char *user_id,
-                                                   BgaHttpResponse *out_response,
-                                                   GError **error);
+gboolean bga_client_session_fetch_game_history(BgaClientSession *session,
+                                               const char *user_id,
+                                               guint game_id,
+                                               BgaHttpResponse *out_response,
+                                               GError **error);
+gboolean bga_client_session_fetch_archive_logs(BgaClientSession *session,
+                                               const char *table_id,
+                                               BgaHttpResponse *out_response,
+                                               char **out_debug_path,
+                                               GError **error);
+gboolean bga_client_save_archive_logs_debug_page(const char *table_id,
+                                                 const char *body,
+                                                 char **out_path,
+                                                 GError **error);
 gboolean bga_client_fetch_request_token(char **out_token, GError **error);
 gboolean bga_client_fetch_homepage_and_request_token(char **out_homepage_body,
                                                      char **out_token,
@@ -65,7 +75,10 @@ gboolean bga_client_login_with_password(const BgaCredentials *credentials,
                                         BgaHttpResponse *out_response,
                                         GError **error);
 gboolean bga_client_parse_login_response(const char *body, BgaLoginResult *out_result, GError **error);
-gboolean bga_client_parse_checkers_history_games(const char *body, GPtrArray **out_games, GError **error);
+gboolean bga_client_parse_history_games(const char *body, GPtrArray **out_games, GError **error);
+gboolean bga_client_archive_review_is_waiting_for_generation(const char *body);
+gboolean bga_client_archive_logs_error_needs_generation(const char *body);
+gboolean bga_client_parse_homeworlds_archive_logs_sgf(const char *body, char **out_sgf, GError **error);
 void bga_http_response_clear(BgaHttpResponse *response);
 void bga_login_result_clear(BgaLoginResult *result);
 void bga_history_game_summary_free(BgaHistoryGameSummary *summary);

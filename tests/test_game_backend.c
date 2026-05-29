@@ -34,6 +34,8 @@ static void test_app_profile_metadata(void) {
       assert(profile->features.supports_ai_players);
       assert(profile->features.supports_puzzles);
       assert(profile->features.supports_import);
+      assert(profile->import.board_game_arena_game_id == 74);
+      assert(profile->import.show_site_step);
       assert(profile->features.supports_settings);
       assert(profile->features.supports_save_position);
       assert(profile->features.supports_edit_mode);
@@ -44,7 +46,9 @@ static void test_app_profile_metadata(void) {
       assert(profile->features.supports_ai_players);
       assert(profile->features.supports_analysis);
       assert(!profile->features.supports_puzzles);
-      assert(!profile->features.supports_import);
+      assert(profile->features.supports_import);
+      assert(profile->import.board_game_arena_game_id == 1515);
+      assert(!profile->import.show_site_step);
       assert(!profile->features.supports_settings);
       assert(profile->features.supports_save_position);
       assert(!profile->features.supports_edit_mode);
@@ -53,7 +57,9 @@ static void test_app_profile_metadata(void) {
     case GGAME_APP_KIND_BOOP:
       assert(profile->features.supports_ai_players);
       assert(profile->features.supports_puzzles);
-      assert(!profile->features.supports_import);
+      assert(profile->features.supports_import);
+      assert(profile->import.board_game_arena_game_id == 1736);
+      assert(!profile->import.show_site_step);
       assert(profile->features.supports_settings);
       assert(profile->features.supports_save_position);
       assert(!profile->features.supports_edit_mode);

@@ -27,6 +27,7 @@ void ggame_window_present_new_game_dialog(GGameWindow *self);
 void ggame_window_present_puzzle_dialog(GGameWindow *self);
 void ggame_window_present_import_dialog(GGameWindow *self);
 void ggame_window_present_settings_dialog(GGameWindow *self);
+void ggame_window_present_game_information_dialog(GGameWindow *self);
 void ggame_window_set_loaded_source_path(GGameWindow *self, const char *path);
 void ggame_window_set_loaded_variant(GGameWindow *self, const GameBackendVariant *variant);
 void ggame_window_force_move(GGameWindow *self);

@@ -123,6 +123,12 @@ typedef enum {
 } GGameWindowAnalysisMode;
 
 typedef struct {
+  GGameWindow *self;
+  GtkWindow *dialog;
+  GtkEntry *player_entries[2];
+} GGameWindowGameInformationDialogData;
+
+typedef struct {
   gint generation;
   GGameWindowAnalysisMode mode;
   gboolean done;
@@ -1863,6 +1869,211 @@ void ggame_window_present_puzzle_dialog(GGameWindow *self) {
                                   (GDestroyNotify)g_object_unref);
 }
 
+static void ggame_window_sync_board_host_node(GGameWindow *self, const SgfNode *node) {
+  g_return_if_fail(GGAME_IS_WINDOW(self));
+  g_return_if_fail(node != NULL);
+
+  if (self->profile != NULL && self->profile->ui.sync_board_host_node != NULL && self->board_host != NULL) {
+    self->profile->ui.sync_board_host_node(self->board_host, node);
+  }
+}
+
+static const char *ggame_window_player_name_property_for_side(GGameWindow *self, guint side) {
+  const GameBackend *backend = NULL;
+  SgfColor color = SGF_COLOR_NONE;
+
+  g_return_val_if_fail(GGAME_IS_WINDOW(self), NULL);
+  g_return_val_if_fail(side < 2, NULL);
+
+  backend = self->profile != NULL ? self->profile->backend : NULL;
+  if (backend != NULL && backend->sgf_color_for_side != NULL) {
+    color = backend->sgf_color_for_side(side);
+  }
+
+  if (color == SGF_COLOR_BLACK) {
+    return "PB";
+  }
+  if (color == SGF_COLOR_WHITE) {
+    return "PW";
+  }
+
+  g_debug("Falling back to player name SGF property for side %u", side);
+  return side == 0 ? "PB" : "PW";
+}
+
+static const char *ggame_window_side_label(GGameWindow *self, guint side) {
+  const GameBackend *backend = NULL;
+
+  g_return_val_if_fail(GGAME_IS_WINDOW(self), NULL);
+  g_return_val_if_fail(side < 2, NULL);
+
+  backend = self->profile != NULL ? self->profile->backend : NULL;
+  if (backend != NULL && backend->side_label != NULL) {
+    return backend->side_label(side);
+  }
+
+  return NULL;
+}
+
+static void ggame_window_game_information_dialog_data_free(GGameWindowGameInformationDialogData *data) {
+  if (data == NULL) {
+    return;
+  }
+
+  g_clear_object(&data->self);
+  g_free(data);
+}
+
+static void ggame_window_on_game_information_cancel_clicked(GtkButton * /*button*/, gpointer user_data) {
+  GtkWindow *dialog = GTK_WINDOW(user_data);
+
+  g_return_if_fail(GTK_IS_WINDOW(dialog));
+
+  gtk_window_destroy(dialog);
+}
+
+static void ggame_window_set_root_player_name(SgfNode *root, const char *property, const char *name) {
+  g_return_if_fail(root != NULL);
+  g_return_if_fail(property != NULL);
+  g_return_if_fail(name != NULL);
+
+  sgf_node_clear_property(root, property);
+  if (name[0] != '\0' && !sgf_node_add_property(root, property, name)) {
+    g_debug("Failed to set SGF root player property %s", property);
+  }
+}
+
+static void ggame_window_on_game_information_save_clicked(GtkButton * /*button*/, gpointer user_data) {
+  GGameWindowGameInformationDialogData *data = user_data;
+  SgfTree *tree = NULL;
+  SgfNode *root = NULL;
+  const SgfNode *current = NULL;
+
+  g_return_if_fail(data != NULL);
+  g_return_if_fail(GGAME_IS_WINDOW(data->self));
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(data->self->sgf_controller));
+
+  tree = ggame_sgf_controller_get_tree(data->self->sgf_controller);
+  if (tree == NULL) {
+    g_debug("Unable to save game information without an SGF tree");
+    return;
+  }
+
+  root = (SgfNode *)sgf_tree_get_root(tree);
+  if (root == NULL) {
+    g_debug("Unable to save game information without an SGF root node");
+    return;
+  }
+
+  for (guint side = 0; side < 2; side++) {
+    const char *property = ggame_window_player_name_property_for_side(data->self, side);
+    g_autofree char *name = g_strdup(gtk_editable_get_text(GTK_EDITABLE(data->player_entries[side])));
+
+    if (property == NULL || name == NULL) {
+      g_debug("Unable to save game information for side %u", side);
+      return;
+    }
+
+    g_strstrip(name);
+    ggame_window_set_root_player_name(root, property, name);
+  }
+
+  current = sgf_tree_get_current(tree);
+  if (current != NULL) {
+    ggame_window_sync_board_host_node(data->self, current);
+  } else {
+    g_debug("Unable to refresh board host after game information change without a current SGF node");
+  }
+  ggame_sgf_controller_autosave_current_tree(data->self->sgf_controller);
+  gtk_window_destroy(data->dialog);
+}
+
+void ggame_window_present_game_information_dialog(GGameWindow *self) {
+  SgfTree *tree = NULL;
+  const SgfNode *root = NULL;
+
+  g_return_if_fail(GGAME_IS_WINDOW(self));
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self->sgf_controller));
+
+  tree = ggame_sgf_controller_get_tree(self->sgf_controller);
+  if (tree == NULL) {
+    g_debug("Unable to show game information without an SGF tree");
+    return;
+  }
+
+  root = sgf_tree_get_root(tree);
+  if (root == NULL) {
+    g_debug("Unable to show game information without an SGF root node");
+    return;
+  }
+
+  GtkWidget *dialog = gtk_window_new();
+  gtk_window_set_title(GTK_WINDOW(dialog), "Game information");
+  gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
+  gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(self));
+  gtk_window_set_resizable(GTK_WINDOW(dialog), FALSE);
+
+  GtkWidget *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
+  gtk_widget_set_margin_top(content, 12);
+  gtk_widget_set_margin_bottom(content, 12);
+  gtk_widget_set_margin_start(content, 12);
+  gtk_widget_set_margin_end(content, 12);
+  gtk_window_set_child(GTK_WINDOW(dialog), content);
+
+  GtkWidget *grid = gtk_grid_new();
+  gtk_grid_set_row_spacing(GTK_GRID(grid), 8);
+  gtk_grid_set_column_spacing(GTK_GRID(grid), 12);
+  gtk_box_append(GTK_BOX(content), grid);
+
+  GGameWindowGameInformationDialogData *data = g_new0(GGameWindowGameInformationDialogData, 1);
+  data->self = g_object_ref(self);
+  data->dialog = GTK_WINDOW(dialog);
+  g_object_set_data_full(G_OBJECT(dialog),
+                         "ggame-window-game-information-dialog-data",
+                         data,
+                         (GDestroyNotify)ggame_window_game_information_dialog_data_free);
+
+  for (guint side = 0; side < 2; side++) {
+    const char *side_label = ggame_window_side_label(self, side);
+    const char *property = ggame_window_player_name_property_for_side(self, side);
+    const char *name = property != NULL ? sgf_node_get_property_first(root, property) : NULL;
+    g_autofree char *fallback_label = g_strdup_printf("Player %u", side + 1);
+    g_autofree char *entry_name = g_strdup_printf("game-information-player-%u-entry", side);
+    GtkWidget *label = gtk_label_new(side_label != NULL ? side_label : fallback_label);
+    GtkWidget *entry = gtk_entry_new();
+
+    gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
+    gtk_widget_set_halign(label, GTK_ALIGN_START);
+    gtk_widget_set_hexpand(entry, TRUE);
+    gtk_widget_set_name(entry, entry_name);
+    gtk_editable_set_text(GTK_EDITABLE(entry), name != NULL ? name : "");
+    gtk_grid_attach(GTK_GRID(grid), label, 0, (int)side, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), entry, 1, (int)side, 1, 1);
+    data->player_entries[side] = GTK_ENTRY(entry);
+  }
+
+  GtkWidget *button_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+  gtk_widget_set_halign(button_box, GTK_ALIGN_END);
+  gtk_box_append(GTK_BOX(content), button_box);
+
+  GtkWidget *cancel_button = gtk_button_new_with_label("Cancel");
+  GtkWidget *save_button = gtk_button_new_with_label("Save");
+  gtk_widget_add_css_class(save_button, "suggested-action");
+  gtk_box_append(GTK_BOX(button_box), cancel_button);
+  gtk_box_append(GTK_BOX(button_box), save_button);
+
+  g_signal_connect(cancel_button,
+                   "clicked",
+                   G_CALLBACK(ggame_window_on_game_information_cancel_clicked),
+                   dialog);
+  g_signal_connect(save_button,
+                   "clicked",
+                   G_CALLBACK(ggame_window_on_game_information_save_clicked),
+                   data);
+
+  gtk_window_present(GTK_WINDOW(dialog));
+}
+
 static gboolean ggame_window_apply_player_move(gconstpointer move, gpointer user_data) {
   GGameWindow *self = GGAME_WINDOW(user_data);
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
@@ -3214,9 +3425,7 @@ static void ggame_window_on_sgf_node_changed(GGameSgfController * /*controller*/
   g_return_if_fail(GGAME_IS_WINDOW(self));
   g_return_if_fail(node != NULL);
 
-  if (self->profile != NULL && self->profile->ui.sync_board_host_node != NULL && self->board_host != NULL) {
-    self->profile->ui.sync_board_host_node(self->board_host, node);
-  }
+  ggame_window_sync_board_host_node(self, node);
   ggame_window_show_analysis_for_current_node(self);
   ggame_window_refresh_analysis_graph(self);
 }
@@ -3283,6 +3492,15 @@ static void ggame_window_on_play_puzzles_action(GSimpleAction * /*action*/,
   }
 
   ggame_window_present_puzzle_dialog(self);
+}
+
+static void ggame_window_on_game_information_action(GSimpleAction * /*action*/,
+                                                        GVariant * /*parameter*/,
+                                                        gpointer user_data) {
+  GGameWindow *self = GGAME_WINDOW(user_data);
+  g_return_if_fail(GGAME_IS_WINDOW(self));
+
+  ggame_window_present_game_information_dialog(self);
 }
 
 static void ggame_window_on_puzzle_next_clicked(GtkButton * /*button*/, gpointer user_data) {
@@ -3769,6 +3987,14 @@ static void ggame_window_init(GGameWindow *self) {
       {
           .name = "puzzle-play",
           .activate = ggame_window_on_play_puzzles_action,
+          .parameter_type = NULL,
+          .state = NULL,
+          .change_state = NULL,
+          .padding = {0},
+      },
+      {
+          .name = "game-information",
+          .activate = ggame_window_on_game_information_action,
           .parameter_type = NULL,
           .state = NULL,
           .change_state = NULL,

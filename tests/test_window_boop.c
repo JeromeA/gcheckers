@@ -641,6 +641,39 @@ static void test_ggame_window_boop_settings_dialog_shows_puzzle_progress(void) {
   g_clear_object(&app);
 }
 
+static void test_ggame_window_boop_import_dialog_starts_with_board_game_arena(void) {
+  GtkApplication *app = test_ggame_window_create_app();
+  GGameModel *model = ggame_model_new(GGAME_ACTIVE_GAME_BACKEND);
+  GGameWindow *window = test_ggame_window_new(app, model);
+  gtk_window_present(GTK_WINDOW(window));
+  test_ggame_window_drain_main_context(24);
+
+  ggame_window_present_import_dialog(window);
+  test_ggame_window_drain_main_context(24);
+
+  GtkWindow *dialog = test_ggame_window_find_toplevel_by_title("Import games");
+  g_assert_nonnull(dialog);
+  g_assert_nonnull(test_ggame_window_find_button_with_label(GTK_WIDGET(dialog), "Fetch game history"));
+  g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "Email"));
+  g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "Password"));
+  g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "BoardGameArena Boop history"));
+
+  GtkButton *back_button = test_ggame_window_find_button_with_label(GTK_WIDGET(dialog), "Back");
+  g_assert_nonnull(back_button);
+  g_assert_false(gtk_widget_get_sensitive(GTK_WIDGET(back_button)));
+
+  GtkButton *cancel_button = test_ggame_window_find_button_with_label(GTK_WIDGET(dialog), "Cancel");
+  g_assert_nonnull(cancel_button);
+  g_signal_emit_by_name(cancel_button, "clicked");
+  test_ggame_window_drain_main_context(16);
+  g_assert_null(test_ggame_window_find_toplevel_by_title("Import games"));
+
+  g_clear_object(&dialog);
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
 static void test_ggame_window_boop_puzzle_dialog_starts_puzzle(void) {
   g_autoptr(GError) error = NULL;
   g_autofree char *root = g_dir_make_tmp("gboop-window-puzzles-XXXXXX", &error);
@@ -713,6 +746,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/ggame-window/boop/supply-selection-tracks-turn", test_ggame_window_skip);
     g_test_add_func("/ggame-window/boop/new-game-dialog-shared-controls", test_ggame_window_skip);
     g_test_add_func("/ggame-window/boop/settings-dialog-puzzle-progress", test_ggame_window_skip);
+    g_test_add_func("/ggame-window/boop/import-dialog-starts-with-bga", test_ggame_window_skip);
     g_test_add_func("/ggame-window/boop/puzzle-dialog-starts-puzzle", test_ggame_window_skip);
     return g_test_run();
   }
@@ -734,6 +768,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/ggame-window/boop/supply-selection-tracks-turn", test_ggame_window_skip);
     g_test_add_func("/ggame-window/boop/new-game-dialog-shared-controls", test_ggame_window_skip);
     g_test_add_func("/ggame-window/boop/settings-dialog-puzzle-progress", test_ggame_window_skip);
+    g_test_add_func("/ggame-window/boop/import-dialog-starts-with-bga", test_ggame_window_skip);
     g_test_add_func("/ggame-window/boop/puzzle-dialog-starts-puzzle", test_ggame_window_skip);
     return g_test_run();
   }
@@ -757,6 +792,8 @@ int main(int argc, char **argv) {
                   test_ggame_window_boop_new_game_dialog_uses_shared_controls);
   g_test_add_func("/ggame-window/boop/settings-dialog-puzzle-progress",
                   test_ggame_window_boop_settings_dialog_shows_puzzle_progress);
+  g_test_add_func("/ggame-window/boop/import-dialog-starts-with-bga",
+                  test_ggame_window_boop_import_dialog_starts_with_board_game_arena);
   g_test_add_func("/ggame-window/boop/puzzle-dialog-starts-puzzle",
                   test_ggame_window_boop_puzzle_dialog_starts_puzzle);
   return g_test_run();

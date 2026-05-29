@@ -38,6 +38,7 @@ gboolean ggame_sgf_controller_step_forward_to_end(GGameSgfController *self);
 gboolean ggame_sgf_controller_select_node(GGameSgfController *self, const SgfNode *node);
 gboolean ggame_sgf_controller_delete_current_node(GGameSgfController *self);
 gboolean ggame_sgf_controller_refresh_current_node(GGameSgfController *self);
+void ggame_sgf_controller_autosave_current_tree(GGameSgfController *self);
 gboolean ggame_sgf_controller_get_current_node_move(GGameSgfController *self, gpointer out_move);
 gboolean ggame_sgf_controller_load_file(GGameSgfController *self, const char *path, GError **error);
 gboolean ggame_sgf_controller_save_file(GGameSgfController *self, const char *path, GError **error);

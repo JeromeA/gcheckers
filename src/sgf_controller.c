@@ -1004,6 +1004,22 @@ gboolean ggame_sgf_controller_refresh_current_node(GGameSgfController *self) {
   return TRUE;
 }
 
+void ggame_sgf_controller_autosave_current_tree(GGameSgfController *self) {
+  GGameModel *game_model = NULL;
+  const GameBackend *backend = NULL;
+
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self));
+  g_return_if_fail(SGF_IS_TREE(self->sgf_tree));
+
+  game_model = ggame_sgf_controller_peek_active_game_model(self);
+  g_return_if_fail(GGAME_IS_MODEL(game_model));
+
+  backend = ggame_model_peek_backend(game_model);
+  g_return_if_fail(backend != NULL);
+
+  ggame_sgf_controller_autosave_current_sgf(self, backend);
+}
+
 gboolean ggame_sgf_controller_get_current_node_move(GGameSgfController *self, gpointer out_move) {
   g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(SGF_IS_TREE(self->sgf_tree), FALSE);

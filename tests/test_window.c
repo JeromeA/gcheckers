@@ -212,6 +212,25 @@ static GtkWidget *test_ggame_window_find_by_type(GtkWidget *root, GType widget_t
   return NULL;
 }
 
+static GtkWidget *test_ggame_window_find_widget_named(GtkWidget *root, const char *name) {
+  g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
+  g_return_val_if_fail(name != NULL, NULL);
+
+  if (g_strcmp0(gtk_widget_get_name(root), name) == 0) {
+    return root;
+  }
+
+  for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
+       child = gtk_widget_get_next_sibling(child)) {
+    GtkWidget *match = test_ggame_window_find_widget_named(child, name);
+    if (match != NULL) {
+      return match;
+    }
+  }
+
+  return NULL;
+}
+
 static GtkWidget *test_ggame_window_find_board_square(GtkWidget *root) {
   g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
 
@@ -418,6 +437,18 @@ static gboolean test_ggame_window_menu_contains_item(GMenuModel *menu, const cha
   }
 
   return FALSE;
+}
+
+static void test_ggame_window_assert_menu_item_label(GMenuModel *menu, gint index, const char *label) {
+  g_return_if_fail(G_IS_MENU_MODEL(menu));
+  g_return_if_fail(label != NULL);
+
+  g_autoptr(GVariant) item_label = g_menu_model_get_item_attribute_value(menu,
+                                                                         index,
+                                                                         G_MENU_ATTRIBUTE_LABEL,
+                                                                         NULL);
+  g_assert_nonnull(item_label);
+  g_assert_cmpstr(g_variant_get_string(item_label, NULL), ==, label);
 }
 
 static GtkDropDown *test_ggame_window_find_variant_dropdown(GtkWidget *root) {
@@ -1231,6 +1262,7 @@ static void test_ggame_window_toolbar_actions_exist(void) {
   g_assert_nonnull(g_action_map_lookup_action(G_ACTION_MAP(window), "sgf-save-as"));
   g_assert_nonnull(g_action_map_lookup_action(G_ACTION_MAP(window), "sgf-save-position"));
   g_assert_nonnull(g_action_map_lookup_action(G_ACTION_MAP(window), "sgf-delete-node"));
+  g_assert_nonnull(g_action_map_lookup_action(G_ACTION_MAP(window), "game-information"));
   g_assert_nonnull(g_action_map_lookup_action(G_ACTION_MAP(window), "analysis-current-position"));
   g_assert_nonnull(g_action_map_lookup_action(G_ACTION_MAP(window), "analysis-whole-game"));
 
@@ -1277,15 +1309,24 @@ static void test_ggame_window_settings_dialog_persists_preferences(void) {
 
   GMenuModel *menubar = gtk_application_get_menubar(GTK_APPLICATION(app));
   g_assert_nonnull(menubar);
+  test_ggame_window_assert_menu_item_label(menubar, 0, "File");
+  test_ggame_window_assert_menu_item_label(menubar, 1, "Edit");
+  test_ggame_window_assert_menu_item_label(menubar, 2, "Move");
+
   GMenuModel *file_menu = test_ggame_window_find_submenu(menubar, "File");
   g_assert_nonnull(file_menu);
   g_assert_true(test_ggame_window_menu_contains_item(file_menu, "Settings..."));
+
+  GMenuModel *edit_menu = test_ggame_window_find_submenu(menubar, "Edit");
+  g_assert_nonnull(edit_menu);
+  g_assert_true(test_ggame_window_menu_contains_item(edit_menu, "Game information..."));
+  g_assert_true(test_ggame_window_menu_contains_item(edit_menu, "Delete node"));
 
   GMenuModel *move_menu = test_ggame_window_find_submenu(menubar, "Move");
   g_assert_nonnull(move_menu);
   g_assert_null(test_ggame_window_find_submenu(menubar, "Game"));
   g_assert_true(test_ggame_window_menu_contains_item(move_menu, "Force move"));
-  g_assert_true(test_ggame_window_menu_contains_item(move_menu, "Delete node"));
+  g_assert_false(test_ggame_window_menu_contains_item(move_menu, "Delete node"));
 
   g_auto(GStrv) delete_accels =
       gtk_application_get_accels_for_action(GTK_APPLICATION(app), "win.sgf-delete-node");
@@ -1349,6 +1390,45 @@ static void test_ggame_window_settings_dialog_persists_preferences(void) {
 
   g_unsetenv("GCHECKERS_PUZZLES_DIR");
   g_unsetenv("GCHECKERS_PUZZLE_PROGRESS_DIR");
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
+static void test_ggame_window_game_information_dialog_updates_player_names(void) {
+  GtkApplication *app = test_ggame_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GGameWindow *window = test_ggame_window_new(app, model);
+  gtk_window_present(GTK_WINDOW(window));
+  test_ggame_window_drain_main_context(32);
+
+  g_action_group_activate_action(G_ACTION_GROUP(window), "game-information", NULL);
+  test_ggame_window_drain_main_context(32);
+
+  GtkWindow *dialog = test_ggame_window_find_toplevel_by_title("Game information");
+  g_assert_nonnull(dialog);
+
+  GtkWidget *white_entry = test_ggame_window_find_widget_named(GTK_WIDGET(dialog),
+                                                              "game-information-player-0-entry");
+  GtkWidget *black_entry = test_ggame_window_find_widget_named(GTK_WIDGET(dialog),
+                                                              "game-information-player-1-entry");
+  g_assert_true(GTK_IS_ENTRY(white_entry));
+  g_assert_true(GTK_IS_ENTRY(black_entry));
+  gtk_editable_set_text(GTK_EDITABLE(white_entry), "Alice");
+  gtk_editable_set_text(GTK_EDITABLE(black_entry), "Bob");
+
+  GtkButton *save_button = test_ggame_window_find_button_with_label(GTK_WIDGET(dialog), "Save");
+  g_assert_nonnull(save_button);
+  g_signal_emit_by_name(save_button, "clicked");
+  test_ggame_window_drain_main_context(32);
+
+  GGameSgfController *controller = ggame_window_get_sgf_controller(window);
+  SgfTree *tree = ggame_sgf_controller_get_tree(controller);
+  const SgfNode *root = sgf_tree_get_root(tree);
+  g_assert_cmpstr(sgf_node_get_property_first(root, "PW"), ==, "Alice");
+  g_assert_cmpstr(sgf_node_get_property_first(root, "PB"), ==, "Bob");
+  g_assert_null(test_ggame_window_find_toplevel_by_title("Game information"));
+
   g_clear_object(&window);
   g_clear_object(&model);
   g_clear_object(&app);
@@ -2560,6 +2640,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/gcheckers-window/analysis-depth-slider", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/node-selection-updates-report", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/settings-dialog", test_ggame_window_skip);
+    g_test_add_func("/gcheckers-window/game-information-dialog", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/puzzle-mode", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/puzzle-dialog-scrolls-to-first-untried", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/puzzle-first-move-failure", test_ggame_window_skip);
@@ -2627,6 +2708,8 @@ int main(int argc, char **argv) {
                   test_ggame_window_node_selection_updates_report);
   g_test_add_func("/gcheckers-window/settings-dialog",
                   test_ggame_window_settings_dialog_persists_preferences);
+  g_test_add_func("/gcheckers-window/game-information-dialog",
+                  test_ggame_window_game_information_dialog_updates_player_names);
   g_test_add_func("/gcheckers-window/puzzle-mode", test_ggame_window_puzzle_mode_solves_and_exits_to_analysis);
   g_test_add_func("/gcheckers-window/puzzle-dialog-scrolls-to-first-untried",
                   test_ggame_window_puzzle_dialog_scrolls_to_first_untried);

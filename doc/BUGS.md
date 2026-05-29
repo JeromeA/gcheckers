@@ -1300,3 +1300,25 @@ system, but it still kept a two-action green sacrifice that built green again at
 performed another build that was already legal before the sacrifice.
 
 The fix recognizes that exact two-build pattern and keeps the direct build instead of the redundant sacrifice sequence.
+
+## BoardGameArena archive log import missed the review-page session step
+
+The import wizard fetched `archive/archive/logs.html` directly after the history list, so BoardGameArena could return
+`Invalid session information for this action` even though the login and history fetch had succeeded.
+
+The fix mimics the browser flow for a selected history row: open `gamereview?table=...` in the same cookie session,
+refresh the request token when the page exposes one, then fetch the archive logs as an XHR with the game-review page as
+referer.
+
+## BoardGameArena archive import assumed old archive logs were already materialized
+
+BGA archive imports should work for history rows whose log files have not recently been opened in a browser.
+
+The client opened the review page and then fetched `archive/archive/logs.html` directly. For older archived tables, BGA
+can return `Cannot find gamenotifs log file of an archived table` until the game-review page has requested archive
+materialization. Loading the same table in a browser first made the bug disappear because the browser performed that
+extra request.
+
+The fix mirrors the browser sequence: open the table page, refresh the table and game-review templates as XHRs, detect
+the `Searching for the game archive` waiting message, call `requestTableArchive.html` when needed, and retry the logs
+fetch if BGA still reports the missing archive file.

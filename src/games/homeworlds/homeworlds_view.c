@@ -4,6 +4,7 @@
 #include "homeworlds_move_builder.h"
 #include "homeworlds_move_report.h"
 #include "../../sgf_move_props.h"
+#include "../../sgf_tree.h"
 
 #include <math.h>
 
@@ -146,6 +147,7 @@ struct _HomeworldsView {
   gulong board_vadjustment_changed_handler_id;
   guint board_layout_settle_tick_id;
   gulong root_destroy_handler_id;
+  char *player_names[2];
 };
 
 static void homeworlds_view_update_from_current_builder(HomeworldsView *view);
@@ -305,6 +307,57 @@ static char *homeworlds_view_system_label(guint system_index) {
   }
 
   return g_strdup_printf("S%u", system_index - 2);
+}
+
+static const char *homeworlds_view_player_name_property_for_side(guint side) {
+  g_return_val_if_fail(side < 2, NULL);
+
+  return side == 0 ? "PB" : "PW";
+}
+
+static const SgfNode *homeworlds_view_node_root(const SgfNode *node) {
+  g_return_val_if_fail(node != NULL, NULL);
+
+  const SgfNode *root = node;
+  while (sgf_node_get_parent(root) != NULL) {
+    root = sgf_node_get_parent(root);
+  }
+
+  return root;
+}
+
+static const char *homeworlds_view_player_name_for_side_from_node(const SgfNode *node, guint side) {
+  g_return_val_if_fail(node != NULL, NULL);
+  g_return_val_if_fail(side < 2, NULL);
+
+  const SgfNode *root = homeworlds_view_node_root(node);
+  const char *property = homeworlds_view_player_name_property_for_side(side);
+  if (root == NULL || property == NULL) {
+    return NULL;
+  }
+
+  return sgf_node_get_property_first(root, property);
+}
+
+static char *homeworlds_view_format_system_title_with_player_name(guint system_index, const char *player_name) {
+  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, NULL);
+
+  if (system_index < 2 && player_name != NULL && player_name[0] != '\0') {
+    return g_strdup_printf("H%u (%s)", system_index + 1, player_name);
+  }
+
+  return homeworlds_view_system_label(system_index);
+}
+
+char *homeworlds_view_format_board_system_title(guint system_index, const SgfNode *node) {
+  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, NULL);
+
+  if (system_index < 2 && node != NULL) {
+    const char *player_name = homeworlds_view_player_name_for_side_from_node(node, system_index);
+    return homeworlds_view_format_system_title_with_player_name(system_index, player_name);
+  }
+
+  return homeworlds_view_system_label(system_index);
 }
 
 static const char *homeworlds_view_size_name(HomeworldsSize size) {
@@ -1548,7 +1601,8 @@ gboolean homeworlds_view_calculate_homeworld_layout(guint system_index,
   return TRUE;
 }
 
-static void homeworlds_view_draw_system(cairo_t *cr,
+static void homeworlds_view_draw_system(HomeworldsView *view,
+                                        cairo_t *cr,
                                         const HomeworldsSystem *system,
                                         guint system_index,
                                         double center_x,
@@ -1562,6 +1616,7 @@ static void homeworlds_view_draw_system(cairo_t *cr,
   double radius = HOMEWORLDS_VIEW_SYSTEM_CORNER_RADIUS;
 
   g_return_if_fail(system != NULL);
+  g_return_if_fail(view != NULL);
 
   if (!homeworlds_view_calculate_system_layout(system, system_index, center_x, center_y, &layout)) {
     return;
@@ -1590,7 +1645,8 @@ static void homeworlds_view_draw_system(cairo_t *cr,
   cairo_set_font_size(cr, 12.0);
   cairo_set_source_rgba(cr, 0.96, 0.96, 0.90, 0.92);
   {
-    char *label = homeworlds_view_system_label(system_index);
+    const char *player_name = system_index < 2 ? view->player_names[system_index] : NULL;
+    char *label = homeworlds_view_format_system_title_with_player_name(system_index, player_name);
 
     cairo_move_to(cr, x + 14.0, y + 22.0);
     if (label != NULL) {
@@ -2187,7 +2243,7 @@ static void homeworlds_view_draw(GtkDrawingArea * /*drawing_area*/,
     if (!homeworlds_view_calculate_system_center(position, system_index, width, height, &center_x, &center_y)) {
       continue;
     }
-    homeworlds_view_draw_system(cr, &position->systems[system_index], system_index, center_x, center_y, selected);
+    homeworlds_view_draw_system(view, cr, &position->systems[system_index], system_index, center_x, center_y, selected);
   }
 }
 
@@ -2997,6 +3053,9 @@ void homeworlds_view_free(HomeworldsView *view) {
   if (view->builder_ready) {
     homeworlds_move_builder_clear(&view->builder);
   }
+  for (guint side = 0; side < 2; side++) {
+    g_free(view->player_names[side]);
+  }
   g_clear_object(&view->model);
   g_free(view);
 }
@@ -3133,6 +3192,26 @@ const char *homeworlds_view_get_last_move_text(const HomeworldsView *view) {
   return gtk_label_get_text(GTK_LABEL(view->last_move_label));
 }
 
+static void homeworlds_view_update_player_names_from_node(HomeworldsView *view, const SgfNode *node) {
+  gboolean changed = FALSE;
+
+  g_return_if_fail(view != NULL);
+  g_return_if_fail(node != NULL);
+
+  for (guint side = 0; side < 2; side++) {
+    const char *name = homeworlds_view_player_name_for_side_from_node(node, side);
+    if (g_strcmp0(view->player_names[side], name) != 0) {
+      g_free(view->player_names[side]);
+      view->player_names[side] = g_strdup(name);
+      changed = TRUE;
+    }
+  }
+
+  if (changed && GTK_IS_WIDGET(view->drawing_area)) {
+    gtk_widget_queue_draw(view->drawing_area);
+  }
+}
+
 void homeworlds_view_sync_board_host_node(GtkWidget *board_host, const SgfNode *node) {
   HomeworldsView *view = NULL;
   HomeworldsMove move = {0};
@@ -3147,6 +3226,8 @@ void homeworlds_view_sync_board_host_node(GtkWidget *board_host, const SgfNode *
   if (view == NULL) {
     return;
   }
+
+  homeworlds_view_update_player_names_from_node(view, node);
 
   if (!sgf_move_props_try_parse_node(node, &color, &move, &has_move, NULL) || !has_move) {
     gtk_label_set_text(GTK_LABEL(view->last_move_label), "None");

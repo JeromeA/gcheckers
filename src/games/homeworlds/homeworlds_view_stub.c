@@ -18,6 +18,14 @@ __attribute__((weak)) void homeworlds_view_sync_board_host_node(GtkWidget *board
   g_return_if_fail(node != NULL);
 }
 
+__attribute__((weak)) char *homeworlds_view_format_board_system_title(guint system_index, const SgfNode * /*node*/) {
+  if (system_index < 2) {
+    return g_strdup_printf("H%u", system_index + 1);
+  }
+
+  return g_strdup_printf("S%u", system_index - 2);
+}
+
 __attribute__((weak)) void homeworlds_view_set_board_host_move_report_enabled(GtkWidget *board_host,
                                                                               gboolean /*enabled*/) {
   g_return_if_fail(board_host != NULL);

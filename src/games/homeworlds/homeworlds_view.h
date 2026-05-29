@@ -34,6 +34,7 @@ GtkWidget *homeworlds_view_create_board_host(GGameModel *model,
                                              gpointer move_handler_data,
                                              const GGameAppBoardHostOptions *options);
 void homeworlds_view_sync_board_host_node(GtkWidget *board_host, const SgfNode *node);
+char *homeworlds_view_format_board_system_title(guint system_index, const SgfNode *node);
 
 GtkWidget *homeworlds_view_get_widget(HomeworldsView *view);
 void homeworlds_view_refresh(HomeworldsView *view);

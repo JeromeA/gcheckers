@@ -351,6 +351,7 @@ static void ggame_application_startup(GApplication *app) {
   GMenu *file_primary_menu = g_menu_new();
   GMenu *file_settings_menu = g_menu_new();
   GMenu *file_quit_menu = g_menu_new();
+  GMenu *edit_menu = g_menu_new();
   GMenu *game_menu = g_menu_new();
   GMenu *game_navigation_menu = g_menu_new();
   GMenu *analysis_menu = g_menu_new();
@@ -366,13 +367,14 @@ static void ggame_application_startup(GApplication *app) {
   g_menu_append_section(file_menu, NULL, G_MENU_MODEL(file_settings_menu));
   g_menu_append(file_quit_menu, "Quit", "app.quit");
   g_menu_append_section(file_menu, NULL, G_MENU_MODEL(file_quit_menu));
+  g_menu_append(edit_menu, "Game information...", "win.game-information");
+  g_menu_append(edit_menu, "Delete node", "win.sgf-delete-node");
   g_menu_append(game_menu, "Force move", "win.game-force-move");
   g_menu_append(game_navigation_menu, "Rewind to start", "win.navigation-rewind");
   g_menu_append(game_navigation_menu, "Back one move", "win.navigation-step-backward");
   g_menu_append(game_navigation_menu, "Forward one move", "win.navigation-step-forward");
   g_menu_append(game_navigation_menu, "Forward to next branch", "win.navigation-step-forward-to-branch");
   g_menu_append(game_navigation_menu, "Forward to main line end", "win.navigation-step-forward-to-end");
-  g_menu_append(game_navigation_menu, "Delete node", "win.sgf-delete-node");
   g_menu_append_section(game_menu, NULL, G_MENU_MODEL(game_navigation_menu));
   g_menu_append(analysis_menu, "Analyse this move", "win.analysis-current-position");
   g_menu_append(analysis_menu, "Analyse whole game", "win.analysis-whole-game");
@@ -383,6 +385,7 @@ static void ggame_application_startup(GApplication *app) {
     g_menu_append(view_menu, "Move report", "win.view-show-move-report");
   }
   g_menu_append_submenu(menubar, "File", G_MENU_MODEL(file_menu));
+  g_menu_append_submenu(menubar, "Edit", G_MENU_MODEL(edit_menu));
   g_menu_append_submenu(menubar, "Move", G_MENU_MODEL(game_menu));
   g_menu_append_submenu(menubar, "Analysis", G_MENU_MODEL(analysis_menu));
   g_menu_append_submenu(menubar, "Puzzle", G_MENU_MODEL(puzzle_menu));
@@ -392,6 +395,7 @@ static void ggame_application_startup(GApplication *app) {
   g_object_unref(file_quit_menu);
   g_object_unref(file_settings_menu);
   g_object_unref(file_primary_menu);
+  g_object_unref(edit_menu);
   g_object_unref(game_navigation_menu);
   g_object_unref(game_menu);
   g_object_unref(analysis_menu);

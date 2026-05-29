@@ -299,6 +299,53 @@ static GtkWidget *test_homeworlds_find_label_with_text(GtkWidget *root, const ch
   return NULL;
 }
 
+static GtkButton *test_homeworlds_find_button_with_label(GtkWidget *root, const char *label) {
+  g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
+  g_return_val_if_fail(label != NULL, NULL);
+
+  if (GTK_IS_BUTTON(root)) {
+    const char *button_label = gtk_button_get_label(GTK_BUTTON(root));
+
+    if (button_label != NULL && g_strcmp0(button_label, label) == 0) {
+      return GTK_BUTTON(root);
+    }
+  }
+
+  for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
+       child = gtk_widget_get_next_sibling(child)) {
+    GtkButton *match = test_homeworlds_find_button_with_label(child, label);
+    if (match != NULL) {
+      return match;
+    }
+  }
+
+  return NULL;
+}
+
+static GtkWindow *test_homeworlds_find_toplevel_by_title(const char *title) {
+  g_return_val_if_fail(title != NULL, NULL);
+
+  GListModel *toplevels = gtk_window_get_toplevels();
+  guint count = g_list_model_get_n_items(toplevels);
+  for (guint i = 0; i < count; ++i) {
+    GtkWindow *window = g_list_model_get_item(toplevels, i);
+    if (!GTK_IS_WINDOW(window)) {
+      if (window != NULL) {
+        g_object_unref(window);
+      }
+      continue;
+    }
+
+    const char *window_title = gtk_window_get_title(window);
+    if (window_title != NULL && g_strcmp0(window_title, title) == 0) {
+      return window;
+    }
+    g_object_unref(window);
+  }
+
+  return NULL;
+}
+
 static void test_homeworlds_assert_text_panel_label_wraps(GtkWidget *label) {
   g_assert_true(GTK_IS_LABEL(label));
   g_assert_true(gtk_label_get_wrap(GTK_LABEL(label)));
@@ -1856,6 +1903,58 @@ static void test_homeworlds_application_view_menu_has_move_report(void) {
   g_assert_true(test_homeworlds_menu_contains_item(view_menu, "Move report"));
 }
 
+static void test_homeworlds_view_board_system_title_uses_player_names(void) {
+  g_autoptr(SgfTree) tree = sgf_tree_new();
+  SgfNode *root = (SgfNode *)sgf_tree_get_root(tree);
+  g_assert_nonnull(root);
+  g_assert_true(sgf_node_add_property(root, "PB", "Alice"));
+  g_assert_true(sgf_node_add_property(root, "PW", "Bob"));
+
+  g_autofree char *homeworld_1 = homeworlds_view_format_board_system_title(0, root);
+  g_autofree char *homeworld_2 = homeworlds_view_format_board_system_title(1, root);
+  g_autofree char *neutral_system = homeworlds_view_format_board_system_title(2, root);
+  g_assert_cmpstr(homeworld_1, ==, "H1 (Alice)");
+  g_assert_cmpstr(homeworld_2, ==, "H2 (Bob)");
+  g_assert_cmpstr(neutral_system, ==, "S0");
+}
+
+static void test_homeworlds_import_dialog_starts_with_board_game_arena(void) {
+  GtkApplication *app = NULL;
+  GGameModel *model = NULL;
+  GGameWindow *window = test_homeworlds_create_window(&app, &model);
+
+  gtk_window_present(GTK_WINDOW(window));
+  test_homeworlds_drain_main_context(16);
+
+  ggame_window_present_import_dialog(window);
+  test_homeworlds_drain_main_context(32);
+
+  GtkWindow *dialog = test_homeworlds_find_toplevel_by_title("Import games");
+  g_assert_nonnull(dialog);
+
+  GtkButton *next_button = test_homeworlds_find_button_with_label(GTK_WIDGET(dialog), "Fetch game history");
+  g_assert_nonnull(next_button);
+  g_assert_true(gtk_widget_get_sensitive(GTK_WIDGET(next_button)));
+  g_assert_nonnull(test_homeworlds_find_label_with_text(GTK_WIDGET(dialog), "Email"));
+  g_assert_nonnull(test_homeworlds_find_label_with_text(GTK_WIDGET(dialog), "Password"));
+  g_assert_nonnull(test_homeworlds_find_label_with_text(GTK_WIDGET(dialog), "BoardGameArena Homeworlds history"));
+
+  GtkButton *back_button = test_homeworlds_find_button_with_label(GTK_WIDGET(dialog), "Back");
+  g_assert_nonnull(back_button);
+  g_assert_false(gtk_widget_get_sensitive(GTK_WIDGET(back_button)));
+
+  GtkButton *cancel_button = test_homeworlds_find_button_with_label(GTK_WIDGET(dialog), "Cancel");
+  g_assert_nonnull(cancel_button);
+  g_signal_emit_by_name(cancel_button, "clicked");
+  test_homeworlds_drain_main_context(16);
+  g_assert_null(test_homeworlds_find_toplevel_by_title("Import games"));
+
+  g_clear_object(&dialog);
+  gtk_window_destroy(GTK_WINDOW(window));
+  g_object_unref(model);
+  g_object_unref(app);
+}
+
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   g_autoptr(GError) autosave_error = NULL;
@@ -1908,6 +2007,8 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/view/board-content-size-tracks-viewport", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/window/move-report-action", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/window/view-menu-move-report", test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/view/board-system-title-player-names", test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/window/import-dialog-starts-with-bga", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/window/catastrophe-prefix-records-single-sgf-move",
                     test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/window/end-move-catastrophe-requires-choice",
@@ -1948,6 +2049,10 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/window/move-report-action", test_homeworlds_window_move_report_action_toggles_view);
     g_test_add_func("/homeworlds/window/view-menu-move-report",
                     test_homeworlds_application_view_menu_has_move_report);
+    g_test_add_func("/homeworlds/view/board-system-title-player-names",
+                    test_homeworlds_view_board_system_title_uses_player_names);
+    g_test_add_func("/homeworlds/window/import-dialog-starts-with-bga",
+                    test_homeworlds_import_dialog_starts_with_board_game_arena);
     g_test_add_func("/homeworlds/window/catastrophe-prefix-records-single-sgf-move",
                     test_homeworlds_window_catastrophe_prefix_records_single_sgf_move);
     g_test_add_func("/homeworlds/window/end-move-catastrophe-requires-choice",

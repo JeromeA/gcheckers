@@ -25,6 +25,11 @@ static const GGameAppProfile checkers_app_profile = {
           .supports_save_position = TRUE,
           .supports_edit_mode = TRUE,
       },
+  .import =
+      {
+          .board_game_arena_game_id = 74,
+          .show_site_step = TRUE,
+      },
   .layout =
       {
           .default_board_panel_width = 500,
@@ -49,10 +54,15 @@ static const GGameAppProfile homeworlds_app_profile = {
           .supports_ai_players = TRUE,
           .supports_analysis = TRUE,
           .supports_puzzles = FALSE,
-          .supports_import = FALSE,
+          .supports_import = TRUE,
           .supports_settings = FALSE,
           .supports_save_position = TRUE,
           .supports_edit_mode = FALSE,
+      },
+  .import =
+      {
+          .board_game_arena_game_id = 1515,
+          .show_site_step = FALSE,
       },
   .ui =
       {
@@ -85,10 +95,15 @@ static const GGameAppProfile boop_app_profile = {
           .supports_ai_players = TRUE,
           .supports_analysis = TRUE,
           .supports_puzzles = TRUE,
-          .supports_import = FALSE,
+          .supports_import = TRUE,
           .supports_settings = TRUE,
           .supports_save_position = TRUE,
           .supports_edit_mode = FALSE,
+      },
+  .import =
+      {
+          .board_game_arena_game_id = 1736,
+          .show_site_step = FALSE,
       },
   .ui =
       {

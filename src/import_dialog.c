@@ -1,22 +1,33 @@
 #include "window.h"
 
+#include "app_paths.h"
 #include "bga_client.h"
+#include "common_settings.h"
+#include "game_app_profile.h"
+#include "sgf_io.h"
+
+#include <errno.h>
+#include <glib/gstdio.h>
+
+#define GGAME_IMPORT_BGA_CACHE_ENV "GCHECKERS_BGA_IMPORT_DIR"
+#define GGAME_IMPORT_BGA_CACHE_SUBDIR "bga-imports"
 
 typedef enum {
-  GCHECKERS_IMPORT_SITE_LIDRAUGHT = 0,
-  GCHECKERS_IMPORT_SITE_FLYORDIE,
-  GCHECKERS_IMPORT_SITE_PLAYOK,
-  GCHECKERS_IMPORT_SITE_BOARDGAMEARENA
-} GCheckersImportSite;
+  GGAME_IMPORT_SITE_LIDRAUGHT = 0,
+  GGAME_IMPORT_SITE_FLYORDIE,
+  GGAME_IMPORT_SITE_PLAYOK,
+  GGAME_IMPORT_SITE_BOARDGAMEARENA
+} GGameImportSite;
 
 typedef enum {
-  GCHECKERS_IMPORT_STEP_SITE = 0,
-  GCHECKERS_IMPORT_STEP_CREDENTIALS,
-  GCHECKERS_IMPORT_STEP_HISTORY
-} GCheckersImportStep;
+  GGAME_IMPORT_STEP_SITE = 0,
+  GGAME_IMPORT_STEP_CREDENTIALS,
+  GGAME_IMPORT_STEP_HISTORY
+} GGameImportStep;
 
 typedef struct {
   GGameWindow *self;
+  const GGameAppProfile *profile;
   GtkWindow *dialog;
   GtkStack *stack;
   GtkDropDown *site_drop_down;
@@ -27,45 +38,11 @@ typedef struct {
   GtkCheckButton *remember_check;
   GtkListBox *history_list;
   GSettings *settings;
-  GCheckersImportStep step;
+  BgaClientSession *bga_session;
+  GGameImportStep step;
 } GGameWindowImportDialogData;
 
-static const char *gcheckers_import_schema_id = "io.github.jeromea.gcheckers";
-static const char *gcheckers_import_key_remember = "import-remember";
-static const char *gcheckers_import_key_email = "import-email";
-static const char *gcheckers_import_key_password = "import-password";
-
-static GSettings *gcheckers_import_dialog_create_settings(void) {
-  GSettingsSchemaSource *default_source = g_settings_schema_source_get_default();
-  GSettingsSchema *schema = NULL;
-  if (default_source != NULL) {
-    schema = g_settings_schema_source_lookup(default_source, gcheckers_import_schema_id, TRUE);
-  }
-
-  g_autoptr(GSettingsSchemaSource) local_source = NULL;
-  if (schema == NULL) {
-    g_autoptr(GError) error = NULL;
-    local_source =
-        g_settings_schema_source_new_from_directory("data/schemas", default_source, FALSE, &error);
-    if (!local_source) {
-      g_debug("Unable to load local GSettings schemas: %s", error ? error->message : "unknown error");
-      return NULL;
-    }
-
-    schema = g_settings_schema_source_lookup(local_source, gcheckers_import_schema_id, FALSE);
-  }
-
-  if (schema == NULL) {
-    g_debug("Missing GSettings schema %s", gcheckers_import_schema_id);
-    return NULL;
-  }
-
-  GSettings *settings = g_settings_new_full(schema, NULL, NULL);
-  g_settings_schema_unref(schema);
-  return settings;
-}
-
-static void gcheckers_import_dialog_load_credentials(GGameWindowImportDialogData *data) {
+static void ggame_import_dialog_load_credentials(GGameWindowImportDialogData *data) {
   g_return_if_fail(data != NULL);
   g_return_if_fail(GTK_IS_ENTRY(data->email_entry));
   g_return_if_fail(GTK_IS_ENTRY(data->password_entry));
@@ -78,7 +55,7 @@ static void gcheckers_import_dialog_load_credentials(GGameWindowImportDialogData
     return;
   }
 
-  gboolean remember = g_settings_get_boolean(data->settings, gcheckers_import_key_remember);
+  gboolean remember = g_settings_get_boolean(data->settings, GGAME_COMMON_SETTINGS_KEY_IMPORT_REMEMBER);
   gtk_check_button_set_active(data->remember_check, remember);
   if (!remember) {
     gtk_editable_set_text(GTK_EDITABLE(data->email_entry), "");
@@ -86,13 +63,13 @@ static void gcheckers_import_dialog_load_credentials(GGameWindowImportDialogData
     return;
   }
 
-  g_autofree char *email = g_settings_get_string(data->settings, gcheckers_import_key_email);
-  g_autofree char *password = g_settings_get_string(data->settings, gcheckers_import_key_password);
+  g_autofree char *email = g_settings_get_string(data->settings, GGAME_COMMON_SETTINGS_KEY_IMPORT_EMAIL);
+  g_autofree char *password = g_settings_get_string(data->settings, GGAME_COMMON_SETTINGS_KEY_IMPORT_PASSWORD);
   gtk_editable_set_text(GTK_EDITABLE(data->email_entry), email ? email : "");
   gtk_editable_set_text(GTK_EDITABLE(data->password_entry), password ? password : "");
 }
 
-static void gcheckers_import_dialog_save_credentials(GGameWindowImportDialogData *data) {
+static void ggame_import_dialog_save_credentials(GGameWindowImportDialogData *data) {
   g_return_if_fail(data != NULL);
   g_return_if_fail(GTK_IS_ENTRY(data->email_entry));
   g_return_if_fail(GTK_IS_ENTRY(data->password_entry));
@@ -103,20 +80,20 @@ static void gcheckers_import_dialog_save_credentials(GGameWindowImportDialogData
   }
 
   gboolean remember = gtk_check_button_get_active(data->remember_check);
-  g_settings_set_boolean(data->settings, gcheckers_import_key_remember, remember);
+  g_settings_set_boolean(data->settings, GGAME_COMMON_SETTINGS_KEY_IMPORT_REMEMBER, remember);
   if (!remember) {
-    g_settings_set_string(data->settings, gcheckers_import_key_email, "");
-    g_settings_set_string(data->settings, gcheckers_import_key_password, "");
+    g_settings_set_string(data->settings, GGAME_COMMON_SETTINGS_KEY_IMPORT_EMAIL, "");
+    g_settings_set_string(data->settings, GGAME_COMMON_SETTINGS_KEY_IMPORT_PASSWORD, "");
     return;
   }
 
   const char *email = gtk_editable_get_text(GTK_EDITABLE(data->email_entry));
   const char *password = gtk_editable_get_text(GTK_EDITABLE(data->password_entry));
-  g_settings_set_string(data->settings, gcheckers_import_key_email, email ? email : "");
-  g_settings_set_string(data->settings, gcheckers_import_key_password, password ? password : "");
+  g_settings_set_string(data->settings, GGAME_COMMON_SETTINGS_KEY_IMPORT_EMAIL, email ? email : "");
+  g_settings_set_string(data->settings, GGAME_COMMON_SETTINGS_KEY_IMPORT_PASSWORD, password ? password : "");
 }
 
-static void gcheckers_import_dialog_on_error_ok_clicked(GtkButton *button, gpointer user_data) {
+static void ggame_import_dialog_on_error_ok_clicked(GtkButton *button, gpointer user_data) {
   GtkWindow *error_dialog = GTK_WINDOW(user_data);
   g_return_if_fail(GTK_IS_BUTTON(button));
   g_return_if_fail(GTK_IS_WINDOW(error_dialog));
@@ -128,8 +105,8 @@ static void gcheckers_import_dialog_on_error_ok_clicked(GtkButton *button, gpoin
   gtk_window_destroy(error_dialog);
 }
 
-static void gcheckers_import_dialog_show_error_and_close_wizard(GGameWindowImportDialogData *data,
-                                                                const char *text) {
+static void ggame_import_dialog_show_error_and_close_wizard(GGameWindowImportDialogData *data,
+                                                            const char *text) {
   g_return_if_fail(data != NULL);
   g_return_if_fail(text != NULL);
 
@@ -155,20 +132,137 @@ static void gcheckers_import_dialog_show_error_and_close_wizard(GGameWindowImpor
   gtk_widget_set_halign(ok_button, GTK_ALIGN_END);
   gtk_box_append(GTK_BOX(content), ok_button);
   g_object_set_data(G_OBJECT(dialog), "wizard-dialog", data->dialog);
-  g_signal_connect(ok_button, "clicked", G_CALLBACK(gcheckers_import_dialog_on_error_ok_clicked), dialog);
+  g_signal_connect(ok_button, "clicked", G_CALLBACK(ggame_import_dialog_on_error_ok_clicked), dialog);
   gtk_window_present(GTK_WINDOW(dialog));
 }
 
-static gboolean gcheckers_import_dialog_is_board_game_arena_selected(GGameWindowImportDialogData *data) {
+static gboolean ggame_import_dialog_is_board_game_arena_selected(GGameWindowImportDialogData *data) {
   g_return_val_if_fail(data != NULL, FALSE);
-  g_return_val_if_fail(GTK_IS_DROP_DOWN(data->site_drop_down), FALSE);
 
-  return gtk_drop_down_get_selected(data->site_drop_down) == GCHECKERS_IMPORT_SITE_BOARDGAMEARENA;
+  if (data->profile != NULL && !data->profile->import.show_site_step) {
+    return TRUE;
+  }
+
+  g_return_val_if_fail(GTK_IS_DROP_DOWN(data->site_drop_down), FALSE);
+  return gtk_drop_down_get_selected(data->site_drop_down) == GGAME_IMPORT_SITE_BOARDGAMEARENA;
+}
+
+static const char *ggame_import_dialog_selected_history_table_id(GGameWindowImportDialogData *data) {
+  g_return_val_if_fail(data != NULL, NULL);
+  g_return_val_if_fail(GTK_IS_LIST_BOX(data->history_list), NULL);
+
+  GtkListBoxRow *row = gtk_list_box_get_selected_row(data->history_list);
+  if (row == NULL) {
+    return NULL;
+  }
+
+  return g_object_get_data(G_OBJECT(row), "bga-table-id");
+}
+
+static gboolean ggame_import_dialog_selected_history_is_cached(GGameWindowImportDialogData *data) {
+  g_return_val_if_fail(data != NULL, FALSE);
+  g_return_val_if_fail(GTK_IS_LIST_BOX(data->history_list), FALSE);
+
+  GtkListBoxRow *row = gtk_list_box_get_selected_row(data->history_list);
+  if (row == NULL) {
+    return FALSE;
+  }
+
+  return GPOINTER_TO_INT(g_object_get_data(G_OBJECT(row), "bga-cached"));
+}
+
+static char *ggame_import_dialog_sanitize_cache_name(const char *text) {
+  g_return_val_if_fail(text != NULL, NULL);
+
+  GString *sanitized = g_string_new(NULL);
+  for (const char *c = text; *c != '\0'; c++) {
+    if (g_ascii_isalnum(*c) || *c == '-' || *c == '_') {
+      g_string_append_c(sanitized, *c);
+    } else {
+      g_string_append_c(sanitized, '_');
+    }
+  }
+  if (sanitized->len == 0) {
+    g_string_append(sanitized, "unknown");
+  }
+
+  return g_string_free(sanitized, FALSE);
+}
+
+static char *ggame_import_dialog_bga_cache_path(GGameWindowImportDialogData *data,
+                                                const char *table_id,
+                                                GError **error) {
+  g_return_val_if_fail(data != NULL, NULL);
+  g_return_val_if_fail(data->profile != NULL, NULL);
+  g_return_val_if_fail(table_id != NULL, NULL);
+
+  g_autofree char *base_dir =
+      ggame_app_paths_get_user_state_subdir(GGAME_IMPORT_BGA_CACHE_ENV, GGAME_IMPORT_BGA_CACHE_SUBDIR, error);
+  if (base_dir == NULL) {
+    return NULL;
+  }
+
+  g_autofree char *profile_dir_name = ggame_import_dialog_sanitize_cache_name(data->profile->id);
+  g_autofree char *profile_dir = g_build_filename(base_dir, profile_dir_name, NULL);
+  if (g_mkdir_with_parents(profile_dir, 0755) != 0) {
+    int saved_errno = errno;
+    g_set_error(error,
+                G_FILE_ERROR,
+                g_file_error_from_errno(saved_errno),
+                "Failed to create BoardGameArena import cache directory %s: %s",
+                profile_dir,
+                g_strerror(saved_errno));
+    return NULL;
+  }
+
+  g_autofree char *cache_name = ggame_import_dialog_sanitize_cache_name(table_id);
+  g_autofree char *file_name = g_strdup_printf("%s.sgf", cache_name);
+  return g_build_filename(profile_dir, file_name, NULL);
+}
+
+static gboolean ggame_import_dialog_bga_table_is_cached(GGameWindowImportDialogData *data,
+                                                        const char *table_id) {
+  g_return_val_if_fail(data != NULL, FALSE);
+  g_return_val_if_fail(table_id != NULL, FALSE);
+
+  g_autoptr(GError) error = NULL;
+  g_autofree char *path = ggame_import_dialog_bga_cache_path(data, table_id, &error);
+  if (path == NULL) {
+    g_debug("Unable to resolve BoardGameArena import cache path for table_id=%s: %s",
+            table_id,
+            error ? error->message : "unknown error");
+    return FALSE;
+  }
+
+  return g_file_test(path, G_FILE_TEST_IS_REGULAR);
+}
+
+static gboolean ggame_import_dialog_load_sgf_path(GGameWindowImportDialogData *data,
+                                                  const char *path,
+                                                  GError **error) {
+  g_return_val_if_fail(data != NULL, FALSE);
+  g_return_val_if_fail(GGAME_IS_WINDOW(data->self), FALSE);
+  g_return_val_if_fail(path != NULL, FALSE);
+
+  GGameSgfController *controller = ggame_window_get_sgf_controller(data->self);
+  if (!ggame_sgf_controller_load_file(controller, path, error)) {
+    return FALSE;
+  }
+
+  SgfTree *tree = ggame_sgf_controller_get_tree(controller);
+  const GameBackendVariant *loaded_variant = NULL;
+  if (tree != NULL && sgf_io_tree_get_variant(tree, &loaded_variant, NULL) && loaded_variant != NULL) {
+    ggame_window_set_loaded_variant(data->self, loaded_variant);
+  }
+  ggame_window_set_loaded_source_path(data->self, path);
+  ggame_window_set_board_orientation_mode(data->self, GGAME_WINDOW_BOARD_ORIENTATION_FIXED);
+  return TRUE;
 }
 
 static void ggame_window_import_dialog_data_free(GGameWindowImportDialogData *data) {
   g_return_if_fail(data != NULL);
 
+  g_clear_pointer(&data->bga_session, bga_client_session_free);
   g_clear_object(&data->settings);
   g_object_unref(data->self);
   g_free(data);
@@ -187,37 +281,53 @@ static void ggame_window_import_dialog_update_step(GGameWindowImportDialogData *
   g_return_if_fail(GTK_IS_BUTTON(data->back_button));
   g_return_if_fail(GTK_IS_BUTTON(data->next_button));
 
-  if (data->step == GCHECKERS_IMPORT_STEP_SITE) {
+  if (data->step == GGAME_IMPORT_STEP_SITE) {
     gtk_stack_set_visible_child_name(data->stack, "site");
     gtk_widget_set_sensitive(GTK_WIDGET(data->back_button), FALSE);
     gtk_button_set_label(data->next_button, "Next");
     gtk_widget_set_sensitive(GTK_WIDGET(data->next_button),
-                             gcheckers_import_dialog_is_board_game_arena_selected(data));
+                             ggame_import_dialog_is_board_game_arena_selected(data));
     return;
   }
 
-  if (data->step == GCHECKERS_IMPORT_STEP_HISTORY) {
+  if (data->step == GGAME_IMPORT_STEP_HISTORY) {
     gtk_stack_set_visible_child_name(data->stack, "history");
     gtk_widget_set_sensitive(GTK_WIDGET(data->back_button), FALSE);
-    gtk_button_set_label(data->next_button, "Close");
-    gtk_widget_set_sensitive(GTK_WIDGET(data->next_button), TRUE);
+    const char *selected_table_id = ggame_import_dialog_selected_history_table_id(data);
+    gtk_button_set_label(data->next_button,
+                         ggame_import_dialog_selected_history_is_cached(data) ? "Load" : "Import");
+    gtk_widget_set_sensitive(GTK_WIDGET(data->next_button), selected_table_id != NULL);
     return;
   }
 
   gtk_stack_set_visible_child_name(data->stack, "credentials");
-  gtk_widget_set_sensitive(GTK_WIDGET(data->back_button), TRUE);
+  gtk_widget_set_sensitive(GTK_WIDGET(data->back_button),
+                           data->profile != NULL && data->profile->import.show_site_step);
   gtk_button_set_label(data->next_button, "Fetch game history");
   gtk_widget_set_sensitive(GTK_WIDGET(data->next_button), TRUE);
-  gcheckers_import_dialog_load_credentials(data);
+  ggame_import_dialog_load_credentials(data);
 }
 
 static void ggame_window_on_import_dialog_site_notify(GObject * /*object*/,
-                                                          GParamSpec * /*pspec*/,
-                                                          gpointer user_data) {
+                                                      GParamSpec * /*pspec*/,
+                                                      gpointer user_data) {
   GGameWindowImportDialogData *data = user_data;
   g_return_if_fail(data != NULL);
 
-  if (data->step != GCHECKERS_IMPORT_STEP_SITE) {
+  if (data->step != GGAME_IMPORT_STEP_SITE) {
+    return;
+  }
+
+  ggame_window_import_dialog_update_step(data);
+}
+
+static void ggame_window_on_import_dialog_history_row_selected(GtkListBox * /*box*/,
+                                                               GtkListBoxRow * /*row*/,
+                                                               gpointer user_data) {
+  GGameWindowImportDialogData *data = user_data;
+  g_return_if_fail(data != NULL);
+
+  if (data->step != GGAME_IMPORT_STEP_HISTORY) {
     return;
   }
 
@@ -236,12 +346,108 @@ static void ggame_window_on_import_dialog_back_clicked(GtkButton * /*button*/, g
   GGameWindowImportDialogData *data = user_data;
   g_return_if_fail(data != NULL);
 
-  if (data->step == GCHECKERS_IMPORT_STEP_SITE) {
+  if (data->step == GGAME_IMPORT_STEP_SITE || data->profile == NULL || !data->profile->import.show_site_step) {
     return;
   }
 
-  data->step = GCHECKERS_IMPORT_STEP_SITE;
+  data->step = GGAME_IMPORT_STEP_SITE;
   ggame_window_import_dialog_update_step(data);
+}
+
+static void ggame_import_dialog_import_selected_history_game(GGameWindowImportDialogData *data) {
+  g_return_if_fail(data != NULL);
+
+  const char *table_id = ggame_import_dialog_selected_history_table_id(data);
+  if (table_id == NULL) {
+    g_debug("Import flow: Import clicked without a selected history row");
+    ggame_window_import_dialog_update_step(data);
+    return;
+  }
+
+  g_autoptr(GError) error = NULL;
+  g_autofree char *cache_path = ggame_import_dialog_bga_cache_path(data, table_id, &error);
+  if (cache_path == NULL) {
+    g_debug("Import flow: failed to resolve BGA import cache path for table_id=%s: %s",
+            table_id,
+            error ? error->message : "unknown error");
+    ggame_import_dialog_show_error_and_close_wizard(data, "Unable to resolve BoardGameArena import cache path.");
+    return;
+  }
+
+  if (ggame_import_dialog_selected_history_is_cached(data)) {
+    g_debug("Import flow: loading cached BoardGameArena table_id=%s from %s", table_id, cache_path);
+    if (!ggame_import_dialog_load_sgf_path(data, cache_path, &error)) {
+      g_debug("Import flow: failed to load cached BoardGameArena table_id=%s: %s",
+              table_id,
+              error ? error->message : "unknown error");
+      ggame_import_dialog_show_error_and_close_wizard(data, "Unable to load cached BoardGameArena game.");
+      return;
+    }
+    gtk_window_destroy(data->dialog);
+    return;
+  }
+
+  if (data->bga_session == NULL) {
+    g_debug("Import flow: missing BoardGameArena session while importing table_id=%s", table_id);
+    ggame_import_dialog_show_error_and_close_wizard(
+        data,
+        "The BoardGameArena session is no longer available.");
+    return;
+  }
+  if (data->profile == NULL || data->profile->kind != GGAME_APP_KIND_HOMEWORLDS) {
+    ggame_import_dialog_show_error_and_close_wizard(
+        data,
+        "BoardGameArena archive import parsing is only implemented for Homeworlds right now.");
+    return;
+  }
+
+  g_debug("Import flow: fetching BoardGameArena archive logs for table_id=%s", table_id);
+  g_autofree char *debug_path = NULL;
+  BgaHttpResponse response = {0};
+  if (!bga_client_session_fetch_archive_logs(data->bga_session, table_id, &response, &debug_path, &error)) {
+    g_debug("Import flow: failed to fetch BoardGameArena archive logs for table_id=%s: %s",
+            table_id,
+            error ? error->message : "unknown error");
+    ggame_import_dialog_show_error_and_close_wizard(
+        data,
+        "Unable to fetch BoardGameArena archive logs.");
+    bga_http_response_clear(&response);
+    return;
+  }
+
+  g_debug("Import flow: archive logs HTTP status=%ld saved to %s",
+          response.http_status,
+          debug_path ? debug_path : "(null)");
+  g_autofree char *sgf = NULL;
+  if (!bga_client_parse_homeworlds_archive_logs_sgf(response.body ? response.body : "", &sgf, &error)) {
+    g_debug("Import flow: failed to parse BoardGameArena archive logs for table_id=%s: %s",
+            table_id,
+            error ? error->message : "unknown error");
+    ggame_import_dialog_show_error_and_close_wizard(data, "Unable to parse BoardGameArena archive logs.");
+    bga_http_response_clear(&response);
+    return;
+  }
+  bga_http_response_clear(&response);
+
+  if (!g_file_set_contents(cache_path, sgf, -1, &error)) {
+    g_debug("Import flow: failed to store BoardGameArena SGF cache for table_id=%s in %s: %s",
+            table_id,
+            cache_path,
+            error ? error->message : "unknown error");
+    ggame_import_dialog_show_error_and_close_wizard(data, "Unable to store imported BoardGameArena game.");
+    return;
+  }
+
+  if (!ggame_import_dialog_load_sgf_path(data, cache_path, &error)) {
+    g_debug("Import flow: failed to load imported BoardGameArena SGF for table_id=%s from %s: %s",
+            table_id,
+            cache_path,
+            error ? error->message : "unknown error");
+    ggame_import_dialog_show_error_and_close_wizard(data, "Unable to load imported BoardGameArena game.");
+    return;
+  }
+
+  gtk_window_destroy(data->dialog);
 }
 
 static void ggame_window_on_import_dialog_next_clicked(GtkButton * /*button*/, gpointer user_data) {
@@ -254,26 +460,32 @@ static void ggame_window_on_import_dialog_next_clicked(GtkButton * /*button*/, g
 
   g_debug("Import flow: Next clicked at step=%d", (int)data->step);
 
-  if (data->step == GCHECKERS_IMPORT_STEP_SITE) {
-    if (!gcheckers_import_dialog_is_board_game_arena_selected(data)) {
+  if (data->step == GGAME_IMPORT_STEP_SITE) {
+    if (!ggame_import_dialog_is_board_game_arena_selected(data)) {
       g_debug("Import source not implemented yet");
       return;
     }
 
-    data->step = GCHECKERS_IMPORT_STEP_CREDENTIALS;
+    data->step = GGAME_IMPORT_STEP_CREDENTIALS;
     g_debug("Import flow: moving to credentials step");
     ggame_window_import_dialog_update_step(data);
     return;
   }
 
-  if (data->step == GCHECKERS_IMPORT_STEP_HISTORY) {
-    g_debug("Import flow: closing wizard from history step");
-    gtk_window_destroy(data->dialog);
+  if (data->step == GGAME_IMPORT_STEP_HISTORY) {
+    ggame_import_dialog_import_selected_history_game(data);
+    return;
+  }
+
+  if (data->profile == NULL || data->profile->import.board_game_arena_game_id == 0) {
+    g_debug("Import flow: no BoardGameArena import game id configured");
+    ggame_import_dialog_show_error_and_close_wizard(data, "This game does not support BoardGameArena import.");
     return;
   }
 
   g_debug("Import flow: starting BGA login sequence");
-  gcheckers_import_dialog_save_credentials(data);
+  g_clear_pointer(&data->bga_session, bga_client_session_free);
+  ggame_import_dialog_save_credentials(data);
   const char *email = gtk_editable_get_text(GTK_EDITABLE(data->email_entry));
   const char *password = gtk_editable_get_text(GTK_EDITABLE(data->password_entry));
   gboolean remember = gtk_check_button_get_active(data->remember_check);
@@ -286,7 +498,7 @@ static void ggame_window_on_import_dialog_next_clicked(GtkButton * /*button*/, g
   BgaClientSession *session = bga_client_session_new(&error);
   if (session == NULL) {
     g_debug("Failed to initialize BoardGameArena client session: %s", error ? error->message : "unknown error");
-    gcheckers_import_dialog_show_error_and_close_wizard(
+    ggame_import_dialog_show_error_and_close_wizard(
         data,
         "Unable to initialize BoardGameArena session.");
     return;
@@ -295,7 +507,7 @@ static void ggame_window_on_import_dialog_next_clicked(GtkButton * /*button*/, g
   g_autofree char *request_token = NULL;
   if (!bga_client_session_fetch_homepage_and_request_token(session, NULL, &request_token, &error)) {
     g_debug("Failed to fetch BoardGameArena request token: %s", error ? error->message : "unknown error");
-    gcheckers_import_dialog_show_error_and_close_wizard(
+    ggame_import_dialog_show_error_and_close_wizard(
         data,
         "Unable to fetch BoardGameArena request token.");
     bga_client_session_free(session);
@@ -305,7 +517,7 @@ static void ggame_window_on_import_dialog_next_clicked(GtkButton * /*button*/, g
   BgaHttpResponse login_response = {0};
   if (!bga_client_session_login_with_password(session, &credentials, request_token, &login_response, &error)) {
     g_debug("Failed to login to BoardGameArena: %s", error ? error->message : "unknown error");
-    gcheckers_import_dialog_show_error_and_close_wizard(
+    ggame_import_dialog_show_error_and_close_wizard(
         data,
         "Unable to login to BoardGameArena.");
     bga_http_response_clear(&login_response);
@@ -319,7 +531,7 @@ static void ggame_window_on_import_dialog_next_clicked(GtkButton * /*button*/, g
   if (!bga_client_parse_login_response(login_response.body ? login_response.body : "", &parsed, &error)) {
     g_debug("Import flow: failed to parse BoardGameArena login response: %s",
             error ? error->message : "unknown error");
-    gcheckers_import_dialog_show_error_and_close_wizard(
+    ggame_import_dialog_show_error_and_close_wizard(
         data,
         "Unable to parse BoardGameArena login response.");
     bga_http_response_clear(&login_response);
@@ -339,7 +551,7 @@ static void ggame_window_on_import_dialog_next_clicked(GtkButton * /*button*/, g
     } else {
       dialog_text = g_strdup_printf("Login failed.\nMessage: %s", parsed.message ? parsed.message : "(none)");
     }
-    gcheckers_import_dialog_show_error_and_close_wizard(data, dialog_text);
+    ggame_import_dialog_show_error_and_close_wizard(data, dialog_text);
     bga_login_result_clear(&parsed);
     bga_http_response_clear(&login_response);
     bga_client_session_free(session);
@@ -353,40 +565,53 @@ static void ggame_window_on_import_dialog_next_clicked(GtkButton * /*button*/, g
 
   if (history_user_id[0] == '\0') {
     g_debug("Import flow: missing user_id in successful BoardGameArena login response");
-    gcheckers_import_dialog_show_error_and_close_wizard(
+    ggame_import_dialog_show_error_and_close_wizard(
         data,
         "BoardGameArena login succeeded but user_id is missing.");
     bga_client_session_free(session);
     return;
   }
-  g_debug("Import flow: fetching checkers history for user_id=%s", history_user_id);
+  g_debug("Import flow: fetching BoardGameArena game_id=%u history for user_id=%s",
+          data->profile->import.board_game_arena_game_id,
+          history_user_id);
 
   BgaHttpResponse history_response = {0};
-  if (!bga_client_session_fetch_checkers_history(session, history_user_id, &history_response, &error)) {
+  if (!bga_client_session_fetch_game_history(session,
+                                             history_user_id,
+                                             data->profile->import.board_game_arena_game_id,
+                                             &history_response,
+                                             &error)) {
     g_debug("Import flow: failed to fetch BoardGameArena history: %s",
             error ? error->message : "unknown error");
-    gcheckers_import_dialog_show_error_and_close_wizard(
+    g_autofree char *dialog_text =
+        g_strdup_printf("Unable to fetch BoardGameArena %s history.", data->profile->display_name);
+    ggame_import_dialog_show_error_and_close_wizard(
         data,
-        "Unable to fetch BoardGameArena checkers history.");
+        dialog_text);
     bga_http_response_clear(&history_response);
     bga_client_session_free(session);
     return;
   }
-  bga_client_session_free(session);
   g_debug("Import flow: history HTTP status=%ld", history_response.http_status);
 
   g_autoptr(GPtrArray) games = NULL;
-  if (!bga_client_parse_checkers_history_games(history_response.body ? history_response.body : "", &games, &error)) {
+  if (!bga_client_parse_history_games(history_response.body ? history_response.body : "", &games, &error)) {
     g_debug("Import flow: failed to parse BoardGameArena history: %s",
             error ? error->message : "unknown error");
-    gcheckers_import_dialog_show_error_and_close_wizard(
+    g_autofree char *dialog_text =
+        g_strdup_printf("Unable to parse BoardGameArena %s history.", data->profile->display_name);
+    ggame_import_dialog_show_error_and_close_wizard(
         data,
-        "Unable to parse BoardGameArena checkers history.");
+        dialog_text);
     bga_http_response_clear(&history_response);
+    bga_client_session_free(session);
     return;
   }
   bga_http_response_clear(&history_response);
-  g_debug("Import flow: parsed %u checkers games", games->len);
+  g_debug("Import flow: parsed %u BoardGameArena games", games->len);
+
+  data->bga_session = session;
+  session = NULL;
 
   GtkWidget *row = gtk_widget_get_first_child(GTK_WIDGET(data->history_list));
   while (row != NULL) {
@@ -399,24 +624,37 @@ static void ggame_window_on_import_dialog_next_clicked(GtkButton * /*button*/, g
     BgaHistoryGameSummary *summary = g_ptr_array_index(games, i);
     g_return_if_fail(summary != NULL);
 
+    GtkWidget *history_row = gtk_list_box_row_new();
+    g_object_set_data_full(G_OBJECT(history_row), "bga-table-id", g_strdup(summary->table_id), g_free);
+    gboolean cached = ggame_import_dialog_bga_table_is_cached(data, summary->table_id);
+    g_object_set_data(G_OBJECT(history_row), "bga-cached", GINT_TO_POINTER(cached));
+
     GtkWidget *line = gtk_label_new(NULL);
-    g_autofree char *text = g_strdup_printf("%s  |  %s  |  %s vs %s",
+    g_autofree char *text = g_strdup_printf("%s  |  %s  |  %s vs %s%s",
                                             summary->start_at ? summary->start_at : "",
-                                            summary->table_id,
-                                            summary->player_one,
-                                            summary->player_two);
+                                            summary->table_id ? summary->table_id : "",
+                                            summary->player_one ? summary->player_one : "",
+                                            summary->player_two ? summary->player_two : "",
+                                            cached ? " (cached)" : "");
     gtk_label_set_text(GTK_LABEL(line), text);
     gtk_widget_set_halign(line, GTK_ALIGN_START);
-    gtk_list_box_append(data->history_list, line);
+    gtk_list_box_row_set_child(GTK_LIST_BOX_ROW(history_row), line);
+    gtk_list_box_append(data->history_list, history_row);
   }
+  gtk_list_box_unselect_all(data->history_list);
 
-  data->step = GCHECKERS_IMPORT_STEP_HISTORY;
+  data->step = GGAME_IMPORT_STEP_HISTORY;
   ggame_window_import_dialog_update_step(data);
   g_debug("Import flow: switched wizard to history step");
 }
 
 void ggame_window_present_import_dialog(GGameWindow *self) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
+
+  const GGameAppProfile *profile = ggame_active_app_profile();
+  g_return_if_fail(profile != NULL);
+  g_return_if_fail(profile->features.supports_import);
+  g_return_if_fail(profile->import.board_game_arena_game_id > 0);
 
   GtkWidget *dialog = gtk_window_new();
   gtk_window_set_title(GTK_WINDOW(dialog), "Import games");
@@ -444,7 +682,7 @@ void ggame_window_present_import_dialog(GGameWindow *self) {
 
   static const char *site_options[] = {"lidraught", "FlyOrDie", "playOK", "BoardGameArena", NULL};
   GtkDropDown *site_drop_down = GTK_DROP_DOWN(gtk_drop_down_new_from_strings(site_options));
-  gtk_drop_down_set_selected(site_drop_down, GCHECKERS_IMPORT_SITE_BOARDGAMEARENA);
+  gtk_drop_down_set_selected(site_drop_down, GGAME_IMPORT_SITE_BOARDGAMEARENA);
   gtk_box_append(GTK_BOX(site_page), GTK_WIDGET(site_drop_down));
 
   GtkWidget *site_note =
@@ -485,7 +723,9 @@ void ggame_window_present_import_dialog(GGameWindow *self) {
   gtk_box_append(GTK_BOX(credentials_page), GTK_WIDGET(remember_check));
 
   GtkWidget *history_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-  GtkWidget *history_title = gtk_label_new("BoardGameArena checkers history");
+  g_autofree char *history_title_text =
+      g_strdup_printf("BoardGameArena %s history", profile->display_name);
+  GtkWidget *history_title = gtk_label_new(history_title_text);
   gtk_widget_set_halign(history_title, GTK_ALIGN_START);
   gtk_box_append(GTK_BOX(history_page), history_title);
 
@@ -498,6 +738,7 @@ void ggame_window_present_import_dialog(GGameWindow *self) {
   gtk_box_append(GTK_BOX(history_page), history_scroll);
 
   GtkListBox *history_list = GTK_LIST_BOX(gtk_list_box_new());
+  gtk_list_box_set_selection_mode(history_list, GTK_SELECTION_SINGLE);
   gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(history_scroll), GTK_WIDGET(history_list));
 
   gtk_stack_add_named(GTK_STACK(stack), site_page, "site");
@@ -517,6 +758,7 @@ void ggame_window_present_import_dialog(GGameWindow *self) {
 
   GGameWindowImportDialogData *data = g_new0(GGameWindowImportDialogData, 1);
   data->self = g_object_ref(self);
+  data->profile = profile;
   data->dialog = GTK_WINDOW(dialog);
   data->stack = GTK_STACK(stack);
   data->site_drop_down = site_drop_down;
@@ -526,8 +768,8 @@ void ggame_window_present_import_dialog(GGameWindow *self) {
   data->password_entry = password_entry;
   data->remember_check = remember_check;
   data->history_list = history_list;
-  data->settings = gcheckers_import_dialog_create_settings();
-  data->step = GCHECKERS_IMPORT_STEP_SITE;
+  data->settings = ggame_common_settings_create();
+  data->step = profile->import.show_site_step ? GGAME_IMPORT_STEP_SITE : GGAME_IMPORT_STEP_CREDENTIALS;
 
   g_signal_connect(site_drop_down,
                    "notify::selected",
@@ -544,6 +786,10 @@ void ggame_window_present_import_dialog(GGameWindow *self) {
   g_signal_connect(next_button,
                    "clicked",
                    G_CALLBACK(ggame_window_on_import_dialog_next_clicked),
+                   data);
+  g_signal_connect(history_list,
+                   "row-selected",
+                   G_CALLBACK(ggame_window_on_import_dialog_history_row_selected),
                    data);
   g_signal_connect(dialog,
                    "destroy",

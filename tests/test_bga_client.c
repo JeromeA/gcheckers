@@ -1,4 +1,5 @@
 #include <glib.h>
+#include <glib/gstdio.h>
 
 #include "../src/bga_client.h"
 
@@ -101,7 +102,7 @@ static void test_bga_client_parse_login_response_rejects_oversized_status(void) 
   bga_login_result_clear(&result);
 }
 
-static void test_bga_client_parse_checkers_history_games(void) {
+static void test_bga_client_parse_history_games(void) {
   const char *body =
       "{"
       "\"status\":1,"
@@ -123,7 +124,7 @@ static void test_bga_client_parse_checkers_history_games(void) {
   g_autoptr(GPtrArray) games = NULL;
   g_autoptr(GError) error = NULL;
 
-  gboolean ok = bga_client_parse_checkers_history_games(body, &games, &error);
+  gboolean ok = bga_client_parse_history_games(body, &games, &error);
   g_assert_no_error(error);
   g_assert_true(ok);
   g_assert_nonnull(games);
@@ -142,6 +143,67 @@ static void test_bga_client_parse_checkers_history_games(void) {
   g_assert_cmpstr(second->start_at, ==, "2025-11-15 22:36");
   g_assert_cmpstr(second->player_one, ==, "JeromeLon");
   g_assert_cmpstr(second->player_two, ==, "N057r4d4mu5Pi");
+}
+
+static void test_bga_client_save_archive_logs_debug_page(void) {
+  g_autofree char *path = NULL;
+  g_autoptr(GError) error = NULL;
+
+  gboolean ok = bga_client_save_archive_logs_debug_page("716050283/not-file", "<html>archive</html>", &path, &error);
+  g_assert_no_error(error);
+  g_assert_true(ok);
+  g_assert_nonnull(path);
+  g_assert_true(g_str_has_prefix(path, "/tmp/gcheckers-bga-archive-logs-716050283_not-file-"));
+  g_assert_true(g_str_has_suffix(path, ".html"));
+
+  g_autofree char *contents = NULL;
+  g_assert_true(g_file_get_contents(path, &contents, NULL, &error));
+  g_assert_no_error(error);
+  g_assert_cmpstr(contents, ==, "<html>archive</html>");
+
+  g_assert_cmpint(g_remove(path), ==, 0);
+}
+
+static void test_bga_client_archive_generation_detection(void) {
+  const char *waiting_body =
+      "<div class=\"archive-status\">Searching for the game archive. Please wait...</div>";
+  const char *ready_body = "<div class=\"archive-status\">Archive ready</div>";
+  const char *missing_logs_body =
+      "{\"status\":\"0\",\"exception\":\"feException\","
+      "\"error\":\"Cannot find gamenotifs log file of an archived table (reference: MU 28\\/05 11:35:56)\","
+      "\"expected\":0,\"code\":100,\"args\":null}";
+
+  g_assert_true(bga_client_archive_review_is_waiting_for_generation(waiting_body));
+  g_assert_false(bga_client_archive_review_is_waiting_for_generation(ready_body));
+  g_assert_true(bga_client_archive_logs_error_needs_generation(missing_logs_body));
+  g_assert_false(bga_client_archive_logs_error_needs_generation("{\"status\":1,\"data\":{\"logs\":[]}}"));
+}
+
+static void test_bga_client_parse_homeworlds_archive_logs_sgf(void) {
+  g_autofree char *body = NULL;
+  g_autoptr(GError) error = NULL;
+  gboolean loaded = g_file_get_contents("tests/fixtures/bga-homeworlds-archive-logs-716050283.json",
+                                        &body,
+                                        NULL,
+                                        &error);
+  g_assert_no_error(error);
+  g_assert_true(loaded);
+
+  g_autofree char *sgf = NULL;
+  gboolean parsed = bga_client_parse_homeworlds_archive_logs_sgf(body, &sgf, &error);
+  g_assert_no_error(error);
+  g_assert_true(parsed);
+  g_assert_nonnull(sgf);
+
+  g_assert_true(g_str_has_prefix(sgf,
+                                 "(;AP[gcheckers]CA[UTF-8]FF[4]GM[40]PB[SenetMaster]PW[JeromeLon]"
+                                 ";B[G3Y2b3];W[Y1B2g3]"));
+  g_assert_nonnull(g_strstr_len(sgf, -1, ";B[H1b1>S0(G1)]"));
+  g_assert_nonnull(g_strstr_len(sgf, -1, ";W[H2b1>S1(G3)]"));
+  g_assert_nonnull(g_strstr_len(sgf, -1, ";W[S2b2- H2r1=y pass]"));
+  g_assert_null(g_strstr_len(sgf, -1, "H2g3- H2g+ H2y+ H2g+"));
+  g_assert_nonnull(g_strstr_len(sgf, -1, ";W[H2y+]"));
+  g_assert_nonnull(g_strstr_len(sgf, -1, ";B[H2g+ H2g!]"));
 }
 
 static void test_bga_client_live_login_logs_response(void) {
@@ -205,6 +267,56 @@ static void test_bga_client_live_login_logs_response(void) {
   bga_client_session_free(session);
 }
 
+static void test_bga_client_live_archive_logs_fetch_sequence(void) {
+  const char *username = g_getenv("GCHECKERS_BGA_USERNAME");
+  const char *password = g_getenv("GCHECKERS_BGA_PASSWORD");
+  const char *table_id = g_getenv("GCHECKERS_BGA_TABLE_ID");
+  if (username == NULL || *username == '\0' ||
+      password == NULL || *password == '\0' ||
+      table_id == NULL || *table_id == '\0') {
+    g_test_skip("Set GCHECKERS_BGA_USERNAME, GCHECKERS_BGA_PASSWORD, and GCHECKERS_BGA_TABLE_ID to run live test.");
+    return;
+  }
+
+  g_autoptr(GError) error = NULL;
+  BgaClientSession *session = bga_client_session_new(&error);
+  g_assert_no_error(error);
+  g_assert_nonnull(session);
+
+  g_autofree char *request_token = NULL;
+  gboolean fetched = bga_client_session_fetch_homepage_and_request_token(session, NULL, &request_token, &error);
+  g_assert_no_error(error);
+  g_assert_true(fetched);
+
+  BgaCredentials credentials = {
+    .username = username,
+    .password = password,
+    .remember_me = TRUE,
+  };
+  BgaHttpResponse login_response = {0};
+  gboolean logged_in =
+      bga_client_session_login_with_password(session, &credentials, request_token, &login_response, &error);
+  g_assert_no_error(error);
+  g_assert_true(logged_in);
+  bga_http_response_clear(&login_response);
+
+  g_autofree char *debug_path = NULL;
+  BgaHttpResponse logs_response = {0};
+  gboolean imported =
+      bga_client_session_fetch_archive_logs(session, table_id, &logs_response, &debug_path, &error);
+  g_assert_no_error(error);
+  g_assert_true(imported);
+  g_assert_cmpint(logs_response.http_status, >=, 200);
+  g_assert_cmpint(logs_response.http_status, <, 300);
+  g_assert_nonnull(debug_path);
+  g_assert_nonnull(logs_response.body);
+  g_assert_false(g_strrstr(logs_response.body, "\"status\":\"0\"") != NULL);
+  g_print("BGA archive logs saved to: %s\n", debug_path);
+
+  bga_http_response_clear(&logs_response);
+  bga_client_session_free(session);
+}
+
 int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
 
@@ -221,8 +333,13 @@ int main(int argc, char **argv) {
                   test_bga_client_parse_login_response_success_true);
   g_test_add_func("/bga-client/parse-login-response-rejects-oversized-status",
                   test_bga_client_parse_login_response_rejects_oversized_status);
-  g_test_add_func("/bga-client/parse-checkers-history-games",
-                  test_bga_client_parse_checkers_history_games);
+  g_test_add_func("/bga-client/parse-history-games", test_bga_client_parse_history_games);
+  g_test_add_func("/bga-client/save-archive-logs-debug-page", test_bga_client_save_archive_logs_debug_page);
+  g_test_add_func("/bga-client/archive-generation-detection", test_bga_client_archive_generation_detection);
+  g_test_add_func("/bga-client/parse-homeworlds-archive-logs-sgf",
+                  test_bga_client_parse_homeworlds_archive_logs_sgf);
   g_test_add_func("/bga-client/live-login-logs-response", test_bga_client_live_login_logs_response);
+  g_test_add_func("/bga-client/live-archive-logs-fetch-sequence",
+                  test_bga_client_live_archive_logs_fetch_sequence);
   return g_test_run();
 }

@@ -23,7 +23,8 @@ Module: runtime app-profile registry and descriptors.
 Role: describe each branded target, including app ID, display strings, optional app-specific settings schema ID, the
 profile-owned
 `GameBackend *`, feature flags, derived helpers such as puzzle-catalog support, shared-window layout and computer-depth
-defaults, and an optional board-host hook. Launchers select one of these profiles at startup, and
+defaults, BoardGameArena import metadata, and an optional board-host hook. Launchers select one of these profiles at
+startup, and
 `ggame_active_app_profile()`
 exposes the chosen profile to shared code. Profiles do not get a custom-window hook; the menu bar, toolbar, SGF
 controller, and drawer actions are always owned by the generic application window. Board-host creation receives shared
@@ -139,7 +140,9 @@ branch.
 Top-level menu actions are
 also exposed in a toolbar
 (`New game...`, `Force move`, SGF timeline rewind/step/skip/delete actions, and analysis actions) via GTK actions.
-Owns modal flows for `New game` and `Import games` wizards.
+The shared menubar owns a generic `Edit` submenu after `File`; `Game information...` edits the SGF root `PB`/`PW`
+player-name properties using backend side labels, and `Delete node` lives there as the common SGF tree-edit action.
+Owns modal flows for `New game`, `Game information`, and `Import games` wizards.
 `New game` now builds its optional `Variant` dropdown and summary label from the active backend metadata rather than
 hard-coding checkers names in the dialog. `GGameWindow`'s public new-game and puzzle APIs now take backend variants,
 while `window.c` keeps the current checkers-only ruleset mapping private. Side labels (`White`/`Black` today) and
@@ -147,10 +150,18 @@ variant display text come from the backend. When a backend exposes no variants, 
 the current game setup. The modal remains
 non-resizable and renders the summary as a single-line ellipsized label so variant switches do not change dialog
 height or leave extra blank space below the action buttons.
-Import wizard persists BoardGameArena email/password and remember flag with `GSettings` when fetching history, and
-prefills credentials on the credentials step from stored values. Parsed login responses drive in-memory result
-handling; status/error responses trigger an error dialog and close the wizard. Successful login advances to a history
-step that lists checkers games as `table_id` + `player_one vs player_two`.
+Import wizard persists BoardGameArena email/password and remember flag in the common per-profile `ggame` settings
+schema when fetching history, and prefills credentials on the credentials step from stored values. Parsed login
+responses drive in-memory result handling; status/error responses trigger an error dialog and close the wizard.
+Successful login advances to a history step that lists games as `table_id` + `player_one vs player_two`, marking rows
+with `(cached)` when the selected profile already has an imported SGF for that table id under the user data import
+cache. Selecting an uncached row enables `Import`, which first opens that table's BoardGameArena game-review page in
+the same session, fetches the archive logs as the review page's XHR does, converts the logs to Homeworlds SGF, writes
+the SGF into the import cache with BGA player names stored as root `PB`/`PW`, and loads it through the shared SGF
+controller. Selecting a cached row changes the button to `Load` and loads the cached SGF without another network fetch.
+Checkers keeps the first import-site selection
+step because its old source list still exists; Boop and Homeworlds skip directly to BoardGameArena credentials because
+their profiles only expose BoardGameArena import.
 Import fetch flow for BoardGameArena uses a dedicated libcurl client: GET home page, extract `requestToken`, then
 POST `loginUserWithPassword.html` with username/password/remember/request token and logs the HTTP/body result.
 Default panel widths come from the active profile, with `500/300/300` as the checkers baseline. Profiles can also set a
@@ -441,13 +452,25 @@ Module: BoardGameArena login HTTP client.
 Role: perform libcurl requests to fetch `requestToken` from `https://en.boardgamearena.com/`, then submit
 `username`/`password`/`remember_me`/`request_token` to
 `https://en.boardgamearena.com/account/auth/loginUserWithPassword.html`, then prefetch
-`https://boardgamearena.com/gamestats?...` and refresh `requestToken` from that page before fetching checkers history
-from `https://boardgamearena.com/gamestats/gamestats/getGames.html` for the authenticated user/session.
-All BoardGameArena HTTP response bodies are saved to `/tmp/gcheckers-bga-*.txt` for debugging.
+`https://boardgamearena.com/gamestats?...` with the active profile's BoardGameArena game id and refresh `requestToken`
+from that page before fetching that game's history from `https://boardgamearena.com/gamestats/gamestats/getGames.html`
+for the authenticated user/session. To import a selected history table, the same session first opens
+`https://boardgamearena.com/table?table=...`, refreshes that table template as an XHR, refreshes
+`https://boardgamearena.com/gamereview?table=...` as an XHR, and calls
+`gamereview/gamereview/requestTableArchive.html` when the review template says BGA is still searching for the archive.
+It then fetches `https://boardgamearena.com/archive/archive/logs.html?table=...&translated=true&dojo.preventCache=...`
+with `X-Requested-With: XMLHttpRequest`, the game-review page as `Referer`, and the current request token when
+available. If the logs endpoint still reports a missing `gamenotifs` archive file, the client requests archive
+generation and retries once. The returned HTML is saved under `/tmp/gcheckers-bga-archive-logs-*.html`. Homeworlds
+archive parsing scans BGA notification objects, maps BGA system ids to the current text notation (`H1`, `H2`, `S0`,
+...), discards restarted turn attempts, preserves explicit sacrifice filler passes, and emits a normal SGF tree.
+Imported SGFs are cached under the writable user data area in a BoardGameArena import subdirectory keyed by active
+profile id and table id.
+All BoardGameArena HTTP response bodies are also saved to `/tmp/gcheckers-bga-*.txt` for debugging.
 History parsing extracts each table's `table_id`, start timestamp (rendered as `YYYY-MM-DD HH:MM`, UTC), and trimmed
 player names. Numeric JSON fields are parsed with explicit range checks before narrowing to local integer types, and
 HTTP response buffering rejects impossible libcurl chunk sizes before appending response bytes.
-Collaborates with: import dialog flow for "Fetch game history" and `tests/test_bga_client.c` (token/login/history
+Collaborates with: import dialog flow for "Fetch game history" and `tests/test_bga_client.c` (token/login/history/log
 parsing + live login smoke test with env-provided credentials).
 
 ## Puzzle generator CLI (`src/create_puzzles.c`, `src/create_puzzles_launcher.c`, `src/create_puzzles_profile.c`)
@@ -624,8 +647,9 @@ connectivity-aware reachability-row placement between the two homeworlds that on
 disconnected row groups, measured-width row packing that reserves the bank footprint and expands inside a scroller only
 when needed, viewport-tracking drawing-area content size that expands width for crowded rows and height for vertically
 crowded row boxes, mapped-frame ticks that recheck startup allocation without replacing stable click targets, a fixed
-minimum board viewport, `H1`/`H2`/`S0`-style system labels matching move notation, pipped square stars, tall pipped
-ship pyramids, overlaid compact bank piles with a shared base button style, an in-panel title, staged legal-choice
+minimum board viewport, `H1`/`H2`/`S0`-style system labels matching move notation, homeworld board titles that append
+root `PB`/`PW` player names when present, pipped square stars, tall pipped ship pyramids, overlaid compact bank piles
+with a shared base button style, an in-panel title, staged legal-choice
 buttons, and catastrophe buttons that stage normal symbolic steps into the
 current move so SGF, model state, and the last-move label stay synchronized. Homeworld rendering keeps player 1 at the
 bottom, player 2 at
