@@ -845,7 +845,7 @@ static GtkWidget *ggame_library_new_grid_row(const GGameLibraryEntry *entry) {
   gtk_widget_set_margin_start(grid, 6);
   gtk_widget_set_margin_end(grid, 6);
 
-  gtk_grid_attach(GTK_GRID(grid), ggame_library_new_cell(entry->date, FALSE, 92), 0, 0, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), ggame_library_new_cell(entry->date, FALSE, 128), 0, 0, 1, 1);
   gtk_grid_attach(GTK_GRID(grid), ggame_library_new_cell(entry->player_one, FALSE, 140), 1, 0, 1, 1);
   gtk_grid_attach(GTK_GRID(grid), ggame_library_new_cell(entry->player_two, FALSE, 140), 2, 0, 1, 1);
   gtk_grid_attach(GTK_GRID(grid), ggame_library_new_cell(entry->winner, FALSE, 120), 3, 0, 1, 1);
@@ -861,7 +861,7 @@ static GtkWidget *ggame_library_new_header_row(void) {
   gtk_widget_set_margin_start(grid, 6);
   gtk_widget_set_margin_end(grid, 6);
 
-  gtk_grid_attach(GTK_GRID(grid), ggame_library_new_cell("Date", TRUE, 92), 0, 0, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), ggame_library_new_cell("Date/time", TRUE, 128), 0, 0, 1, 1);
   gtk_grid_attach(GTK_GRID(grid), ggame_library_new_cell("Player 1", TRUE, 140), 1, 0, 1, 1);
   gtk_grid_attach(GTK_GRID(grid), ggame_library_new_cell("Player 2", TRUE, 140), 2, 0, 1, 1);
   gtk_grid_attach(GTK_GRID(grid), ggame_library_new_cell("Winner", TRUE, 120), 3, 0, 1, 1);

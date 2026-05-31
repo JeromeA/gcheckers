@@ -2095,7 +2095,7 @@ void ggame_window_present_game_information_dialog(GGameWindow *self) {
                                                 &data->player_entries[side]);
   }
   ggame_window_new_game_information_entry_row(GTK_GRID(grid),
-                                              "Date",
+                                              "Date/time",
                                               "game-information-date-entry",
                                               sgf_node_get_property_first(root, GGAME_SGF_PROP_DATE),
                                               row++,

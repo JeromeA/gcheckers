@@ -1451,6 +1451,7 @@ static void test_ggame_window_game_information_dialog_updates_player_names(void)
 
   GtkWindow *dialog = test_ggame_window_find_toplevel_by_title("Game information");
   g_assert_nonnull(dialog);
+  g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "Date/time"));
 
   GtkWidget *white_entry = test_ggame_window_find_widget_named(GTK_WIDGET(dialog),
                                                               "game-information-player-0-entry");
@@ -1469,7 +1470,7 @@ static void test_ggame_window_game_information_dialog_updates_player_names(void)
   g_assert_true(GTK_IS_ENTRY(winner_entry));
   gtk_editable_set_text(GTK_EDITABLE(white_entry), "Alice");
   gtk_editable_set_text(GTK_EDITABLE(black_entry), "Bob");
-  gtk_editable_set_text(GTK_EDITABLE(date_entry), "2025-08-18");
+  gtk_editable_set_text(GTK_EDITABLE(date_entry), "2025-08-18 03:01");
   gtk_editable_set_text(GTK_EDITABLE(table_id_entry), "716050283");
   gtk_editable_set_text(GTK_EDITABLE(winner_entry), "Alice");
 
@@ -1483,7 +1484,7 @@ static void test_ggame_window_game_information_dialog_updates_player_names(void)
   const SgfNode *root = sgf_tree_get_root(tree);
   g_assert_cmpstr(sgf_node_get_property_first(root, "PW"), ==, "Alice");
   g_assert_cmpstr(sgf_node_get_property_first(root, "PB"), ==, "Bob");
-  g_assert_cmpstr(sgf_node_get_property_first(root, GGAME_SGF_PROP_DATE), ==, "2025-08-18");
+  g_assert_cmpstr(sgf_node_get_property_first(root, GGAME_SGF_PROP_DATE), ==, "2025-08-18 03:01");
   g_assert_cmpstr(sgf_node_get_property_first(root, GGAME_SGF_PROP_BGA_TABLE_ID), ==, "716050283");
   g_assert_cmpstr(sgf_node_get_property_first(root, GGAME_SGF_PROP_RESULT), ==, "Alice");
   g_assert_null(test_ggame_window_find_toplevel_by_title("Game information"));
@@ -2511,7 +2512,7 @@ static void test_ggame_window_library_loads_imported_game(void) {
   g_assert_cmpint(g_mkdir_with_parents(profile_dir, 0755), ==, 0);
   g_autofree char *path = g_build_filename(profile_dir, "716050283.sgf", NULL);
   const char *content =
-      "(;FF[4]CA[UTF-8]AP[gcheckers]GM[40]RU[international]DT[2025-08-18]"
+      "(;FF[4]CA[UTF-8]AP[gcheckers]GM[40]RU[international]DT[2025-08-18 03:01]"
       "PB[SenetMaster]PW[JeromeLon]RE[SenetMaster]GCBT[716050283])";
   g_assert_true(g_file_set_contents(path, content, -1, &error));
   g_assert_no_error(error);
@@ -2528,12 +2529,12 @@ static void test_ggame_window_library_loads_imported_game(void) {
   GtkWindow *dialog = test_ggame_window_find_toplevel_by_title("Library");
   g_assert_nonnull(dialog);
   g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "Imported games"));
-  g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "Date"));
+  g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "Date/time"));
   g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "Player 1"));
   g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "Player 2"));
   g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "Winner"));
   g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "Table ID"));
-  g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "2025-08-18"));
+  g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "2025-08-18 03:01"));
   g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "SenetMaster"));
   g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "JeromeLon"));
   g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "716050283"));
@@ -2556,7 +2557,7 @@ static void test_ggame_window_library_loads_imported_game(void) {
   GGameSgfController *controller = ggame_window_get_sgf_controller(window);
   SgfTree *tree = ggame_sgf_controller_get_tree(controller);
   const SgfNode *root = sgf_tree_get_root(tree);
-  g_assert_cmpstr(sgf_node_get_property_first(root, GGAME_SGF_PROP_DATE), ==, "2025-08-18");
+  g_assert_cmpstr(sgf_node_get_property_first(root, GGAME_SGF_PROP_DATE), ==, "2025-08-18 03:01");
   g_assert_cmpstr(sgf_node_get_property_first(root, "PB"), ==, "SenetMaster");
   g_assert_cmpstr(sgf_node_get_property_first(root, "PW"), ==, "JeromeLon");
   g_assert_cmpstr(sgf_node_get_property_first(root, GGAME_SGF_PROP_RESULT), ==, "SenetMaster");

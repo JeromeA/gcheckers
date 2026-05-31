@@ -226,7 +226,7 @@ static char *bga_client_format_sgf_date(const char *unix_text) {
     return NULL;
   }
 
-  return g_date_time_format(timestamp, "%Y-%m-%d");
+  return g_date_time_format(timestamp, "%Y-%m-%d %H:%M");
 }
 
 static char *bga_client_strdup_stripped(const char *text) {

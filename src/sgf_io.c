@@ -17,7 +17,8 @@
  *               : application identifier.
  * - GM[40]      : game id marker used by gcheckers for checkers/draughts.
  * - RU[short]   : gcheckers ruleset short name, e.g. international or american.
- * - DT[date]    : game date, usually imported from the remote table start date.
+ * - DT[date/time]
+ *               : game date and time, usually imported from the remote table start timestamp.
  * - PB[name]    : black-side player name.
  * - PW[name]    : white-side player name.
  * - RE[result]  : result or winner label.

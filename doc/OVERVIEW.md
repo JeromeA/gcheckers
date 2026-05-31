@@ -168,8 +168,8 @@ cached table ids. Selecting an uncached row enables
 as the review page's XHR does, converts the logs to Homeworlds SGF, writes the SGF into the import cache with BGA
 player names and metadata stored as root `PB`/`PW`, `DT`, `RE`, and `GCBT`, and loads it through the shared SGF
 controller. Selecting a cached row changes the button to `Load` and loads the cached SGF without another network fetch.
-The Library dialog scans that same per-profile import cache, displays date, players, winner, and BoardGameArena table
-id in columns, and loads the selected cached SGF.
+The Library dialog scans that same per-profile import cache, displays date/time, players, winner, and BoardGameArena
+table id in columns, and loads the selected cached SGF.
 Checkers keeps the first import-site selection
 step because its old source list still exists; Boop and Homeworlds skip directly to BoardGameArena credentials because
 their profiles only expose BoardGameArena import.
@@ -233,7 +233,7 @@ lets boop disambiguate between confirming a single-kitten graduation and continu
 ## SGF metadata constants (`src/sgf_metadata.h`)
 Module: shared SGF root metadata property names.
 Role: centralize non-move SGF property identifiers used across import, save/load, and game-information editing.
-Defines `DT` for the game date, `RE` for the winner/result text, and `GCBT` for the BoardGameArena table id.
+Defines `DT` for the game date/time, `RE` for the winner/result text, and `GCBT` for the BoardGameArena table id.
 Collaborates with: `src/bga_client.c`, `src/import_dialog.c`, `src/window.c`, and `src/sgf_io.c`.
 
 ## `AnalysisGraph` (`src/analysis_graph.c`, `src/analysis_graph.h`)
@@ -485,7 +485,7 @@ available. If the logs endpoint still reports a missing `gamenotifs` archive fil
 generation and retries once. The returned HTML is saved under `/tmp/gcheckers-bga-archive-logs-*.html`. Homeworlds
 archive parsing scans BGA notification objects, maps BGA system ids to the current text notation (`H1`, `H2`, `S0`,
 ...), discards restarted turn attempts, preserves explicit sacrifice filler passes, and emits a normal SGF tree with
-BGA date, player names, winner, and table id stored in root metadata.
+BGA date/time, player names, winner, and table id stored in root metadata.
 Imported SGFs are cached under the writable user data area in a BoardGameArena import subdirectory keyed by active
 profile id and table id.
 All BoardGameArena HTTP response bodies are also saved to `/tmp/gcheckers-bga-*.txt` for debugging.

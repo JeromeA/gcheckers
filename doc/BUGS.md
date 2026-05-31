@@ -1332,3 +1332,11 @@ the history list and could not be selected.
 The fix walks subsequent `getGames.html?page=N` pages with `updateStats=0`, deduplicating table ids and treating an
 empty `tables` page as the normal end of pagination. History rows are cached per profile. Refreshes stop when they hit
 a cached table id or the 10-page batch limit, and the history page exposes `More...` to fetch the next 10-page batch.
+
+## BoardGameArena imported games lost their start time in SGF metadata
+
+BGA history rows include start timestamps, but imported SGFs stored only the calendar date in `DT`. The game
+information dialog and library therefore could not show or edit the precise imported start time.
+
+The fix writes imported `DT` metadata as `YYYY-MM-DD HH:MM` in UTC, keeps the full value editable in the game
+information dialog, and shows the full date/time value in the library.

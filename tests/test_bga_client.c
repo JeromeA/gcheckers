@@ -226,7 +226,7 @@ static void test_bga_client_parse_homeworlds_archive_logs_sgf(void) {
   g_assert_nonnull(sgf);
 
   g_assert_true(g_str_has_prefix(sgf,
-                                 "(;AP[gcheckers]CA[UTF-8]FF[4]GM[40]DT[2025-08-18]GCBT[716050283]"
+                                 "(;AP[gcheckers]CA[UTF-8]FF[4]GM[40]DT[2025-08-18 03:01]GCBT[716050283]"
                                  "PB[SenetMaster]PW[JeromeLon]RE[SenetMaster]"
                                  ";B[G3Y2b3];W[Y1B2g3]"));
   g_assert_nonnull(g_strstr_len(sgf, -1, ";B[H1b1>S0(G1)]"));
