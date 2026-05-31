@@ -2424,6 +2424,7 @@ static void test_ggame_window_import_wizard_flow(void) {
 
 static void test_ggame_window_import_wizard_uses_cached_history(void) {
   ggame_import_dialog_test_clear_bga_session_cache();
+  ggame_import_dialog_test_set_auto_history_refresh_enabled(FALSE);
   g_autoptr(GError) error = NULL;
   g_autofree char *cache_root = g_dir_make_tmp("gcheckers-window-import-cache-XXXXXX", &error);
   g_assert_no_error(error);
@@ -2435,6 +2436,7 @@ static void test_ggame_window_import_wizard_uses_cached_history(void) {
                                             "2025-12-02 17:31",
                                             "Alice",
                                             "Bob");
+  g_assert_cmpuint(ggame_import_dialog_test_count_bga_history_cache("checkers"), ==, 1);
 
   GtkApplication *app = test_ggame_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
@@ -2459,6 +2461,11 @@ static void test_ggame_window_import_wizard_uses_cached_history(void) {
   g_assert_true(GTK_IS_BUTTON(reload));
   g_assert_true(gtk_widget_get_sensitive(reload));
 
+  GtkWidget *more = test_ggame_window_find_widget_named(GTK_WIDGET(dialog), "import-history-more-button");
+  g_assert_true(GTK_IS_BUTTON(more));
+  g_assert_true(gtk_widget_get_visible(more));
+  g_assert_true(gtk_widget_get_sensitive(more));
+
   GtkButton *import_button = test_ggame_window_find_button_with_label(GTK_WIDGET(dialog), "Import");
   GtkWidget *list = test_ggame_window_find_by_type(GTK_WIDGET(dialog), GTK_TYPE_LIST_BOX);
   GtkListBoxRow *row = test_ggame_window_find_first_list_box_row(GTK_WIDGET(dialog));
@@ -2477,6 +2484,7 @@ static void test_ggame_window_import_wizard_uses_cached_history(void) {
   g_assert_null(test_ggame_window_find_toplevel_by_title("Import games"));
 
   ggame_import_dialog_test_clear_bga_session_cache();
+  ggame_import_dialog_test_set_auto_history_refresh_enabled(TRUE);
   g_unsetenv("GCHECKERS_BGA_IMPORT_DIR");
   g_clear_object(&window);
   g_clear_object(&model);

@@ -12,6 +12,8 @@
 
 #define GGAME_IMPORT_BGA_CACHE_ENV "GCHECKERS_BGA_IMPORT_DIR"
 #define GGAME_IMPORT_BGA_CACHE_SUBDIR "bga-imports"
+#define GGAME_IMPORT_BGA_HISTORY_CACHE_FILE "history.ini"
+#define GGAME_IMPORT_BGA_HISTORY_PAGE_BATCH_SIZE 10
 
 typedef enum {
   GGAME_IMPORT_SITE_LIDRAUGHT = 0,
@@ -30,6 +32,8 @@ typedef struct {
   BgaClientSession *session;
   char *user_id;
   GPtrArray *history_games;
+  guint history_next_page;
+  gboolean history_more_available;
 } GGameBgaImportSessionCache;
 
 typedef struct {
@@ -42,6 +46,7 @@ typedef struct {
   GtkButton *back_button;
   GtkButton *next_button;
   GtkButton *reload_button;
+  GtkButton *more_button;
   GtkEntry *email_entry;
   GtkEntry *password_entry;
   GtkCheckButton *remember_check;
@@ -68,6 +73,15 @@ typedef struct {
 } GGameWindowLibraryDialogData;
 
 static GHashTable *bga_import_session_caches = NULL;
+#ifdef GGAME_TESTING
+static gboolean bga_import_dialog_test_auto_history_refresh_enabled = TRUE;
+#endif
+
+static gboolean ggame_import_dialog_save_bga_history_cache_for_profile(const GGameAppProfile *profile,
+                                                                       GPtrArray *games,
+                                                                       GError **error);
+static GPtrArray *ggame_import_dialog_load_bga_history_cache_for_profile(const GGameAppProfile *profile,
+                                                                         GError **error);
 
 static BgaHistoryGameSummary *ggame_bga_history_game_summary_copy(const BgaHistoryGameSummary *summary) {
   g_return_val_if_fail(summary != NULL, NULL);
@@ -91,6 +105,80 @@ static GPtrArray *ggame_bga_history_games_copy(GPtrArray *games) {
     }
   }
   return copy;
+}
+
+static gboolean ggame_bga_history_games_contains_table_id(GPtrArray *games, const char *table_id) {
+  g_return_val_if_fail(games != NULL, FALSE);
+  g_return_val_if_fail(table_id != NULL, FALSE);
+
+  for (guint i = 0; i < games->len; ++i) {
+    BgaHistoryGameSummary *summary = g_ptr_array_index(games, i);
+    if (summary != NULL && g_strcmp0(summary->table_id, table_id) == 0) {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+static GHashTable *ggame_bga_history_games_table_id_set(GPtrArray *games) {
+  g_return_val_if_fail(games != NULL, NULL);
+
+  GHashTable *table_ids = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  for (guint i = 0; i < games->len; ++i) {
+    BgaHistoryGameSummary *summary = g_ptr_array_index(games, i);
+    if (summary != NULL && summary->table_id != NULL && summary->table_id[0] != '\0') {
+      g_hash_table_add(table_ids, g_strdup(summary->table_id));
+    }
+  }
+  return table_ids;
+}
+
+static GPtrArray *ggame_bga_history_games_merge_new_then_cached(GPtrArray *new_games, GPtrArray *cached_games) {
+  g_return_val_if_fail(new_games != NULL, NULL);
+  g_return_val_if_fail(cached_games != NULL, NULL);
+
+  GPtrArray *merged = g_ptr_array_new_with_free_func((GDestroyNotify)bga_history_game_summary_free);
+  for (guint i = 0; i < new_games->len; ++i) {
+    BgaHistoryGameSummary *summary = g_ptr_array_index(new_games, i);
+    if (summary != NULL && summary->table_id != NULL && summary->table_id[0] != '\0' &&
+        !ggame_bga_history_games_contains_table_id(merged, summary->table_id)) {
+      g_ptr_array_add(merged, ggame_bga_history_game_summary_copy(summary));
+    }
+  }
+  for (guint i = 0; i < cached_games->len; ++i) {
+    BgaHistoryGameSummary *summary = g_ptr_array_index(cached_games, i);
+    if (summary != NULL && summary->table_id != NULL && summary->table_id[0] != '\0' &&
+        !ggame_bga_history_games_contains_table_id(merged, summary->table_id)) {
+      g_ptr_array_add(merged, ggame_bga_history_game_summary_copy(summary));
+    }
+  }
+  return merged;
+}
+
+static void ggame_bga_history_games_append_or_replace(GPtrArray *destination, GPtrArray *source) {
+  g_return_if_fail(destination != NULL);
+  g_return_if_fail(source != NULL);
+
+  for (guint source_index = 0; source_index < source->len; ++source_index) {
+    BgaHistoryGameSummary *source_summary = g_ptr_array_index(source, source_index);
+    if (source_summary == NULL || source_summary->table_id == NULL || source_summary->table_id[0] == '\0') {
+      continue;
+    }
+
+    gboolean replaced = FALSE;
+    for (guint destination_index = 0; destination_index < destination->len; ++destination_index) {
+      BgaHistoryGameSummary *destination_summary = g_ptr_array_index(destination, destination_index);
+      if (destination_summary != NULL && g_strcmp0(destination_summary->table_id, source_summary->table_id) == 0) {
+        g_ptr_array_remove_index(destination, destination_index);
+        g_ptr_array_insert(destination, destination_index, ggame_bga_history_game_summary_copy(source_summary));
+        replaced = TRUE;
+        break;
+      }
+    }
+    if (!replaced) {
+      g_ptr_array_add(destination, ggame_bga_history_game_summary_copy(source_summary));
+    }
+  }
 }
 
 static void ggame_bga_import_session_cache_free(gpointer data) {
@@ -131,10 +219,16 @@ static gboolean ggame_bga_import_session_cache_has_history(const GGameBgaImportS
          cache->history_games != NULL;
 }
 
+static gboolean ggame_bga_import_session_cache_has_session(const GGameBgaImportSessionCache *cache) {
+  return cache != NULL && cache->session != NULL && cache->user_id != NULL && cache->user_id[0] != '\0';
+}
+
 static void ggame_bga_import_session_cache_store(GGameBgaImportSessionCache *cache,
                                                  BgaClientSession *session,
                                                  const char *user_id,
-                                                 GPtrArray *history_games) {
+                                                 GPtrArray *history_games,
+                                                 guint history_next_page,
+                                                 gboolean history_more_available) {
   g_return_if_fail(cache != NULL);
   g_return_if_fail(session != NULL);
   g_return_if_fail(user_id != NULL);
@@ -148,19 +242,31 @@ static void ggame_bga_import_session_cache_store(GGameBgaImportSessionCache *cac
   cache->user_id = g_strdup(user_id);
   g_clear_pointer(&cache->history_games, g_ptr_array_unref);
   cache->history_games = ggame_bga_history_games_copy(history_games);
+  cache->history_next_page = history_next_page;
+  cache->history_more_available = history_more_available;
 }
 
-static void ggame_bga_import_session_cache_store_history(GGameBgaImportSessionCache *cache, GPtrArray *history_games) {
+static void ggame_bga_import_session_cache_store_history(GGameBgaImportSessionCache *cache,
+                                                         GPtrArray *history_games,
+                                                         guint history_next_page,
+                                                         gboolean history_more_available) {
   g_return_if_fail(cache != NULL);
   g_return_if_fail(history_games != NULL);
 
   g_clear_pointer(&cache->history_games, g_ptr_array_unref);
   cache->history_games = ggame_bga_history_games_copy(history_games);
+  cache->history_next_page = history_next_page;
+  cache->history_more_available = history_more_available;
 }
 
 #ifdef GGAME_TESTING
 void ggame_import_dialog_test_clear_bga_session_cache(void) {
   g_clear_pointer(&bga_import_session_caches, g_hash_table_unref);
+  bga_import_dialog_test_auto_history_refresh_enabled = TRUE;
+}
+
+void ggame_import_dialog_test_set_auto_history_refresh_enabled(gboolean enabled) {
+  bga_import_dialog_test_auto_history_refresh_enabled = enabled;
 }
 
 void ggame_import_dialog_test_seed_bga_history(const char *profile_id,
@@ -192,7 +298,30 @@ void ggame_import_dialog_test_seed_bga_history(const char *profile_id,
   summary->player_one = g_strdup(player_one != NULL ? player_one : "");
   summary->player_two = g_strdup(player_two != NULL ? player_two : "");
   g_ptr_array_add(games, summary);
-  ggame_bga_import_session_cache_store(cache, session, "test-user", games);
+  ggame_bga_import_session_cache_store(cache, session, "test-user", games, 2, TRUE);
+
+  const GGameAppProfile *profile = ggame_app_profile_lookup_by_id(profile_id);
+  if (profile != NULL) {
+    g_autoptr(GError) error = NULL;
+    if (!ggame_import_dialog_save_bga_history_cache_for_profile(profile, games, &error)) {
+      g_debug("Unable to seed BGA history cache for tests: %s", error != NULL ? error->message : "unknown");
+    }
+  }
+}
+
+guint ggame_import_dialog_test_count_bga_history_cache(const char *profile_id) {
+  g_return_val_if_fail(profile_id != NULL, 0);
+
+  const GGameAppProfile *profile = ggame_app_profile_lookup_by_id(profile_id);
+  g_return_val_if_fail(profile != NULL, 0);
+
+  g_autoptr(GError) error = NULL;
+  g_autoptr(GPtrArray) games = ggame_import_dialog_load_bga_history_cache_for_profile(profile, &error);
+  if (games == NULL) {
+    g_debug("Unable to load BGA history cache for tests: %s", error != NULL ? error->message : "unknown");
+    return 0;
+  }
+  return games->len;
 }
 #endif
 
@@ -409,6 +538,102 @@ static char *ggame_import_dialog_bga_cache_path_for_profile(const GGameAppProfil
   return g_build_filename(profile_dir, file_name, NULL);
 }
 
+static char *ggame_import_dialog_bga_history_cache_path_for_profile(const GGameAppProfile *profile,
+                                                                    GError **error) {
+  g_return_val_if_fail(profile != NULL, NULL);
+
+  g_autofree char *profile_dir = ggame_import_dialog_bga_profile_cache_dir(profile, error);
+  if (profile_dir == NULL) {
+    return NULL;
+  }
+
+  return g_build_filename(profile_dir, GGAME_IMPORT_BGA_HISTORY_CACHE_FILE, NULL);
+}
+
+static gboolean ggame_import_dialog_save_bga_history_cache_for_profile(const GGameAppProfile *profile,
+                                                                       GPtrArray *games,
+                                                                       GError **error) {
+  g_return_val_if_fail(profile != NULL, FALSE);
+  g_return_val_if_fail(games != NULL, FALSE);
+
+  g_autofree char *path = ggame_import_dialog_bga_history_cache_path_for_profile(profile, error);
+  if (path == NULL) {
+    return FALSE;
+  }
+
+  g_autoptr(GKeyFile) key_file = g_key_file_new();
+  g_key_file_set_uint64(key_file, "history", "count", games->len);
+  for (guint i = 0; i < games->len; ++i) {
+    BgaHistoryGameSummary *summary = g_ptr_array_index(games, i);
+    if (summary == NULL) {
+      continue;
+    }
+
+    g_autofree char *group = g_strdup_printf("game %u", i);
+    g_key_file_set_string(key_file, group, "table_id", summary->table_id ? summary->table_id : "");
+    g_key_file_set_string(key_file, group, "start_at", summary->start_at ? summary->start_at : "");
+    g_key_file_set_string(key_file, group, "player_one", summary->player_one ? summary->player_one : "");
+    g_key_file_set_string(key_file, group, "player_two", summary->player_two ? summary->player_two : "");
+  }
+
+  gsize length = 0;
+  g_autofree char *contents = g_key_file_to_data(key_file, &length, error);
+  if (contents == NULL) {
+    return FALSE;
+  }
+
+  return g_file_set_contents(path, contents, length, error);
+}
+
+static GPtrArray *ggame_import_dialog_load_bga_history_cache_for_profile(const GGameAppProfile *profile,
+                                                                         GError **error) {
+  g_return_val_if_fail(profile != NULL, NULL);
+
+  g_autofree char *path = ggame_import_dialog_bga_history_cache_path_for_profile(profile, error);
+  if (path == NULL) {
+    return NULL;
+  }
+
+  GPtrArray *games = g_ptr_array_new_with_free_func((GDestroyNotify)bga_history_game_summary_free);
+  if (!g_file_test(path, G_FILE_TEST_IS_REGULAR)) {
+    return games;
+  }
+
+  g_autoptr(GKeyFile) key_file = g_key_file_new();
+  if (!g_key_file_load_from_file(key_file, path, G_KEY_FILE_NONE, error)) {
+    g_ptr_array_unref(games);
+    return NULL;
+  }
+
+  guint64 count = g_key_file_get_uint64(key_file, "history", "count", error);
+  if (error != NULL && *error != NULL) {
+    g_ptr_array_unref(games);
+    return NULL;
+  }
+  if (count > G_MAXUINT) {
+    g_ptr_array_unref(games);
+    g_set_error(error, G_FILE_ERROR, G_FILE_ERROR_INVAL, "BoardGameArena history cache has too many entries");
+    return NULL;
+  }
+
+  for (guint i = 0; i < (guint)count; ++i) {
+    g_autofree char *group = g_strdup_printf("game %u", i);
+    g_autofree char *table_id = g_key_file_get_string(key_file, group, "table_id", NULL);
+    if (table_id == NULL || table_id[0] == '\0' || ggame_bga_history_games_contains_table_id(games, table_id)) {
+      continue;
+    }
+
+    BgaHistoryGameSummary *summary = g_new0(BgaHistoryGameSummary, 1);
+    summary->table_id = g_steal_pointer(&table_id);
+    summary->start_at = g_key_file_get_string(key_file, group, "start_at", NULL);
+    summary->player_one = g_key_file_get_string(key_file, group, "player_one", NULL);
+    summary->player_two = g_key_file_get_string(key_file, group, "player_two", NULL);
+    g_ptr_array_add(games, summary);
+  }
+
+  return games;
+}
+
 static char *ggame_import_dialog_bga_cache_path(GGameWindowImportDialogData *data,
                                                 const char *table_id,
                                                 GError **error) {
@@ -434,6 +659,31 @@ static gboolean ggame_import_dialog_bga_table_is_cached(GGameWindowImportDialogD
   }
 
   return g_file_test(path, G_FILE_TEST_IS_REGULAR);
+}
+
+static void ggame_import_dialog_load_persistent_history_cache(GGameWindowImportDialogData *data) {
+  g_return_if_fail(data != NULL);
+  g_return_if_fail(data->profile != NULL);
+  g_return_if_fail(data->bga_cache != NULL);
+
+  if (data->bga_cache->history_games != NULL) {
+    return;
+  }
+
+  g_autoptr(GError) error = NULL;
+  GPtrArray *cached_games = ggame_import_dialog_load_bga_history_cache_for_profile(data->profile, &error);
+  if (cached_games == NULL) {
+    g_debug("Unable to load BoardGameArena history cache: %s", error != NULL ? error->message : "unknown error");
+    return;
+  }
+  if (cached_games->len == 0) {
+    g_ptr_array_unref(cached_games);
+    return;
+  }
+
+  data->bga_cache->history_games = cached_games;
+  data->bga_cache->history_next_page = 1;
+  data->bga_cache->history_more_available = TRUE;
 }
 
 static gboolean ggame_window_load_sgf_path_from_library(GGameWindow *window, const char *path, GError **error) {
@@ -781,32 +1031,89 @@ static void ggame_import_dialog_show_history(GGameWindowImportDialogData *data, 
   ggame_window_import_dialog_update_step(data);
 }
 
-static gboolean ggame_import_dialog_fetch_bga_history(GGameWindowImportDialogData *data,
-                                                      BgaClientSession *session,
-                                                      const char *user_id,
-                                                      GPtrArray **out_games,
-                                                      GError **error) {
+static gboolean ggame_import_dialog_fetch_bga_history_batch(GGameWindowImportDialogData *data,
+                                                            BgaClientSession *session,
+                                                            const char *user_id,
+                                                            guint first_page,
+                                                            gboolean stop_at_cached_history,
+                                                            GPtrArray **out_games,
+                                                            BgaHistoryFetchResult *out_result,
+                                                            GError **error) {
   g_return_val_if_fail(data != NULL, FALSE);
   g_return_val_if_fail(data->profile != NULL, FALSE);
   g_return_val_if_fail(session != NULL, FALSE);
   g_return_val_if_fail(user_id != NULL, FALSE);
+  g_return_val_if_fail(first_page > 0, FALSE);
   g_return_val_if_fail(out_games != NULL, FALSE);
 
-  BgaHttpResponse history_response = {0};
-  if (!bga_client_session_fetch_game_history(session,
-                                             user_id,
-                                             data->profile->import.board_game_arena_game_id,
-                                             &history_response,
-                                             error)) {
-    bga_http_response_clear(&history_response);
+  g_autoptr(GHashTable) stop_table_ids = NULL;
+  if (stop_at_cached_history && data->bga_cache != NULL && data->bga_cache->history_games != NULL &&
+      data->bga_cache->history_games->len > 0) {
+    stop_table_ids = ggame_bga_history_games_table_id_set(data->bga_cache->history_games);
+  }
+
+  return bga_client_session_fetch_game_history_pages(session,
+                                                     user_id,
+                                                     data->profile->import.board_game_arena_game_id,
+                                                     first_page,
+                                                     GGAME_IMPORT_BGA_HISTORY_PAGE_BATCH_SIZE,
+                                                     stop_table_ids,
+                                                     out_games,
+                                                     out_result,
+                                                     error);
+}
+
+static gboolean ggame_import_dialog_update_bga_history_from_network(GGameWindowImportDialogData *data,
+                                                                    BgaClientSession *session,
+                                                                    const char *user_id,
+                                                                    guint first_page,
+                                                                    gboolean stop_at_cached_history,
+                                                                    gboolean append_to_existing_history,
+                                                                    GError **error) {
+  g_return_val_if_fail(data != NULL, FALSE);
+  g_return_val_if_fail(data->profile != NULL, FALSE);
+  g_return_val_if_fail(data->bga_cache != NULL, FALSE);
+  g_return_val_if_fail(session != NULL, FALSE);
+  g_return_val_if_fail(user_id != NULL, FALSE);
+  g_return_val_if_fail(first_page > 0, FALSE);
+
+  g_autoptr(GPtrArray) network_games = NULL;
+  BgaHistoryFetchResult fetch_result = {0};
+  if (!ggame_import_dialog_fetch_bga_history_batch(data,
+                                                   session,
+                                                   user_id,
+                                                   first_page,
+                                                   stop_at_cached_history,
+                                                   &network_games,
+                                                   &fetch_result,
+                                                   error)) {
     return FALSE;
   }
 
-  if (!bga_client_parse_history_games(history_response.body ? history_response.body : "", out_games, error)) {
-    bga_http_response_clear(&history_response);
-    return FALSE;
+  g_autoptr(GPtrArray) cached_games = data->bga_cache->history_games != NULL
+      ? ggame_bga_history_games_copy(data->bga_cache->history_games)
+      : g_ptr_array_new_with_free_func((GDestroyNotify)bga_history_game_summary_free);
+  g_autoptr(GPtrArray) merged_games = NULL;
+  if (append_to_existing_history) {
+    merged_games = ggame_bga_history_games_copy(cached_games);
+    ggame_bga_history_games_append_or_replace(merged_games, network_games);
+  } else {
+    merged_games = ggame_bga_history_games_merge_new_then_cached(network_games, cached_games);
   }
-  bga_http_response_clear(&history_response);
+
+  g_autoptr(GError) write_error = NULL;
+  if (!ggame_import_dialog_save_bga_history_cache_for_profile(data->profile, merged_games, &write_error)) {
+    g_debug("Unable to save BoardGameArena history cache: %s",
+            write_error != NULL ? write_error->message : "unknown error");
+  }
+
+  gboolean more_available = !fetch_result.reached_end;
+  guint next_page = fetch_result.next_page > 0 ? fetch_result.next_page : first_page + 1;
+  if (data->bga_cache->session == NULL) {
+    ggame_bga_import_session_cache_store(data->bga_cache, session, user_id, merged_games, next_page, more_available);
+  } else {
+    ggame_bga_import_session_cache_store_history(data->bga_cache, merged_games, next_page, more_available);
+  }
   return TRUE;
 }
 
@@ -821,20 +1128,48 @@ static void ggame_import_dialog_reload_cached_history(GGameWindowImportDialogDat
   }
 
   g_autoptr(GError) error = NULL;
-  g_autoptr(GPtrArray) games = NULL;
-  if (!ggame_import_dialog_fetch_bga_history(data,
-                                             data->bga_cache->session,
-                                             data->bga_cache->user_id,
-                                             &games,
-                                             &error)) {
+  if (!ggame_import_dialog_update_bga_history_from_network(data,
+                                                           data->bga_cache->session,
+                                                           data->bga_cache->user_id,
+                                                           1,
+                                                           TRUE,
+                                                           FALSE,
+                                                           &error)) {
     g_debug("Import flow: failed to reload BoardGameArena history: %s",
             error != NULL ? error->message : "unknown error");
     ggame_import_dialog_show_error(data, "Unable to reload BoardGameArena history.");
     return;
   }
 
-  g_debug("Import flow: reloaded %u BoardGameArena games", games->len);
-  ggame_bga_import_session_cache_store_history(data->bga_cache, games);
+  g_debug("Import flow: reloaded %u BoardGameArena games", data->bga_cache->history_games->len);
+  ggame_import_dialog_show_history(data, data->bga_cache->history_games);
+}
+
+static void ggame_import_dialog_fetch_more_history(GGameWindowImportDialogData *data) {
+  g_return_if_fail(data != NULL);
+
+  if (!ggame_bga_import_session_cache_has_session(data->bga_cache)) {
+    g_debug("Import flow: More requested without a cached BoardGameArena session");
+    ggame_import_dialog_show_error(data, "BoardGameArena history cannot be extended without an active session.");
+    return;
+  }
+
+  guint first_page = data->bga_cache->history_next_page > 0 ? data->bga_cache->history_next_page : 1;
+  g_autoptr(GError) error = NULL;
+  if (!ggame_import_dialog_update_bga_history_from_network(data,
+                                                           data->bga_cache->session,
+                                                           data->bga_cache->user_id,
+                                                           first_page,
+                                                           FALSE,
+                                                           TRUE,
+                                                           &error)) {
+    g_debug("Import flow: failed to fetch more BoardGameArena history: %s",
+            error != NULL ? error->message : "unknown error");
+    ggame_import_dialog_show_error(data, "Unable to fetch more BoardGameArena history.");
+    return;
+  }
+
+  g_debug("Import flow: extended history to %u BoardGameArena games", data->bga_cache->history_games->len);
   ggame_import_dialog_show_history(data, data->bga_cache->history_games);
 }
 
@@ -844,6 +1179,7 @@ static void ggame_window_import_dialog_update_step(GGameWindowImportDialogData *
   g_return_if_fail(GTK_IS_BUTTON(data->back_button));
   g_return_if_fail(GTK_IS_BUTTON(data->next_button));
   g_return_if_fail(GTK_IS_BUTTON(data->reload_button));
+  g_return_if_fail(GTK_IS_BUTTON(data->more_button));
 
   if (data->step == GGAME_IMPORT_STEP_SITE) {
     gtk_stack_set_visible_child_name(data->stack, "site");
@@ -852,6 +1188,7 @@ static void ggame_window_import_dialog_update_step(GGameWindowImportDialogData *
     gtk_widget_set_sensitive(GTK_WIDGET(data->next_button),
                              ggame_import_dialog_is_board_game_arena_selected(data));
     gtk_widget_set_sensitive(GTK_WIDGET(data->reload_button), FALSE);
+    gtk_widget_set_visible(GTK_WIDGET(data->more_button), FALSE);
     return;
   }
 
@@ -865,6 +1202,10 @@ static void ggame_window_import_dialog_update_step(GGameWindowImportDialogData *
     gtk_widget_set_sensitive(GTK_WIDGET(data->reload_button),
                              data->bga_cache != NULL && data->bga_cache->session != NULL &&
                              data->bga_cache->user_id != NULL && data->bga_cache->user_id[0] != '\0');
+    gtk_widget_set_visible(GTK_WIDGET(data->more_button), TRUE);
+    gtk_widget_set_sensitive(GTK_WIDGET(data->more_button),
+                             ggame_bga_import_session_cache_has_session(data->bga_cache) &&
+                             data->bga_cache->history_more_available);
     return;
   }
 
@@ -874,6 +1215,7 @@ static void ggame_window_import_dialog_update_step(GGameWindowImportDialogData *
   gtk_button_set_label(data->next_button, "Fetch game history");
   gtk_widget_set_sensitive(GTK_WIDGET(data->next_button), TRUE);
   gtk_widget_set_sensitive(GTK_WIDGET(data->reload_button), FALSE);
+  gtk_widget_set_visible(GTK_WIDGET(data->more_button), FALSE);
   ggame_import_dialog_load_credentials(data);
 }
 
@@ -932,6 +1274,17 @@ static void ggame_window_on_import_dialog_reload_clicked(GtkButton * /*button*/,
   }
 
   ggame_import_dialog_reload_cached_history(data);
+}
+
+static void ggame_window_on_import_dialog_more_clicked(GtkButton * /*button*/, gpointer user_data) {
+  GGameWindowImportDialogData *data = user_data;
+  g_return_if_fail(data != NULL);
+
+  if (data->step != GGAME_IMPORT_STEP_HISTORY) {
+    return;
+  }
+
+  ggame_import_dialog_fetch_more_history(data);
 }
 
 void ggame_window_present_library_dialog(GGameWindow *self) {
@@ -1235,8 +1588,13 @@ static void ggame_window_on_import_dialog_next_clicked(GtkButton * /*button*/, g
           data->profile->import.board_game_arena_game_id,
           history_user_id);
 
-  g_autoptr(GPtrArray) games = NULL;
-  if (!ggame_import_dialog_fetch_bga_history(data, session, history_user_id, &games, &error)) {
+  if (!ggame_import_dialog_update_bga_history_from_network(data,
+                                                           session,
+                                                           history_user_id,
+                                                           1,
+                                                           data->bga_cache->history_games != NULL,
+                                                           FALSE,
+                                                           &error)) {
     g_debug("Import flow: failed to fetch BoardGameArena history: %s",
             error ? error->message : "unknown error");
     g_autofree char *dialog_text =
@@ -1247,9 +1605,8 @@ static void ggame_window_on_import_dialog_next_clicked(GtkButton * /*button*/, g
     bga_client_session_free(session);
     return;
   }
-  g_debug("Import flow: parsed %u BoardGameArena games", games->len);
+  g_debug("Import flow: parsed %u BoardGameArena games", data->bga_cache->history_games->len);
 
-  ggame_bga_import_session_cache_store(data->bga_cache, session, history_user_id, games);
   data->bga_session = data->bga_cache->session;
   session = NULL;
   ggame_import_dialog_show_history(data, data->bga_cache->history_games);
@@ -1347,6 +1704,11 @@ void ggame_window_present_import_dialog(GGameWindow *self) {
   gtk_widget_set_halign(reload_button, GTK_ALIGN_END);
   gtk_box_append(GTK_BOX(history_header), reload_button);
 
+  GtkWidget *more_button = gtk_button_new_with_label("More...");
+  gtk_widget_set_name(more_button, "import-history-more-button");
+  gtk_widget_set_halign(more_button, GTK_ALIGN_END);
+  gtk_box_append(GTK_BOX(history_header), more_button);
+
   GtkWidget *history_scroll = gtk_scrolled_window_new();
   gtk_widget_set_hexpand(history_scroll, TRUE);
   gtk_widget_set_vexpand(history_scroll, TRUE);
@@ -1384,11 +1746,13 @@ void ggame_window_present_import_dialog(GGameWindow *self) {
   data->back_button = GTK_BUTTON(back_button);
   data->next_button = GTK_BUTTON(next_button);
   data->reload_button = GTK_BUTTON(reload_button);
+  data->more_button = GTK_BUTTON(more_button);
   data->email_entry = email_entry;
   data->password_entry = password_entry;
   data->remember_check = remember_check;
   data->history_list = history_list;
   data->settings = ggame_common_settings_create();
+  ggame_import_dialog_load_persistent_history_cache(data);
   if (ggame_bga_import_session_cache_has_history(data->bga_cache)) {
     data->step = GGAME_IMPORT_STEP_HISTORY;
     data->bga_session = data->bga_cache->session;
@@ -1412,6 +1776,10 @@ void ggame_window_present_import_dialog(GGameWindow *self) {
                    "clicked",
                    G_CALLBACK(ggame_window_on_import_dialog_reload_clicked),
                    data);
+  g_signal_connect(more_button,
+                   "clicked",
+                   G_CALLBACK(ggame_window_on_import_dialog_more_clicked),
+                   data);
   g_signal_connect(next_button,
                    "clicked",
                    G_CALLBACK(ggame_window_on_import_dialog_next_clicked),
@@ -1426,6 +1794,22 @@ void ggame_window_present_import_dialog(GGameWindow *self) {
                    data);
 
   if (ggame_bga_import_session_cache_has_history(data->bga_cache)) {
+    gboolean should_refresh_cached_history = TRUE;
+#ifdef GGAME_TESTING
+    should_refresh_cached_history = bga_import_dialog_test_auto_history_refresh_enabled;
+#endif
+    g_autoptr(GError) error = NULL;
+    if (should_refresh_cached_history &&
+        !ggame_import_dialog_update_bga_history_from_network(data,
+                                                             data->bga_cache->session,
+                                                             data->bga_cache->user_id,
+                                                             1,
+                                                             TRUE,
+                                                             FALSE,
+                                                             &error)) {
+      g_debug("Import flow: failed to refresh cached BoardGameArena history on open: %s",
+              error != NULL ? error->message : "unknown error");
+    }
     ggame_import_dialog_show_history(data, data->bga_cache->history_games);
   } else {
     ggame_window_import_dialog_update_step(data);

@@ -1322,3 +1322,13 @@ extra request.
 The fix mirrors the browser sequence: open the table page, refresh the table and game-review templates as XHRs, detect
 the `Searching for the game archive` waiting message, call `requestTableArchive.html` when needed, and retry the logs
 fetch if BGA still reports the missing archive file.
+
+## BoardGameArena history import only showed the first page
+
+BGA history responses contain a limited `tables` page and a total game count under `stats.general.played`. The import
+wizard fetched only the first `getGames.html` response, so older imported games beyond the first page were not shown in
+the history list and could not be selected.
+
+The fix walks subsequent `getGames.html?page=N` pages with `updateStats=0`, deduplicating table ids and treating an
+empty `tables` page as the normal end of pagination. History rows are cached per profile. Refreshes stop when they hit
+a cached table id or the 10-page batch limit, and the history page exposes `More...` to fetch the next 10-page batch.

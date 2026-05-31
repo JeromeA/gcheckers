@@ -145,6 +145,36 @@ static void test_bga_client_parse_history_games(void) {
   g_assert_cmpstr(second->player_two, ==, "N057r4d4mu5Pi");
 }
 
+static void test_bga_client_parse_empty_history_games(void) {
+  const char *body = "{\"status\":1,\"data\":{\"tables\":[],\"stats\":{\"general\":{\"played\":\"0\"}}}}";
+  g_autoptr(GPtrArray) games = NULL;
+  g_autoptr(GError) error = NULL;
+
+  gboolean ok = bga_client_parse_history_games(body, &games, &error);
+  g_assert_no_error(error);
+  g_assert_true(ok);
+  g_assert_nonnull(games);
+  g_assert_cmpuint(games->len, ==, 0);
+}
+
+static void test_bga_client_parse_history_total_games(void) {
+  const char *body =
+      "{"
+      "\"status\":1,"
+      "\"data\":{"
+      "\"tables\":[{\"table_id\":\"716050283\",\"start\":\"1755486072\",\"player_names\":\"A,B\"}],"
+      "\"stats\":{\"general\":{\"played\":\"17\",\"score\":\"0.4706\"}}"
+      "}"
+      "}";
+  guint total = 0;
+  g_autoptr(GError) error = NULL;
+
+  gboolean ok = bga_client_parse_history_total_games(body, &total, &error);
+  g_assert_no_error(error);
+  g_assert_true(ok);
+  g_assert_cmpuint(total, ==, 17);
+}
+
 static void test_bga_client_save_archive_logs_debug_page(void) {
   g_autofree char *path = NULL;
   g_autoptr(GError) error = NULL;
@@ -335,6 +365,8 @@ int main(int argc, char **argv) {
   g_test_add_func("/bga-client/parse-login-response-rejects-oversized-status",
                   test_bga_client_parse_login_response_rejects_oversized_status);
   g_test_add_func("/bga-client/parse-history-games", test_bga_client_parse_history_games);
+  g_test_add_func("/bga-client/parse-empty-history-games", test_bga_client_parse_empty_history_games);
+  g_test_add_func("/bga-client/parse-history-total-games", test_bga_client_parse_history_total_games);
   g_test_add_func("/bga-client/save-archive-logs-debug-page", test_bga_client_save_archive_logs_debug_page);
   g_test_add_func("/bga-client/archive-generation-detection", test_bga_client_archive_generation_detection);
   g_test_add_func("/bga-client/parse-homeworlds-archive-logs-sgf",

@@ -19,6 +19,7 @@ static const char *bga_client_archive_logs_url_prefix =
     "https://boardgamearena.com/archive/archive/logs.html";
 static const guint bga_client_archive_ready_poll_count = 5;
 static const guint bga_client_archive_ready_poll_usec = 250000;
+static const guint bga_client_history_default_page_batch_size = 10;
 
 static const char *bga_client_json_previous_object_start(const char *body, const char *position);
 static const char *bga_client_json_object_end(const char *object_start);
@@ -1893,6 +1894,94 @@ gboolean bga_client_session_login_with_password(BgaClientSession *session,
   return ok;
 }
 
+static gboolean bga_client_session_prepare_game_history_fetch(BgaClientSession *session,
+                                                              const char *encoded_user_id,
+                                                              guint game_id,
+                                                              char **out_referer_url,
+                                                              GError **error) {
+  g_return_val_if_fail(session != NULL, FALSE);
+  g_return_val_if_fail(session->curl != NULL, FALSE);
+  g_return_val_if_fail(encoded_user_id != NULL, FALSE);
+  g_return_val_if_fail(game_id > 0, FALSE);
+  g_return_val_if_fail(out_referer_url != NULL, FALSE);
+
+  g_autofree char *gamestats_url = g_strdup_printf("%s?player=%s&opponent_id=0&game_id=%u&finished=0",
+                                                    bga_client_gamestats_url_prefix,
+                                                    encoded_user_id,
+                                                    game_id);
+  BgaHttpResponse gamestats_response = {0};
+  if (!bga_client_http_request(session->curl, gamestats_url, NULL, NULL, &gamestats_response, error)) {
+    bga_http_response_clear(&gamestats_response);
+    return FALSE;
+  }
+
+  g_autofree char *gamestats_request_token = NULL;
+  if (!bga_client_extract_request_token(gamestats_response.body ? gamestats_response.body : "",
+                                        &gamestats_request_token,
+                                        error)) {
+    g_debug("Unable to extract requestToken from gamestats response: %s",
+            (error != NULL && *error != NULL) ? (*error)->message : "unknown error");
+    bga_http_response_clear(&gamestats_response);
+    return FALSE;
+  }
+  g_free(session->request_token);
+  session->request_token = g_strdup(gamestats_request_token);
+  bga_http_response_clear(&gamestats_response);
+
+  g_free(*out_referer_url);
+  *out_referer_url = g_steal_pointer(&gamestats_url);
+  return TRUE;
+}
+
+static gboolean bga_client_session_fetch_game_history_page(BgaClientSession *session,
+                                                           const char *encoded_user_id,
+                                                           guint game_id,
+                                                           guint page,
+                                                           gboolean update_stats,
+                                                           const char *referer_url,
+                                                           BgaHttpResponse *out_response,
+                                                           GError **error) {
+  g_return_val_if_fail(session != NULL, FALSE);
+  g_return_val_if_fail(session->curl != NULL, FALSE);
+  g_return_val_if_fail(encoded_user_id != NULL, FALSE);
+  g_return_val_if_fail(game_id > 0, FALSE);
+  g_return_val_if_fail(page > 0, FALSE);
+  g_return_val_if_fail(referer_url != NULL, FALSE);
+  g_return_val_if_fail(out_response != NULL, FALSE);
+
+  gint64 cache_buster = g_get_real_time() / 1000;
+  g_autofree char *get_games_url = page == 1
+      ? g_strdup_printf(
+            "%s?player=%s&opponent_id=0&game_id=%u&finished=0&updateStats=%u&dojo.preventCache=%" G_GINT64_FORMAT,
+            bga_client_history_url_prefix,
+            encoded_user_id,
+            game_id,
+            update_stats ? 1 : 0,
+            cache_buster)
+      : g_strdup_printf(
+            "%s?player=%s&opponent_id=0&game_id=%u&finished=0&page=%u&updateStats=%u&dojo.preventCache=%"
+            G_GINT64_FORMAT,
+            bga_client_history_url_prefix,
+            encoded_user_id,
+            game_id,
+            page,
+            update_stats ? 1 : 0,
+            cache_buster);
+
+  struct curl_slist *headers = NULL;
+  if (session->request_token != NULL && session->request_token[0] != '\0') {
+    g_autofree char *request_token_header = g_strdup_printf("X-Request-Token: %s", session->request_token);
+    headers = curl_slist_append(headers, request_token_header);
+  }
+  headers = curl_slist_append(headers, "X-Requested-With: XMLHttpRequest");
+  g_autofree char *referer_header = g_strdup_printf("Referer: %s", referer_url);
+  headers = curl_slist_append(headers, referer_header);
+
+  gboolean ok = bga_client_http_request(session->curl, get_games_url, NULL, headers, out_response, error);
+  curl_slist_free_all(headers);
+  return ok;
+}
+
 gboolean bga_client_session_fetch_game_history(BgaClientSession *session,
                                                const char *user_id,
                                                guint game_id,
@@ -1910,51 +1999,17 @@ gboolean bga_client_session_fetch_game_history(BgaClientSession *session,
     return FALSE;
   }
 
-  g_autofree char *gamestats_url = g_strdup_printf("%s?player=%s&opponent_id=0&game_id=%u&finished=0",
-                                                    bga_client_gamestats_url_prefix,
-                                                    encoded_user_id,
-                                                    game_id);
-  BgaHttpResponse gamestats_response = {0};
-  if (!bga_client_http_request(session->curl, gamestats_url, NULL, NULL, &gamestats_response, error)) {
-    bga_http_response_clear(&gamestats_response);
-    curl_free(encoded_user_id);
-    return FALSE;
-  }
-
-  g_autofree char *gamestats_request_token = NULL;
-  if (!bga_client_extract_request_token(gamestats_response.body ? gamestats_response.body : "",
-                                        &gamestats_request_token,
-                                        error)) {
-    g_debug("Unable to extract requestToken from gamestats response: %s",
-            (error != NULL && *error != NULL) ? (*error)->message : "unknown error");
-    bga_http_response_clear(&gamestats_response);
-    curl_free(encoded_user_id);
-    return FALSE;
-  }
-  g_free(session->request_token);
-  session->request_token = g_strdup(gamestats_request_token);
-  bga_http_response_clear(&gamestats_response);
-
-  gint64 cache_buster = g_get_real_time() / 1000;
-  g_autofree char *get_games_url = g_strdup_printf(
-      "%s?player=%s&opponent_id=0&game_id=%u&finished=0&updateStats=1&dojo.preventCache=%" G_GINT64_FORMAT,
-      bga_client_history_url_prefix,
-      encoded_user_id,
-      game_id,
-      cache_buster);
+  g_autofree char *referer_url = NULL;
+  gboolean ok = bga_client_session_prepare_game_history_fetch(session, encoded_user_id, game_id, &referer_url, error) &&
+      bga_client_session_fetch_game_history_page(session,
+                                                 encoded_user_id,
+                                                 game_id,
+                                                 1,
+                                                 TRUE,
+                                                 referer_url,
+                                                 out_response,
+                                                 error);
   curl_free(encoded_user_id);
-
-  struct curl_slist *headers = NULL;
-  if (session->request_token != NULL && session->request_token[0] != '\0') {
-    g_autofree char *request_token_header = g_strdup_printf("X-Request-Token: %s", session->request_token);
-    headers = curl_slist_append(headers, request_token_header);
-  }
-  headers = curl_slist_append(headers, "X-Requested-With: XMLHttpRequest");
-  g_autofree char *referer_header = g_strdup_printf("Referer: %s", gamestats_url);
-  headers = curl_slist_append(headers, referer_header);
-
-  gboolean ok = bga_client_http_request(session->curl, get_games_url, NULL, headers, out_response, error);
-  curl_slist_free_all(headers);
   return ok;
 }
 
@@ -2436,6 +2491,61 @@ void bga_history_game_summary_free(BgaHistoryGameSummary *summary) {
   g_free(summary);
 }
 
+static BgaHistoryGameSummary *bga_history_game_summary_copy(const BgaHistoryGameSummary *summary) {
+  g_return_val_if_fail(summary != NULL, NULL);
+
+  BgaHistoryGameSummary *copy = g_new0(BgaHistoryGameSummary, 1);
+  copy->table_id = g_strdup(summary->table_id);
+  copy->start_at = g_strdup(summary->start_at);
+  copy->player_one = g_strdup(summary->player_one);
+  copy->player_two = g_strdup(summary->player_two);
+  return copy;
+}
+
+static guint bga_history_game_summaries_append_unique_until_known(GPtrArray *destination,
+                                                                  GHashTable *known_table_ids,
+                                                                  GHashTable *stop_table_ids,
+                                                                  GPtrArray *source,
+                                                                  gboolean *out_stopped_on_known_table) {
+  g_return_val_if_fail(destination != NULL, 0);
+  g_return_val_if_fail(known_table_ids != NULL, 0);
+  g_return_val_if_fail(source != NULL, 0);
+
+  guint added = 0;
+  if (out_stopped_on_known_table != NULL) {
+    *out_stopped_on_known_table = FALSE;
+  }
+
+  for (guint i = 0; i < source->len; ++i) {
+    const BgaHistoryGameSummary *summary = g_ptr_array_index(source, i);
+    if (summary == NULL || summary->table_id == NULL || summary->table_id[0] == '\0') {
+      continue;
+    }
+    if (stop_table_ids != NULL && g_hash_table_contains(stop_table_ids, summary->table_id)) {
+      if (out_stopped_on_known_table != NULL) {
+        *out_stopped_on_known_table = TRUE;
+      }
+      break;
+    }
+    if (g_hash_table_contains(known_table_ids, summary->table_id)) {
+      continue;
+    }
+
+    BgaHistoryGameSummary *copy = bga_history_game_summary_copy(summary);
+    g_hash_table_add(known_table_ids, g_strdup(copy->table_id));
+    g_ptr_array_add(destination, copy);
+    added++;
+  }
+  return added;
+}
+
+static gboolean bga_client_history_response_has_tables_array(const char *body) {
+  g_return_val_if_fail(body != NULL, FALSE);
+
+  g_autoptr(GRegex) regex = g_regex_new("\"tables\"\\s*:\\s*\\[", G_REGEX_DOTALL, 0, NULL);
+  return g_regex_match(regex, body, 0, NULL);
+}
+
 gboolean bga_client_parse_history_games(const char *body, GPtrArray **out_games, GError **error) {
   g_return_val_if_fail(body != NULL, FALSE);
   g_return_val_if_fail(out_games != NULL, FALSE);
@@ -2445,8 +2555,16 @@ gboolean bga_client_parse_history_games(const char *body, GPtrArray **out_games,
   g_autoptr(GMatchInfo) info = NULL;
   gboolean found = g_regex_match(regex, body, 0, &info);
   if (!found) {
-    g_set_error(error, bga_client_error_quark(), 15, "No games found in history response");
-    return FALSE;
+    if (!bga_client_history_response_has_tables_array(body)) {
+      g_set_error(error, bga_client_error_quark(), 15, "No games found in history response");
+      return FALSE;
+    }
+
+    if (*out_games != NULL) {
+      g_ptr_array_unref(*out_games);
+    }
+    *out_games = g_ptr_array_new_with_free_func((GDestroyNotify)bga_history_game_summary_free);
+    return TRUE;
   }
 
   GPtrArray *games = g_ptr_array_new_with_free_func((GDestroyNotify)bga_history_game_summary_free);
@@ -2492,4 +2610,160 @@ gboolean bga_client_parse_history_games(const char *body, GPtrArray **out_games,
   }
   *out_games = games;
   return TRUE;
+}
+
+gboolean bga_client_parse_history_total_games(const char *body, guint *out_total, GError **error) {
+  g_return_val_if_fail(body != NULL, FALSE);
+  g_return_val_if_fail(out_total != NULL, FALSE);
+
+  g_autoptr(GRegex) regex =
+      g_regex_new("\"general\"\\s*:\\s*\\{[^\\{\\}]*\"played\"\\s*:\\s*\"?([0-9]+)\"?",
+                  G_REGEX_DOTALL,
+                  0,
+                  NULL);
+  g_autoptr(GMatchInfo) info = NULL;
+  if (!g_regex_match(regex, body, 0, &info)) {
+    g_set_error(error, bga_client_error_quark(), 53, "No total game count found in history response");
+    return FALSE;
+  }
+
+  g_autofree char *value = g_match_info_fetch(info, 1);
+  if (value == NULL) {
+    g_set_error(error, bga_client_error_quark(), 54, "Malformed total game count in history response");
+    return FALSE;
+  }
+
+  errno = 0;
+  char *end = NULL;
+  guint64 parsed = g_ascii_strtoull(value, &end, 10);
+  if (end == value || end == NULL || *end != '\0' || errno == ERANGE || parsed > G_MAXUINT) {
+    g_set_error(error, bga_client_error_quark(), 54, "Malformed total game count in history response");
+    return FALSE;
+  }
+
+  *out_total = (guint)parsed;
+  return TRUE;
+}
+
+gboolean bga_client_session_fetch_game_history_pages(BgaClientSession *session,
+                                                     const char *user_id,
+                                                     guint game_id,
+                                                     guint first_page,
+                                                     guint max_pages,
+                                                     GHashTable *stop_table_ids,
+                                                     GPtrArray **out_games,
+                                                     BgaHistoryFetchResult *out_result,
+                                                     GError **error) {
+  g_return_val_if_fail(session != NULL, FALSE);
+  g_return_val_if_fail(session->curl != NULL, FALSE);
+  g_return_val_if_fail(user_id != NULL, FALSE);
+  g_return_val_if_fail(game_id > 0, FALSE);
+  g_return_val_if_fail(first_page > 0, FALSE);
+  g_return_val_if_fail(max_pages > 0, FALSE);
+  g_return_val_if_fail(out_games != NULL, FALSE);
+
+  char *encoded_user_id = curl_easy_escape(session->curl, user_id, 0);
+  if (encoded_user_id == NULL) {
+    g_set_error(error, bga_client_error_quark(), 14, "Failed to encode BoardGameArena user id");
+    return FALSE;
+  }
+
+  g_autofree char *referer_url = NULL;
+  if (!bga_client_session_prepare_game_history_fetch(session, encoded_user_id, game_id, &referer_url, error)) {
+    curl_free(encoded_user_id);
+    return FALSE;
+  }
+
+  g_autoptr(GPtrArray) games = g_ptr_array_new_with_free_func((GDestroyNotify)bga_history_game_summary_free);
+  g_autoptr(GHashTable) known_table_ids = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  guint expected_total = 0;
+  gboolean has_expected_total = FALSE;
+  BgaHistoryFetchResult result = {
+    .first_page = first_page,
+    .next_page = first_page,
+  };
+
+  for (guint page = first_page; page < first_page + max_pages; ++page) {
+    BgaHttpResponse response = {0};
+    if (!bga_client_session_fetch_game_history_page(session,
+                                                    encoded_user_id,
+                                                    game_id,
+                                                    page,
+                                                    page == 1,
+                                                    referer_url,
+                                                    &response,
+                                                    error)) {
+      bga_http_response_clear(&response);
+      curl_free(encoded_user_id);
+      return FALSE;
+    }
+
+    g_autoptr(GPtrArray) page_games = NULL;
+    gboolean parsed = bga_client_parse_history_games(response.body ? response.body : "", &page_games, error);
+    if (parsed && page == 1) {
+      g_autoptr(GError) total_error = NULL;
+      has_expected_total =
+          bga_client_parse_history_total_games(response.body ? response.body : "", &expected_total, &total_error);
+      if (!has_expected_total) {
+        g_debug("BoardGameArena history response did not include a total game count: %s",
+                total_error != NULL ? total_error->message : "unknown error");
+      }
+    }
+    bga_http_response_clear(&response);
+    if (!parsed) {
+      curl_free(encoded_user_id);
+      return FALSE;
+    }
+
+    result.pages_fetched++;
+    result.next_page = page + 1;
+    result.has_total_games = has_expected_total;
+    result.total_games = expected_total;
+
+    gboolean stopped_on_known_table = FALSE;
+    guint added = bga_history_game_summaries_append_unique_until_known(games,
+                                                                       known_table_ids,
+                                                                       stop_table_ids,
+                                                                       page_games,
+                                                                       &stopped_on_known_table);
+    if (stopped_on_known_table) {
+      result.stopped_on_known_table = TRUE;
+      break;
+    }
+    if (has_expected_total && games->len >= expected_total) {
+      result.reached_end = TRUE;
+      break;
+    }
+    if (page_games->len == 0 || added == 0) {
+      result.reached_end = TRUE;
+      break;
+    }
+  }
+
+  curl_free(encoded_user_id);
+
+  if (*out_games != NULL) {
+    g_ptr_array_unref(*out_games);
+  }
+  *out_games = g_steal_pointer(&games);
+  if (out_result != NULL) {
+    *out_result = result;
+  }
+  return TRUE;
+}
+
+gboolean bga_client_session_fetch_all_game_history(BgaClientSession *session,
+                                                   const char *user_id,
+                                                   guint game_id,
+                                                   GPtrArray **out_games,
+                                                   GError **error) {
+  return bga_client_session_fetch_game_history_pages(session,
+                                                     user_id,
+                                                     game_id,
+                                                     1,
+                                                     bga_client_history_default_page_batch_size,
+                                                     NULL,
+                                                     out_games,
+                                                     NULL,
+                                                     error);
 }

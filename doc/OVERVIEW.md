@@ -159,7 +159,10 @@ Successful login advances to a history step that lists games as `table_id` + `pl
 with `(cached)` when the selected profile already has an imported SGF for that table id under the user data import
 cache. The BGA session, user id, and parsed history are cached per profile for the current app process, so reopening
 Import skips site/credentials/network-history steps and goes straight to the history page. The history page has a
-`Reload` button that refreshes only the game history through the cached BGA session. Selecting an uncached row enables
+`Reload` button that refreshes only the game history through the cached BGA session. BGA history summaries are cached
+in the same per-profile import directory as imported SGFs; when cached history exists, refresh fetches recent pages
+until it reaches a cached table id or the 10-page batch limit. `More...` fetches another 10 pages without stopping at
+cached table ids. Selecting an uncached row enables
 `Import`, which first opens that table's BoardGameArena game-review page in the same session, fetches the archive logs
 as the review page's XHR does, converts the logs to Homeworlds SGF, writes the SGF into the import cache with BGA
 player names and metadata stored as root `PB`/`PW`, `DT`, `RE`, and `GCBT`, and loads it through the shared SGF
@@ -468,7 +471,10 @@ Role: perform libcurl requests to fetch `requestToken` from `https://en.boardgam
 `https://en.boardgamearena.com/account/auth/loginUserWithPassword.html`, then prefetch
 `https://boardgamearena.com/gamestats?...` with the active profile's BoardGameArena game id and refresh `requestToken`
 from that page before fetching that game's history from `https://boardgamearena.com/gamestats/gamestats/getGames.html`
-for the authenticated user/session. To import a selected history table, the same session first opens
+for the authenticated user/session. History fetching follows page links by requesting `page=2`, `page=3`, and so on
+with `updateStats=0`. A single fetch is limited to 10 pages. If a cached history table id is provided, page walking
+stops at the first cached table; explicit `More...` requests omit that stop set and fetch the next 10 pages. To import
+a selected history table, the same session first opens
 `https://boardgamearena.com/table?table=...`, refreshes that table template as an XHR, refreshes
 `https://boardgamearena.com/gamereview?table=...` as an XHR, and calls
 `gamereview/gamereview/requestTableArchive.html` when the review template says BGA is still searching for the archive.
@@ -482,9 +488,11 @@ BGA date, player names, winner, and table id stored in root metadata.
 Imported SGFs are cached under the writable user data area in a BoardGameArena import subdirectory keyed by active
 profile id and table id.
 All BoardGameArena HTTP response bodies are also saved to `/tmp/gcheckers-bga-*.txt` for debugging.
-History parsing extracts each table's `table_id`, start timestamp (rendered as `YYYY-MM-DD HH:MM`, UTC), and trimmed
-player names. Numeric JSON fields are parsed with explicit range checks before narrowing to local integer types, and
-HTTP response buffering rejects impossible libcurl chunk sizes before appending response bytes.
+History parsing extracts each table's `table_id`, start timestamp (rendered as `YYYY-MM-DD HH:MM`, UTC), trimmed
+player names, and the first page's total game count. Empty `tables` arrays are accepted as normal pagination
+terminators. History summaries are stored in `history.ini` under the profile's BGA import cache directory. Numeric JSON
+fields are parsed with explicit range checks before narrowing to local integer types, and HTTP response buffering
+rejects impossible libcurl chunk sizes before appending response bytes.
 Collaborates with: import dialog flow for "Fetch game history" and `tests/test_bga_client.c` (token/login/history/log
 parsing + live login smoke test with env-provided credentials).
 

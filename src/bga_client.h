@@ -40,6 +40,16 @@ typedef struct {
   char *player_two;
 } BgaHistoryGameSummary;
 
+typedef struct {
+  guint first_page;
+  guint pages_fetched;
+  guint next_page;
+  guint total_games;
+  gboolean has_total_games;
+  gboolean stopped_on_known_table;
+  gboolean reached_end;
+} BgaHistoryFetchResult;
+
 gboolean bga_client_extract_request_token(const char *body, char **out_token, GError **error);
 BgaClientSession *bga_client_session_new(GError **error);
 void bga_client_session_free(BgaClientSession *session);
@@ -57,6 +67,20 @@ gboolean bga_client_session_fetch_game_history(BgaClientSession *session,
                                                guint game_id,
                                                BgaHttpResponse *out_response,
                                                GError **error);
+gboolean bga_client_session_fetch_all_game_history(BgaClientSession *session,
+                                                   const char *user_id,
+                                                   guint game_id,
+                                                   GPtrArray **out_games,
+                                                   GError **error);
+gboolean bga_client_session_fetch_game_history_pages(BgaClientSession *session,
+                                                     const char *user_id,
+                                                     guint game_id,
+                                                     guint first_page,
+                                                     guint max_pages,
+                                                     GHashTable *stop_table_ids,
+                                                     GPtrArray **out_games,
+                                                     BgaHistoryFetchResult *out_result,
+                                                     GError **error);
 gboolean bga_client_session_fetch_archive_logs(BgaClientSession *session,
                                                const char *table_id,
                                                BgaHttpResponse *out_response,
@@ -76,6 +100,7 @@ gboolean bga_client_login_with_password(const BgaCredentials *credentials,
                                         GError **error);
 gboolean bga_client_parse_login_response(const char *body, BgaLoginResult *out_result, GError **error);
 gboolean bga_client_parse_history_games(const char *body, GPtrArray **out_games, GError **error);
+gboolean bga_client_parse_history_total_games(const char *body, guint *out_total, GError **error);
 gboolean bga_client_archive_review_is_waiting_for_generation(const char *body);
 gboolean bga_client_archive_logs_error_needs_generation(const char *body);
 gboolean bga_client_parse_homeworlds_archive_logs_sgf(const char *body,
