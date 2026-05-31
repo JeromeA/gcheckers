@@ -14,6 +14,7 @@
 #include "sgf_file_actions.h"
 #include "sgf_controller.h"
 #include "sgf_io.h"
+#include "sgf_metadata.h"
 #include "sgf_move_props.h"
 #include "style.h"
 #include "player_controls_panel.h"
@@ -126,6 +127,9 @@ typedef struct {
   GGameWindow *self;
   GtkWindow *dialog;
   GtkEntry *player_entries[2];
+  GtkEntry *date_entry;
+  GtkEntry *table_id_entry;
+  GtkEntry *winner_entry;
 } GGameWindowGameInformationDialogData;
 
 typedef struct {
@@ -1932,15 +1936,55 @@ static void ggame_window_on_game_information_cancel_clicked(GtkButton * /*button
   gtk_window_destroy(dialog);
 }
 
-static void ggame_window_set_root_player_name(SgfNode *root, const char *property, const char *name) {
+static void ggame_window_set_root_text_property(SgfNode *root, const char *property, const char *value) {
   g_return_if_fail(root != NULL);
   g_return_if_fail(property != NULL);
-  g_return_if_fail(name != NULL);
+  g_return_if_fail(value != NULL);
 
   sgf_node_clear_property(root, property);
-  if (name[0] != '\0' && !sgf_node_add_property(root, property, name)) {
-    g_debug("Failed to set SGF root player property %s", property);
+  if (value[0] != '\0' && !sgf_node_add_property(root, property, value)) {
+    g_debug("Failed to set SGF root property %s", property);
   }
+}
+
+static void ggame_window_set_root_entry_text_property(SgfNode *root, const char *property, GtkEntry *entry) {
+  g_return_if_fail(root != NULL);
+  g_return_if_fail(property != NULL);
+  g_return_if_fail(GTK_IS_ENTRY(entry));
+
+  g_autofree char *value = g_strdup(gtk_editable_get_text(GTK_EDITABLE(entry)));
+  if (value == NULL) {
+    g_debug("Unable to read SGF root property %s from entry", property);
+    return;
+  }
+
+  g_strstrip(value);
+  ggame_window_set_root_text_property(root, property, value);
+}
+
+static GtkWidget *ggame_window_new_game_information_entry_row(GtkGrid *grid,
+                                                             const char *label_text,
+                                                             const char *entry_name,
+                                                             const char *value,
+                                                             guint row,
+                                                             GtkEntry **out_entry) {
+  g_return_val_if_fail(GTK_IS_GRID(grid), NULL);
+  g_return_val_if_fail(label_text != NULL, NULL);
+  g_return_val_if_fail(entry_name != NULL, NULL);
+  g_return_val_if_fail(out_entry != NULL, NULL);
+
+  GtkWidget *label = gtk_label_new(label_text);
+  GtkWidget *entry = gtk_entry_new();
+
+  gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
+  gtk_widget_set_halign(label, GTK_ALIGN_START);
+  gtk_widget_set_hexpand(entry, TRUE);
+  gtk_widget_set_name(entry, entry_name);
+  gtk_editable_set_text(GTK_EDITABLE(entry), value != NULL ? value : "");
+  gtk_grid_attach(grid, label, 0, (int)row, 1, 1);
+  gtk_grid_attach(grid, entry, 1, (int)row, 1, 1);
+  *out_entry = GTK_ENTRY(entry);
+  return entry;
 }
 
 static void ggame_window_on_game_information_save_clicked(GtkButton * /*button*/, gpointer user_data) {
@@ -1975,8 +2019,11 @@ static void ggame_window_on_game_information_save_clicked(GtkButton * /*button*/
     }
 
     g_strstrip(name);
-    ggame_window_set_root_player_name(root, property, name);
+    ggame_window_set_root_text_property(root, property, name);
   }
+  ggame_window_set_root_entry_text_property(root, GGAME_SGF_PROP_DATE, data->date_entry);
+  ggame_window_set_root_entry_text_property(root, GGAME_SGF_PROP_BGA_TABLE_ID, data->table_id_entry);
+  ggame_window_set_root_entry_text_property(root, GGAME_SGF_PROP_RESULT, data->winner_entry);
 
   current = sgf_tree_get_current(tree);
   if (current != NULL) {
@@ -2033,24 +2080,38 @@ void ggame_window_present_game_information_dialog(GGameWindow *self) {
                          data,
                          (GDestroyNotify)ggame_window_game_information_dialog_data_free);
 
+  guint row = 0;
   for (guint side = 0; side < 2; side++) {
     const char *side_label = ggame_window_side_label(self, side);
     const char *property = ggame_window_player_name_property_for_side(self, side);
     const char *name = property != NULL ? sgf_node_get_property_first(root, property) : NULL;
     g_autofree char *fallback_label = g_strdup_printf("Player %u", side + 1);
     g_autofree char *entry_name = g_strdup_printf("game-information-player-%u-entry", side);
-    GtkWidget *label = gtk_label_new(side_label != NULL ? side_label : fallback_label);
-    GtkWidget *entry = gtk_entry_new();
-
-    gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
-    gtk_widget_set_halign(label, GTK_ALIGN_START);
-    gtk_widget_set_hexpand(entry, TRUE);
-    gtk_widget_set_name(entry, entry_name);
-    gtk_editable_set_text(GTK_EDITABLE(entry), name != NULL ? name : "");
-    gtk_grid_attach(GTK_GRID(grid), label, 0, (int)side, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), entry, 1, (int)side, 1, 1);
-    data->player_entries[side] = GTK_ENTRY(entry);
+    ggame_window_new_game_information_entry_row(GTK_GRID(grid),
+                                                side_label != NULL ? side_label : fallback_label,
+                                                entry_name,
+                                                name,
+                                                row++,
+                                                &data->player_entries[side]);
   }
+  ggame_window_new_game_information_entry_row(GTK_GRID(grid),
+                                              "Date",
+                                              "game-information-date-entry",
+                                              sgf_node_get_property_first(root, GGAME_SGF_PROP_DATE),
+                                              row++,
+                                              &data->date_entry);
+  ggame_window_new_game_information_entry_row(GTK_GRID(grid),
+                                              "Table ID",
+                                              "game-information-table-id-entry",
+                                              sgf_node_get_property_first(root, GGAME_SGF_PROP_BGA_TABLE_ID),
+                                              row++,
+                                              &data->table_id_entry);
+  ggame_window_new_game_information_entry_row(GTK_GRID(grid),
+                                              "Winner",
+                                              "game-information-winner-entry",
+                                              sgf_node_get_property_first(root, GGAME_SGF_PROP_RESULT),
+                                              row++,
+                                              &data->winner_entry);
 
   GtkWidget *button_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
   gtk_widget_set_halign(button_box, GTK_ALIGN_END);
@@ -2072,6 +2133,48 @@ void ggame_window_present_game_information_dialog(GGameWindow *self) {
                    data);
 
   gtk_window_present(GTK_WINDOW(dialog));
+}
+
+static void ggame_window_set_new_game_computer_player_names(GGameWindow *self,
+                                                            PlayerControlMode side0_mode,
+                                                            PlayerControlMode side1_mode) {
+  g_return_if_fail(GGAME_IS_WINDOW(self));
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self->sgf_controller));
+
+  SgfTree *tree = ggame_sgf_controller_get_tree(self->sgf_controller);
+  if (tree == NULL) {
+    g_debug("Unable to set computer player names without an SGF tree");
+    return;
+  }
+
+  SgfNode *root = (SgfNode *)sgf_tree_get_root(tree);
+  if (root == NULL) {
+    g_debug("Unable to set computer player names without an SGF root node");
+    return;
+  }
+
+  PlayerControlMode modes[2] = {side0_mode, side1_mode};
+  for (guint side = 0; side < 2; side++) {
+    if (modes[side] != PLAYER_CONTROL_MODE_COMPUTER) {
+      continue;
+    }
+
+    const char *property = ggame_window_player_name_property_for_side(self, side);
+    if (property == NULL) {
+      g_debug("Unable to set computer player name for side %u", side);
+      continue;
+    }
+    ggame_window_set_root_text_property(root, property, "Computer");
+  }
+}
+
+static void ggame_window_set_current_computer_player_names(GGameWindow *self) {
+  g_return_if_fail(GGAME_IS_WINDOW(self));
+  g_return_if_fail(self->controls_panel != NULL);
+
+  ggame_window_set_new_game_computer_player_names(self,
+                                                  player_controls_panel_get_mode(self->controls_panel, 0),
+                                                  player_controls_panel_get_mode(self->controls_panel, 1));
 }
 
 static gboolean ggame_window_apply_player_move(gconstpointer move, gpointer user_data) {
@@ -3503,6 +3606,15 @@ static void ggame_window_on_game_information_action(GSimpleAction * /*action*/,
   ggame_window_present_game_information_dialog(self);
 }
 
+static void ggame_window_on_library_action(GSimpleAction * /*action*/,
+                                           GVariant * /*parameter*/,
+                                           gpointer user_data) {
+  GGameWindow *self = GGAME_WINDOW(user_data);
+  g_return_if_fail(GGAME_IS_WINDOW(self));
+
+  ggame_window_present_library_dialog(self);
+}
+
 static void ggame_window_on_puzzle_next_clicked(GtkButton * /*button*/, gpointer user_data) {
   GGameWindow *self = GGAME_WINDOW(user_data);
   g_return_if_fail(GGAME_IS_WINDOW(self));
@@ -3739,6 +3851,7 @@ void ggame_window_apply_new_game_settings(GGameWindow *self,
     ggame_window_set_ruleset(self, ruleset);
   }
   ggame_window_start_new_game(self);
+  ggame_window_set_current_computer_player_names(self);
 }
 
 void ggame_window_set_board_orientation_mode(GGameWindow *self,
@@ -3799,6 +3912,7 @@ static void ggame_window_set_model(GGameWindow *self, GGameModel *model) {
   ggame_window_sync_board_orientation(self);
   ggame_window_update_status(self);
   ggame_window_update_control_state(self);
+  ggame_window_set_current_computer_player_names(self);
   ggame_window_refresh_analysis_graph(self);
 }
 
@@ -3995,6 +4109,14 @@ static void ggame_window_init(GGameWindow *self) {
       {
           .name = "game-information",
           .activate = ggame_window_on_game_information_action,
+          .parameter_type = NULL,
+          .state = NULL,
+          .change_state = NULL,
+          .padding = {0},
+      },
+      {
+          .name = "library",
+          .activate = ggame_window_on_library_action,
           .parameter_type = NULL,
           .state = NULL,
           .change_state = NULL,

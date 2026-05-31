@@ -5,6 +5,7 @@
 #include "common_settings.h"
 #include "game_app_profile.h"
 #include "sgf_io.h"
+#include "sgf_metadata.h"
 
 #include <errno.h>
 #include <glib/gstdio.h>
@@ -41,6 +42,46 @@ typedef struct {
   BgaClientSession *bga_session;
   GGameImportStep step;
 } GGameWindowImportDialogData;
+
+typedef struct {
+  char *path;
+  char *date;
+  char *player_one;
+  char *player_two;
+  char *winner;
+  char *table_id;
+} GGameLibraryEntry;
+
+typedef struct {
+  GGameWindow *self;
+  GtkWindow *dialog;
+  GtkListBox *list;
+  GtkButton *load_button;
+} GGameWindowLibraryDialogData;
+
+static void ggame_library_entry_free(gpointer data) {
+  GGameLibraryEntry *entry = data;
+  if (entry == NULL) {
+    return;
+  }
+
+  g_free(entry->path);
+  g_free(entry->date);
+  g_free(entry->player_one);
+  g_free(entry->player_two);
+  g_free(entry->winner);
+  g_free(entry->table_id);
+  g_free(entry);
+}
+
+static void ggame_window_library_dialog_data_free(GGameWindowLibraryDialogData *data) {
+  if (data == NULL) {
+    return;
+  }
+
+  g_clear_object(&data->self);
+  g_free(data);
+}
 
 static void ggame_import_dialog_load_credentials(GGameWindowImportDialogData *data) {
   g_return_if_fail(data != NULL);
@@ -189,12 +230,9 @@ static char *ggame_import_dialog_sanitize_cache_name(const char *text) {
   return g_string_free(sanitized, FALSE);
 }
 
-static char *ggame_import_dialog_bga_cache_path(GGameWindowImportDialogData *data,
-                                                const char *table_id,
-                                                GError **error) {
-  g_return_val_if_fail(data != NULL, NULL);
-  g_return_val_if_fail(data->profile != NULL, NULL);
-  g_return_val_if_fail(table_id != NULL, NULL);
+static char *ggame_import_dialog_bga_profile_cache_dir(const GGameAppProfile *profile, GError **error) {
+  g_return_val_if_fail(profile != NULL, NULL);
+  g_return_val_if_fail(profile->id != NULL, NULL);
 
   g_autofree char *base_dir =
       ggame_app_paths_get_user_state_subdir(GGAME_IMPORT_BGA_CACHE_ENV, GGAME_IMPORT_BGA_CACHE_SUBDIR, error);
@@ -202,7 +240,7 @@ static char *ggame_import_dialog_bga_cache_path(GGameWindowImportDialogData *dat
     return NULL;
   }
 
-  g_autofree char *profile_dir_name = ggame_import_dialog_sanitize_cache_name(data->profile->id);
+  g_autofree char *profile_dir_name = ggame_import_dialog_sanitize_cache_name(profile->id);
   g_autofree char *profile_dir = g_build_filename(base_dir, profile_dir_name, NULL);
   if (g_mkdir_with_parents(profile_dir, 0755) != 0) {
     int saved_errno = errno;
@@ -215,9 +253,33 @@ static char *ggame_import_dialog_bga_cache_path(GGameWindowImportDialogData *dat
     return NULL;
   }
 
+  return g_steal_pointer(&profile_dir);
+}
+
+static char *ggame_import_dialog_bga_cache_path_for_profile(const GGameAppProfile *profile,
+                                                            const char *table_id,
+                                                            GError **error) {
+  g_return_val_if_fail(profile != NULL, NULL);
+  g_return_val_if_fail(table_id != NULL, NULL);
+
+  g_autofree char *profile_dir = ggame_import_dialog_bga_profile_cache_dir(profile, error);
+  if (profile_dir == NULL) {
+    return NULL;
+  }
+
   g_autofree char *cache_name = ggame_import_dialog_sanitize_cache_name(table_id);
   g_autofree char *file_name = g_strdup_printf("%s.sgf", cache_name);
   return g_build_filename(profile_dir, file_name, NULL);
+}
+
+static char *ggame_import_dialog_bga_cache_path(GGameWindowImportDialogData *data,
+                                                const char *table_id,
+                                                GError **error) {
+  g_return_val_if_fail(data != NULL, NULL);
+  g_return_val_if_fail(data->profile != NULL, NULL);
+  g_return_val_if_fail(table_id != NULL, NULL);
+
+  return ggame_import_dialog_bga_cache_path_for_profile(data->profile, table_id, error);
 }
 
 static gboolean ggame_import_dialog_bga_table_is_cached(GGameWindowImportDialogData *data,
@@ -237,14 +299,11 @@ static gboolean ggame_import_dialog_bga_table_is_cached(GGameWindowImportDialogD
   return g_file_test(path, G_FILE_TEST_IS_REGULAR);
 }
 
-static gboolean ggame_import_dialog_load_sgf_path(GGameWindowImportDialogData *data,
-                                                  const char *path,
-                                                  GError **error) {
-  g_return_val_if_fail(data != NULL, FALSE);
-  g_return_val_if_fail(GGAME_IS_WINDOW(data->self), FALSE);
+static gboolean ggame_window_load_sgf_path_from_library(GGameWindow *window, const char *path, GError **error) {
+  g_return_val_if_fail(GGAME_IS_WINDOW(window), FALSE);
   g_return_val_if_fail(path != NULL, FALSE);
 
-  GGameSgfController *controller = ggame_window_get_sgf_controller(data->self);
+  GGameSgfController *controller = ggame_window_get_sgf_controller(window);
   if (!ggame_sgf_controller_load_file(controller, path, error)) {
     return FALSE;
   }
@@ -252,10 +311,23 @@ static gboolean ggame_import_dialog_load_sgf_path(GGameWindowImportDialogData *d
   SgfTree *tree = ggame_sgf_controller_get_tree(controller);
   const GameBackendVariant *loaded_variant = NULL;
   if (tree != NULL && sgf_io_tree_get_variant(tree, &loaded_variant, NULL) && loaded_variant != NULL) {
-    ggame_window_set_loaded_variant(data->self, loaded_variant);
+    ggame_window_set_loaded_variant(window, loaded_variant);
   }
-  ggame_window_set_loaded_source_path(data->self, path);
-  ggame_window_set_board_orientation_mode(data->self, GGAME_WINDOW_BOARD_ORIENTATION_FIXED);
+  ggame_window_set_loaded_source_path(window, path);
+  ggame_window_set_board_orientation_mode(window, GGAME_WINDOW_BOARD_ORIENTATION_FIXED);
+  return TRUE;
+}
+
+static gboolean ggame_import_dialog_load_sgf_path(GGameWindowImportDialogData *data,
+                                                  const char *path,
+                                                  GError **error) {
+  g_return_val_if_fail(data != NULL, FALSE);
+  g_return_val_if_fail(GGAME_IS_WINDOW(data->self), FALSE);
+
+  if (!ggame_window_load_sgf_path_from_library(data->self, path, error)) {
+    return FALSE;
+  }
+
   return TRUE;
 }
 
@@ -273,6 +345,228 @@ static void ggame_window_on_import_dialog_destroy(GtkWindow * /*dialog*/, gpoint
   g_return_if_fail(data != NULL);
 
   ggame_window_import_dialog_data_free(data);
+}
+
+static void ggame_window_on_library_dialog_destroy(GtkWindow * /*dialog*/, gpointer user_data) {
+  GGameWindowLibraryDialogData *data = user_data;
+  g_return_if_fail(data != NULL);
+
+  ggame_window_library_dialog_data_free(data);
+}
+
+static GGameLibraryEntry *ggame_library_entry_new_from_sgf_path(const char *path) {
+  g_return_val_if_fail(path != NULL, NULL);
+
+  g_autoptr(GError) error = NULL;
+  g_autoptr(SgfTree) tree = NULL;
+  if (!sgf_io_load_file(path, &tree, &error)) {
+    g_debug("Skipping imported game library entry %s: %s", path, error != NULL ? error->message : "unknown error");
+    return NULL;
+  }
+
+  const SgfNode *root = sgf_tree_get_root(tree);
+  if (root == NULL) {
+    g_debug("Skipping imported game library entry %s without an SGF root", path);
+    return NULL;
+  }
+
+  GGameLibraryEntry *entry = g_new0(GGameLibraryEntry, 1);
+  entry->path = g_strdup(path);
+  entry->date = g_strdup(sgf_node_get_property_first(root, GGAME_SGF_PROP_DATE));
+  entry->player_one = g_strdup(sgf_node_get_property_first(root, "PB"));
+  entry->player_two = g_strdup(sgf_node_get_property_first(root, "PW"));
+  entry->winner = g_strdup(sgf_node_get_property_first(root, GGAME_SGF_PROP_RESULT));
+  entry->table_id = g_strdup(sgf_node_get_property_first(root, GGAME_SGF_PROP_BGA_TABLE_ID));
+  if (entry->table_id == NULL || entry->table_id[0] == '\0') {
+    g_autofree char *basename = g_path_get_basename(path);
+    if (g_str_has_suffix(basename, ".sgf")) {
+      basename[strlen(basename) - 4] = '\0';
+    }
+    g_free(entry->table_id);
+    entry->table_id = g_strdup(basename);
+  }
+
+  return entry;
+}
+
+static gint ggame_library_entry_compare(gconstpointer a, gconstpointer b) {
+  const GGameLibraryEntry *left = *(GGameLibraryEntry * const *)a;
+  const GGameLibraryEntry *right = *(GGameLibraryEntry * const *)b;
+
+  g_return_val_if_fail(left != NULL, 0);
+  g_return_val_if_fail(right != NULL, 0);
+
+  gint date_order = g_strcmp0(right->date, left->date);
+  if (date_order != 0) {
+    return date_order;
+  }
+
+  return g_strcmp0(left->table_id, right->table_id);
+}
+
+static GPtrArray *ggame_library_collect_imported_games(const GGameAppProfile *profile, GError **error) {
+  g_return_val_if_fail(profile != NULL, NULL);
+
+  g_autofree char *profile_dir = ggame_import_dialog_bga_profile_cache_dir(profile, error);
+  if (profile_dir == NULL) {
+    return NULL;
+  }
+
+  GPtrArray *entries = g_ptr_array_new_with_free_func(ggame_library_entry_free);
+  g_autoptr(GDir) dir = g_dir_open(profile_dir, 0, error);
+  if (dir == NULL) {
+    g_ptr_array_unref(entries);
+    return NULL;
+  }
+
+  const char *name = NULL;
+  while ((name = g_dir_read_name(dir)) != NULL) {
+    if (!g_str_has_suffix(name, ".sgf")) {
+      continue;
+    }
+
+    g_autofree char *path = g_build_filename(profile_dir, name, NULL);
+    GGameLibraryEntry *entry = ggame_library_entry_new_from_sgf_path(path);
+    if (entry != NULL) {
+      g_ptr_array_add(entries, entry);
+    }
+  }
+  g_ptr_array_sort(entries, ggame_library_entry_compare);
+
+  return entries;
+}
+
+static GtkWidget *ggame_library_new_cell(const char *text, gboolean header, int width) {
+  GtkWidget *label = gtk_label_new(text != NULL ? text : "");
+  gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
+  gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
+  gtk_widget_set_halign(label, GTK_ALIGN_FILL);
+  gtk_widget_set_hexpand(label, TRUE);
+  gtk_widget_set_size_request(label, width, -1);
+  if (header) {
+    gtk_widget_add_css_class(label, "heading");
+  }
+  return label;
+}
+
+static GtkWidget *ggame_library_new_grid_row(const GGameLibraryEntry *entry) {
+  g_return_val_if_fail(entry != NULL, NULL);
+
+  GtkWidget *grid = gtk_grid_new();
+  gtk_grid_set_column_spacing(GTK_GRID(grid), 12);
+  gtk_widget_set_margin_top(grid, 4);
+  gtk_widget_set_margin_bottom(grid, 4);
+  gtk_widget_set_margin_start(grid, 6);
+  gtk_widget_set_margin_end(grid, 6);
+
+  gtk_grid_attach(GTK_GRID(grid), ggame_library_new_cell(entry->date, FALSE, 92), 0, 0, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), ggame_library_new_cell(entry->player_one, FALSE, 140), 1, 0, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), ggame_library_new_cell(entry->player_two, FALSE, 140), 2, 0, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), ggame_library_new_cell(entry->winner, FALSE, 120), 3, 0, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), ggame_library_new_cell(entry->table_id, FALSE, 96), 4, 0, 1, 1);
+  return grid;
+}
+
+static GtkWidget *ggame_library_new_header_row(void) {
+  GtkWidget *grid = gtk_grid_new();
+  gtk_grid_set_column_spacing(GTK_GRID(grid), 12);
+  gtk_widget_set_margin_top(grid, 4);
+  gtk_widget_set_margin_bottom(grid, 4);
+  gtk_widget_set_margin_start(grid, 6);
+  gtk_widget_set_margin_end(grid, 6);
+
+  gtk_grid_attach(GTK_GRID(grid), ggame_library_new_cell("Date", TRUE, 92), 0, 0, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), ggame_library_new_cell("Player 1", TRUE, 140), 1, 0, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), ggame_library_new_cell("Player 2", TRUE, 140), 2, 0, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), ggame_library_new_cell("Winner", TRUE, 120), 3, 0, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), ggame_library_new_cell("Table ID", TRUE, 96), 4, 0, 1, 1);
+  return grid;
+}
+
+static void ggame_library_dialog_update_load_button(GGameWindowLibraryDialogData *data) {
+  g_return_if_fail(data != NULL);
+  g_return_if_fail(GTK_IS_LIST_BOX(data->list));
+  g_return_if_fail(GTK_IS_BUTTON(data->load_button));
+
+  GtkListBoxRow *row = gtk_list_box_get_selected_row(data->list);
+  const char *path = row != NULL ? g_object_get_data(G_OBJECT(row), "library-path") : NULL;
+  gtk_widget_set_sensitive(GTK_WIDGET(data->load_button), path != NULL && path[0] != '\0');
+}
+
+static void ggame_window_on_library_row_selected(GtkListBox * /*box*/,
+                                                 GtkListBoxRow * /*row*/,
+                                                 gpointer user_data) {
+  GGameWindowLibraryDialogData *data = user_data;
+  g_return_if_fail(data != NULL);
+
+  ggame_library_dialog_update_load_button(data);
+}
+
+static void ggame_window_on_library_cancel_clicked(GtkButton * /*button*/, gpointer user_data) {
+  GGameWindowLibraryDialogData *data = user_data;
+  g_return_if_fail(data != NULL);
+  g_return_if_fail(GTK_IS_WINDOW(data->dialog));
+
+  gtk_window_destroy(data->dialog);
+}
+
+static void ggame_window_on_library_error_ok_clicked(GtkButton * /*button*/, gpointer user_data) {
+  GtkWindow *dialog = GTK_WINDOW(user_data);
+  g_return_if_fail(GTK_IS_WINDOW(dialog));
+
+  gtk_window_destroy(dialog);
+}
+
+static void ggame_library_dialog_show_error(GGameWindowLibraryDialogData *data, const char *message) {
+  g_return_if_fail(data != NULL);
+  g_return_if_fail(message != NULL);
+
+  GtkWidget *dialog = gtk_window_new();
+  gtk_window_set_title(GTK_WINDOW(dialog), "Library error");
+  gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
+  gtk_window_set_transient_for(GTK_WINDOW(dialog), data->dialog);
+  gtk_window_set_destroy_with_parent(GTK_WINDOW(dialog), TRUE);
+
+  GtkWidget *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
+  gtk_widget_set_margin_top(content, 12);
+  gtk_widget_set_margin_bottom(content, 12);
+  gtk_widget_set_margin_start(content, 12);
+  gtk_widget_set_margin_end(content, 12);
+  gtk_window_set_child(GTK_WINDOW(dialog), content);
+
+  GtkWidget *label = gtk_label_new(message);
+  gtk_label_set_wrap(GTK_LABEL(label), TRUE);
+  gtk_widget_set_halign(label, GTK_ALIGN_START);
+  gtk_box_append(GTK_BOX(content), label);
+
+  GtkWidget *ok_button = gtk_button_new_with_label("OK");
+  gtk_widget_set_halign(ok_button, GTK_ALIGN_END);
+  gtk_box_append(GTK_BOX(content), ok_button);
+  g_signal_connect(ok_button, "clicked", G_CALLBACK(ggame_window_on_library_error_ok_clicked), dialog);
+
+  gtk_window_present(GTK_WINDOW(dialog));
+}
+
+static void ggame_window_on_library_load_clicked(GtkButton * /*button*/, gpointer user_data) {
+  GGameWindowLibraryDialogData *data = user_data;
+  g_return_if_fail(data != NULL);
+  g_return_if_fail(GTK_IS_LIST_BOX(data->list));
+
+  GtkListBoxRow *row = gtk_list_box_get_selected_row(data->list);
+  const char *path = row != NULL ? g_object_get_data(G_OBJECT(row), "library-path") : NULL;
+  if (path == NULL || path[0] == '\0') {
+    ggame_library_dialog_update_load_button(data);
+    return;
+  }
+
+  g_autoptr(GError) error = NULL;
+  if (!ggame_window_load_sgf_path_from_library(data->self, path, &error)) {
+    g_debug("Failed to load library game %s: %s", path, error != NULL ? error->message : "unknown error");
+    ggame_library_dialog_show_error(data, "Unable to load the selected game.");
+    return;
+  }
+
+  gtk_window_destroy(data->dialog);
 }
 
 static void ggame_window_import_dialog_update_step(GGameWindowImportDialogData *data) {
@@ -354,6 +648,86 @@ static void ggame_window_on_import_dialog_back_clicked(GtkButton * /*button*/, g
   ggame_window_import_dialog_update_step(data);
 }
 
+void ggame_window_present_library_dialog(GGameWindow *self) {
+  g_return_if_fail(GGAME_IS_WINDOW(self));
+
+  const GGameAppProfile *profile = ggame_active_app_profile();
+  g_return_if_fail(profile != NULL);
+
+  GtkWidget *dialog = gtk_window_new();
+  gtk_window_set_title(GTK_WINDOW(dialog), "Library");
+  gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
+  gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(self));
+  gtk_window_set_destroy_with_parent(GTK_WINDOW(dialog), TRUE);
+  gtk_window_set_default_size(GTK_WINDOW(dialog), 760, 360);
+
+  GtkWidget *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
+  gtk_widget_set_margin_top(content, 12);
+  gtk_widget_set_margin_bottom(content, 12);
+  gtk_widget_set_margin_start(content, 12);
+  gtk_widget_set_margin_end(content, 12);
+  gtk_window_set_child(GTK_WINDOW(dialog), content);
+
+  GtkWidget *title = gtk_label_new("Imported games");
+  gtk_widget_set_halign(title, GTK_ALIGN_START);
+  gtk_box_append(GTK_BOX(content), title);
+  gtk_box_append(GTK_BOX(content), ggame_library_new_header_row());
+
+  GtkWidget *scroll = gtk_scrolled_window_new();
+  gtk_widget_set_hexpand(scroll, TRUE);
+  gtk_widget_set_vexpand(scroll, TRUE);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+  gtk_box_append(GTK_BOX(content), scroll);
+
+  GtkListBox *list = GTK_LIST_BOX(gtk_list_box_new());
+  gtk_list_box_set_selection_mode(list, GTK_SELECTION_SINGLE);
+  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroll), GTK_WIDGET(list));
+
+  g_autoptr(GError) error = NULL;
+  g_autoptr(GPtrArray) entries = ggame_library_collect_imported_games(profile, &error);
+  if (entries == NULL) {
+    g_debug("Unable to collect imported game library: %s", error != NULL ? error->message : "unknown error");
+    entries = g_ptr_array_new_with_free_func(ggame_library_entry_free);
+  }
+
+  for (guint i = 0; i < entries->len; i++) {
+    GGameLibraryEntry *entry = g_ptr_array_index(entries, i);
+    GtkWidget *row = gtk_list_box_row_new();
+    g_object_set_data_full(G_OBJECT(row), "library-path", g_strdup(entry->path), g_free);
+    gtk_list_box_row_set_child(GTK_LIST_BOX_ROW(row), ggame_library_new_grid_row(entry));
+    gtk_list_box_append(list, row);
+  }
+
+  if (entries->len == 0) {
+    GtkWidget *empty_label = gtk_label_new("No imported games.");
+    gtk_widget_set_halign(empty_label, GTK_ALIGN_START);
+    gtk_box_append(GTK_BOX(content), empty_label);
+  }
+
+  GtkWidget *actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+  gtk_widget_set_halign(actions, GTK_ALIGN_END);
+  gtk_box_append(GTK_BOX(content), actions);
+
+  GtkWidget *cancel_button = gtk_button_new_with_label("Cancel");
+  GtkWidget *load_button = gtk_button_new_with_label("Load");
+  gtk_widget_set_sensitive(load_button, FALSE);
+  gtk_box_append(GTK_BOX(actions), cancel_button);
+  gtk_box_append(GTK_BOX(actions), load_button);
+
+  GGameWindowLibraryDialogData *data = g_new0(GGameWindowLibraryDialogData, 1);
+  data->self = g_object_ref(self);
+  data->dialog = GTK_WINDOW(dialog);
+  data->list = list;
+  data->load_button = GTK_BUTTON(load_button);
+
+  g_signal_connect(cancel_button, "clicked", G_CALLBACK(ggame_window_on_library_cancel_clicked), data);
+  g_signal_connect(load_button, "clicked", G_CALLBACK(ggame_window_on_library_load_clicked), data);
+  g_signal_connect(list, "row-selected", G_CALLBACK(ggame_window_on_library_row_selected), data);
+  g_signal_connect(dialog, "destroy", G_CALLBACK(ggame_window_on_library_dialog_destroy), data);
+
+  gtk_window_present(GTK_WINDOW(dialog));
+}
+
 static void ggame_import_dialog_import_selected_history_game(GGameWindowImportDialogData *data) {
   g_return_if_fail(data != NULL);
 
@@ -419,7 +793,7 @@ static void ggame_import_dialog_import_selected_history_game(GGameWindowImportDi
           response.http_status,
           debug_path ? debug_path : "(null)");
   g_autofree char *sgf = NULL;
-  if (!bga_client_parse_homeworlds_archive_logs_sgf(response.body ? response.body : "", &sgf, &error)) {
+  if (!bga_client_parse_homeworlds_archive_logs_sgf(response.body ? response.body : "", table_id, &sgf, &error)) {
     g_debug("Import flow: failed to parse BoardGameArena archive logs for table_id=%s: %s",
             table_id,
             error ? error->message : "unknown error");

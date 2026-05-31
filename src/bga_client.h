@@ -78,7 +78,10 @@ gboolean bga_client_parse_login_response(const char *body, BgaLoginResult *out_r
 gboolean bga_client_parse_history_games(const char *body, GPtrArray **out_games, GError **error);
 gboolean bga_client_archive_review_is_waiting_for_generation(const char *body);
 gboolean bga_client_archive_logs_error_needs_generation(const char *body);
-gboolean bga_client_parse_homeworlds_archive_logs_sgf(const char *body, char **out_sgf, GError **error);
+gboolean bga_client_parse_homeworlds_archive_logs_sgf(const char *body,
+                                                      const char *table_id,
+                                                      char **out_sgf,
+                                                      GError **error);
 void bga_http_response_clear(BgaHttpResponse *response);
 void bga_login_result_clear(BgaLoginResult *result);
 void bga_history_game_summary_free(BgaHistoryGameSummary *summary);

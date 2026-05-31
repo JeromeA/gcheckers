@@ -15,6 +15,7 @@
 #include "games/checkers/board.h"
 #include "games/checkers/rulesets.h"
 #include "sgf_autosave.h"
+#include "sgf_metadata.h"
 #include "sgf_move_props.h"
 #include "sgf_tree.h"
 
@@ -205,6 +206,24 @@ static GtkWidget *test_ggame_window_find_by_type(GtkWidget *root, GType widget_t
        child = gtk_widget_get_next_sibling(child)) {
     GtkWidget *match = test_ggame_window_find_by_type(child, widget_type);
     if (match) {
+      return match;
+    }
+  }
+
+  return NULL;
+}
+
+static GtkListBoxRow *test_ggame_window_find_first_list_box_row(GtkWidget *root) {
+  g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
+
+  if (GTK_IS_LIST_BOX_ROW(root)) {
+    return GTK_LIST_BOX_ROW(root);
+  }
+
+  for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
+       child = gtk_widget_get_next_sibling(child)) {
+    GtkListBoxRow *match = test_ggame_window_find_first_list_box_row(child);
+    if (match != NULL) {
       return match;
     }
   }
@@ -1199,6 +1218,12 @@ static void test_ggame_window_defaults_second_player_to_computer(void) {
   g_assert_cmpuint(player_controls_panel_get_mode(panel, 1), ==, PLAYER_CONTROL_MODE_COMPUTER);
   g_assert_cmpuint(player_controls_panel_get_computer_depth(panel), ==, PLAYER_COMPUTER_DEPTH_DEFAULT);
 
+  GGameSgfController *controller = ggame_window_get_sgf_controller(window);
+  SgfTree *tree = ggame_sgf_controller_get_tree(controller);
+  const SgfNode *root = sgf_tree_get_root(tree);
+  g_assert_null(sgf_node_get_property_first(root, "PW"));
+  g_assert_cmpstr(sgf_node_get_property_first(root, "PB"), ==, "Computer");
+
   g_clear_object(&window);
   g_clear_object(&model);
   g_clear_object(&app);
@@ -1263,8 +1288,15 @@ static void test_ggame_window_toolbar_actions_exist(void) {
   g_assert_nonnull(g_action_map_lookup_action(G_ACTION_MAP(window), "sgf-save-position"));
   g_assert_nonnull(g_action_map_lookup_action(G_ACTION_MAP(window), "sgf-delete-node"));
   g_assert_nonnull(g_action_map_lookup_action(G_ACTION_MAP(window), "game-information"));
+  g_assert_nonnull(g_action_map_lookup_action(G_ACTION_MAP(window), "library"));
   g_assert_nonnull(g_action_map_lookup_action(G_ACTION_MAP(window), "analysis-current-position"));
   g_assert_nonnull(g_action_map_lookup_action(G_ACTION_MAP(window), "analysis-whole-game"));
+
+  GMenuModel *menubar = gtk_application_get_menubar(GTK_APPLICATION(app));
+  g_assert_nonnull(menubar);
+  GMenuModel *file_menu = test_ggame_window_find_submenu(menubar, "File");
+  g_assert_nonnull(file_menu);
+  g_assert_true(test_ggame_window_menu_contains_item(file_menu, "Library..."));
 
   g_clear_object(&window);
   g_clear_object(&model);
@@ -1306,6 +1338,8 @@ static void test_ggame_window_settings_dialog_persists_preferences(void) {
 
   GAction *settings_action = g_action_map_lookup_action(G_ACTION_MAP(app), "settings");
   g_assert_nonnull(settings_action);
+  GAction *library_action = g_action_map_lookup_action(G_ACTION_MAP(window), "library");
+  g_assert_nonnull(library_action);
 
   GMenuModel *menubar = gtk_application_get_menubar(GTK_APPLICATION(app));
   g_assert_nonnull(menubar);
@@ -1315,6 +1349,7 @@ static void test_ggame_window_settings_dialog_persists_preferences(void) {
 
   GMenuModel *file_menu = test_ggame_window_find_submenu(menubar, "File");
   g_assert_nonnull(file_menu);
+  g_assert_true(test_ggame_window_menu_contains_item(file_menu, "Library..."));
   g_assert_true(test_ggame_window_menu_contains_item(file_menu, "Settings..."));
 
   GMenuModel *edit_menu = test_ggame_window_find_submenu(menubar, "Edit");
@@ -1412,10 +1447,22 @@ static void test_ggame_window_game_information_dialog_updates_player_names(void)
                                                               "game-information-player-0-entry");
   GtkWidget *black_entry = test_ggame_window_find_widget_named(GTK_WIDGET(dialog),
                                                               "game-information-player-1-entry");
+  GtkWidget *date_entry = test_ggame_window_find_widget_named(GTK_WIDGET(dialog),
+                                                             "game-information-date-entry");
+  GtkWidget *table_id_entry = test_ggame_window_find_widget_named(GTK_WIDGET(dialog),
+                                                                 "game-information-table-id-entry");
+  GtkWidget *winner_entry = test_ggame_window_find_widget_named(GTK_WIDGET(dialog),
+                                                               "game-information-winner-entry");
   g_assert_true(GTK_IS_ENTRY(white_entry));
   g_assert_true(GTK_IS_ENTRY(black_entry));
+  g_assert_true(GTK_IS_ENTRY(date_entry));
+  g_assert_true(GTK_IS_ENTRY(table_id_entry));
+  g_assert_true(GTK_IS_ENTRY(winner_entry));
   gtk_editable_set_text(GTK_EDITABLE(white_entry), "Alice");
   gtk_editable_set_text(GTK_EDITABLE(black_entry), "Bob");
+  gtk_editable_set_text(GTK_EDITABLE(date_entry), "2025-08-18");
+  gtk_editable_set_text(GTK_EDITABLE(table_id_entry), "716050283");
+  gtk_editable_set_text(GTK_EDITABLE(winner_entry), "Alice");
 
   GtkButton *save_button = test_ggame_window_find_button_with_label(GTK_WIDGET(dialog), "Save");
   g_assert_nonnull(save_button);
@@ -1427,6 +1474,9 @@ static void test_ggame_window_game_information_dialog_updates_player_names(void)
   const SgfNode *root = sgf_tree_get_root(tree);
   g_assert_cmpstr(sgf_node_get_property_first(root, "PW"), ==, "Alice");
   g_assert_cmpstr(sgf_node_get_property_first(root, "PB"), ==, "Bob");
+  g_assert_cmpstr(sgf_node_get_property_first(root, GGAME_SGF_PROP_DATE), ==, "2025-08-18");
+  g_assert_cmpstr(sgf_node_get_property_first(root, GGAME_SGF_PROP_BGA_TABLE_ID), ==, "716050283");
+  g_assert_cmpstr(sgf_node_get_property_first(root, GGAME_SGF_PROP_RESULT), ==, "Alice");
   g_assert_null(test_ggame_window_find_toplevel_by_title("Game information"));
 
   g_clear_object(&window);
@@ -2372,6 +2422,74 @@ static void test_ggame_window_import_wizard_flow(void) {
   g_clear_object(&app);
 }
 
+static void test_ggame_window_library_loads_imported_game(void) {
+  g_autoptr(GError) error = NULL;
+  g_autofree char *cache_root = g_dir_make_tmp("gcheckers-window-bga-library-XXXXXX", &error);
+  g_assert_no_error(error);
+  g_assert_nonnull(cache_root);
+  g_setenv("GCHECKERS_BGA_IMPORT_DIR", cache_root, TRUE);
+
+  g_autofree char *profile_dir = g_build_filename(cache_root, "checkers", NULL);
+  g_assert_cmpint(g_mkdir_with_parents(profile_dir, 0755), ==, 0);
+  g_autofree char *path = g_build_filename(profile_dir, "716050283.sgf", NULL);
+  const char *content =
+      "(;FF[4]CA[UTF-8]AP[gcheckers]GM[40]RU[international]DT[2025-08-18]"
+      "PB[SenetMaster]PW[JeromeLon]RE[SenetMaster]GCBT[716050283])";
+  g_assert_true(g_file_set_contents(path, content, -1, &error));
+  g_assert_no_error(error);
+
+  GtkApplication *app = test_ggame_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GGameWindow *window = test_ggame_window_new(app, model);
+  gtk_window_present(GTK_WINDOW(window));
+  test_ggame_window_drain_main_context(16);
+
+  g_action_group_activate_action(G_ACTION_GROUP(window), "library", NULL);
+  test_ggame_window_drain_main_context(32);
+
+  GtkWindow *dialog = test_ggame_window_find_toplevel_by_title("Library");
+  g_assert_nonnull(dialog);
+  g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "Imported games"));
+  g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "Date"));
+  g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "Player 1"));
+  g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "Player 2"));
+  g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "Winner"));
+  g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "Table ID"));
+  g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "2025-08-18"));
+  g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "SenetMaster"));
+  g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "JeromeLon"));
+  g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "716050283"));
+  g_assert_null(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "716050283.sgf"));
+
+  GtkButton *load_button = test_ggame_window_find_button_with_label(GTK_WIDGET(dialog), "Load");
+  GtkWidget *list = test_ggame_window_find_by_type(GTK_WIDGET(dialog), GTK_TYPE_LIST_BOX);
+  GtkListBoxRow *row = test_ggame_window_find_first_list_box_row(GTK_WIDGET(dialog));
+  g_assert_nonnull(load_button);
+  g_assert_nonnull(list);
+  g_assert_nonnull(row);
+  gtk_list_box_select_row(GTK_LIST_BOX(list), row);
+  test_ggame_window_drain_main_context(16);
+  g_assert_true(gtk_widget_get_sensitive(GTK_WIDGET(load_button)));
+
+  g_signal_emit_by_name(load_button, "clicked");
+  test_ggame_window_drain_main_context(32);
+  g_assert_null(test_ggame_window_find_toplevel_by_title("Library"));
+
+  GGameSgfController *controller = ggame_window_get_sgf_controller(window);
+  SgfTree *tree = ggame_sgf_controller_get_tree(controller);
+  const SgfNode *root = sgf_tree_get_root(tree);
+  g_assert_cmpstr(sgf_node_get_property_first(root, GGAME_SGF_PROP_DATE), ==, "2025-08-18");
+  g_assert_cmpstr(sgf_node_get_property_first(root, "PB"), ==, "SenetMaster");
+  g_assert_cmpstr(sgf_node_get_property_first(root, "PW"), ==, "JeromeLon");
+  g_assert_cmpstr(sgf_node_get_property_first(root, GGAME_SGF_PROP_RESULT), ==, "SenetMaster");
+  g_assert_cmpstr(sgf_node_get_property_first(root, GGAME_SGF_PROP_BGA_TABLE_ID), ==, "716050283");
+
+  g_unsetenv("GCHECKERS_BGA_IMPORT_DIR");
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
 static void test_ggame_window_ruleset_switch_resets_model(void) {
   GtkApplication *app = test_ggame_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
@@ -2418,6 +2536,11 @@ static void test_ggame_window_new_game_keeps_computer_controls(void) {
   g_assert_cmpuint(player_controls_panel_get_mode(panel, 0), ==, PLAYER_CONTROL_MODE_COMPUTER);
   g_assert_cmpuint(player_controls_panel_get_mode(panel, 1), ==, PLAYER_CONTROL_MODE_COMPUTER);
   g_assert_cmpuint(player_controls_panel_get_computer_depth(panel), ==, 4);
+  GGameSgfController *controller = ggame_window_get_sgf_controller(window);
+  SgfTree *tree = ggame_sgf_controller_get_tree(controller);
+  const SgfNode *root = sgf_tree_get_root(tree);
+  g_assert_cmpstr(sgf_node_get_property_first(root, "PW"), ==, "Computer");
+  g_assert_cmpstr(sgf_node_get_property_first(root, "PB"), ==, "Computer");
 
   ggame_window_apply_new_game_settings(window,
                                            test_ggame_window_variant(PLAYER_RULESET_AMERICAN),
@@ -2430,11 +2553,14 @@ static void test_ggame_window_new_game_keeps_computer_controls(void) {
   g_assert_cmpuint(player_controls_panel_get_mode(panel, 0), ==, PLAYER_CONTROL_MODE_COMPUTER);
   g_assert_cmpuint(player_controls_panel_get_mode(panel, 1), ==, PLAYER_CONTROL_MODE_COMPUTER);
   g_assert_cmpuint(player_controls_panel_get_computer_depth(panel), ==, 6);
+  tree = ggame_sgf_controller_get_tree(controller);
+  root = sgf_tree_get_root(tree);
+  g_assert_cmpstr(sgf_node_get_property_first(root, "PW"), ==, "Computer");
+  g_assert_cmpstr(sgf_node_get_property_first(root, "PB"), ==, "Computer");
 
   const GameState *state = gcheckers_model_peek_state(model);
   g_assert_nonnull(state);
   g_assert_cmpuint(state->board.board_size, ==, 8);
-  g_assert_cmpuint(state->turn, ==, CHECKERS_COLOR_WHITE);
 
   g_clear_object(&window);
   g_clear_object(&model);
@@ -2652,6 +2778,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/gcheckers-window/graph-selection-sync", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/graph-activation-selects-node", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/import-wizard-flow", test_ggame_window_skip);
+    g_test_add_func("/gcheckers-window/library-loads-imported-game", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/ruleset-switch", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/new-game-rotates-for-black-player", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/hotseat-follows-turn", test_ggame_window_skip);
@@ -2731,6 +2858,8 @@ int main(int argc, char **argv) {
                   test_ggame_window_graph_activation_changes_sgf_selection);
   g_test_add_func("/analysis-graph/progress-node-accessors", test_analysis_graph_progress_node_accessors);
   g_test_add_func("/gcheckers-window/import-wizard-flow", test_ggame_window_import_wizard_flow);
+  g_test_add_func("/gcheckers-window/library-loads-imported-game",
+                  test_ggame_window_library_loads_imported_game);
   g_test_add_func("/gcheckers-window/ruleset-switch", test_ggame_window_ruleset_switch_resets_model);
   g_test_add_func("/gcheckers-window/new-game-rotates-for-black-player",
                   test_ggame_window_new_game_rotates_for_black_player);

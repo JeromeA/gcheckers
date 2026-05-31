@@ -141,7 +141,9 @@ Top-level menu actions are
 also exposed in a toolbar
 (`New game...`, `Force move`, SGF timeline rewind/step/skip/delete actions, and analysis actions) via GTK actions.
 The shared menubar owns a generic `Edit` submenu after `File`; `Game information...` edits the SGF root `PB`/`PW`
-player-name properties using backend side labels, and `Delete node` lives there as the common SGF tree-edit action.
+player-name properties plus common game metadata (`DT`, `RE`, `GCBT`) using backend side labels, and `Delete node`
+lives there as the common SGF tree-edit action. `File` also exposes `Library...`, which lists cached imported games
+as game records and loads the selected SGF without showing cache filenames as the primary UI.
 Owns modal flows for `New game`, `Game information`, and `Import games` wizards.
 `New game` now builds its optional `Variant` dropdown and summary label from the active backend metadata rather than
 hard-coding checkers names in the dialog. `GGameWindow`'s public new-game and puzzle APIs now take backend variants,
@@ -157,8 +159,10 @@ Successful login advances to a history step that lists games as `table_id` + `pl
 with `(cached)` when the selected profile already has an imported SGF for that table id under the user data import
 cache. Selecting an uncached row enables `Import`, which first opens that table's BoardGameArena game-review page in
 the same session, fetches the archive logs as the review page's XHR does, converts the logs to Homeworlds SGF, writes
-the SGF into the import cache with BGA player names stored as root `PB`/`PW`, and loads it through the shared SGF
-controller. Selecting a cached row changes the button to `Load` and loads the cached SGF without another network fetch.
+the SGF into the import cache with BGA player names and metadata stored as root `PB`/`PW`, `DT`, `RE`, and `GCBT`,
+and loads it through the shared SGF controller. Selecting a cached row changes the button to `Load` and loads the
+cached SGF without another network fetch. The Library dialog scans that same per-profile import cache, displays date,
+players, winner, and BoardGameArena table id in columns, and loads the selected cached SGF.
 Checkers keeps the first import-site selection
 step because its old source list still exists; Boop and Homeworlds skip directly to BoardGameArena credentials because
 their profiles only expose BoardGameArena import.
@@ -219,6 +223,12 @@ navigation.
 Pending move confirmations can still accept further backend builder steps before falling back to selection reset, which
 lets boop disambiguate between confirming a single-kitten graduation and continuing to select a line promotion.
 
+## SGF metadata constants (`src/sgf_metadata.h`)
+Module: shared SGF root metadata property names.
+Role: centralize non-move SGF property identifiers used across import, save/load, and game-information editing.
+Defines `DT` for the game date, `RE` for the winner/result text, and `GCBT` for the BoardGameArena table id.
+Collaborates with: `src/bga_client.c`, `src/import_dialog.c`, `src/window.c`, and `src/sgf_io.c`.
+
 ## `AnalysisGraph` (`src/analysis_graph.c`, `src/analysis_graph.h`)
 Class: `AnalysisGraph` (`GObject`).
 Role: wraps a `GtkDrawingArea` chart for SGF branch evaluations. Draws best-score points/segments from per-node
@@ -237,7 +247,8 @@ Class: `PlayerControlsPanel` (`GtkBox`).
 Role: encapsulate two-side player mode controls.
 Modes: side 0 / side 1 each select `User` or `Computer`, plus a shared `Computer depth` slider (`1..16`).
 Defaults: side 0 starts as `User`, side 1 starts as `Computer`, and the active profile supplies the initial computer
-depth. Labels are backend-supplied by the window (`White`/`Black` for the current checkers backend).
+depth. New-game SGF roots mark any computer-controlled side as `Computer` in the side's player-name property. Labels
+are backend-supplied by the window (`White`/`Black` for the current checkers backend).
 Signals: `control-changed` for window-level coordination.
 Collaborates with: `GGameWindow` signal handlers and GTK widgets (`GtkDropDown`, `GtkScale`).
 
@@ -463,7 +474,8 @@ with `X-Requested-With: XMLHttpRequest`, the game-review page as `Referer`, and 
 available. If the logs endpoint still reports a missing `gamenotifs` archive file, the client requests archive
 generation and retries once. The returned HTML is saved under `/tmp/gcheckers-bga-archive-logs-*.html`. Homeworlds
 archive parsing scans BGA notification objects, maps BGA system ids to the current text notation (`H1`, `H2`, `S0`,
-...), discards restarted turn attempts, preserves explicit sacrifice filler passes, and emits a normal SGF tree.
+...), discards restarted turn attempts, preserves explicit sacrifice filler passes, and emits a normal SGF tree with
+BGA date, player names, winner, and table id stored in root metadata.
 Imported SGFs are cached under the writable user data area in a BoardGameArena import subdirectory keyed by active
 profile id and table id.
 All BoardGameArena HTTP response bodies are also saved to `/tmp/gcheckers-bga-*.txt` for debugging.

@@ -1,0 +1,8 @@
+#ifndef SGF_METADATA_H
+#define SGF_METADATA_H
+
+#define GGAME_SGF_PROP_DATE "DT"
+#define GGAME_SGF_PROP_RESULT "RE"
+#define GGAME_SGF_PROP_BGA_TABLE_ID "GCBT"
+
+#endif

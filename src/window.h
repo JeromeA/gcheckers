@@ -26,6 +26,7 @@ GGameWindow *ggame_window_new(GtkApplication *app, GGameModel *model);
 void ggame_window_present_new_game_dialog(GGameWindow *self);
 void ggame_window_present_puzzle_dialog(GGameWindow *self);
 void ggame_window_present_import_dialog(GGameWindow *self);
+void ggame_window_present_library_dialog(GGameWindow *self);
 void ggame_window_present_settings_dialog(GGameWindow *self);
 void ggame_window_present_game_information_dialog(GGameWindow *self);
 void ggame_window_set_loaded_source_path(GGameWindow *self, const char *path);

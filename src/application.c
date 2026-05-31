@@ -359,6 +359,7 @@ static void ggame_application_startup(GApplication *app) {
   GMenu *view_menu = g_menu_new();
   g_menu_append(file_primary_menu, "New game...", "app.new-game");
   g_menu_append(file_primary_menu, "Import...", "app.import");
+  g_menu_append(file_primary_menu, "Library...", "win.library");
   g_menu_append(file_primary_menu, "Load...", "win.sgf-load");
   g_menu_append(file_primary_menu, "Save as...", "win.sgf-save-as");
   g_menu_append(file_primary_menu, "Save position...", "win.sgf-save-position");

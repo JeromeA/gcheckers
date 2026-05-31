@@ -1,5 +1,7 @@
 #include "bga_client.h"
 
+#include "sgf_metadata.h"
+
 #include <curl/curl.h>
 #include <errno.h>
 #include <string.h>
@@ -17,6 +19,9 @@ static const char *bga_client_archive_logs_url_prefix =
     "https://boardgamearena.com/archive/archive/logs.html";
 static const guint bga_client_archive_ready_poll_count = 5;
 static const guint bga_client_archive_ready_poll_usec = 250000;
+
+static const char *bga_client_json_previous_object_start(const char *body, const char *position);
+static const char *bga_client_json_object_end(const char *object_start);
 
 struct _BgaClientSession {
   CURL *curl;
@@ -206,6 +211,23 @@ static char *bga_client_format_history_start_at(const char *start_unix_text) {
   return g_date_time_format(timestamp, "%Y-%m-%d %H:%M");
 }
 
+static char *bga_client_format_sgf_date(const char *unix_text) {
+  g_return_val_if_fail(unix_text != NULL, NULL);
+
+  char *end = NULL;
+  gint64 unix_seconds = g_ascii_strtoll(unix_text, &end, 10);
+  if (end == unix_text || (end != NULL && *end != '\0') || unix_seconds < 0) {
+    return NULL;
+  }
+
+  g_autoptr(GDateTime) timestamp = g_date_time_new_from_unix_utc(unix_seconds);
+  if (timestamp == NULL) {
+    return NULL;
+  }
+
+  return g_date_time_format(timestamp, "%Y-%m-%d");
+}
+
 static char *bga_client_strdup_stripped(const char *text) {
   g_autofree char *copy = g_strdup(text != NULL ? text : "");
   g_strstrip(copy);
@@ -264,6 +286,9 @@ typedef struct {
   GString *sgf;
   GPtrArray *steps;
   GPtrArray *players;
+  char *table_id;
+  char *date;
+  char *winner;
   BgaHomeworldsArchivePosition committed;
   BgaHomeworldsArchivePosition working;
   gboolean has_pending_turn;
@@ -375,6 +400,9 @@ static void bga_homeworlds_archive_state_clear(BgaHomeworldsArchiveState *state)
   }
   g_clear_pointer(&state->steps, g_ptr_array_unref);
   g_clear_pointer(&state->players, g_ptr_array_unref);
+  g_clear_pointer(&state->table_id, g_free);
+  g_clear_pointer(&state->date, g_free);
+  g_clear_pointer(&state->winner, g_free);
   bga_homeworlds_archive_position_clear(&state->committed);
   bga_homeworlds_archive_position_clear(&state->working);
 }
@@ -724,6 +752,68 @@ static const char *bga_homeworlds_archive_player_name_for_side(BgaHomeworldsArch
   return NULL;
 }
 
+static char *bga_homeworlds_archive_extract_first_json_string(const char *body, const char *key) {
+  g_return_val_if_fail(body != NULL, NULL);
+  g_return_val_if_fail(key != NULL, NULL);
+
+  g_autofree char *pattern = g_strdup_printf("\"%s\"\\s*:\\s*\"([^\"]+)\"", key);
+  g_autoptr(GRegex) regex = g_regex_new(pattern, G_REGEX_DOTALL, 0, NULL);
+  g_autoptr(GMatchInfo) info = NULL;
+  if (!g_regex_match(regex, body, 0, &info)) {
+    return NULL;
+  }
+
+  return g_match_info_fetch(info, 1);
+}
+
+static char *bga_homeworlds_archive_extract_date(const char *body) {
+  g_return_val_if_fail(body != NULL, NULL);
+
+  g_autofree char *time_text = bga_homeworlds_archive_extract_first_json_string(body, "time");
+  if (time_text == NULL) {
+    return NULL;
+  }
+
+  return bga_client_format_sgf_date(time_text);
+}
+
+static char *bga_homeworlds_archive_extract_winner(const char *body) {
+  g_return_val_if_fail(body != NULL, NULL);
+
+  g_autoptr(GRegex) rank_regex = g_regex_new("\"rank\"\\s*:\\s*1\\b", G_REGEX_DOTALL, 0, NULL);
+  g_autoptr(GMatchInfo) match_info = NULL;
+  if (!g_regex_match(rank_regex, body, 0, &match_info)) {
+    return NULL;
+  }
+
+  while (g_match_info_matches(match_info)) {
+    int start_pos = -1;
+    int end_pos = -1;
+    if (!g_match_info_fetch_pos(match_info, 0, &start_pos, &end_pos) || start_pos < 0 || end_pos < 0) {
+      break;
+    }
+
+    const char *object_start = bga_client_json_previous_object_start(body, body + start_pos);
+    const char *object_end = object_start != NULL ? bga_client_json_object_end(object_start) : NULL;
+    if (object_start != NULL && object_end != NULL && object_end > object_start) {
+      g_autofree char *entry_body = g_strndup(object_start, (gsize)(object_end - object_start));
+      gboolean tied = FALSE;
+      g_autofree char *name = NULL;
+      if ((!bga_client_json_extract_bool(entry_body, "tie", &tied) || !tied) &&
+          bga_client_json_extract_string(entry_body, "name", &name) &&
+          name != NULL && name[0] != '\0') {
+        return g_steal_pointer(&name);
+      }
+    }
+
+    if (!g_match_info_next(match_info, NULL)) {
+      break;
+    }
+  }
+
+  return NULL;
+}
+
 static int bga_homeworlds_archive_player_side_from_event(BgaHomeworldsArchiveState *state,
                                                          const char *event_body) {
   g_return_val_if_fail(state != NULL, -1);
@@ -777,6 +867,16 @@ static char *bga_homeworlds_archive_format_sgf(BgaHomeworldsArchiveState *state)
   g_return_val_if_fail(state->sgf != NULL, NULL);
 
   GString *sgf = g_string_new("(;AP[gcheckers]CA[UTF-8]FF[4]GM[40]");
+  if (state->date != NULL && state->date[0] != '\0') {
+    g_string_append(sgf, GGAME_SGF_PROP_DATE "[");
+    bga_homeworlds_archive_append_sgf_value(sgf, state->date);
+    g_string_append_c(sgf, ']');
+  }
+  if (state->table_id != NULL && state->table_id[0] != '\0') {
+    g_string_append(sgf, GGAME_SGF_PROP_BGA_TABLE_ID "[");
+    bga_homeworlds_archive_append_sgf_value(sgf, state->table_id);
+    g_string_append_c(sgf, ']');
+  }
   const char *player_1_name = bga_homeworlds_archive_player_name_for_side(state, 0);
   const char *player_2_name = bga_homeworlds_archive_player_name_for_side(state, 1);
   if (player_1_name != NULL && player_1_name[0] != '\0') {
@@ -787,6 +887,11 @@ static char *bga_homeworlds_archive_format_sgf(BgaHomeworldsArchiveState *state)
   if (player_2_name != NULL && player_2_name[0] != '\0') {
     g_string_append(sgf, "PW[");
     bga_homeworlds_archive_append_sgf_value(sgf, player_2_name);
+    g_string_append_c(sgf, ']');
+  }
+  if (state->winner != NULL && state->winner[0] != '\0') {
+    g_string_append(sgf, GGAME_SGF_PROP_RESULT "[");
+    bga_homeworlds_archive_append_sgf_value(sgf, state->winner);
     g_string_append_c(sgf, ']');
   }
   g_string_append(sgf, state->sgf->str);
@@ -2163,7 +2268,10 @@ gboolean bga_client_session_fetch_archive_logs(BgaClientSession *session,
   return bga_client_save_archive_logs_debug_page(table_id, out_response->body, out_debug_path, error);
 }
 
-gboolean bga_client_parse_homeworlds_archive_logs_sgf(const char *body, char **out_sgf, GError **error) {
+gboolean bga_client_parse_homeworlds_archive_logs_sgf(const char *body,
+                                                      const char *table_id,
+                                                      char **out_sgf,
+                                                      GError **error) {
   g_return_val_if_fail(body != NULL, FALSE);
   g_return_val_if_fail(out_sgf != NULL, FALSE);
 
@@ -2179,6 +2287,11 @@ gboolean bga_client_parse_homeworlds_archive_logs_sgf(const char *body, char **o
 
   BgaHomeworldsArchiveState state = {0};
   bga_homeworlds_archive_state_init(&state);
+  state.date = bga_homeworlds_archive_extract_date(body);
+  state.table_id = table_id != NULL && table_id[0] != '\0'
+      ? g_strdup(table_id)
+      : bga_homeworlds_archive_extract_first_json_string(body, "table_id");
+  state.winner = bga_homeworlds_archive_extract_winner(body);
   guint processed_notifications = 0;
   gboolean ok = TRUE;
 

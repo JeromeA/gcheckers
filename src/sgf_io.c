@@ -1,6 +1,7 @@
 #include "sgf_io.h"
 
 #include "active_game_backend.h"
+#include "sgf_metadata.h"
 #include "sgf_move_props.h"
 
 #include <errno.h>
@@ -16,6 +17,11 @@
  *               : application identifier.
  * - GM[40]      : game id marker used by gcheckers for checkers/draughts.
  * - RU[short]   : gcheckers ruleset short name, e.g. international or american.
+ * - DT[date]    : game date, usually imported from the remote table start date.
+ * - PB[name]    : black-side player name.
+ * - PW[name]    : white-side player name.
+ * - RE[result]  : result or winner label.
+ * - GCBT[id]    : BoardGameArena table id for imported games.
  *
  * Move properties:
  * - B[move]     : black move in gcheckers move notation, e.g. 12-16 or 23x18.
