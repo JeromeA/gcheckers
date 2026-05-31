@@ -1069,14 +1069,10 @@ static void ggame_window_apply_saved_panel_widths(GGameWindow *self) {
     gtk_widget_set_size_request(self->board_panel, board_min_width, -1);
   }
   if (self->drawer_host != NULL) {
-    gtk_widget_set_size_request(self->drawer_host,
-                                self->show_navigation_drawer || self->show_analysis_drawer ? drawer_width : 0,
-                                -1);
+    gtk_widget_set_size_request(self->drawer_host, -1, -1);
   }
   if (self->drawer_split != NULL) {
-    gtk_widget_set_size_request(self->drawer_split,
-                                self->show_navigation_drawer && self->show_analysis_drawer ? drawer_width : -1,
-                                -1);
+    gtk_widget_set_size_request(self->drawer_split, -1, -1);
   }
 }
 

@@ -112,6 +112,8 @@ updates instead of switching from a separate startup string, includes the cumula
 label, and refreshes on the same 100 ms throttle used by current-position analysis while a node is being searched.
 Panel width state is retained for the board, navigation drawer, and analysis drawer, and drawer show/hide transitions
 recompute window width plus paned positions so visible panels keep their prior widths instead of stretching.
+Saved drawer widths are restored through window defaults and paned positions, not through widget size requests, so a
+remembered wide drawer does not become the main split's hard minimum width.
 Puzzle mode also owns the toplevel default width while active, so foreign GTK/default-size changes are reasserted back
 to the puzzle layout instead of expanding the window to the normal three-pane width.
 Mode dropdown supports `Play` and `Edit`. In `Edit`, board clicks mutate SGF setup properties on the current node:

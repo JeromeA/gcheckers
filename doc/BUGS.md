@@ -1340,3 +1340,14 @@ information dialog and library therefore could not show or edit the precise impo
 
 The fix writes imported `DT` metadata as `YYYY-MM-DD HH:MM` in UTC, keeps the full value editable in the game
 information dialog, and shows the full date/time value in the library.
+
+## Drawer width restoration clamped the main paned handle
+
+The main board/drawer split could not be dragged far enough to the right even when the navigation and analysis panels
+needed only a small minimum width. The layout debug log proved the clamp: `main_paned` had width `1766`, but its end
+child reported `end_min=884` and `max_position_from_end_min=882`, matching the observed stop around position `881`.
+That `884` did not come from the SGF or analysis content, which measured as `133` and `116`; it came from an explicit
+`drawer_host request=884x-1` set while restoring saved panel widths.
+
+The fix keeps restoring preferred widths through the paned positions and window default size, but no longer turns the
+saved drawer width into a hard minimum size request on `drawer_host` or `drawer_split`.

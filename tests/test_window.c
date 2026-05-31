@@ -2214,17 +2214,25 @@ static void test_ggame_window_drawer_visibility_actions(void) {
 }
 
 static void test_ggame_window_drawer_visibility_preserves_panel_widths(void) {
+  g_setenv("GSETTINGS_BACKEND", "memory", TRUE);
+
+  g_autoptr(GSettings) settings = ggame_common_settings_create();
+  g_assert_nonnull(settings);
+  test_ggame_window_reset_common_window_settings(settings);
+
   GtkApplication *app = test_ggame_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
   GGameWindow *window = test_ggame_window_new(app, model);
   gtk_window_present(GTK_WINDOW(window));
   test_ggame_window_drain_main_context(24);
 
+  GtkWidget *main_paned = test_ggame_window_get_named_widget(window, "main-paned");
   GtkWidget *board_panel = test_ggame_window_get_named_widget(window, "board-panel");
   GtkWidget *drawer_host = test_ggame_window_get_named_widget(window, "drawer-host");
   GtkWidget *drawer_split = test_ggame_window_get_named_widget(window, "drawer-split");
   GtkWidget *navigation_panel = test_ggame_window_get_named_widget(window, "navigation-panel");
   GtkWidget *analysis_panel = test_ggame_window_get_named_widget(window, "analysis-panel");
+  g_assert_nonnull(main_paned);
   g_assert_nonnull(board_panel);
   g_assert_nonnull(drawer_host);
   g_assert_nonnull(drawer_split);
@@ -2234,38 +2242,43 @@ static void test_ggame_window_drawer_visibility_preserves_panel_widths(void) {
   gint board_width = gtk_widget_get_width(board_panel);
   gint navigation_width = gtk_widget_get_width(navigation_panel);
   gint analysis_width = gtk_widget_get_width(analysis_panel);
+  gint drawer_split_position = gtk_paned_get_position(GTK_PANED(drawer_split));
   g_assert_cmpint(board_width, >, 0);
   g_assert_cmpint(navigation_width, >, 0);
   g_assert_cmpint(analysis_width, >, 0);
+  g_assert_cmpint(drawer_split_position, >, 0);
+  g_assert_cmpint(test_ggame_window_get_size_request_width(drawer_host), ==, -1);
+  g_assert_cmpint(test_ggame_window_get_size_request_width(drawer_split), ==, -1);
 
   g_action_group_change_action_state(G_ACTION_GROUP(window),
                                      "view-show-navigation-drawer",
                                      g_variant_new_boolean(FALSE));
   test_ggame_window_drain_main_context(96);
-  g_assert_cmpint(test_ggame_window_get_size_request_width(board_panel), ==, board_width);
-  g_assert_cmpint(test_ggame_window_get_size_request_width(drawer_host), ==, analysis_width);
+  g_assert_cmpint(test_ggame_window_get_size_request_width(drawer_host), ==, -1);
 
   g_action_group_change_action_state(G_ACTION_GROUP(window),
                                      "view-show-navigation-drawer",
                                      g_variant_new_boolean(TRUE));
   test_ggame_window_drain_main_context(96);
-  g_assert_cmpint(test_ggame_window_get_size_request_width(board_panel), ==, board_width);
-  g_assert_cmpint(gtk_paned_get_position(GTK_PANED(drawer_split)), ==, navigation_width);
+  g_assert_cmpint(test_ggame_window_get_size_request_width(drawer_host), ==, -1);
+  g_assert_cmpint(test_ggame_window_get_size_request_width(drawer_split), ==, -1);
+  g_assert_cmpint(gtk_paned_get_position(GTK_PANED(drawer_split)), ==, drawer_split_position);
 
   g_action_group_change_action_state(G_ACTION_GROUP(window),
                                      "view-show-analysis-drawer",
                                      g_variant_new_boolean(FALSE));
   test_ggame_window_drain_main_context(96);
-  g_assert_cmpint(test_ggame_window_get_size_request_width(board_panel), ==, board_width);
-  g_assert_cmpint(test_ggame_window_get_size_request_width(drawer_host), ==, navigation_width);
+  g_assert_cmpint(test_ggame_window_get_size_request_width(drawer_host), ==, -1);
 
   g_action_group_change_action_state(G_ACTION_GROUP(window),
                                      "view-show-analysis-drawer",
                                      g_variant_new_boolean(TRUE));
   test_ggame_window_drain_main_context(96);
-  g_assert_cmpint(test_ggame_window_get_size_request_width(board_panel), ==, board_width);
-  g_assert_cmpint(gtk_paned_get_position(GTK_PANED(drawer_split)), ==, navigation_width);
+  g_assert_cmpint(test_ggame_window_get_size_request_width(drawer_host), ==, -1);
+  g_assert_cmpint(test_ggame_window_get_size_request_width(drawer_split), ==, -1);
+  g_assert_cmpint(gtk_paned_get_position(GTK_PANED(drawer_split)), ==, drawer_split_position);
 
+  test_ggame_window_reset_common_window_settings(settings);
   g_clear_object(&window);
   g_clear_object(&model);
   g_clear_object(&app);
