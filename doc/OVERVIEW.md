@@ -102,10 +102,11 @@ the window.
 Puzzle entry forces a fixed attacker-at-bottom orientation, while puzzle exit restores only layout/drawer state and
 leaves the current board orientation unchanged.
 Adds an `Analysis` menubar submenu for current-position and whole-game analysis, plus a `View` submenu with
-independent toggles for the navigation drawer and analysis drawer; Homeworlds also exposes a `Move report` toggle
-there. Hiding both drawers removes the entire right-side drawer split while preserving the board pane. The analysis
-drawer keeps the text report bound to the currently selected SGF node, and shows only transient analysis depth/node
-progress in a separate status label under the graph instead of overwriting or duplicating the report text. Full-game
+independent toggles for the navigation drawer, analysis drawer, and move report; the move-report action is disabled
+for profiles without a board-host report hook. Hiding both drawers removes the entire right-side drawer split while
+preserving the board pane. The analysis drawer keeps the text report bound to the currently selected SGF node, and
+shows only transient analysis depth/node progress in a separate status label under the graph instead of overwriting or
+duplicating the report text. Full-game
 analysis status uses one shared formatter from the initial `0/n` state through later progress
 updates instead of switching from a separate startup string, includes the cumulative explored-node count in the status
 label, and refreshes on the same 100 ms throttle used by current-position analysis while a node is being searched.
@@ -844,8 +845,8 @@ Role: define the GTK application type and activation flow that creates the main 
 (`app.new-game`, `app.import`, `app.quit`, `app.settings`), installs window game/SGF/navigation/analysis/puzzle/view
 actions, and publishes one shared menubar model (`File` -> `New game...`, `Import...`, `Load...`, `Save as...`,
 `Save position...`, `Settings`, `Quit`; `Move` -> `Force move` + SGF navigation/delete-node section; `Analysis` ->
-current-position and whole-game analysis; `Puzzle` -> `Play puzzles`; `View` -> drawer toggles plus profile-specific
-items such as the Homeworlds move report) with keyboard accelerators, including Delete for SGF node deletion. Both
+current-position and whole-game analysis; `Puzzle` -> `Play puzzles`; `View` -> drawer toggles and `Show move report`)
+with keyboard accelerators, including Delete for SGF node deletion. Both
 `gcheckers` and `gboop` are built from this same shell and diverge through `GGameAppProfile` feature flags and boop's
 optional board-host hook. Unsupported actions stay in the same shared shell but are disabled for profiles that do not
 support them. `src/ghomeworlds.c` selects the Homeworlds profile and opens the same shared shell with the Homeworlds

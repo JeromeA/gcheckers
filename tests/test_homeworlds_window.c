@@ -1900,7 +1900,7 @@ static void test_homeworlds_application_view_menu_has_move_report(void) {
   g_assert_nonnull(menubar);
   view_menu = test_homeworlds_find_submenu(menubar, "View");
   g_assert_nonnull(view_menu);
-  g_assert_true(test_homeworlds_menu_contains_item(view_menu, "Move report"));
+  g_assert_true(test_homeworlds_menu_contains_item(view_menu, "Show move report"));
 }
 
 static void test_homeworlds_view_board_system_title_uses_player_names(void) {

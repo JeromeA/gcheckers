@@ -1340,6 +1340,9 @@ static void test_ggame_window_settings_dialog_persists_preferences(void) {
   g_assert_nonnull(settings_action);
   GAction *library_action = g_action_map_lookup_action(G_ACTION_MAP(window), "library");
   g_assert_nonnull(library_action);
+  GAction *move_report_action = g_action_map_lookup_action(G_ACTION_MAP(window), "view-show-move-report");
+  g_assert_nonnull(move_report_action);
+  g_assert_false(g_action_get_enabled(move_report_action));
 
   GMenuModel *menubar = gtk_application_get_menubar(GTK_APPLICATION(app));
   g_assert_nonnull(menubar);
@@ -1362,6 +1365,12 @@ static void test_ggame_window_settings_dialog_persists_preferences(void) {
   g_assert_null(test_ggame_window_find_submenu(menubar, "Game"));
   g_assert_true(test_ggame_window_menu_contains_item(move_menu, "Force move"));
   g_assert_false(test_ggame_window_menu_contains_item(move_menu, "Delete node"));
+
+  GMenuModel *view_menu = test_ggame_window_find_submenu(menubar, "View");
+  g_assert_nonnull(view_menu);
+  g_assert_true(test_ggame_window_menu_contains_item(view_menu, "Show navigation drawer"));
+  g_assert_true(test_ggame_window_menu_contains_item(view_menu, "Show analysis drawer"));
+  g_assert_true(test_ggame_window_menu_contains_item(view_menu, "Show move report"));
 
   g_auto(GStrv) delete_accels =
       gtk_application_get_accels_for_action(GTK_APPLICATION(app), "win.sgf-delete-node");
