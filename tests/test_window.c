@@ -2422,6 +2422,67 @@ static void test_ggame_window_import_wizard_flow(void) {
   g_clear_object(&app);
 }
 
+static void test_ggame_window_import_wizard_uses_cached_history(void) {
+  ggame_import_dialog_test_clear_bga_session_cache();
+  g_autoptr(GError) error = NULL;
+  g_autofree char *cache_root = g_dir_make_tmp("gcheckers-window-import-cache-XXXXXX", &error);
+  g_assert_no_error(error);
+  g_assert_nonnull(cache_root);
+  g_setenv("GCHECKERS_BGA_IMPORT_DIR", cache_root, TRUE);
+
+  ggame_import_dialog_test_seed_bga_history("checkers",
+                                            "769024787",
+                                            "2025-12-02 17:31",
+                                            "Alice",
+                                            "Bob");
+
+  GtkApplication *app = test_ggame_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GGameWindow *window = test_ggame_window_new(app, model);
+  gtk_window_present(GTK_WINDOW(window));
+  test_ggame_window_drain_main_context(16);
+
+  g_action_group_activate_action(G_ACTION_GROUP(app), "import", NULL);
+  test_ggame_window_drain_main_context(32);
+
+  GtkWindow *dialog = test_ggame_window_find_toplevel_by_title("Import games");
+  g_assert_nonnull(dialog);
+
+  GtkWidget *stack = test_ggame_window_find_by_type(GTK_WIDGET(dialog), GTK_TYPE_STACK);
+  g_assert_true(GTK_IS_STACK(stack));
+  g_assert_cmpstr(gtk_stack_get_visible_child_name(GTK_STACK(stack)), ==, "history");
+  g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "BoardGameArena Checkers history"));
+  g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog),
+                                                          "2025-12-02 17:31  |  769024787  |  Alice vs Bob"));
+
+  GtkWidget *reload = test_ggame_window_find_widget_named(GTK_WIDGET(dialog), "import-history-reload-button");
+  g_assert_true(GTK_IS_BUTTON(reload));
+  g_assert_true(gtk_widget_get_sensitive(reload));
+
+  GtkButton *import_button = test_ggame_window_find_button_with_label(GTK_WIDGET(dialog), "Import");
+  GtkWidget *list = test_ggame_window_find_by_type(GTK_WIDGET(dialog), GTK_TYPE_LIST_BOX);
+  GtkListBoxRow *row = test_ggame_window_find_first_list_box_row(GTK_WIDGET(dialog));
+  g_assert_nonnull(import_button);
+  g_assert_nonnull(list);
+  g_assert_nonnull(row);
+  g_assert_false(gtk_widget_get_sensitive(GTK_WIDGET(import_button)));
+  gtk_list_box_select_row(GTK_LIST_BOX(list), row);
+  test_ggame_window_drain_main_context(16);
+  g_assert_true(gtk_widget_get_sensitive(GTK_WIDGET(import_button)));
+
+  GtkButton *cancel_button = test_ggame_window_find_button_with_label(GTK_WIDGET(dialog), "Cancel");
+  g_assert_nonnull(cancel_button);
+  g_signal_emit_by_name(cancel_button, "clicked");
+  test_ggame_window_drain_main_context(16);
+  g_assert_null(test_ggame_window_find_toplevel_by_title("Import games"));
+
+  ggame_import_dialog_test_clear_bga_session_cache();
+  g_unsetenv("GCHECKERS_BGA_IMPORT_DIR");
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
 static void test_ggame_window_library_loads_imported_game(void) {
   g_autoptr(GError) error = NULL;
   g_autofree char *cache_root = g_dir_make_tmp("gcheckers-window-bga-library-XXXXXX", &error);
@@ -2778,6 +2839,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/gcheckers-window/graph-selection-sync", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/graph-activation-selects-node", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/import-wizard-flow", test_ggame_window_skip);
+    g_test_add_func("/gcheckers-window/import-wizard-cached-history", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/library-loads-imported-game", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/ruleset-switch", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/new-game-rotates-for-black-player", test_ggame_window_skip);
@@ -2858,6 +2920,8 @@ int main(int argc, char **argv) {
                   test_ggame_window_graph_activation_changes_sgf_selection);
   g_test_add_func("/analysis-graph/progress-node-accessors", test_analysis_graph_progress_node_accessors);
   g_test_add_func("/gcheckers-window/import-wizard-flow", test_ggame_window_import_wizard_flow);
+  g_test_add_func("/gcheckers-window/import-wizard-cached-history",
+                  test_ggame_window_import_wizard_uses_cached_history);
   g_test_add_func("/gcheckers-window/library-loads-imported-game",
                   test_ggame_window_library_loads_imported_game);
   g_test_add_func("/gcheckers-window/ruleset-switch", test_ggame_window_ruleset_switch_resets_model);

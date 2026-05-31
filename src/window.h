@@ -53,6 +53,15 @@ guint ggame_window_get_analysis_depth(GGameWindow *self);
 PlayerControlsPanel *ggame_window_get_controls_panel(GGameWindow *self);
 GGameSgfController *ggame_window_get_sgf_controller(GGameWindow *self);
 
+#ifdef GGAME_TESTING
+void ggame_import_dialog_test_clear_bga_session_cache(void);
+void ggame_import_dialog_test_seed_bga_history(const char *profile_id,
+                                               const char *table_id,
+                                               const char *start_at,
+                                               const char *player_one,
+                                               const char *player_two);
+#endif
+
 G_END_DECLS
 
 #endif

@@ -157,12 +157,15 @@ schema when fetching history, and prefills credentials on the credentials step f
 responses drive in-memory result handling; status/error responses trigger an error dialog and close the wizard.
 Successful login advances to a history step that lists games as `table_id` + `player_one vs player_two`, marking rows
 with `(cached)` when the selected profile already has an imported SGF for that table id under the user data import
-cache. Selecting an uncached row enables `Import`, which first opens that table's BoardGameArena game-review page in
-the same session, fetches the archive logs as the review page's XHR does, converts the logs to Homeworlds SGF, writes
-the SGF into the import cache with BGA player names and metadata stored as root `PB`/`PW`, `DT`, `RE`, and `GCBT`,
-and loads it through the shared SGF controller. Selecting a cached row changes the button to `Load` and loads the
-cached SGF without another network fetch. The Library dialog scans that same per-profile import cache, displays date,
-players, winner, and BoardGameArena table id in columns, and loads the selected cached SGF.
+cache. The BGA session, user id, and parsed history are cached per profile for the current app process, so reopening
+Import skips site/credentials/network-history steps and goes straight to the history page. The history page has a
+`Reload` button that refreshes only the game history through the cached BGA session. Selecting an uncached row enables
+`Import`, which first opens that table's BoardGameArena game-review page in the same session, fetches the archive logs
+as the review page's XHR does, converts the logs to Homeworlds SGF, writes the SGF into the import cache with BGA
+player names and metadata stored as root `PB`/`PW`, `DT`, `RE`, and `GCBT`, and loads it through the shared SGF
+controller. Selecting a cached row changes the button to `Load` and loads the cached SGF without another network fetch.
+The Library dialog scans that same per-profile import cache, displays date, players, winner, and BoardGameArena table
+id in columns, and loads the selected cached SGF.
 Checkers keeps the first import-site selection
 step because its old source list still exists; Boop and Homeworlds skip directly to BoardGameArena credentials because
 their profiles only expose BoardGameArena import.
