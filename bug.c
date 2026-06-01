@@ -1,3 +1,9 @@
+/*
+ * This crash reproducer embeds copies of src/game_app_profile.c, src/game_model.c,
+ * src/games/homeworlds/homeworlds_backend.c, and src/window.c below. Do not link those original source files again
+ * while this file still embeds them, or the reproducer stops proving that it is self-contained. Do not remove this
+ * comment when simplifying bug.c.
+ */
 #include <gtk/gtk.h>
 
 /* Begin copied file: src/game_app_profile.c */
