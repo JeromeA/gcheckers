@@ -9,9 +9,59 @@
 
 static GtkApplication *test_homeworlds_app = NULL;
 
-static void test_homeworlds_skip(void) {
-  g_test_skip("Skipped by minimal reproducer.");
-}
+#define BUG_ASSERT_TRUE(expr) \
+  G_STMT_START { \
+    if (!(expr)) { \
+      g_error("Assertion failed: %s", #expr); \
+    } \
+  } G_STMT_END
+
+#define BUG_ASSERT_FALSE(expr) BUG_ASSERT_TRUE(!(expr))
+
+#define BUG_ASSERT_NONNULL(expr) \
+  G_STMT_START { \
+    gconstpointer bug_value = (expr); \
+    if (bug_value == NULL) { \
+      g_error("Assertion failed: %s != NULL", #expr); \
+    } \
+  } G_STMT_END
+
+#define BUG_ASSERT_NO_ERROR(error) \
+  G_STMT_START { \
+    const GError *bug_error = (error); \
+    if (bug_error != NULL) { \
+      g_error("Unexpected error: %s", bug_error->message); \
+    } \
+  } G_STMT_END
+
+#define BUG_ASSERT_CMPINT(left, op, right) \
+  G_STMT_START { \
+    gint64 bug_left = (left); \
+    gint64 bug_right = (right); \
+    if (!(bug_left op bug_right)) { \
+      g_error("Assertion failed: %s (%" G_GINT64_FORMAT ") %s %s (%" G_GINT64_FORMAT ")", \
+              #left, bug_left, #op, #right, bug_right); \
+    } \
+  } G_STMT_END
+
+#define BUG_ASSERT_CMPUINT(left, op, right) \
+  G_STMT_START { \
+    guint64 bug_left = (left); \
+    guint64 bug_right = (right); \
+    if (!(bug_left op bug_right)) { \
+      g_error("Assertion failed: %s (%" G_GUINT64_FORMAT ") %s %s (%" G_GUINT64_FORMAT ")", \
+              #left, bug_left, #op, #right, bug_right); \
+    } \
+  } G_STMT_END
+
+#define BUG_ASSERT_CMPFLOAT(left, op, right) \
+  G_STMT_START { \
+    double bug_left = (left); \
+    double bug_right = (right); \
+    if (!(bug_left op bug_right)) { \
+      g_error("Assertion failed: %s (%g) %s %s (%g)", #left, bug_left, #op, #right, bug_right); \
+    } \
+  } G_STMT_END
 
 static void test_homeworlds_drain_main_context(guint max_iterations) {
   g_return_if_fail(max_iterations > 0);
@@ -69,9 +119,9 @@ static GtkApplication *test_homeworlds_create_app(void) {
 
     test_homeworlds_app = gtk_application_new("io.github.jeromea.ghomeworlds.test",
                                               G_APPLICATION_DEFAULT_FLAGS | G_APPLICATION_NON_UNIQUE);
-    g_assert_nonnull(test_homeworlds_app);
-    g_assert_true(g_application_register(G_APPLICATION(test_homeworlds_app), NULL, &error));
-    g_assert_no_error(error);
+    BUG_ASSERT_NONNULL(test_homeworlds_app);
+    BUG_ASSERT_TRUE(g_application_register(G_APPLICATION(test_homeworlds_app), NULL, &error));
+    BUG_ASSERT_NO_ERROR(error);
   }
 
   return g_object_ref(test_homeworlds_app);
@@ -82,9 +132,9 @@ static GGameWindow *test_homeworlds_create_window(GtkApplication **out_app, GGam
   GGameModel *model = ggame_model_new(&homeworlds_game_backend);
   GGameWindow *window = NULL;
 
-  g_assert_nonnull(model);
+  BUG_ASSERT_NONNULL(model);
   window = ggame_window_new(app, model);
-  g_assert_nonnull(window);
+  BUG_ASSERT_NONNULL(window);
 
   if (out_app != NULL) {
     *out_app = app;
@@ -126,14 +176,14 @@ static HomeworldsView *test_homeworlds_view_new_without_move_report(GGameModel *
 }
 
 static void test_homeworlds_assert_text_panel_label_wraps(GtkWidget *label) {
-  g_assert_true(GTK_IS_LABEL(label));
-  g_assert_true(gtk_label_get_wrap(GTK_LABEL(label)));
-  g_assert_cmpuint(gtk_label_get_wrap_mode(GTK_LABEL(label)), ==, PANGO_WRAP_WORD_CHAR);
-  g_assert_cmpuint(gtk_label_get_natural_wrap_mode(GTK_LABEL(label)), ==, GTK_NATURAL_WRAP_WORD);
-  g_assert_cmpint(gtk_label_get_width_chars(GTK_LABEL(label)), ==, -1);
-  g_assert_cmpint(gtk_label_get_max_width_chars(GTK_LABEL(label)), ==, -1);
-  g_assert_cmpuint(gtk_widget_get_halign(label), ==, GTK_ALIGN_FILL);
-  g_assert_true(gtk_widget_get_hexpand(label));
+  BUG_ASSERT_TRUE(GTK_IS_LABEL(label));
+  BUG_ASSERT_TRUE(gtk_label_get_wrap(GTK_LABEL(label)));
+  BUG_ASSERT_CMPUINT(gtk_label_get_wrap_mode(GTK_LABEL(label)), ==, PANGO_WRAP_WORD_CHAR);
+  BUG_ASSERT_CMPUINT(gtk_label_get_natural_wrap_mode(GTK_LABEL(label)), ==, GTK_NATURAL_WRAP_WORD);
+  BUG_ASSERT_CMPINT(gtk_label_get_width_chars(GTK_LABEL(label)), ==, -1);
+  BUG_ASSERT_CMPINT(gtk_label_get_max_width_chars(GTK_LABEL(label)), ==, -1);
+  BUG_ASSERT_CMPUINT(gtk_widget_get_halign(label), ==, GTK_ALIGN_FILL);
+  BUG_ASSERT_TRUE(gtk_widget_get_hexpand(label));
 }
 
 static void test_homeworlds_view_text_panel_has_fixed_width(void) {
@@ -163,20 +213,20 @@ static void test_homeworlds_view_text_panel_has_fixed_width(void) {
   gint allocated_width = 0;
   gint board_viewport_width = 0;
 
-  g_assert_nonnull(text_panel);
-  g_assert_nonnull(text_panel_content);
-  g_assert_true(GTK_IS_SCROLLED_WINDOW(text_panel));
+  BUG_ASSERT_NONNULL(text_panel);
+  BUG_ASSERT_NONNULL(text_panel_content);
+  BUG_ASSERT_TRUE(GTK_IS_SCROLLED_WINDOW(text_panel));
   gtk_widget_get_size_request(text_panel, &width_request, NULL);
   gtk_widget_get_size_request(text_panel_content, &content_width_request, NULL);
-  g_assert_cmpint(width_request, ==, 350);
-  g_assert_cmpint(content_width_request, ==, 326);
-  g_assert_cmpint(gtk_scrolled_window_get_min_content_width(GTK_SCROLLED_WINDOW(text_panel)), ==, 350);
-  g_assert_cmpint(gtk_scrolled_window_get_max_content_width(GTK_SCROLLED_WINDOW(text_panel)), ==, 350);
-  g_assert_false(gtk_scrolled_window_get_propagate_natural_width(GTK_SCROLLED_WINDOW(text_panel)));
-  g_assert_true(gtk_scrolled_window_get_overlay_scrolling(GTK_SCROLLED_WINDOW(text_panel)));
+  BUG_ASSERT_CMPINT(width_request, ==, 350);
+  BUG_ASSERT_CMPINT(content_width_request, ==, 326);
+  BUG_ASSERT_CMPINT(gtk_scrolled_window_get_min_content_width(GTK_SCROLLED_WINDOW(text_panel)), ==, 350);
+  BUG_ASSERT_CMPINT(gtk_scrolled_window_get_max_content_width(GTK_SCROLLED_WINDOW(text_panel)), ==, 350);
+  BUG_ASSERT_FALSE(gtk_scrolled_window_get_propagate_natural_width(GTK_SCROLLED_WINDOW(text_panel)));
+  BUG_ASSERT_TRUE(gtk_scrolled_window_get_overlay_scrolling(GTK_SCROLLED_WINDOW(text_panel)));
   gtk_scrolled_window_get_policy(GTK_SCROLLED_WINDOW(text_panel), &horizontal_policy, &vertical_policy);
-  g_assert_cmpuint(horizontal_policy, ==, GTK_POLICY_EXTERNAL);
-  g_assert_cmpuint(vertical_policy, ==, GTK_POLICY_AUTOMATIC);
+  BUG_ASSERT_CMPUINT(horizontal_policy, ==, GTK_POLICY_EXTERNAL);
+  BUG_ASSERT_CMPUINT(vertical_policy, ==, GTK_POLICY_AUTOMATIC);
 
   homeworlds_view_free(view);
   g_object_unref(model);
@@ -188,49 +238,49 @@ static void test_homeworlds_view_text_panel_has_fixed_width(void) {
   window_board = test_homeworlds_find_widget_named(GTK_WIDGET(window), "homeworlds-board");
   window_board_scroller = test_homeworlds_find_widget_named(GTK_WIDGET(window), "homeworlds-board-scroller");
   window_bank = test_homeworlds_find_widget_named(GTK_WIDGET(window), "homeworlds-board-bank");
-  g_assert_nonnull(window_view);
-  g_assert_nonnull(window_text_panel);
-  g_assert_nonnull(window_text_panel_content);
-  g_assert_nonnull(window_board);
-  g_assert_true(GTK_IS_DRAWING_AREA(window_board));
-  g_assert_nonnull(window_board_scroller);
-  g_assert_true(GTK_IS_SCROLLED_WINDOW(window_board_scroller));
-  g_assert_nonnull(window_bank);
+  BUG_ASSERT_NONNULL(window_view);
+  BUG_ASSERT_NONNULL(window_text_panel);
+  BUG_ASSERT_NONNULL(window_text_panel_content);
+  BUG_ASSERT_NONNULL(window_board);
+  BUG_ASSERT_TRUE(GTK_IS_DRAWING_AREA(window_board));
+  BUG_ASSERT_NONNULL(window_board_scroller);
+  BUG_ASSERT_TRUE(GTK_IS_SCROLLED_WINDOW(window_board_scroller));
+  BUG_ASSERT_NONNULL(window_bank);
   homeworlds_view_set_move_report_enabled(window_view, FALSE);
   gtk_window_set_default_size(GTK_WINDOW(window), 1200, 700);
   gtk_window_present(GTK_WINDOW(window));
   test_homeworlds_drain_main_context(64);
 
   board_viewport_width = gtk_widget_get_width(window_board_scroller);
-  g_assert_cmpint(board_viewport_width, >, 0);
-  g_assert_cmpint(gtk_drawing_area_get_content_width(GTK_DRAWING_AREA(window_board)), <=, board_viewport_width + 2);
-  g_assert_true(gtk_widget_compute_bounds(window_bank, window_board_scroller, &bank_bounds));
-  g_assert_cmpfloat(bank_bounds.origin.x, >=, 0.0);
-  g_assert_cmpfloat(bank_bounds.origin.x + bank_bounds.size.width, <=, (double)board_viewport_width + 1.0);
+  BUG_ASSERT_CMPINT(board_viewport_width, >, 0);
+  BUG_ASSERT_CMPINT(gtk_drawing_area_get_content_width(GTK_DRAWING_AREA(window_board)), <=, board_viewport_width + 2);
+  BUG_ASSERT_TRUE(gtk_widget_compute_bounds(window_bank, window_board_scroller, &bank_bounds));
+  BUG_ASSERT_CMPFLOAT(bank_bounds.origin.x, >=, 0.0);
+  BUG_ASSERT_CMPFLOAT(bank_bounds.origin.x + bank_bounds.size.width, <=, (double)board_viewport_width + 1.0);
   allocated_width = gtk_widget_get_width(window_text_panel);
-  g_assert_cmpint(allocated_width, >, 0);
-  g_assert_true(gtk_widget_compute_bounds(window_text_panel_content, window_text_panel, &content_bounds));
-  g_assert_cmpfloat(content_bounds.origin.x, >=, 0.0);
-  g_assert_cmpfloat(content_bounds.origin.x + content_bounds.size.width, <=, (double)allocated_width + 1.0);
+  BUG_ASSERT_CMPINT(allocated_width, >, 0);
+  BUG_ASSERT_TRUE(gtk_widget_compute_bounds(window_text_panel_content, window_text_panel, &content_bounds));
+  BUG_ASSERT_CMPFLOAT(content_bounds.origin.x, >=, 0.0);
+  BUG_ASSERT_CMPFLOAT(content_bounds.origin.x + content_bounds.size.width, <=, (double)allocated_width + 1.0);
   visual_choice_label = test_homeworlds_find_label_with_text(window_text_panel_content,
                                                             "Click a highlighted pyramid in the bank on the board.");
-  g_assert_nonnull(visual_choice_label);
+  BUG_ASSERT_NONNULL(visual_choice_label);
   test_homeworlds_assert_text_panel_label_wraps(visual_choice_label);
-  g_assert_true(gtk_widget_compute_bounds(visual_choice_label, window_text_panel, &label_bounds));
-  g_assert_cmpfloat(label_bounds.origin.x + label_bounds.size.width, <=, (double)allocated_width + 1.0);
+  BUG_ASSERT_TRUE(gtk_widget_compute_bounds(visual_choice_label, window_text_panel, &label_bounds));
+  BUG_ASSERT_CMPFLOAT(label_bounds.origin.x + label_bounds.size.width, <=, (double)allocated_width + 1.0);
   for (guint step = 0; step < 3; step++) {
-    g_assert_true(homeworlds_view_apply_candidate_at(window_view, 0));
+    BUG_ASSERT_TRUE(homeworlds_view_apply_candidate_at(window_view, 0));
     test_homeworlds_drain_main_context(64);
-    g_assert_cmpint(gtk_widget_get_width(window_text_panel), ==, allocated_width);
-    g_assert_true(gtk_widget_compute_bounds(window_text_panel_content, window_text_panel, &content_bounds));
-    g_assert_cmpfloat(content_bounds.origin.x + content_bounds.size.width, <=, (double)allocated_width + 1.0);
+    BUG_ASSERT_CMPINT(gtk_widget_get_width(window_text_panel), ==, allocated_width);
+    BUG_ASSERT_TRUE(gtk_widget_compute_bounds(window_text_panel_content, window_text_panel, &content_bounds));
+    BUG_ASSERT_CMPFLOAT(content_bounds.origin.x + content_bounds.size.width, <=, (double)allocated_width + 1.0);
     if (step == 0) {
       catastrophe_reset_label = test_homeworlds_find_label_with_text(window_text_panel_content,
                                                                      "Reset the partial move before catastrophes.");
-      g_assert_nonnull(catastrophe_reset_label);
+      BUG_ASSERT_NONNULL(catastrophe_reset_label);
       test_homeworlds_assert_text_panel_label_wraps(catastrophe_reset_label);
-      g_assert_true(gtk_widget_compute_bounds(catastrophe_reset_label, window_text_panel, &label_bounds));
-      g_assert_cmpfloat(label_bounds.origin.x + label_bounds.size.width, <=, (double)allocated_width + 1.0);
+      BUG_ASSERT_TRUE(gtk_widget_compute_bounds(catastrophe_reset_label, window_text_panel, &label_bounds));
+      BUG_ASSERT_CMPFLOAT(label_bounds.origin.x + label_bounds.size.width, <=, (double)allocated_width + 1.0);
     }
   }
 
@@ -250,85 +300,48 @@ static void test_homeworlds_window_main_split_can_exceed_height(void) {
   window = test_homeworlds_create_window(&app, &model);
   main_paned = g_object_get_data(G_OBJECT(window), "main-paned");
 
-  g_assert_nonnull(main_paned);
-  g_assert_true(GTK_IS_PANED(main_paned));
+  BUG_ASSERT_NONNULL(main_paned);
+  BUG_ASSERT_TRUE(GTK_IS_PANED(main_paned));
 
   gtk_window_set_default_size(GTK_WINDOW(window), 2000, 700);
   gtk_window_present(GTK_WINDOW(window));
   test_homeworlds_drain_main_context(64);
 
   height = gtk_widget_get_height(main_paned);
-  g_assert_cmpint(height, >, 0);
-  g_assert_cmpint(target_position, >, height);
+  BUG_ASSERT_CMPINT(height, >, 0);
+  BUG_ASSERT_CMPINT(target_position, >, height);
 
   gtk_paned_set_position(GTK_PANED(main_paned), target_position);
   test_homeworlds_drain_main_context(64);
 
-  g_assert_cmpint(gtk_paned_get_position(GTK_PANED(main_paned)), >=, target_position);
+  BUG_ASSERT_CMPINT(gtk_paned_get_position(GTK_PANED(main_paned)), >=, target_position);
 
   gtk_window_destroy(GTK_WINDOW(window));
   g_object_unref(model);
   g_object_unref(app);
 }
 
-int main(int argc, char **argv) {
+int main(void) {
   g_autoptr(GError) autosave_error = NULL;
   g_autofree char *autosave_root = NULL;
   const GGameAppProfile *profile = NULL;
-  int result = 0;
 
-  g_test_init(&argc, &argv, NULL);
+  g_log_set_always_fatal(G_LOG_FATAL_MASK | G_LOG_LEVEL_CRITICAL);
 
   autosave_root = g_dir_make_tmp("ghomeworlds-window-autosave-XXXXXX", &autosave_error);
-  g_assert_no_error(autosave_error);
-  g_assert_nonnull(autosave_root);
+  BUG_ASSERT_NO_ERROR(autosave_error);
+  BUG_ASSERT_NONNULL(autosave_root);
   g_setenv(SGF_AUTOSAVE_ENV, autosave_root, TRUE);
 
   gtk_init();
 
   profile = ggame_app_profile_get_by_kind(GGAME_APP_KIND_HOMEWORLDS);
-  g_assert_nonnull(profile);
-  g_assert_true(ggame_app_profile_set_active(profile));
+  BUG_ASSERT_NONNULL(profile);
+  BUG_ASSERT_TRUE(ggame_app_profile_set_active(profile));
 
-  g_test_add_func("/homeworlds/view/homeworld-layout", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/view/system-layout", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/view/connected-sparse-row-layout", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/view/width-aware-row-layout", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/view/board-width-expands-for-wide-rows", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/view/board-size-matches-viewport-when-rows-fit", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/view/board-height-expands-for-tall-rows", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/view/piece-metrics", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/window/replaces-skeleton", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/window/main-split-can-exceed-height",
-                  test_homeworlds_window_main_split_can_exceed_height);
-  g_test_add_func("/homeworlds/window/defaults-to-minimum-computer-depth", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/window/setup-recorded-in-sgf", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/view/setup-bank-buttons", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/view/bank-layout", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/view/bank-layout-stays-compact-after-setup", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/view/board-ship-buttons", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/view/action-button-labels", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/view/build-action-from-each-green-ship", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/view/choice-list-cancel", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/view/build-no-second-step-highlight", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/view/trade-bank-buttons", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/view/attack-board-buttons", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/view/move-board-bank-buttons", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/view/advances-setup", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/view/move-report", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/view/move-report-toggle", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/view/move-report-initial-state", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/view/board-scrollable", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/view/text-panel-fixed-width", test_homeworlds_view_text_panel_has_fixed_width);
-  g_test_add_func("/homeworlds/view/board-content-size-tracks-viewport", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/window/move-report-action", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/window/view-menu-move-report", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/view/board-system-title-player-names", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/window/import-dialog-starts-with-bga", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/window/catastrophe-prefix-records-single-sgf-move", test_homeworlds_skip);
-  g_test_add_func("/homeworlds/window/end-move-catastrophe-requires-choice", test_homeworlds_skip);
+  test_homeworlds_view_text_panel_has_fixed_width();
+  test_homeworlds_window_main_split_can_exceed_height();
 
-  result = g_test_run();
   g_clear_object(&test_homeworlds_app);
-  return result;
+  return 0;
 }
