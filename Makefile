@@ -180,6 +180,8 @@ PROFILE_BIN ?= $(HOMEWORLDS_PROFILE_MOVES_BIN)
 # PROFILE_CMD = $(PROFILE_BIN) --moves 10 --seed 1
 # PROFILE_CMD = $(PROFILE_BIN) --file game-homeworlds.sgf --moves 19 --depth 2
 PROFILE_CMD = ./bug
+BUG_REPRO_RUNS ?= 10
+BUG_REPRO_OUT ?= /tmp/bug-run.out
 TEST_BINS := $(TEST_GAME_BIN) $(TEST_GAME_PRINT_BIN) $(TEST_GAME_BACKEND_BIN) $(TEST_GAME_MODEL_BIN) \
 	$(TEST_HOMEWORLDS_GAME_BIN) $(TEST_HOMEWORLDS_BACKEND_BIN) $(TEST_HOMEWORLDS_PROFILE_MOVES_BIN) \
 	$(TEST_HOMEWORLDS_EVAL_EXPERIMENT_BIN) $(TEST_HOMEWORLDS_WINDOW_BIN) \
@@ -221,7 +223,7 @@ test_game test_game_print test_game_backend test_game_model test_homeworlds_game
 	test_sgf_view test_board_view test_player_controls_panel test_sgf_controller test_window test_window_boop \
 	test_puzzle_generation test_puzzle_catalog \
 	test_piece_palette test_puzzle_progress test_puzzle_progress_report_server callgrind-run \
-	callgrind-annotate
+	callgrind-annotate bug-repro
 
 all: $(GSETTINGS_SCHEMA_COMPILED) $(LIBGAME_A) $(CREATE_PUZZLES_BINS) $(HOMEWORLDS_PROFILE_MOVES_BIN) \
 	$(HOMEWORLDS_EVAL_EXPERIMENT_BIN) $(APP_BINS)
@@ -368,6 +370,24 @@ bug: bug.c $(HOMEWORLDS_UI_SRCS) \
 		src/sgf_view.c src/sgf_view_disc_factory.c src/sgf_view_layout.c src/sgf_view_link_renderer.c \
 		src/sgf_view_scroller.c src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(BUG_SRCS) \
 		$(HOMEWORLDS_UI_SRCS) $(LDLIBS) $(GTK_LIBS)
+
+bug-repro: bug
+	@/bin/bash -lc 'set -u; \
+		runs="$(BUG_REPRO_RUNS)"; \
+		out="$(BUG_REPRO_OUT)"; \
+		critical=0; clean=0; other=0; i=0; \
+		while [ "$$i" -lt "$$runs" ]; do \
+			i=$$((i + 1)); \
+			xvfb-run -a ./bug >"$$out" 2>&1; code=$$?; \
+			if grep -q "invalid (NULL) pointer instance" "$$out"; then \
+				critical=$$((critical + 1)); \
+			elif [ "$$code" -eq 0 ]; then \
+				clean=$$((clean + 1)); \
+			else \
+				other=$$((other + 1)); \
+			fi; \
+		done; \
+		printf "critical=%d clean=%d other=%d\n" "$$critical" "$$clean" "$$other"'
 
 test_boop_game: $(TEST_BOOP_GAME_BIN)
 $(TEST_BOOP_GAME_BIN): tests/test_boop_game.c $(BOOP_GAME_SRCS) $(BOOP_DIR)/boop_game.h
