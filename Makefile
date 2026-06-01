@@ -175,7 +175,8 @@ CALLGRIND_OUT := $(CALLGRIND_DIR)/callgrind.out
 CALLGRIND_ANNOTATION := $(CALLGRIND_DIR)/callgrind.annotated
 PROFILE_BIN ?= $(HOMEWORLDS_PROFILE_MOVES_BIN)
 # PROFILE_CMD = $(PROFILE_BIN) --moves 10 --seed 1
-PROFILE_CMD = $(PROFILE_BIN) --file game-homeworlds.sgf --moves 19 --depth 2
+# PROFILE_CMD = $(PROFILE_BIN) --file game-homeworlds.sgf --moves 19 --depth 2
+PROFILE_CMD = ./bug
 TEST_BINS := $(TEST_GAME_BIN) $(TEST_GAME_PRINT_BIN) $(TEST_GAME_BACKEND_BIN) $(TEST_GAME_MODEL_BIN) \
 	$(TEST_HOMEWORLDS_GAME_BIN) $(TEST_HOMEWORLDS_BACKEND_BIN) $(TEST_HOMEWORLDS_PROFILE_MOVES_BIN) \
 	$(TEST_HOMEWORLDS_EVAL_EXPERIMENT_BIN) $(TEST_HOMEWORLDS_WINDOW_BIN) \
@@ -351,7 +352,7 @@ bug: bug.c $(HOMEWORLDS_UI_SRCS) \
 	src/sgf_view_disc_factory.c src/sgf_view_disc_factory.h src/sgf_view_layout.c src/sgf_view_layout.h \
 	src/sgf_view_link_renderer.c src/sgf_view_link_renderer.h src/sgf_view_scroller.c \
 	src/sgf_view_scroller.h src/sgf_view_selection_controller.c src/sgf_view_selection_controller.h \
-	$(SRCS) $(BOOP_UI_SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS) \
+	$(SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS) \
 	$(HOMEWORLDS_DIR)/homeworlds_view.h
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ bug.c \
 		src/application.c src/window.c $(APP_PATHS_SRCS) $(COMMON_SETTINGS_SRCS) $(PUZZLE_PROGRESS_SRCS) \
@@ -363,7 +364,7 @@ bug: bug.c $(HOMEWORLDS_UI_SRCS) \
 		src/piece_palette.c src/man_paintable.c src/sgf_io.c src/sgf_move_props.c src/sgf_tree.c \
 		src/sgf_view.c src/sgf_view_disc_factory.c src/sgf_view_layout.c src/sgf_view_link_renderer.c \
 		src/sgf_view_scroller.c src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(SRCS) \
-		$(BOOP_UI_SRCS) $(HOMEWORLDS_UI_SRCS) $(LDLIBS) $(GTK_LIBS)
+		$(HOMEWORLDS_UI_SRCS) $(LDLIBS) $(GTK_LIBS)
 
 test_boop_game: $(TEST_BOOP_GAME_BIN)
 $(TEST_BOOP_GAME_BIN): tests/test_boop_game.c $(BOOP_GAME_SRCS) $(BOOP_DIR)/boop_game.h
@@ -944,4 +945,4 @@ callgrind-annotate:
 		echo "$(CALLGRIND_OUT) was not created"; \
 		exit 1; \
 	fi
-	callgrind_annotate --auto=yes $(CALLGRIND_OUT) | tee $(CALLGRIND_ANNOTATION)
+	callgrind_annotate --context=30 --auto=yes $(CALLGRIND_OUT) | tee $(CALLGRIND_ANNOTATION)
