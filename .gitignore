@@ -1,5 +1,6 @@
 build/
 coverage/
+/bug
 gcheckers.png
 data/schemas/gschemas.compiled
 /*.sgf
