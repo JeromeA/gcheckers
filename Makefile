@@ -182,6 +182,7 @@ PROFILE_BIN ?= $(HOMEWORLDS_PROFILE_MOVES_BIN)
 PROFILE_CMD = ./bug
 BUG_REPRO_RUNS ?= 10
 BUG_REPRO_OUT ?= /tmp/bug-run.out
+BUG_REPRO_TIMEOUT ?= 30
 TEST_BINS := $(TEST_GAME_BIN) $(TEST_GAME_PRINT_BIN) $(TEST_GAME_BACKEND_BIN) $(TEST_GAME_MODEL_BIN) \
 	$(TEST_HOMEWORLDS_GAME_BIN) $(TEST_HOMEWORLDS_BACKEND_BIN) $(TEST_HOMEWORLDS_PROFILE_MOVES_BIN) \
 	$(TEST_HOMEWORLDS_EVAL_EXPERIMENT_BIN) $(TEST_HOMEWORLDS_WINDOW_BIN) \
@@ -344,7 +345,7 @@ bug: bug.c $(HOMEWORLDS_UI_SRCS) \
 	$(BUG_HOMEWORLDS_ALL_SRCS) src/application.c $(APP_PATHS_SRCS) $(PUZZLE_PROGRESS_SRCS) \
 	$(PUZZLE_CATALOG_SRCS) src/app_settings.c src/app_settings.h $(COMMON_SETTINGS_SRCS) src/common_settings.h \
 	src/settings_dialog.c src/settings_dialog.h \
-	src/new_game_dialog.c src/puzzle_dialog.c src/puzzle_dialog.h $(CHECKERS_DIR)/rulesets.c \
+	src/new_game_dialog.c $(CHECKERS_DIR)/rulesets.c \
 	$(CHECKERS_DIR)/rulesets.h src/import_dialog.c src/sgf_file_actions.c src/sgf_file_actions.h \
 	src/file_dialog_history.c src/file_dialog_history.h src/bga_client.c src/bga_client.h src/window.h \
 	src/style.c src/style.h src/player_controls_panel.c src/player_controls_panel.h src/analysis_graph.c \
@@ -362,7 +363,7 @@ bug: bug.c $(HOMEWORLDS_UI_SRCS) \
 	$(CC) $(CFLAGS) $(GTK_CFLAGS) -I$(HOMEWORLDS_DIR) -o $@ bug.c \
 		src/application.c $(APP_PATHS_SRCS) $(COMMON_SETTINGS_SRCS) $(PUZZLE_PROGRESS_SRCS) \
 		$(PUZZLE_CATALOG_SRCS) \
-		src/app_settings.c src/settings_dialog.c src/new_game_dialog.c src/puzzle_dialog.c \
+		src/app_settings.c src/settings_dialog.c src/new_game_dialog.c \
 		src/import_dialog.c src/sgf_file_actions.c src/file_dialog_history.c src/bga_client.c src/style.c \
 		src/player_controls_panel.c src/analysis_graph.c src/sgf_controller.c $(SGF_AUTOSAVE_SRCS) src/board_view.c \
 		src/board_grid.c src/board_square.c src/board_move_overlay.c src/board_selection_controller.c \
@@ -375,10 +376,11 @@ bug-repro: bug
 	@/bin/bash -lc 'set -u; \
 		runs="$(BUG_REPRO_RUNS)"; \
 		out="$(BUG_REPRO_OUT)"; \
+		timeout_seconds="$(BUG_REPRO_TIMEOUT)"; \
 		critical=0; clean=0; other=0; i=0; \
 		while [ "$$i" -lt "$$runs" ]; do \
 			i=$$((i + 1)); \
-			xvfb-run -a ./bug >"$$out" 2>&1; code=$$?; \
+			timeout "$$timeout_seconds" xvfb-run -a ./bug >"$$out" 2>&1; code=$$?; \
 			if grep -q "invalid (NULL) pointer instance" "$$out"; then \
 				critical=$$((critical + 1)); \
 			elif [ "$$code" -eq 0 ]; then \

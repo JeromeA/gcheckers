@@ -1,54 +1,16 @@
 /*
  * This crash reproducer embeds copies of src/game_app_profile.c, src/game_model.c,
  * src/games/homeworlds/homeworlds_backend.c, and src/window.c below. Do not link those original source files again
- * while this file still embeds them, or the reproducer stops proving that it is self-contained. Do not remove this
- * comment when simplifying bug.c.
+ * or the reproducer stops proving that it is self-contained. Do not remove this comment when simplifying bug.c.
  */
 #include <gtk/gtk.h>
 
 /* Begin copied file: src/game_app_profile.c */
 #include "game_app_profile.h"
 
-#include "games/boop/boop_backend.h"
-#include "games/boop/boop_controls.h"
-#include "games/checkers/checkers_backend.h"
 #include "games/homeworlds/homeworlds_backend.h"
 #include "games/homeworlds/homeworlds_view.h"
 #include "player_controls_panel.h"
-
-static const GGameAppProfile checkers_app_profile = {
-  .kind = GGAME_APP_KIND_CHECKERS,
-  .id = "checkers",
-  .app_id = "io.github.jeromea.gcheckers",
-  .display_name = "Checkers",
-  .window_title_name = "gcheckers",
-  .settings_schema_id = "io.github.jeromea.gcheckers",
-  .backend = &checkers_game_backend,
-  .features =
-      {
-          .supports_ai_players = TRUE,
-          .supports_analysis = TRUE,
-          .supports_puzzles = TRUE,
-          .supports_import = TRUE,
-          .supports_settings = TRUE,
-          .supports_save_position = TRUE,
-          .supports_edit_mode = TRUE,
-      },
-  .import =
-      {
-          .board_game_arena_game_id = 74,
-          .show_site_step = TRUE,
-      },
-  .layout =
-      {
-          .default_board_panel_width = 500,
-          .default_navigation_panel_width = 300,
-          .default_analysis_panel_width = 300,
-          .show_navigation_drawer_by_default = TRUE,
-          .show_analysis_drawer_by_default = TRUE,
-      },
-  .default_computer_depth = PLAYER_COMPUTER_DEPTH_DEFAULT,
-};
 
 static const GGameAppProfile homeworlds_app_profile = {
   .kind = GGAME_APP_KIND_HOMEWORLDS,
@@ -60,12 +22,12 @@ static const GGameAppProfile homeworlds_app_profile = {
   .backend = &homeworlds_game_backend,
   .features =
       {
-          .supports_ai_players = TRUE,
-          .supports_analysis = TRUE,
+          .supports_ai_players = FALSE,
+          .supports_analysis = FALSE,
           .supports_puzzles = FALSE,
-          .supports_import = TRUE,
+          .supports_import = FALSE,
           .supports_settings = FALSE,
-          .supports_save_position = TRUE,
+          .supports_save_position = FALSE,
           .supports_edit_mode = FALSE,
       },
   .import =
@@ -91,74 +53,11 @@ static const GGameAppProfile homeworlds_app_profile = {
   .default_computer_depth = PLAYER_COMPUTER_DEPTH_MIN,
 };
 
-static const GGameAppProfile boop_app_profile = {
-  .kind = GGAME_APP_KIND_BOOP,
-  .id = "boop",
-  .app_id = "io.github.jeromea.gboop",
-  .display_name = "Boop",
-  .window_title_name = "gboop",
-  .settings_schema_id = "io.github.jeromea.gboop",
-  .backend = &boop_game_backend,
-  .features =
-      {
-          .supports_ai_players = TRUE,
-          .supports_analysis = TRUE,
-          .supports_puzzles = TRUE,
-          .supports_import = TRUE,
-          .supports_settings = TRUE,
-          .supports_save_position = TRUE,
-          .supports_edit_mode = FALSE,
-      },
-  .import =
-      {
-          .board_game_arena_game_id = 1736,
-          .show_site_step = FALSE,
-      },
-  .ui =
-      {
-          .create_board_host = gboop_controls_create_board_host,
-      },
-  .layout =
-      {
-          .default_board_panel_width = 760,
-          .default_navigation_panel_width = 300,
-          .default_analysis_panel_width = 300,
-          .show_navigation_drawer_by_default = TRUE,
-          .show_analysis_drawer_by_default = FALSE,
-      },
-  .default_computer_depth = PLAYER_COMPUTER_DEPTH_DEFAULT,
-};
-
 static const GGameAppProfile *const ggame_app_profiles[] = {
-  &checkers_app_profile,
   &homeworlds_app_profile,
-  &boop_app_profile,
 };
 
-static const GGameAppProfile *active_app_profile = &checkers_app_profile;
-
-static gboolean ggame_app_profile_is_registered(const GGameAppProfile *profile) {
-  g_return_val_if_fail(profile != NULL, FALSE);
-
-  for (guint i = 0; i < G_N_ELEMENTS(ggame_app_profiles); ++i) {
-    if (ggame_app_profiles[i] == profile) {
-      return TRUE;
-    }
-  }
-
-  return FALSE;
-}
-
-const GGameAppProfile *ggame_app_profile_get_by_kind(GGameAppKind kind) {
-  for (guint i = 0; i < G_N_ELEMENTS(ggame_app_profiles); ++i) {
-    if (ggame_app_profiles[i]->kind == kind) {
-      return ggame_app_profiles[i];
-    }
-  }
-
-  g_debug("Unknown app profile kind %d", (gint)kind);
-  return NULL;
-}
+static const GGameAppProfile *active_app_profile = &homeworlds_app_profile;
 
 const GGameAppProfile *ggame_app_profile_lookup_by_id(const char *id) {
   g_return_val_if_fail(id != NULL, NULL);
@@ -171,40 +70,6 @@ const GGameAppProfile *ggame_app_profile_lookup_by_id(const char *id) {
 
   g_debug("Unknown app profile id %s", id);
   return NULL;
-}
-
-const GGameAppProfile *ggame_app_profile_lookup_by_app_id(const char *app_id) {
-  g_return_val_if_fail(app_id != NULL, NULL);
-
-  for (guint i = 0; i < G_N_ELEMENTS(ggame_app_profiles); ++i) {
-    if (g_strcmp0(ggame_app_profiles[i]->app_id, app_id) == 0) {
-      return ggame_app_profiles[i];
-    }
-  }
-
-  g_debug("Unknown application id %s", app_id);
-  return NULL;
-}
-
-gboolean ggame_app_profile_set_active(const GGameAppProfile *profile) {
-  g_return_val_if_fail(profile != NULL, FALSE);
-
-  if (!ggame_app_profile_is_registered(profile)) {
-    g_debug("Refusing to activate an unregistered app profile");
-    return FALSE;
-  }
-
-  active_app_profile = profile;
-  return TRUE;
-}
-
-gboolean ggame_app_profile_set_active_by_id(const char *id) {
-  const GGameAppProfile *profile = ggame_app_profile_lookup_by_id(id);
-  if (profile == NULL) {
-    return FALSE;
-  }
-
-  return ggame_app_profile_set_active(profile);
 }
 
 const GGameAppProfile *ggame_active_app_profile(void) {
@@ -2964,7 +2829,6 @@ const GameBackend homeworlds_game_backend = {
 #include "analysis_graph.h"
 #include "board_view.h"
 #include "common_settings.h"
-#include "puzzle_dialog.h"
 #include "puzzle_catalog.h"
 #include "games/checkers/rulesets.h"
 #include "sgf_file_actions.h"
@@ -3078,15 +2942,6 @@ typedef enum {
   GGAME_WINDOW_ANALYSIS_MODE_CURRENT,
   GGAME_WINDOW_ANALYSIS_MODE_FULL_GAME
 } GGameWindowAnalysisMode;
-
-typedef struct {
-  GGameWindow *self;
-  GtkWindow *dialog;
-  GtkEntry *player_entries[2];
-  GtkEntry *date_entry;
-  GtkEntry *table_id_entry;
-  GtkEntry *winner_entry;
-} GGameWindowGameInformationDialogData;
 
 typedef struct {
   gint generation;
@@ -3269,50 +3124,6 @@ static const GameState *ggame_window_get_checkers_state(GGameWindow *self) {
   }
 
   return &game->state;
-}
-
-static gboolean ggame_window_copy_analysis_position(GGameWindow *self,
-                                                    const GameBackend **out_backend,
-                                                    const GameBackendVariant **out_variant,
-                                                    guint8 **out_position) {
-  const GameBackend *backend = NULL;
-  const GameBackendVariant *variant = NULL;
-  gconstpointer position = NULL;
-  guint8 *copy = NULL;
-
-  g_return_val_if_fail(out_backend != NULL, FALSE);
-  g_return_val_if_fail(out_position != NULL, FALSE);
-
-  backend = ggame_window_get_game_backend(self);
-  position = ggame_window_get_game_position(self);
-  variant = ggame_window_get_variant(self);
-  g_return_val_if_fail(backend != NULL, FALSE);
-  g_return_val_if_fail(position != NULL, FALSE);
-  g_return_val_if_fail(backend->position_size > 0, FALSE);
-  g_return_val_if_fail(backend->position_init != NULL, FALSE);
-  g_return_val_if_fail(backend->position_clear != NULL, FALSE);
-  g_return_val_if_fail(backend->position_copy != NULL, FALSE);
-
-  if (backend->variant_count > 0 && variant == NULL) {
-    g_debug("Missing active backend variant while copying analysis position");
-    return FALSE;
-  }
-
-  copy = g_malloc0(backend->position_size);
-  if (copy == NULL) {
-    g_debug("Failed to allocate analysis position snapshot");
-    return FALSE;
-  }
-
-  backend->position_init(copy, variant);
-  backend->position_copy(copy, position);
-
-  *out_backend = backend;
-  if (out_variant != NULL) {
-    *out_variant = variant;
-  }
-  *out_position = copy;
-  return TRUE;
 }
 
 static const char *ggame_window_side_name(guint side) {
@@ -3822,23 +3633,9 @@ static gboolean ggame_window_constrain_main_split_cb(GtkWidget * /*widget*/,
 }
 
 static void ggame_window_analysis_sync_ui(GGameWindow *self) {
-  const GGameAppProfile *profile = ggame_window_get_profile(self);
-  gboolean analysis_supported = profile != NULL && profile->features.supports_analysis;
-
   g_return_if_fail(GGAME_IS_WINDOW(self));
 
   gboolean full_game_active = self->analysis_mode == GGAME_WINDOW_ANALYSIS_MODE_FULL_GAME;
-  GAction *action = g_action_map_lookup_action(G_ACTION_MAP(self), "analysis-whole-game");
-  if (action != NULL && G_IS_SIMPLE_ACTION(action)) {
-    g_simple_action_set_enabled(G_SIMPLE_ACTION(action),
-                                analysis_supported && !full_game_active && !self->puzzle_mode);
-  }
-
-  action = g_action_map_lookup_action(G_ACTION_MAP(self), "analysis-current-position");
-  if (action != NULL && G_IS_SIMPLE_ACTION(action)) {
-    g_simple_action_set_enabled(G_SIMPLE_ACTION(action), analysis_supported && !self->puzzle_mode);
-  }
-
   if (!full_game_active && self->analysis_graph != NULL) {
     analysis_graph_clear_progress_node(self->analysis_graph);
   }
@@ -4220,7 +4017,6 @@ static void ggame_window_sync_mode_ui(GGameWindow *self) {
   const GGameAppProfile *profile = ggame_window_get_profile(self);
   gboolean supports_save_position = FALSE;
   gboolean supports_analysis = FALSE;
-  gboolean supports_puzzles = FALSE;
   gboolean supports_edit_mode = FALSE;
 
   g_return_if_fail(GGAME_IS_WINDOW(self));
@@ -4228,7 +4024,6 @@ static void ggame_window_sync_mode_ui(GGameWindow *self) {
 
   supports_save_position = profile->features.supports_save_position;
   supports_analysis = profile->features.supports_analysis;
-  supports_puzzles = profile->features.supports_puzzles;
   supports_edit_mode = profile->features.supports_edit_mode;
 
   gboolean allow_navigation = !self->edit_mode_enabled && !self->puzzle_mode;
@@ -4237,7 +4032,6 @@ static void ggame_window_sync_mode_ui(GGameWindow *self) {
   gboolean allow_edit_mode_selection = supports_edit_mode && !self->puzzle_mode;
 
   ggame_window_set_action_enabled(G_ACTION_MAP(self), "game-force-move", allow_navigation);
-  ggame_window_set_action_enabled(G_ACTION_MAP(self), "puzzle-play", supports_puzzles && !self->puzzle_mode);
   ggame_window_set_action_enabled(G_ACTION_MAP(self), "navigation-rewind", allow_navigation);
   ggame_window_set_action_enabled(G_ACTION_MAP(self), "navigation-step-backward", allow_navigation);
   ggame_window_set_action_enabled(G_ACTION_MAP(self), "navigation-step-forward", allow_navigation);
@@ -4788,43 +4582,6 @@ static gboolean ggame_window_start_next_puzzle_mode(GGameWindow *self) {
   return TRUE;
 }
 
-static void ggame_window_on_puzzle_dialog_done(gboolean selected,
-                                               const GameBackendVariant *variant,
-                                               const char *path,
-                                               gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  if (!selected) {
-    return;
-  }
-  if (path == NULL || path[0] == '\0') {
-    g_debug("Puzzle dialog returned an empty puzzle path");
-    return;
-  }
-  if (variant == NULL && GGAME_ACTIVE_GAME_BACKEND->variant_count > 0) {
-    g_debug("Puzzle dialog returned no variant");
-    return;
-  }
-  if (!ggame_window_start_puzzle_mode_for_path(self, variant, path)) {
-    g_debug("Failed to load selected puzzle %s", path);
-    return;
-  }
-
-  ggame_window_start_opened_puzzle_attempt(self);
-}
-
-void ggame_window_present_puzzle_dialog(GGameWindow *self) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  ggame_puzzle_dialog_present(GTK_WINDOW(self),
-                                  ggame_window_get_variant(self),
-                                  self->puzzle_progress_store,
-                                  ggame_window_on_puzzle_dialog_done,
-                                  g_object_ref(self),
-                                  (GDestroyNotify)g_object_unref);
-}
-
 static void ggame_window_sync_board_host_node(GGameWindow *self, const SgfNode *node) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
   g_return_if_fail(node != NULL);
@@ -4857,37 +4614,6 @@ static const char *ggame_window_player_name_property_for_side(GGameWindow *self,
   return side == 0 ? "PB" : "PW";
 }
 
-static const char *ggame_window_side_label(GGameWindow *self, guint side) {
-  const GameBackend *backend = NULL;
-
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), NULL);
-  g_return_val_if_fail(side < 2, NULL);
-
-  backend = self->profile != NULL ? self->profile->backend : NULL;
-  if (backend != NULL && backend->side_label != NULL) {
-    return backend->side_label(side);
-  }
-
-  return NULL;
-}
-
-static void ggame_window_game_information_dialog_data_free(GGameWindowGameInformationDialogData *data) {
-  if (data == NULL) {
-    return;
-  }
-
-  g_clear_object(&data->self);
-  g_free(data);
-}
-
-static void ggame_window_on_game_information_cancel_clicked(GtkButton * /*button*/, gpointer user_data) {
-  GtkWindow *dialog = GTK_WINDOW(user_data);
-
-  g_return_if_fail(GTK_IS_WINDOW(dialog));
-
-  gtk_window_destroy(dialog);
-}
-
 static void ggame_window_set_root_text_property(SgfNode *root, const char *property, const char *value) {
   g_return_if_fail(root != NULL);
   g_return_if_fail(property != NULL);
@@ -4897,194 +4623,6 @@ static void ggame_window_set_root_text_property(SgfNode *root, const char *prope
   if (value[0] != '\0' && !sgf_node_add_property(root, property, value)) {
     g_debug("Failed to set SGF root property %s", property);
   }
-}
-
-static void ggame_window_set_root_entry_text_property(SgfNode *root, const char *property, GtkEntry *entry) {
-  g_return_if_fail(root != NULL);
-  g_return_if_fail(property != NULL);
-  g_return_if_fail(GTK_IS_ENTRY(entry));
-
-  g_autofree char *value = g_strdup(gtk_editable_get_text(GTK_EDITABLE(entry)));
-  if (value == NULL) {
-    g_debug("Unable to read SGF root property %s from entry", property);
-    return;
-  }
-
-  g_strstrip(value);
-  ggame_window_set_root_text_property(root, property, value);
-}
-
-static GtkWidget *ggame_window_new_game_information_entry_row(GtkGrid *grid,
-                                                             const char *label_text,
-                                                             const char *entry_name,
-                                                             const char *value,
-                                                             guint row,
-                                                             GtkEntry **out_entry) {
-  g_return_val_if_fail(GTK_IS_GRID(grid), NULL);
-  g_return_val_if_fail(label_text != NULL, NULL);
-  g_return_val_if_fail(entry_name != NULL, NULL);
-  g_return_val_if_fail(out_entry != NULL, NULL);
-
-  GtkWidget *label = gtk_label_new(label_text);
-  GtkWidget *entry = gtk_entry_new();
-
-  gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
-  gtk_widget_set_halign(label, GTK_ALIGN_START);
-  gtk_widget_set_hexpand(entry, TRUE);
-  gtk_widget_set_name(entry, entry_name);
-  gtk_editable_set_text(GTK_EDITABLE(entry), value != NULL ? value : "");
-  gtk_grid_attach(grid, label, 0, (int)row, 1, 1);
-  gtk_grid_attach(grid, entry, 1, (int)row, 1, 1);
-  *out_entry = GTK_ENTRY(entry);
-  return entry;
-}
-
-static void ggame_window_on_game_information_save_clicked(GtkButton * /*button*/, gpointer user_data) {
-  GGameWindowGameInformationDialogData *data = user_data;
-  SgfTree *tree = NULL;
-  SgfNode *root = NULL;
-  const SgfNode *current = NULL;
-
-  g_return_if_fail(data != NULL);
-  g_return_if_fail(GGAME_IS_WINDOW(data->self));
-  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(data->self->sgf_controller));
-
-  tree = ggame_sgf_controller_get_tree(data->self->sgf_controller);
-  if (tree == NULL) {
-    g_debug("Unable to save game information without an SGF tree");
-    return;
-  }
-
-  root = (SgfNode *)sgf_tree_get_root(tree);
-  if (root == NULL) {
-    g_debug("Unable to save game information without an SGF root node");
-    return;
-  }
-
-  for (guint side = 0; side < 2; side++) {
-    const char *property = ggame_window_player_name_property_for_side(data->self, side);
-    g_autofree char *name = g_strdup(gtk_editable_get_text(GTK_EDITABLE(data->player_entries[side])));
-
-    if (property == NULL || name == NULL) {
-      g_debug("Unable to save game information for side %u", side);
-      return;
-    }
-
-    g_strstrip(name);
-    ggame_window_set_root_text_property(root, property, name);
-  }
-  ggame_window_set_root_entry_text_property(root, GGAME_SGF_PROP_DATE, data->date_entry);
-  ggame_window_set_root_entry_text_property(root, GGAME_SGF_PROP_BGA_TABLE_ID, data->table_id_entry);
-  ggame_window_set_root_entry_text_property(root, GGAME_SGF_PROP_RESULT, data->winner_entry);
-
-  current = sgf_tree_get_current(tree);
-  if (current != NULL) {
-    ggame_window_sync_board_host_node(data->self, current);
-  } else {
-    g_debug("Unable to refresh board host after game information change without a current SGF node");
-  }
-  ggame_sgf_controller_autosave_current_tree(data->self->sgf_controller);
-  gtk_window_destroy(data->dialog);
-}
-
-void ggame_window_present_game_information_dialog(GGameWindow *self) {
-  SgfTree *tree = NULL;
-  const SgfNode *root = NULL;
-
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self->sgf_controller));
-
-  tree = ggame_sgf_controller_get_tree(self->sgf_controller);
-  if (tree == NULL) {
-    g_debug("Unable to show game information without an SGF tree");
-    return;
-  }
-
-  root = sgf_tree_get_root(tree);
-  if (root == NULL) {
-    g_debug("Unable to show game information without an SGF root node");
-    return;
-  }
-
-  GtkWidget *dialog = gtk_window_new();
-  gtk_window_set_title(GTK_WINDOW(dialog), "Game information");
-  gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
-  gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(self));
-  gtk_window_set_resizable(GTK_WINDOW(dialog), FALSE);
-
-  GtkWidget *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
-  gtk_widget_set_margin_top(content, 12);
-  gtk_widget_set_margin_bottom(content, 12);
-  gtk_widget_set_margin_start(content, 12);
-  gtk_widget_set_margin_end(content, 12);
-  gtk_window_set_child(GTK_WINDOW(dialog), content);
-
-  GtkWidget *grid = gtk_grid_new();
-  gtk_grid_set_row_spacing(GTK_GRID(grid), 8);
-  gtk_grid_set_column_spacing(GTK_GRID(grid), 12);
-  gtk_box_append(GTK_BOX(content), grid);
-
-  GGameWindowGameInformationDialogData *data = g_new0(GGameWindowGameInformationDialogData, 1);
-  data->self = g_object_ref(self);
-  data->dialog = GTK_WINDOW(dialog);
-  g_object_set_data_full(G_OBJECT(dialog),
-                         "ggame-window-game-information-dialog-data",
-                         data,
-                         (GDestroyNotify)ggame_window_game_information_dialog_data_free);
-
-  guint row = 0;
-  for (guint side = 0; side < 2; side++) {
-    const char *side_label = ggame_window_side_label(self, side);
-    const char *property = ggame_window_player_name_property_for_side(self, side);
-    const char *name = property != NULL ? sgf_node_get_property_first(root, property) : NULL;
-    g_autofree char *fallback_label = g_strdup_printf("Player %u", side + 1);
-    g_autofree char *entry_name = g_strdup_printf("game-information-player-%u-entry", side);
-    ggame_window_new_game_information_entry_row(GTK_GRID(grid),
-                                                side_label != NULL ? side_label : fallback_label,
-                                                entry_name,
-                                                name,
-                                                row++,
-                                                &data->player_entries[side]);
-  }
-  ggame_window_new_game_information_entry_row(GTK_GRID(grid),
-                                              "Date/time",
-                                              "game-information-date-entry",
-                                              sgf_node_get_property_first(root, GGAME_SGF_PROP_DATE),
-                                              row++,
-                                              &data->date_entry);
-  ggame_window_new_game_information_entry_row(GTK_GRID(grid),
-                                              "Table ID",
-                                              "game-information-table-id-entry",
-                                              sgf_node_get_property_first(root, GGAME_SGF_PROP_BGA_TABLE_ID),
-                                              row++,
-                                              &data->table_id_entry);
-  ggame_window_new_game_information_entry_row(GTK_GRID(grid),
-                                              "Winner",
-                                              "game-information-winner-entry",
-                                              sgf_node_get_property_first(root, GGAME_SGF_PROP_RESULT),
-                                              row++,
-                                              &data->winner_entry);
-
-  GtkWidget *button_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-  gtk_widget_set_halign(button_box, GTK_ALIGN_END);
-  gtk_box_append(GTK_BOX(content), button_box);
-
-  GtkWidget *cancel_button = gtk_button_new_with_label("Cancel");
-  GtkWidget *save_button = gtk_button_new_with_label("Save");
-  gtk_widget_add_css_class(save_button, "suggested-action");
-  gtk_box_append(GTK_BOX(button_box), cancel_button);
-  gtk_box_append(GTK_BOX(button_box), save_button);
-
-  g_signal_connect(cancel_button,
-                   "clicked",
-                   G_CALLBACK(ggame_window_on_game_information_cancel_clicked),
-                   dialog);
-  g_signal_connect(save_button,
-                   "clicked",
-                   G_CALLBACK(ggame_window_on_game_information_save_clicked),
-                   data);
-
-  gtk_window_present(GTK_WINDOW(dialog));
 }
 
 static void ggame_window_set_new_game_computer_player_names(GGameWindow *self,
@@ -5312,14 +4850,6 @@ static void ggame_window_show_analysis_for_current_node(GGameWindow *self) {
   }
 
   ggame_window_set_analysis_text(self, "");
-}
-
-static gboolean ggame_window_should_cancel_analysis(gpointer user_data) {
-  GGameWindowAnalysisTask *task = user_data;
-  g_return_val_if_fail(task != NULL, TRUE);
-  g_return_val_if_fail(GGAME_IS_WINDOW(task->self), TRUE);
-
-  return g_atomic_int_get(&task->self->analysis_generation) != task->generation;
 }
 
 static gboolean ggame_window_should_cancel_full_analysis(gpointer user_data) {
@@ -5702,44 +5232,6 @@ static char *ggame_window_analysis_format_full_game_status(guint completed_nodes
                          explored_nodes);
 }
 
-static char *ggame_window_analysis_format_progress(const GGameWindowAnalysisTask *task,
-                                                   const GameAiSearchStats *stats) {
-  g_return_val_if_fail(task != NULL, NULL);
-  g_return_val_if_fail(stats != NULL, NULL);
-
-  GString *text = g_string_new(NULL);
-  g_string_append_printf(text, "Analysis depth: %u (searching)\n", task->current_depth);
-  g_string_append_printf(text, "Nodes: %" G_GUINT64_FORMAT "\n", stats->nodes);
-  return g_string_free(text, FALSE);
-}
-
-static void ggame_window_analysis_on_progress(const GameAiSearchStats *stats, gpointer user_data) {
-  GGameWindowAnalysisTask *task = user_data;
-  g_return_if_fail(stats != NULL);
-  g_return_if_fail(task != NULL);
-  g_return_if_fail(GGAME_IS_WINDOW(task->self));
-
-  const gint64 interval_us = (gint64)GGAME_WINDOW_ANALYSIS_PROGRESS_INTERVAL_MS * 1000;
-  gint64 now = g_get_monotonic_time();
-  if (task->last_progress_publish_us != 0 && now - task->last_progress_publish_us < interval_us) {
-    return;
-  }
-
-  task->last_progress_publish_us = now;
-  g_autofree char *text = ggame_window_analysis_format_progress(task, stats);
-  if (text == NULL) {
-    g_debug("Failed to format analysis progress text");
-    return;
-  }
-
-  ggame_window_analysis_publish_status(task->self,
-                                           task->generation,
-                                           GGAME_WINDOW_ANALYSIS_MODE_CURRENT,
-                                           FALSE,
-                                           FALSE,
-                                           text);
-}
-
 static void ggame_window_full_analysis_on_progress(const GameAiSearchStats *stats, gpointer user_data) {
   GGameWindowFullAnalysisTask *task = user_data;
   g_return_if_fail(stats != NULL);
@@ -5769,84 +5261,6 @@ static void ggame_window_full_analysis_on_progress(const GameAiSearchStats *stat
                                            FALSE,
                                            FALSE,
                                            text);
-}
-
-static gpointer ggame_window_analysis_thread(gpointer user_data) {
-  GGameWindowAnalysisTask *task = user_data;
-  g_return_val_if_fail(task != NULL, NULL);
-  g_return_val_if_fail(task->backend != NULL, NULL);
-  g_return_val_if_fail(task->position != NULL, NULL);
-
-  for (guint depth = GGAME_WINDOW_ANALYSIS_DEPTH_MIN;
-       depth <= task->target_depth && !ggame_window_should_cancel_analysis(task);
-       ++depth) {
-    task->current_depth = depth;
-    task->last_progress_publish_us = 0;
-    ggame_window_analysis_on_progress(&task->cumulative_stats, task);
-
-    GameAiScoredMoveList moves = {0};
-    gboolean ok = game_ai_search_analyze_moves_cancellable_with_tt(
-        task->backend,
-        task->position,
-        depth,
-        &moves,
-        ggame_window_should_cancel_analysis,
-        task,
-        ggame_window_analysis_on_progress,
-        task,
-        task->tt,
-        &task->cumulative_stats);
-    if (!ok) {
-      if (!ggame_window_should_cancel_analysis(task)) {
-        ggame_window_analysis_publish_status(task->self,
-                                                 task->generation,
-                                                 GGAME_WINDOW_ANALYSIS_MODE_CURRENT,
-                                                 TRUE,
-                                                 FALSE,
-                                                 "No legal moves to analyze.");
-      }
-      break;
-    }
-
-    g_autoptr(SgfNodeAnalysis) analysis =
-        ggame_window_analysis_from_scored_moves(task->backend, &moves, depth, &task->cumulative_stats);
-    game_ai_scored_move_list_free(&moves);
-    if (analysis == NULL) {
-      g_debug("Failed to build SGF node analysis payload");
-      break;
-    }
-
-    g_autofree char *text = ggame_window_format_analysis_status(analysis);
-    if (text == NULL) {
-      break;
-    }
-
-    ggame_window_analysis_publish_payload(task->self,
-                                              task->generation,
-                                              GGAME_WINDOW_ANALYSIS_MODE_CURRENT,
-                                              analysis,
-                                              task->target_node);
-    ggame_window_analysis_publish_status(task->self,
-                                             task->generation,
-                                             GGAME_WINDOW_ANALYSIS_MODE_CURRENT,
-                                             FALSE,
-                                             FALSE,
-                                             text);
-  }
-
-  ggame_window_analysis_publish_status(task->self,
-                                           task->generation,
-                                           GGAME_WINDOW_ANALYSIS_MODE_CURRENT,
-                                           TRUE,
-                                           ggame_window_should_cancel_analysis(task),
-                                           ggame_window_should_cancel_analysis(task) ? "Analysis stopped." : NULL);
-
-  g_object_unref(task->self);
-  game_ai_tt_free(task->tt);
-  task->backend->position_clear(task->position);
-  g_free(task->position);
-  g_free(task);
-  return NULL;
 }
 
 static void ggame_window_full_node_job_free(gpointer data) {
@@ -6069,50 +5483,6 @@ static void ggame_window_stop_analysis(GGameWindow *self) {
   }
   g_mutex_unlock(&self->analysis_report_mutex);
   ggame_window_analysis_finish_session(self);
-}
-
-static void ggame_window_start_analysis(GGameWindow *self) {
-  const GameBackend *backend = NULL;
-  g_autofree guint8 *position = NULL;
-
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self->sgf_controller));
-
-  if (!ggame_window_copy_analysis_position(self, &backend, NULL, &position)) {
-    g_debug("Failed to snapshot backend position for threaded analysis");
-    return;
-  }
-  g_return_if_fail(backend != NULL);
-  g_return_if_fail(backend->move_size > 0);
-
-  SgfTree *tree = ggame_sgf_controller_get_tree(self->sgf_controller);
-  if (tree == NULL) {
-    g_debug("Missing SGF tree for analysis");
-    return;
-  }
-  const SgfNode *target_node = sgf_tree_get_current(tree);
-  if (target_node == NULL) {
-    g_debug("Missing SGF current node for analysis");
-    return;
-  }
-
-  gint generation = g_atomic_int_add(&self->analysis_generation, 1) + 1;
-  ggame_window_analysis_begin_session(self, GGAME_WINDOW_ANALYSIS_MODE_CURRENT, 0);
-  ggame_window_set_analysis_status(self, "Analyzing current position...");
-
-  GGameWindowAnalysisTask *task = g_new0(GGameWindowAnalysisTask, 1);
-  task->self = g_object_ref(self);
-  task->backend = backend;
-  task->position = g_steal_pointer(&position);
-  task->generation = generation;
-  task->target_node = target_node;
-  task->target_depth = ggame_window_get_analysis_depth(self);
-  task->tt = game_ai_tt_new(GGAME_WINDOW_ANALYSIS_TT_SIZE_MB, backend->move_size);
-  if (task->tt == NULL) {
-    g_debug("Failed to allocate analysis TT, continuing without TT caching");
-  }
-  GThread *thread = g_thread_new("analysis-thread", ggame_window_analysis_thread, task);
-  g_thread_unref(thread);
 }
 
 static void ggame_window_start_full_game_analysis(GGameWindow *self) {
@@ -6501,33 +5871,6 @@ static void ggame_window_on_analysis_graph_node_activated(AnalysisGraph * /*grap
   }
 }
 
-static void ggame_window_on_analyze_current_position_action(GSimpleAction * /*action*/,
-                                                                GVariant * /*parameter*/,
-                                                                gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  if (!ggame_window_get_profile(self)->features.supports_analysis) {
-    return;
-  }
-
-  ggame_window_stop_analysis(self);
-  ggame_window_start_analysis(self);
-}
-
-static void ggame_window_on_analyze_full_game_action(GSimpleAction * /*action*/,
-                                                         GVariant * /*parameter*/,
-                                                         gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  if (!ggame_window_get_profile(self)->features.supports_analysis) {
-    return;
-  }
-
-  ggame_window_stop_analysis(self);
-  ggame_window_start_full_game_analysis(self);
-}
-
 static void ggame_window_on_force_move_action(GSimpleAction * /*action*/,
                                                   GVariant * /*parameter*/,
                                                   gpointer user_data) {
@@ -6537,34 +5880,14 @@ static void ggame_window_on_force_move_action(GSimpleAction * /*action*/,
   ggame_window_force_move(self);
 }
 
-static void ggame_window_on_play_puzzles_action(GSimpleAction * /*action*/,
-                                                    GVariant * /*parameter*/,
-                                                    gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  if (!ggame_window_get_profile(self)->features.supports_puzzles) {
-    return;
-  }
-
-  ggame_window_present_puzzle_dialog(self);
-}
-
 static void ggame_window_on_game_information_action(GSimpleAction * /*action*/,
-                                                        GVariant * /*parameter*/,
-                                                        gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  ggame_window_present_game_information_dialog(self);
+                                                    GVariant * /*parameter*/,
+                                                    gpointer /*user_data*/) {
 }
 
 static void ggame_window_on_library_action(GSimpleAction * /*action*/,
                                            GVariant * /*parameter*/,
-                                           gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  ggame_window_present_library_dialog(self);
+                                           gpointer /*user_data*/) {
 }
 
 static void ggame_window_on_puzzle_next_clicked(GtkButton * /*button*/, gpointer user_data) {
@@ -7051,14 +6374,6 @@ static void ggame_window_init(GGameWindow *self) {
           .padding = {0},
       },
       {
-          .name = "puzzle-play",
-          .activate = ggame_window_on_play_puzzles_action,
-          .parameter_type = NULL,
-          .state = NULL,
-          .change_state = NULL,
-          .padding = {0},
-      },
-      {
           .name = "game-information",
           .activate = ggame_window_on_game_information_action,
           .parameter_type = NULL,
@@ -7146,22 +6461,6 @@ static void ggame_window_init(GGameWindow *self) {
           .change_state = ggame_window_on_show_move_report_change_state,
           .padding = {0},
       },
-      {
-          .name = "analysis-current-position",
-          .activate = ggame_window_on_analyze_current_position_action,
-          .parameter_type = NULL,
-          .state = NULL,
-          .change_state = NULL,
-          .padding = {0},
-      },
-      {
-          .name = "analysis-whole-game",
-          .activate = ggame_window_on_analyze_full_game_action,
-          .parameter_type = NULL,
-          .state = NULL,
-          .change_state = NULL,
-          .padding = {0},
-      },
   };
   g_action_map_add_action_entries(G_ACTION_MAP(self),
                                   window_actions,
@@ -7230,20 +6529,6 @@ static void ggame_window_init(GGameWindow *self) {
                                                                               "win.navigation-step-forward-to-end");
   gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), step_to_end_button);
 
-  GtkWidget *analysis_separator = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
-  gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), analysis_separator);
-
-  GtkWidget *analyze_current_button =
-      ggame_window_new_toolbar_action_button("system-search-symbolic",
-                                             "Analyze current position",
-                                             "win.analysis-current-position");
-  gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), analyze_current_button);
-
-  GtkWidget *analyze_full_button =
-      ggame_window_new_toolbar_action_button("view-list-symbolic",
-                                             "Analyze whole game",
-                                             "win.analysis-whole-game");
-  gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), analyze_full_button);
   gtk_box_append(GTK_BOX(content), toolbar);
 
   GtkWidget *paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
@@ -7583,7 +6868,6 @@ int main(void) {
   g_log_set_always_fatal(G_LOG_LEVEL_CRITICAL);
 
   gtk_init();
-  ggame_app_profile_set_active(ggame_app_profile_get_by_kind(GGAME_APP_KIND_HOMEWORLDS));
 
   window = create_window(&app, &model);
   gtk_window_present(GTK_WINDOW(window));
