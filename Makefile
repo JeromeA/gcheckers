@@ -81,6 +81,9 @@ CHECKERS_SRCS := $(CHECKERS_DIR)/board.c $(CHECKERS_DIR)/board_geometry.c $(CHEC
 SRCS := $(CHECKERS_SRCS) $(CHECKERS_BACKEND_SRCS) \
 	$(HOMEWORLDS_GAME_SRCS) $(HOMEWORLDS_BACKEND_SRCS) $(HOMEWORLDS_UI_STUB_SRCS) \
 	$(BOOP_RULES_SRCS) src/ai_search.c src/game_model.c src/game_app_profile.c
+BUG_EMBEDDED_SRCS := src/game_app_profile.c src/game_model.c $(HOMEWORLDS_DIR)/homeworlds_backend.c src/window.c
+BUG_HOMEWORLDS_ALL_SRCS := $(filter-out $(HOMEWORLDS_DIR)/homeworlds_backend.c,$(HOMEWORLDS_ALL_SRCS))
+BUG_SRCS := $(filter-out $(BUG_EMBEDDED_SRCS),$(SRCS))
 BOARD_SRCS := $(CHECKERS_DIR)/board.c
 SGF_TREE_SRCS := src/sgf_tree.c
 SGF_MOVE_PROPS_SRCS := src/sgf_move_props.c
@@ -336,7 +339,7 @@ $(TEST_HOMEWORLDS_WINDOW_BIN): tests/test_homeworlds_window.c $(HOMEWORLDS_UI_SR
 		$(BOOP_UI_SRCS) $(HOMEWORLDS_UI_SRCS) $(LDLIBS) $(GTK_LIBS)
 
 bug: bug.c $(HOMEWORLDS_UI_SRCS) \
-	$(HOMEWORLDS_ALL_SRCS) src/application.c src/window.c $(APP_PATHS_SRCS) $(PUZZLE_PROGRESS_SRCS) \
+	$(BUG_HOMEWORLDS_ALL_SRCS) src/application.c $(APP_PATHS_SRCS) $(PUZZLE_PROGRESS_SRCS) \
 	$(PUZZLE_CATALOG_SRCS) src/app_settings.c src/app_settings.h $(COMMON_SETTINGS_SRCS) src/common_settings.h \
 	src/settings_dialog.c src/settings_dialog.h \
 	src/new_game_dialog.c src/puzzle_dialog.c src/puzzle_dialog.h $(CHECKERS_DIR)/rulesets.c \
@@ -352,10 +355,10 @@ bug: bug.c $(HOMEWORLDS_UI_SRCS) \
 	src/sgf_view_disc_factory.c src/sgf_view_disc_factory.h src/sgf_view_layout.c src/sgf_view_layout.h \
 	src/sgf_view_link_renderer.c src/sgf_view_link_renderer.h src/sgf_view_scroller.c \
 	src/sgf_view_scroller.h src/sgf_view_selection_controller.c src/sgf_view_selection_controller.h \
-	$(SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS) \
+	$(BUG_SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS) \
 	$(HOMEWORLDS_DIR)/homeworlds_view.h
-	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ bug.c \
-		src/application.c src/window.c $(APP_PATHS_SRCS) $(COMMON_SETTINGS_SRCS) $(PUZZLE_PROGRESS_SRCS) \
+	$(CC) $(CFLAGS) $(GTK_CFLAGS) -I$(HOMEWORLDS_DIR) -o $@ bug.c \
+		src/application.c $(APP_PATHS_SRCS) $(COMMON_SETTINGS_SRCS) $(PUZZLE_PROGRESS_SRCS) \
 		$(PUZZLE_CATALOG_SRCS) \
 		src/app_settings.c src/settings_dialog.c src/new_game_dialog.c src/puzzle_dialog.c \
 		src/import_dialog.c src/sgf_file_actions.c src/file_dialog_history.c src/bga_client.c src/style.c \
@@ -363,7 +366,7 @@ bug: bug.c $(HOMEWORLDS_UI_SRCS) \
 		src/board_grid.c src/board_square.c src/board_move_overlay.c src/board_selection_controller.c \
 		src/piece_palette.c src/man_paintable.c src/sgf_io.c src/sgf_move_props.c src/sgf_tree.c \
 		src/sgf_view.c src/sgf_view_disc_factory.c src/sgf_view_layout.c src/sgf_view_link_renderer.c \
-		src/sgf_view_scroller.c src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(SRCS) \
+		src/sgf_view_scroller.c src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(BUG_SRCS) \
 		$(HOMEWORLDS_UI_SRCS) $(LDLIBS) $(GTK_LIBS)
 
 test_boop_game: $(TEST_BOOP_GAME_BIN)
