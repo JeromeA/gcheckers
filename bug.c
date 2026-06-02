@@ -619,7 +619,6 @@ static gint ggame_window_current_extra_width(GGameWindow *self);
 static void ggame_window_apply_saved_panel_widths(GGameWindow *self);
 static gint ggame_window_expected_default_width(GGameWindow *self);
 static gboolean ggame_window_apply_player_move(gconstpointer move, gpointer user_data);
-static gboolean ggame_window_on_board_square_action(guint8 index, guint button, gpointer user_data);
 static void ggame_window_sync_board_orientation(GGameWindow *self);
 static void ggame_window_sync_puzzle_ui(GGameWindow *self);
 static void ggame_window_sync_drawer_ui_with_capture(GGameWindow *self, gboolean capture_current_layout);
@@ -1093,15 +1092,6 @@ static void ggame_window_sync_mode_ui(GGameWindow *self) {
   if (self->sgf_mode_control != NULL) {
     gtk_widget_set_sensitive(GTK_WIDGET(self->sgf_mode_control), allow_edit_mode_selection);
   }
-}
-
-static gboolean ggame_window_on_board_square_action(guint8 index, guint button, gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), FALSE);
-  (void)index;
-  (void)button;
-  return FALSE;
 }
 
 static void ggame_window_start_new_game(GGameWindow *self) {
@@ -1921,7 +1911,6 @@ static void ggame_window_init(GGameWindow *self) {
   if (square_board) {
     board_view_set_sgf_controller(self->board_view, self->sgf_controller);
     board_view_set_move_handler(self->board_view, ggame_window_apply_player_move, self);
-    board_view_set_square_handler(self->board_view, ggame_window_on_board_square_action, self);
   }
   self->analysis_graph = analysis_graph_new();
   GtkWidget *sgf_widget = ggame_sgf_controller_get_widget(self->sgf_controller);
