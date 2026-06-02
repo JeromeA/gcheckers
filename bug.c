@@ -590,8 +590,6 @@ struct _GGameWindow {
   gint puzzle_navigation_panel_width;
   gint puzzle_analysis_panel_width;
   gint puzzle_extra_width;
-  GGameWindowBoardOrientationMode board_orientation_mode;
-  CheckersColor board_bottom_color;
   const GameBackendVariant *puzzle_variant;
   char *puzzle_variant_key;
   guint puzzle_attacker_side;
@@ -617,7 +615,6 @@ static gint ggame_window_current_extra_width(GGameWindow *self);
 static void ggame_window_apply_saved_panel_widths(GGameWindow *self);
 static gint ggame_window_expected_default_width(GGameWindow *self);
 static gboolean ggame_window_apply_player_move(gconstpointer move, gpointer user_data);
-static void ggame_window_sync_board_orientation(GGameWindow *self);
 static void ggame_window_sync_puzzle_ui(GGameWindow *self);
 static void ggame_window_sync_drawer_ui_with_capture(GGameWindow *self, gboolean capture_current_layout);
 static void ggame_window_sync_title(GGameWindow *self);
@@ -751,29 +748,6 @@ static gint *ggame_window_saved_extra_width_ptr(GGameWindow *self) {
   g_return_val_if_fail(ggame_window_layout_mode_valid(self->layout_mode), NULL);
 
   return self->layout_mode == GGAME_WINDOW_LAYOUT_MODE_PUZZLE ? &self->puzzle_extra_width : &self->extra_width;
-}
-
-static gboolean ggame_window_board_orientation_mode_valid(GGameWindowBoardOrientationMode mode) {
-  return mode == GGAME_WINDOW_BOARD_ORIENTATION_FIXED ||
-         mode == GGAME_WINDOW_BOARD_ORIENTATION_FOLLOW_PLAYER ||
-         mode == GGAME_WINDOW_BOARD_ORIENTATION_FOLLOW_TURN;
-}
-
-static CheckersColor ggame_window_resolve_board_bottom_color(GGameWindow *self) {
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), CHECKERS_COLOR_WHITE);
-
-  return self->board_bottom_color;
-}
-
-static void ggame_window_sync_board_orientation(GGameWindow *self) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  if (!ggame_window_uses_square_board(self)) {
-    return;
-  }
-
-  CheckersColor bottom_color = ggame_window_resolve_board_bottom_color(self);
-  self->board_bottom_color = bottom_color;
 }
 
 static gboolean ggame_window_constrain_main_split_cb(GtkWidget * /*widget*/,
@@ -1253,7 +1227,6 @@ static void ggame_window_on_state_changed(GGameModel *model, gpointer user_data)
   g_return_if_fail(GGAME_IS_MODEL(model));
   g_return_if_fail(GGAME_IS_WINDOW(self));
 
-  ggame_window_sync_board_orientation(self);
   ggame_window_update_status(self);
   ggame_window_update_control_state(self);
 }
@@ -1263,7 +1236,6 @@ static void ggame_window_on_control_changed(PlayerControlsPanel * /*panel*/, gpo
 
   g_return_if_fail(GGAME_IS_WINDOW(self));
 
-  ggame_window_sync_board_orientation(self);
   ggame_window_update_control_state(self);
 }
 
@@ -1483,28 +1455,20 @@ void ggame_window_apply_new_game_settings(GGameWindow *self,
 void ggame_window_set_board_orientation_mode(GGameWindow *self,
                                                  GGameWindowBoardOrientationMode mode) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(ggame_window_board_orientation_mode_valid(mode));
-
-  if (self->board_orientation_mode == mode) {
-    return;
-  }
-
-  self->board_orientation_mode = mode;
-  ggame_window_sync_board_orientation(self);
+  (void)mode;
 }
 
 void ggame_window_set_board_bottom_color(GGameWindow *self, CheckersColor bottom_color) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
   g_return_if_fail(bottom_color == CHECKERS_COLOR_WHITE || bottom_color == CHECKERS_COLOR_BLACK);
 
-  self->board_bottom_color = bottom_color;
-  ggame_window_sync_board_orientation(self);
+  (void)bottom_color;
 }
 
 CheckersColor ggame_window_get_board_bottom_color(GGameWindow *self) {
   g_return_val_if_fail(GGAME_IS_WINDOW(self), CHECKERS_COLOR_WHITE);
 
-  return self->board_bottom_color;
+  return CHECKERS_COLOR_WHITE;
 }
 
 static void ggame_window_set_model(GGameWindow *self, GGameModel *model) {
@@ -1526,7 +1490,6 @@ static void ggame_window_set_model(GGameWindow *self, GGameModel *model) {
                                             self);
   ggame_sgf_controller_set_game_model(self->sgf_controller, self->game_model);
   ggame_window_rebuild_board_host(self);
-  ggame_window_sync_board_orientation(self);
   ggame_window_update_status(self);
   ggame_window_update_control_state(self);
   ggame_window_set_current_computer_player_names(self);
@@ -1959,8 +1922,6 @@ static void ggame_window_init(GGameWindow *self) {
   self->puzzle_navigation_panel_width = self->navigation_panel_width;
   self->puzzle_analysis_panel_width = self->analysis_panel_width;
   self->puzzle_extra_width = 0;
-  self->board_orientation_mode = GGAME_WINDOW_BOARD_ORIENTATION_FIXED;
-  self->board_bottom_color = CHECKERS_COLOR_WHITE;
   self->puzzle_variant = NULL;
   self->puzzle_variant_key = NULL;
   self->puzzle_attacker_side = 0;
