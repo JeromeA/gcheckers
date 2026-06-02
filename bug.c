@@ -474,12 +474,6 @@ static gboolean homeworlds_backend_moves_equal(gconstpointer left, gconstpointer
   return homeworlds_moves_equal(left_move, right_move);
 }
 
-static GameBackendMoveList homeworlds_backend_list_good_moves(gconstpointer position, guint /*depth_hint*/) {
-  g_return_val_if_fail(position != NULL, (GameBackendMoveList){0});
-
-  return (GameBackendMoveList){0};
-}
-
 static gboolean homeworlds_backend_apply_move(gpointer position, gconstpointer move) {
   HomeworldsPosition *homeworlds_position = position;
   const HomeworldsMove *homeworlds_move = move;
@@ -488,28 +482,6 @@ static gboolean homeworlds_backend_apply_move(gpointer position, gconstpointer m
   g_return_val_if_fail(homeworlds_move != NULL, FALSE);
 
   return homeworlds_position_apply_move(homeworlds_position, homeworlds_move);
-}
-
-static gint homeworlds_backend_evaluate_static(gconstpointer position) {
-  const HomeworldsPosition *homeworlds_position = position;
-
-  g_return_val_if_fail(homeworlds_position != NULL, 0);
-
-  return homeworlds_position_evaluate_static(homeworlds_position);
-}
-
-static gint homeworlds_backend_terminal_score(gconstpointer position, GameBackendOutcome outcome, guint ply_depth) {
-  g_return_val_if_fail(position != NULL, 0);
-
-  return homeworlds_position_terminal_score(outcome, ply_depth);
-}
-
-static guint64 homeworlds_backend_hash_position(gconstpointer position) {
-  const HomeworldsPosition *homeworlds_position = position;
-
-  g_return_val_if_fail(homeworlds_position != NULL, 0);
-
-  return homeworlds_position_hash(homeworlds_position);
 }
 
 static gboolean homeworlds_backend_format_move(gconstpointer move, char *buffer, gsize size) {
@@ -537,7 +509,6 @@ const GameBackend homeworlds_game_backend = {
   .move_size = sizeof(HomeworldsMove),
   .supports_move_list = FALSE,
   .supports_move_builder = TRUE,
-  .supports_ai_search = TRUE,
   .side_label = homeworlds_backend_side_label,
   .sgf_color_for_side = homeworlds_backend_sgf_color_for_side,
   .outcome_banner_text = homeworlds_backend_outcome_banner_text,
@@ -546,7 +517,6 @@ const GameBackend homeworlds_game_backend = {
   .position_copy = homeworlds_backend_position_copy,
   .position_outcome = homeworlds_backend_position_outcome,
   .position_turn = homeworlds_backend_position_turn,
-  .list_good_moves = homeworlds_backend_list_good_moves,
   .move_list_free = homeworlds_backend_move_list_free,
   .move_list_get = homeworlds_backend_move_list_get,
   .moves_equal = homeworlds_backend_moves_equal,
@@ -559,9 +529,6 @@ const GameBackend homeworlds_game_backend = {
   .move_builder_build_move = (gboolean (*)(const GameBackendMoveBuilder *, gpointer))
       homeworlds_move_builder_build_move,
   .apply_move = homeworlds_backend_apply_move,
-  .evaluate_static = homeworlds_backend_evaluate_static,
-  .terminal_score = homeworlds_backend_terminal_score,
-  .hash_position = homeworlds_backend_hash_position,
   .format_move = homeworlds_backend_format_move,
   .parse_move = homeworlds_backend_parse_move,
   .sgf_apply_setup_node = homeworlds_sgf_position_apply_setup_node,
