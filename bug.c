@@ -606,8 +606,6 @@ struct _GGameWindow {
   GtkButton *puzzle_next_button;
   GtkButton *puzzle_analyze_button;
   GGamePuzzleProgressStore *puzzle_progress_store;
-  gboolean puzzle_attempt_started;
-  gboolean puzzle_attempt_made_player_move;
   GGamePuzzleAttemptRecord puzzle_attempt;
   char *puzzle_path;
 };
@@ -626,10 +624,6 @@ static void ggame_window_sync_board_orientation(GGameWindow *self);
 static void ggame_window_sync_puzzle_ui(GGameWindow *self);
 static void ggame_window_sync_drawer_ui_with_capture(GGameWindow *self, gboolean capture_current_layout);
 static void ggame_window_sync_title(GGameWindow *self);
-static gboolean ggame_window_puzzle_attempt_finish_failure(GGameWindow *self,
-                                                               gboolean failure_on_first_move,
-                                                               gconstpointer failed_first_move);
-static void ggame_window_puzzle_attempt_reset(GGameWindow *self);
 static void ggame_window_rebuild_board_host(GGameWindow *self);
 static void ggame_window_load_default_size(gint *out_width, gint *out_height);
 static void ggame_window_save_default_size(GGameWindow *self);
@@ -729,28 +723,6 @@ static void ggame_window_sync_side_labels(GGameWindow *self) {
   side0_label = backend->side_label(0);
   side1_label = backend->side_label(1);
   player_controls_panel_set_side_labels(self->controls_panel, side0_label, side1_label);
-}
-
-static gboolean ggame_window_puzzle_attempt_is_terminal(GGameWindow *self) {
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), FALSE);
-
-  return FALSE;
-}
-
-static gboolean ggame_window_puzzle_attempt_finish_failure(GGameWindow *self,
-                                                               gboolean failure_on_first_move,
-                                                               gconstpointer failed_first_move) {
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), FALSE);
-  (void)failure_on_first_move;
-  (void)failed_first_move;
-  return FALSE;
-}
-
-static void ggame_window_puzzle_attempt_reset(GGameWindow *self) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  self->puzzle_attempt_started = FALSE;
-  self->puzzle_attempt_made_player_move = FALSE;
 }
 
 static gboolean ggame_window_analysis_depth_valid(guint depth) {
@@ -1677,9 +1649,6 @@ static void ggame_window_dispose(GObject *object) {
   gboolean panel_removed = ggame_window_unparent_controls_panel(self);
   g_clear_handle_id(&self->auto_move_source_id, g_source_remove);
   g_clear_handle_id(&self->puzzle_wrong_move_source_id, g_source_remove);
-  if (self->puzzle_attempt_started && !ggame_window_puzzle_attempt_is_terminal(self)) {
-    (void)ggame_window_puzzle_attempt_finish_failure(self, FALSE, NULL);
-  }
 
   ggame_window_unparent_controls_panel(self);
   self->analysis_status_label = NULL;
@@ -1723,7 +1692,6 @@ static void ggame_window_dispose(GObject *object) {
   }
   g_clear_object(&self->board_view);
   g_clear_object(&self->game_model);
-  ggame_window_puzzle_attempt_reset(self);
   g_clear_pointer(&self->puzzle_variant_key, g_free);
   g_clear_pointer(&self->puzzle_path, g_free);
   self->puzzle_progress_store = NULL;
@@ -2065,8 +2033,6 @@ static void ggame_window_init(GGameWindow *self) {
   self->puzzle_variant_key = NULL;
   self->puzzle_attacker_side = 0;
   self->puzzle_number = 0;
-  self->puzzle_attempt_started = FALSE;
-  self->puzzle_attempt_made_player_move = FALSE;
   ggame_window_sync_drawer_ui_with_capture(self, FALSE);
   ggame_window_sync_puzzle_ui(self);
   ggame_window_sync_mode_ui(self);
