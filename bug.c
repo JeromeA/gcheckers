@@ -2980,9 +2980,6 @@ typedef struct {
 
 static void ggame_window_analysis_sync_ui(GGameWindow *self);
 static void ggame_window_analysis_reset_runtime_state(GGameWindow *self);
-static void ggame_window_analysis_begin_session(GGameWindow *self,
-                                                    GGameWindowAnalysisMode mode,
-                                                    guint expected_nodes);
 static void ggame_window_analysis_finish_session(GGameWindow *self);
 static gboolean ggame_window_is_edit_mode(GGameWindow *self);
 static void ggame_window_set_action_enabled(GActionMap *map, const char *name, gboolean enabled);
@@ -3010,10 +3007,7 @@ static gboolean ggame_window_puzzle_attempt_finish_success(GGameWindow *self);
 static gboolean ggame_window_puzzle_attempt_finish_failure(GGameWindow *self,
                                                                gboolean failure_on_first_move,
                                                                gconstpointer failed_first_move);
-static gboolean ggame_window_puzzle_attempt_finish_analyze(GGameWindow *self);
 static void ggame_window_puzzle_attempt_reset(GGameWindow *self);
-static void ggame_window_start_opened_puzzle_attempt(GGameWindow *self);
-static gboolean ggame_window_start_next_puzzle_mode(GGameWindow *self);
 static char *ggame_window_analysis_format_complete(const SgfNodeAnalysis *analysis);
 static void ggame_window_rebuild_board_host(GGameWindow *self);
 static void ggame_window_sync_drawer_action_states(GGameWindow *self);
@@ -3296,23 +3290,6 @@ static gboolean ggame_window_puzzle_attempt_finish_failure(GGameWindow *self,
       self->puzzle_attempt.failed_first_move_text = g_strdup(notation);
     }
   }
-  if (!ggame_window_puzzle_attempt_store_update(self, FALSE)) {
-    return FALSE;
-  }
-
-  ggame_window_request_puzzle_progress_flush(self);
-  return TRUE;
-}
-
-static gboolean ggame_window_puzzle_attempt_finish_analyze(GGameWindow *self) {
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), FALSE);
-
-  if (!self->puzzle_attempt_started || ggame_window_puzzle_attempt_is_terminal(self)) {
-    return FALSE;
-  }
-
-  self->puzzle_attempt.finished_unix_ms = g_get_real_time() / 1000;
-  self->puzzle_attempt.result = GGAME_PUZZLE_ATTEMPT_RESULT_ANALYZE;
   if (!ggame_window_puzzle_attempt_store_update(self, FALSE)) {
     return FALSE;
   }
@@ -3966,20 +3943,6 @@ static void ggame_window_analysis_reset_runtime_state(GGameWindow *self) {
   self->analysis_canceled = FALSE;
 }
 
-static void ggame_window_analysis_begin_session(GGameWindow *self,
-                                                    GGameWindowAnalysisMode mode,
-                                                    guint expected_nodes) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(mode == GGAME_WINDOW_ANALYSIS_MODE_CURRENT ||
-                   mode == GGAME_WINDOW_ANALYSIS_MODE_FULL_GAME);
-
-  self->analysis_mode = mode;
-  ggame_window_analysis_reset_runtime_state(self);
-  self->analysis_expected_nodes = expected_nodes;
-  ggame_window_set_analysis_status(self, "");
-  ggame_window_analysis_sync_ui(self);
-}
-
 static void ggame_window_analysis_finish_session(GGameWindow *self) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
 
@@ -4527,61 +4490,6 @@ gboolean ggame_window_start_puzzle_mode_for_path(GGameWindow *self,
   return TRUE;
 }
 
-static void ggame_window_start_opened_puzzle_attempt(GGameWindow *self) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  (void)ggame_window_puzzle_attempt_ensure_started(self);
-}
-
-static gboolean ggame_window_start_next_puzzle_mode(GGameWindow *self) {
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), FALSE);
-  g_return_val_if_fail(self->puzzle_path != NULL, FALSE);
-
-  const GameBackendVariant *variant = self->puzzle_variant;
-
-  g_autoptr(GError) error = NULL;
-  g_autoptr(GPtrArray) puzzle_entries = game_puzzle_catalog_load_variant(GGAME_ACTIVE_GAME_BACKEND, variant, &error);
-  if (puzzle_entries == NULL) {
-    g_debug("Failed to load puzzle catalog: %s", error != NULL ? error->message : "unknown error");
-    return FALSE;
-  }
-  if (puzzle_entries->len == 0) {
-    g_autofree char *dir_path = ggame_window_build_puzzle_variant_dir(self, variant);
-    g_debug("No puzzle files found in %s", dir_path != NULL ? dir_path : "(unknown)");
-    return FALSE;
-  }
-
-  guint current_index = G_MAXUINT;
-  for (guint i = 0; i < puzzle_entries->len; i++) {
-    GamePuzzleCatalogEntry *entry = g_ptr_array_index(puzzle_entries, i);
-    g_return_val_if_fail(entry != NULL, FALSE);
-    if (g_strcmp0(entry->path, self->puzzle_path) == 0) {
-      current_index = i;
-      break;
-    }
-  }
-
-  if (current_index == G_MAXUINT) {
-    g_debug("Current puzzle path %s was not found in the active puzzle catalog", self->puzzle_path);
-    return FALSE;
-  }
-
-  guint next_index = current_index + 1;
-  if (next_index >= puzzle_entries->len) {
-    next_index = 0;
-  }
-
-  GamePuzzleCatalogEntry *entry = g_ptr_array_index(puzzle_entries, next_index);
-  g_return_val_if_fail(entry != NULL, FALSE);
-  g_return_val_if_fail(entry->path != NULL, FALSE);
-  if (!ggame_window_start_puzzle_mode_for_path(self, variant, entry->path)) {
-    return FALSE;
-  }
-
-  ggame_window_start_opened_puzzle_attempt(self);
-  return TRUE;
-}
-
 static void ggame_window_sync_board_host_node(GGameWindow *self, const SgfNode *node) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
   g_return_if_fail(node != NULL);
@@ -4852,52 +4760,6 @@ static void ggame_window_show_analysis_for_current_node(GGameWindow *self) {
   ggame_window_set_analysis_text(self, "");
 }
 
-static gboolean ggame_window_should_cancel_full_analysis(gpointer user_data) {
-  GGameWindowFullAnalysisTask *task = user_data;
-  g_return_val_if_fail(task != NULL, TRUE);
-  g_return_val_if_fail(GGAME_IS_WINDOW(task->self), TRUE);
-
-  return g_atomic_int_get(&task->self->analysis_generation) != task->generation;
-}
-
-static SgfNodeAnalysis *ggame_window_analysis_from_scored_moves(const GameBackend *backend,
-                                                                const GameAiScoredMoveList *moves,
-                                                                guint depth,
-                                                                const GameAiSearchStats *stats) {
-  g_return_val_if_fail(backend != NULL, NULL);
-  g_return_val_if_fail(moves != NULL, NULL);
-  g_return_val_if_fail(stats != NULL, NULL);
-  g_return_val_if_fail(backend->format_move != NULL, NULL);
-
-  SgfNodeAnalysis *analysis = sgf_node_analysis_new();
-  if (analysis == NULL) {
-    return NULL;
-  }
-
-  analysis->depth = depth;
-  analysis->nodes = stats->nodes;
-  analysis->tt_probes = stats->tt_probes;
-  analysis->tt_hits = stats->tt_hits;
-  analysis->tt_cutoffs = stats->tt_cutoffs;
-
-  for (gsize i = 0; i < moves->count; ++i) {
-    char notation[128] = {0};
-    if (moves->moves[i].move == NULL || !backend->format_move(moves->moves[i].move, notation, sizeof(notation))) {
-      sgf_node_analysis_free(analysis);
-      return NULL;
-    }
-    if (!sgf_node_analysis_add_scored_move(analysis,
-                                           notation,
-                                           moves->moves[i].score,
-                                           moves->moves[i].nodes)) {
-      sgf_node_analysis_free(analysis);
-      return NULL;
-    }
-  }
-
-  return analysis;
-}
-
 static gboolean ggame_window_node_first_score(const SgfNode *node, gint *out_score) {
   g_return_val_if_fail(node != NULL, FALSE);
   g_return_val_if_fail(out_score != NULL, FALSE);
@@ -4925,141 +4787,6 @@ static void ggame_window_analysis_event_free(gpointer data) {
   g_clear_pointer(&event->status_text, g_free);
   sgf_node_analysis_free(event->analysis);
   g_free(event);
-}
-
-static void ggame_window_maybe_finish_full_analysis(GGameWindow *self) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  if (self->analysis_mode != GGAME_WINDOW_ANALYSIS_MODE_FULL_GAME) {
-    return;
-  }
-  if (!self->analysis_done_received) {
-    return;
-  }
-  if (!self->analysis_canceled && self->analysis_processed_nodes < self->analysis_expected_nodes) {
-    return;
-  }
-
-  ggame_window_analysis_finish_session(self);
-}
-
-static gboolean ggame_window_analysis_dispatch_cb(gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), G_SOURCE_REMOVE);
-
-  while (TRUE) {
-    GGameWindowAnalysisEvent *event = NULL;
-
-    g_mutex_lock(&self->analysis_report_mutex);
-    if (self->analysis_report_queue != NULL && !g_queue_is_empty(self->analysis_report_queue)) {
-      event = g_queue_pop_head(self->analysis_report_queue);
-    }
-    g_mutex_unlock(&self->analysis_report_mutex);
-
-    if (event == NULL) {
-      break;
-    }
-
-    gint current_generation = g_atomic_int_get(&self->analysis_generation);
-    if (event->generation != current_generation) {
-      g_debug("Analysis dispatch dropped stale event: event_gen=%d current_gen=%d mode=%d payload=%d status=%d",
-              event->generation,
-              current_generation,
-              event->mode,
-              event->is_payload,
-              event->status_text != NULL);
-      ggame_window_analysis_event_free(event);
-      continue;
-    }
-
-    if (event->status_text != NULL) {
-      ggame_window_set_analysis_status(self, event->status_text);
-      if (event->mode == GGAME_WINDOW_ANALYSIS_MODE_FULL_GAME && !event->done) {
-        self->analysis_processed_nodes++;
-      }
-    }
-
-    if (event->is_payload && event->analysis != NULL && event->node != NULL) {
-      if (!sgf_node_set_analysis((SgfNode *)event->node, event->analysis)) {
-        g_debug("Failed to attach analysis to selected SGF node");
-      } else {
-        if (event->mode == GGAME_WINDOW_ANALYSIS_MODE_FULL_GAME) {
-          self->analysis_attached_nodes++;
-          self->analysis_last_updated_node = event->node;
-        }
-        ggame_window_refresh_analysis_graph(self);
-        SgfTree *tree = ggame_sgf_controller_get_tree(self->sgf_controller);
-        if (tree != NULL && sgf_tree_get_current(tree) == event->node) {
-          ggame_window_show_analysis_for_current_node(self);
-        }
-      }
-    }
-
-    if (event->done && event->mode == GGAME_WINDOW_ANALYSIS_MODE_FULL_GAME) {
-      self->analysis_done_received = TRUE;
-      self->analysis_canceled = event->canceled;
-    }
-
-    ggame_window_analysis_event_free(event);
-  }
-
-  ggame_window_maybe_finish_full_analysis(self);
-  g_object_unref(self);
-  return G_SOURCE_REMOVE;
-}
-
-static void ggame_window_analysis_enqueue_event(GGameWindow *self, GGameWindowAnalysisEvent *event) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(event != NULL);
-
-  g_mutex_lock(&self->analysis_report_mutex);
-  g_return_if_fail(self->analysis_report_queue != NULL);
-  g_queue_push_tail(self->analysis_report_queue, event);
-  g_mutex_unlock(&self->analysis_report_mutex);
-
-  g_main_context_invoke(NULL, ggame_window_analysis_dispatch_cb, g_object_ref(self));
-}
-
-static void ggame_window_analysis_publish_status(GGameWindow *self,
-                                                     gint generation,
-                                                     GGameWindowAnalysisMode mode,
-                                                     gboolean done,
-                                                     gboolean canceled,
-                                                     const char *text) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  GGameWindowAnalysisEvent *event = g_new0(GGameWindowAnalysisEvent, 1);
-  event->generation = generation;
-  event->mode = mode;
-  event->done = done;
-  event->canceled = canceled;
-  if (text != NULL) {
-    event->status_text = g_strdup(text);
-  }
-  ggame_window_analysis_enqueue_event(self, event);
-}
-
-static void ggame_window_analysis_publish_payload(GGameWindow *self,
-                                                      gint generation,
-                                                      GGameWindowAnalysisMode mode,
-                                                      const SgfNodeAnalysis *analysis,
-                                                      const SgfNode *node) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(analysis != NULL);
-  g_return_if_fail(node != NULL);
-
-  GGameWindowAnalysisEvent *event = g_new0(GGameWindowAnalysisEvent, 1);
-  event->generation = generation;
-  event->mode = mode;
-  event->is_payload = TRUE;
-  event->analysis = sgf_node_analysis_copy(analysis);
-  event->node = node;
-  if (event->analysis == NULL) {
-    g_debug("Failed to copy payload analysis event");
-    ggame_window_analysis_event_free(event);
-    return;
-  }
-  ggame_window_analysis_enqueue_event(self, event);
 }
 
 static void ggame_window_refresh_analysis_graph(GGameWindow *self) {
@@ -5212,261 +4939,6 @@ static char *ggame_window_analysis_format_complete(const SgfNodeAnalysis *analys
   return ggame_window_format_analysis_report(analysis);
 }
 
-static char *ggame_window_analysis_format_full_game_status(guint completed_nodes,
-                                                               guint total_nodes,
-                                                               guint64 explored_nodes,
-                                                               const char *detail) {
-  g_return_val_if_fail(total_nodes > 0, NULL);
-
-  if (detail != NULL && *detail != '\0') {
-    return g_strdup_printf("Analysis: %u/%u (%" G_GUINT64_FORMAT ") %s.",
-                           completed_nodes,
-                           total_nodes,
-                           explored_nodes,
-                           detail);
-  }
-
-  return g_strdup_printf("Analysis: %u/%u (%" G_GUINT64_FORMAT ").",
-                         completed_nodes,
-                         total_nodes,
-                         explored_nodes);
-}
-
-static void ggame_window_full_analysis_on_progress(const GameAiSearchStats *stats, gpointer user_data) {
-  GGameWindowFullAnalysisTask *task = user_data;
-  g_return_if_fail(stats != NULL);
-  g_return_if_fail(task != NULL);
-  g_return_if_fail(GGAME_IS_WINDOW(task->self));
-  g_return_if_fail(task->jobs != NULL);
-
-  const gint64 interval_us = (gint64)GGAME_WINDOW_ANALYSIS_PROGRESS_INTERVAL_MS * 1000;
-  gint64 now = g_get_monotonic_time();
-  if (task->last_progress_publish_us != 0 && now - task->last_progress_publish_us < interval_us) {
-    return;
-  }
-
-  task->last_progress_publish_us = now;
-  g_autofree char *text = ggame_window_analysis_format_full_game_status(task->current_job_index,
-                                                                            task->jobs->len,
-                                                                            task->explored_nodes + stats->nodes,
-                                                                            NULL);
-  if (text == NULL) {
-    g_debug("Failed to format full-game analysis progress text");
-    return;
-  }
-
-  ggame_window_analysis_publish_status(task->self,
-                                           task->generation,
-                                           GGAME_WINDOW_ANALYSIS_MODE_FULL_GAME,
-                                           FALSE,
-                                           FALSE,
-                                           text);
-}
-
-static void ggame_window_full_node_job_free(gpointer data) {
-  GGameWindowFullNodeJob *job = data;
-  if (job == NULL) {
-    return;
-  }
-
-  g_free(job);
-}
-
-static GPtrArray *ggame_window_build_full_analysis_jobs(SgfTree *tree) {
-  g_return_val_if_fail(SGF_IS_TREE(tree), NULL);
-
-  g_autoptr(GPtrArray) nodes = sgf_tree_collect_nodes_preorder(tree);
-  if (nodes == NULL) {
-    g_debug("Failed to collect SGF nodes for full analysis");
-    return NULL;
-  }
-
-  GPtrArray *jobs = g_ptr_array_new_with_free_func(ggame_window_full_node_job_free);
-  for (guint i = 0; i < nodes->len; ++i) {
-    const SgfNode *node = g_ptr_array_index(nodes, i);
-    g_return_val_if_fail(node != NULL, NULL);
-
-    GGameWindowFullNodeJob *job = g_new0(GGameWindowFullNodeJob, 1);
-    job->node = node;
-
-    g_ptr_array_add(jobs, job);
-  }
-
-  for (guint i = 0; i < jobs->len / 2; ++i) {
-    guint swap_i = jobs->len - 1 - i;
-    gpointer tmp = g_ptr_array_index(jobs, i);
-    jobs->pdata[i] = jobs->pdata[swap_i];
-    jobs->pdata[swap_i] = tmp;
-  }
-
-  return jobs;
-}
-
-static gpointer ggame_window_full_analysis_thread(gpointer user_data) {
-  GGameWindowFullAnalysisTask *task = user_data;
-  g_return_val_if_fail(task != NULL, NULL);
-  g_return_val_if_fail(task->jobs != NULL, NULL);
-  g_return_val_if_fail(task->backend != NULL, NULL);
-  if (!task->use_checkers_replay) {
-    g_return_val_if_fail(task->backend->position_size > 0, NULL);
-    g_return_val_if_fail(task->backend->position_init != NULL, NULL);
-    g_return_val_if_fail(task->backend->position_clear != NULL, NULL);
-  }
-
-  for (guint i = 0; i < task->jobs->len; ++i) {
-    if (ggame_window_should_cancel_full_analysis(task)) {
-      break;
-    }
-
-    task->current_job_index = i;
-    task->last_progress_publish_us = 0;
-
-    GGameWindowFullNodeJob *job = g_ptr_array_index(task->jobs, i);
-    g_return_val_if_fail(job != NULL, NULL);
-
-    g_autoptr(GError) replay_error = NULL;
-    GameAiScoredMoveList moves = {0};
-    GameAiSearchStats stats = {0};
-    ggame_window_full_analysis_on_progress(&stats, task);
-    gboolean ok = FALSE;
-    gboolean replay_ok = FALSE;
-    gconstpointer analysis_position = NULL;
-    g_autofree guint8 *generic_position = NULL;
-    Game checkers_game = {0};
-
-    if (task->use_checkers_replay) {
-      g_return_val_if_fail(task->checkers_rules != NULL, NULL);
-      game_init_with_rules(&checkers_game, task->checkers_rules);
-      replay_ok = ggame_sgf_controller_replay_node_into_game(job->node, &checkers_game, &replay_error);
-      analysis_position = &checkers_game;
-    } else {
-      generic_position = g_malloc0(task->backend->position_size);
-      if (generic_position == NULL) {
-        g_debug("Failed to allocate replay position for full-game analysis");
-        continue;
-      }
-
-      task->backend->position_init(generic_position, task->variant);
-      replay_ok =
-          ggame_sgf_controller_replay_node_into_position(job->node, task->backend, generic_position, &replay_error);
-      analysis_position = generic_position;
-    }
-
-    if (!replay_ok) {
-      if (!task->use_checkers_replay && generic_position != NULL) {
-        task->backend->position_clear(generic_position);
-      }
-      if (task->use_checkers_replay) {
-        game_destroy(&checkers_game);
-      }
-      g_debug("Skipping full analysis for SGF node %u: %s",
-              sgf_node_get_move_number(job->node),
-              replay_error != NULL ? replay_error->message : "unknown error");
-      g_autofree char *text = ggame_window_analysis_format_full_game_status(i + 1,
-                                                                                task->jobs->len,
-                                                                                task->explored_nodes,
-                                                                                "replay skipped");
-      ggame_window_analysis_publish_status(task->self,
-                                               task->generation,
-                                               GGAME_WINDOW_ANALYSIS_MODE_FULL_GAME,
-                                               FALSE,
-                                               FALSE,
-                                               text);
-      continue;
-    }
-
-    ok = game_ai_search_analyze_moves_cancellable_with_tt(
-        task->backend,
-        analysis_position,
-        task->depth,
-        &moves,
-        ggame_window_should_cancel_full_analysis,
-        task,
-        ggame_window_full_analysis_on_progress,
-        task,
-        task->tt,
-        &stats);
-    if (!task->use_checkers_replay && generic_position != NULL) {
-      task->backend->position_clear(generic_position);
-    }
-    if (task->use_checkers_replay) {
-      game_destroy(&checkers_game);
-    }
-    if (!ok) {
-      game_ai_scored_move_list_free(&moves);
-      task->explored_nodes += stats.nodes;
-      g_autofree char *text = ggame_window_analysis_format_full_game_status(i + 1,
-                                                                                task->jobs->len,
-                                                                                task->explored_nodes,
-                                                                                "no legal moves");
-      ggame_window_analysis_publish_status(task->self,
-                                               task->generation,
-                                               GGAME_WINDOW_ANALYSIS_MODE_FULL_GAME,
-                                               FALSE,
-                                               FALSE,
-                                               text);
-      continue;
-    }
-
-    g_autoptr(SgfNodeAnalysis) analysis =
-        ggame_window_analysis_from_scored_moves(task->backend, &moves, task->depth, &stats);
-    game_ai_scored_move_list_free(&moves);
-    task->explored_nodes += stats.nodes;
-    if (analysis == NULL) {
-      g_autofree char *text = ggame_window_analysis_format_full_game_status(i + 1,
-                                                                                task->jobs->len,
-                                                                                task->explored_nodes,
-                                                                                "analysis payload failed");
-      ggame_window_analysis_publish_status(task->self,
-                                               task->generation,
-                                               GGAME_WINDOW_ANALYSIS_MODE_FULL_GAME,
-                                               FALSE,
-                                               FALSE,
-                                               text);
-      continue;
-    }
-
-    g_autofree char *text =
-        ggame_window_analysis_format_full_game_status(i + 1, task->jobs->len, task->explored_nodes, NULL);
-    gint first_score = 0;
-    gboolean has_first_score = FALSE;
-    if (analysis->moves != NULL && analysis->moves->len > 0) {
-      const SgfNodeScoredMove *entry = g_ptr_array_index(analysis->moves, 0);
-      if (entry != NULL) {
-        first_score = entry->score;
-        has_first_score = TRUE;
-      }
-    }
-    ggame_window_analysis_publish_payload(task->self,
-                                              task->generation,
-                                              GGAME_WINDOW_ANALYSIS_MODE_FULL_GAME,
-                                              analysis,
-                                              job->node);
-    ggame_window_analysis_publish_status(task->self,
-                                             task->generation,
-                                             GGAME_WINDOW_ANALYSIS_MODE_FULL_GAME,
-                                             FALSE,
-                                             FALSE,
-                                             text);
-    (void)first_score;
-    (void)has_first_score;
-  }
-
-  const gboolean canceled = ggame_window_should_cancel_full_analysis(task);
-  ggame_window_analysis_publish_status(task->self,
-                                           task->generation,
-                                           GGAME_WINDOW_ANALYSIS_MODE_FULL_GAME,
-                                           TRUE,
-                                           canceled,
-                                           canceled ? "Full-game analysis canceled." : NULL);
-
-  g_ptr_array_unref(task->jobs);
-  game_ai_tt_free(task->tt);
-  g_object_unref(task->self);
-  g_free(task);
-  return NULL;
-}
-
 static void ggame_window_stop_analysis(GGameWindow *self) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
 
@@ -5483,77 +4955,6 @@ static void ggame_window_stop_analysis(GGameWindow *self) {
   }
   g_mutex_unlock(&self->analysis_report_mutex);
   ggame_window_analysis_finish_session(self);
-}
-
-static void ggame_window_start_full_game_analysis(GGameWindow *self) {
-  const GGameAppProfile *profile = NULL;
-  const GameBackend *backend = NULL;
-  const GameBackendVariant *variant = NULL;
-  const Game *checkers_game = NULL;
-  const CheckersRules *checkers_rules = NULL;
-
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self->sgf_controller));
-  g_return_if_fail(self->controls_panel != NULL);
-
-  SgfTree *tree = ggame_sgf_controller_get_tree(self->sgf_controller);
-  if (tree == NULL) {
-    g_debug("Missing SGF tree for full-game analysis");
-    return;
-  }
-
-  g_autoptr(GPtrArray) jobs = ggame_window_build_full_analysis_jobs(tree);
-  if (jobs == NULL) {
-    g_debug("Failed to build full-game analysis jobs");
-    return;
-  }
-
-  profile = ggame_window_get_profile(self);
-  backend = ggame_window_get_game_backend(self);
-  variant = ggame_window_get_variant(self);
-  g_return_if_fail(profile != NULL);
-  g_return_if_fail(backend != NULL);
-  g_return_if_fail(backend->move_size > 0);
-  if (backend->variant_count > 0 && variant == NULL) {
-    g_debug("Missing active backend variant for full-game analysis");
-    return;
-  }
-
-  if (profile->kind == GGAME_APP_KIND_CHECKERS) {
-    checkers_game = ggame_window_get_checkers_game(self);
-    if (checkers_game == NULL || checkers_game->rules == NULL) {
-      g_debug("Missing checkers rules for full-game analysis");
-      return;
-    }
-    checkers_rules = checkers_game->rules;
-  }
-
-  guint depth = ggame_window_get_analysis_depth(self);
-  gint generation = g_atomic_int_add(&self->analysis_generation, 1) + 1;
-  ggame_window_analysis_begin_session(self, GGAME_WINDOW_ANALYSIS_MODE_FULL_GAME, jobs->len);
-  g_autofree char *initial_status = ggame_window_analysis_format_full_game_status(0, jobs->len, 0, NULL);
-  if (initial_status == NULL) {
-    g_debug("Failed to format initial full-game analysis status");
-    return;
-  }
-  ggame_window_set_analysis_status(self, initial_status);
-
-  GGameWindowFullAnalysisTask *task = g_new0(GGameWindowFullAnalysisTask, 1);
-  task->self = g_object_ref(self);
-  task->generation = generation;
-  task->use_checkers_replay = profile->kind == GGAME_APP_KIND_CHECKERS;
-  task->checkers_rules = checkers_rules;
-  task->backend = backend;
-  task->variant = variant;
-  task->depth = depth;
-  task->jobs = g_steal_pointer(&jobs);
-  task->tt = game_ai_tt_new(GGAME_WINDOW_ANALYSIS_TT_SIZE_MB, backend->move_size);
-  if (task->tt == NULL) {
-    g_debug("Failed to allocate full analysis TT, continuing without TT caching");
-  }
-
-  GThread *thread = g_thread_new("full-analysis-thread", ggame_window_full_analysis_thread, task);
-  g_thread_unref(thread);
 }
 
 static void ggame_window_update_control_state(GGameWindow *self) {
@@ -5893,33 +5294,11 @@ static void ggame_window_on_library_action(GSimpleAction * /*action*/,
 static void ggame_window_on_puzzle_next_clicked(GtkButton * /*button*/, gpointer user_data) {
   GGameWindow *self = GGAME_WINDOW(user_data);
   g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  if (!self->puzzle_mode || !self->puzzle_finished) {
-    return;
-  }
-  if (!ggame_window_start_next_puzzle_mode(self)) {
-    g_debug("Failed to load next puzzle");
-  }
 }
 
 static void ggame_window_on_puzzle_analyze_clicked(GtkButton * /*button*/, gpointer user_data) {
   GGameWindow *self = GGAME_WINDOW(user_data);
   g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self->sgf_controller));
-
-  if (!self->puzzle_mode) {
-    return;
-  }
-
-  (void)ggame_window_puzzle_attempt_finish_analyze(self);
-  ggame_window_leave_puzzle_mode(self, TRUE);
-  if (!ggame_sgf_controller_rewind_to_start(self->sgf_controller)) {
-    g_debug("Failed to rewind puzzle before analysis");
-  }
-  self->show_analysis_drawer = TRUE;
-  ggame_window_sync_drawer_ui(self);
-  ggame_window_stop_analysis(self);
-  ggame_window_start_full_game_analysis(self);
 }
 
 static void ggame_window_on_sgf_rewind(GSimpleAction * /*action*/,
