@@ -53,19 +53,13 @@ static const GGameAppProfile homeworlds_app_profile = {
   .default_computer_depth = PLAYER_COMPUTER_DEPTH_MIN,
 };
 
-static const GGameAppProfile *const ggame_app_profiles[] = {
-  &homeworlds_app_profile,
-};
-
 static const GGameAppProfile *active_app_profile = &homeworlds_app_profile;
 
 const GGameAppProfile *ggame_app_profile_lookup_by_id(const char *id) {
   g_return_val_if_fail(id != NULL, NULL);
 
-  for (guint i = 0; i < G_N_ELEMENTS(ggame_app_profiles); ++i) {
-    if (g_strcmp0(ggame_app_profiles[i]->id, id) == 0) {
-      return ggame_app_profiles[i];
-    }
+  if (g_strcmp0(id, homeworlds_app_profile.id) == 0) {
+    return &homeworlds_app_profile;
   }
 
   g_debug("Unknown app profile id %s", id);
@@ -79,10 +73,7 @@ const GGameAppProfile *ggame_active_app_profile(void) {
 gboolean ggame_app_profile_supports_puzzle_catalog(const GGameAppProfile *profile) {
   g_return_val_if_fail(profile != NULL, FALSE);
 
-  return profile->features.supports_puzzles &&
-         profile->backend != NULL &&
-         profile->backend->id != NULL &&
-         (profile->backend->variant_count == 0 || profile->backend->variant_at != NULL);
+  return FALSE;
 }
 /* End copied file: src/game_app_profile.c */
 
@@ -363,31 +354,10 @@ const GameBackendVariant *ggame_model_peek_variant(GGameModel *self) {
 }
 
 char *ggame_model_format_status(GGameModel *self) {
-  GameBackendMoveList moves = {0};
-  const char *variant_name = "Default";
-  char *status = NULL;
-
   g_return_val_if_fail(GGAME_IS_MODEL(self), NULL);
   g_return_val_if_fail(self->backend != NULL, NULL);
 
-  if (self->variant != NULL && self->variant->name != NULL) {
-    variant_name = self->variant->name;
-  }
-
-  if (self->backend->supports_move_list) {
-    moves = ggame_model_list_moves(self);
-    status = g_strdup_printf("Game: %s\nVariant: %s\nMoves available: %" G_GSIZE_FORMAT,
-                             self->backend->display_name,
-                             variant_name,
-                             moves.count);
-    self->backend->move_list_free(&moves);
-  } else {
-    status = g_strdup_printf("Game: %s\nVariant: %s\nMoves available: unavailable",
-                             self->backend->display_name,
-                             variant_name);
-  }
-
-  return status;
+  return g_strdup(self->backend->display_name != NULL ? self->backend->display_name : "Game");
 }
 /* End copied file: src/game_model.c */
 
@@ -3003,7 +2973,6 @@ static gboolean ggame_window_puzzle_attempt_finish_failure(GGameWindow *self,
                                                                gboolean failure_on_first_move,
                                                                gconstpointer failed_first_move);
 static void ggame_window_puzzle_attempt_reset(GGameWindow *self);
-static char *ggame_window_analysis_format_complete(const SgfNodeAnalysis *analysis);
 static void ggame_window_rebuild_board_host(GGameWindow *self);
 static void ggame_window_load_default_size(gint *out_width, gint *out_height);
 static void ggame_window_save_default_size(GGameWindow *self);
@@ -3326,49 +3295,10 @@ static gboolean ggame_window_board_orientation_mode_valid(GGameWindowBoardOrient
          mode == GGAME_WINDOW_BOARD_ORIENTATION_FOLLOW_TURN;
 }
 
-static gboolean ggame_window_try_resolve_follow_player_bottom_color(GGameWindow *self,
-                                                                        CheckersColor *out_color) {
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), FALSE);
-  g_return_val_if_fail(out_color != NULL, FALSE);
-  g_return_val_if_fail(self->controls_panel != NULL, FALSE);
-
-  gboolean white_is_user = player_controls_panel_is_user_control(self->controls_panel, 0);
-  gboolean black_is_user = player_controls_panel_is_user_control(self->controls_panel, 1);
-  if (white_is_user == black_is_user) {
-    return FALSE;
-  }
-
-  *out_color = white_is_user ? CHECKERS_COLOR_WHITE : CHECKERS_COLOR_BLACK;
-  return TRUE;
-}
-
 static CheckersColor ggame_window_resolve_board_bottom_color(GGameWindow *self) {
   g_return_val_if_fail(GGAME_IS_WINDOW(self), CHECKERS_COLOR_WHITE);
 
-  switch (self->board_orientation_mode) {
-    case GGAME_WINDOW_BOARD_ORIENTATION_FIXED:
-      return self->board_bottom_color;
-    case GGAME_WINDOW_BOARD_ORIENTATION_FOLLOW_PLAYER: {
-      CheckersColor bottom_color = self->board_bottom_color;
-      if (ggame_window_try_resolve_follow_player_bottom_color(self, &bottom_color)) {
-        return bottom_color;
-      }
-      return self->board_bottom_color;
-    }
-    case GGAME_WINDOW_BOARD_ORIENTATION_FOLLOW_TURN: {
-      const GameBackend *backend = ggame_window_get_game_backend(self);
-      gconstpointer position = ggame_window_get_game_position(self);
-
-      if (backend != NULL && position != NULL && backend->position_turn != NULL) {
-        guint side = backend->position_turn(position);
-        return side == 0 ? CHECKERS_COLOR_WHITE : CHECKERS_COLOR_BLACK;
-      }
-      return self->board_bottom_color;
-    }
-    default:
-      g_debug("Unexpected board orientation mode %d", self->board_orientation_mode);
-      return self->board_bottom_color;
-  }
+  return self->board_bottom_color;
 }
 
 static void ggame_window_sync_board_orientation(GGameWindow *self) {
@@ -3890,30 +3820,6 @@ static void ggame_window_sync_mode_ui(GGameWindow *self) {
   }
 }
 
-static const GameBackendVariant *ggame_window_variant_for_ruleset(PlayerRuleset ruleset) {
-  const char *short_name = checkers_ruleset_short_name(ruleset);
-
-  if (short_name == NULL) {
-    g_debug("Missing short name for ruleset %d", (gint) ruleset);
-    return NULL;
-  }
-
-  return GGAME_ACTIVE_GAME_BACKEND->variant_by_short_name(short_name);
-}
-
-static gboolean ggame_window_ruleset_from_variant(const GameBackendVariant *variant, PlayerRuleset *out_ruleset) {
-  g_return_val_if_fail(variant != NULL, FALSE);
-  g_return_val_if_fail(out_ruleset != NULL, FALSE);
-  g_return_val_if_fail(variant->short_name != NULL, FALSE);
-
-  if (!checkers_ruleset_find_by_short_name(variant->short_name, out_ruleset)) {
-    g_debug("Unable to map variant %s to a checkers ruleset", variant->short_name);
-    return FALSE;
-  }
-
-  return TRUE;
-}
-
 static char *ggame_window_build_puzzle_variant_dir(GGameWindow *self, const GameBackendVariant *variant) {
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   g_return_val_if_fail(GGAME_IS_WINDOW(self), NULL);
@@ -4342,38 +4248,9 @@ void ggame_window_set_analysis_depth(GGameWindow *self, guint depth) {
   gtk_range_set_value(GTK_RANGE(self->analysis_depth_scale), (gdouble)depth);
 }
 
-static void ggame_window_set_ruleset(GGameWindow *self, PlayerRuleset ruleset) {
-  const GameBackendVariant *variant = NULL;
-
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(GGAME_IS_MODEL(self->game_model));
-  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self->sgf_controller));
-
-  variant = ggame_window_variant_for_ruleset(ruleset);
-  if (variant == NULL) {
-    return;
-  }
-
-  if (ggame_model_peek_variant(self->game_model) == variant) {
-    self->applied_ruleset = ruleset;
-    return;
-  }
-
-  ggame_model_reset(self->game_model, variant);
-  ggame_window_clear_board_selection(self);
-  ggame_sgf_controller_new_game(self->sgf_controller);
-  self->applied_ruleset = ruleset;
-}
-
 void ggame_window_set_loaded_variant(GGameWindow *self, const GameBackendVariant *variant) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
   g_return_if_fail(variant != NULL);
-
-  if (ggame_window_get_profile(self)->kind == GGAME_APP_KIND_CHECKERS) {
-    if (!ggame_window_ruleset_from_variant(variant, &self->applied_ruleset)) {
-      return;
-    }
-  }
 }
 
 static void ggame_window_set_analysis_text(GGameWindow *self, const char *text) {
@@ -4406,27 +4283,18 @@ static void ggame_window_set_analysis_status(GGameWindow *self, const char *text
 static void ggame_window_show_analysis_for_current_node(GGameWindow *self) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
 
-  if (!ggame_window_get_profile(self)->features.supports_analysis) {
-    ggame_window_set_analysis_text(self, "");
-    return;
-  }
-
-  SgfTree *tree = ggame_sgf_controller_get_tree(self->sgf_controller);
-  const SgfNode *node = tree != NULL ? sgf_tree_get_current(tree) : NULL;
-  if (node == NULL) {
-    return;
-  }
-
-  g_autoptr(SgfNodeAnalysis) analysis = sgf_node_get_analysis(node);
-  if (analysis != NULL) {
-    g_autofree char *text = ggame_window_analysis_format_complete(analysis);
-    if (text != NULL) {
-      ggame_window_set_analysis_text(self, text);
-    }
-    return;
-  }
-
   ggame_window_set_analysis_text(self, "");
+}
+
+static void ggame_window_analysis_event_free(gpointer data) {
+  GGameWindowAnalysisEvent *event = data;
+  if (event == NULL) {
+    return;
+  }
+
+  g_clear_pointer(&event->status_text, g_free);
+  sgf_node_analysis_free(event->analysis);
+  g_free(event);
 }
 
 static gboolean ggame_window_node_first_score(const SgfNode *node, gint *out_score) {
@@ -4445,17 +4313,6 @@ static gboolean ggame_window_node_first_score(const SgfNode *node, gint *out_sco
 
   *out_score = entry->score;
   return TRUE;
-}
-
-static void ggame_window_analysis_event_free(gpointer data) {
-  GGameWindowAnalysisEvent *event = data;
-  if (event == NULL) {
-    return;
-  }
-
-  g_clear_pointer(&event->status_text, g_free);
-  sgf_node_analysis_free(event->analysis);
-  g_free(event);
 }
 
 static void ggame_window_refresh_analysis_graph(GGameWindow *self) {
@@ -4540,25 +4397,9 @@ char *ggame_window_format_analysis_status(const SgfNodeAnalysis *analysis) {
   return g_strdup_printf("Analysis depth: %u\nNodes: %" G_GUINT64_FORMAT, analysis->depth, analysis->nodes);
 }
 
-static char *ggame_window_analysis_format_complete(const SgfNodeAnalysis *analysis) {
-  return ggame_window_format_analysis_report(analysis);
-}
-
 static void ggame_window_stop_analysis(GGameWindow *self) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
 
-  if (self->analysis_mode == GGAME_WINDOW_ANALYSIS_MODE_NONE) {
-    ggame_window_analysis_finish_session(self);
-    return;
-  }
-
-  g_atomic_int_inc(&self->analysis_generation);
-
-  g_mutex_lock(&self->analysis_report_mutex);
-  if (self->analysis_report_queue != NULL) {
-    g_queue_clear_full(self->analysis_report_queue, ggame_window_analysis_event_free);
-  }
-  g_mutex_unlock(&self->analysis_report_mutex);
   ggame_window_analysis_finish_session(self);
 }
 
@@ -4820,20 +4661,9 @@ static GtkWidget *ggame_window_new_toolbar_action_button(const char *icon_name,
 }
 
 const GameBackendVariant *ggame_window_get_variant(GGameWindow *self) {
-  const GameBackendVariant *variant = NULL;
-
   g_return_val_if_fail(GGAME_IS_WINDOW(self), NULL);
 
-  variant = self->game_model != NULL ? ggame_model_peek_variant(self->game_model) : NULL;
-  if (variant != NULL) {
-    return variant;
-  }
-
-  if (ggame_window_get_profile(self)->kind == GGAME_APP_KIND_CHECKERS) {
-    return ggame_window_variant_for_ruleset(self->applied_ruleset);
-  }
-
-  return NULL;
+  return self->game_model != NULL ? ggame_model_peek_variant(self->game_model) : NULL;
 }
 
 void ggame_window_apply_new_game_settings(GGameWindow *self,
@@ -4841,36 +4671,13 @@ void ggame_window_apply_new_game_settings(GGameWindow *self,
                                               PlayerControlMode white_mode,
                                               PlayerControlMode black_mode,
                                               guint computer_depth) {
-  const GameBackend *backend = NULL;
-
   g_return_if_fail(GGAME_IS_WINDOW(self));
   g_return_if_fail(self->controls_panel != NULL);
-  backend = ggame_window_get_game_backend(self);
-  g_return_if_fail(backend != NULL);
-  if (backend->variant_count > 0) {
-    g_return_if_fail(variant != NULL);
-  }
 
+  (void)variant;
   player_controls_panel_set_mode(self->controls_panel, 0, white_mode);
   player_controls_panel_set_mode(self->controls_panel, 1, black_mode);
   player_controls_panel_set_computer_depth(self->controls_panel, computer_depth);
-
-  ggame_window_set_board_bottom_color(self, CHECKERS_COLOR_WHITE);
-  if (white_mode == PLAYER_CONTROL_MODE_USER && black_mode == PLAYER_CONTROL_MODE_USER) {
-    ggame_window_set_board_orientation_mode(self, GGAME_WINDOW_BOARD_ORIENTATION_FOLLOW_TURN);
-  } else if (white_mode != black_mode) {
-    ggame_window_set_board_orientation_mode(self, GGAME_WINDOW_BOARD_ORIENTATION_FOLLOW_PLAYER);
-  } else {
-    ggame_window_set_board_orientation_mode(self, GGAME_WINDOW_BOARD_ORIENTATION_FIXED);
-  }
-
-  if (backend->variant_count > 0 && ggame_window_get_profile(self)->kind == GGAME_APP_KIND_CHECKERS) {
-    PlayerRuleset ruleset = PLAYER_RULESET_INTERNATIONAL;
-    if (!ggame_window_ruleset_from_variant(variant, &ruleset)) {
-      return;
-    }
-    ggame_window_set_ruleset(self, ruleset);
-  }
   ggame_window_start_new_game(self);
   ggame_window_set_current_computer_player_names(self);
 }
@@ -4903,8 +4710,6 @@ CheckersColor ggame_window_get_board_bottom_color(GGameWindow *self) {
 }
 
 static void ggame_window_set_model(GGameWindow *self, GGameModel *model) {
-  const GameBackendVariant *variant = NULL;
-
   g_return_if_fail(GGAME_IS_WINDOW(self));
   g_return_if_fail(GGAME_IS_MODEL(model));
 
@@ -4926,10 +4731,6 @@ static void ggame_window_set_model(GGameWindow *self, GGameModel *model) {
   }
   ggame_sgf_controller_set_game_model(self->sgf_controller, self->game_model);
   ggame_window_rebuild_board_host(self);
-  variant = ggame_model_peek_variant(self->game_model);
-  if (variant != NULL && self->profile != NULL && self->profile->kind == GGAME_APP_KIND_CHECKERS) {
-    (void)ggame_window_ruleset_from_variant(variant, &self->applied_ruleset);
-  }
   ggame_window_sync_board_orientation(self);
   ggame_window_update_status(self);
   ggame_window_update_control_state(self);
