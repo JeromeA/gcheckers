@@ -1963,16 +1963,6 @@ struct _GGameWindow {
   gulong state_handler_id;
   guint auto_move_source_id;
   guint paned_tick_id;
-  gint analysis_mode;
-  gint analysis_generation;
-  GMutex analysis_report_mutex;
-  GQueue *analysis_report_queue;
-  guint analysis_expected_nodes;
-  guint analysis_attached_nodes;
-  guint analysis_processed_nodes;
-  const SgfNode *analysis_last_updated_node;
-  gboolean analysis_done_received;
-  gboolean analysis_canceled;
   gboolean puzzle_mode;
   gboolean puzzle_finished;
   gboolean puzzle_feedback_locked;
@@ -2015,62 +2005,10 @@ struct _GGameWindow {
 G_DEFINE_TYPE(GGameWindow, ggame_window, GTK_TYPE_APPLICATION_WINDOW)
 
 typedef struct {
-  GGameWindow *self;
-  const GameBackend *backend;
-  guint8 *position;
-  gint generation;
-  GameAiTranspositionTable *tt;
-  guint current_depth;
-  guint target_depth;
-  gint64 last_progress_publish_us;
-  GameAiSearchStats cumulative_stats;
-  const SgfNode *target_node;
-} GGameWindowAnalysisTask;
-
-typedef enum {
-  GGAME_WINDOW_ANALYSIS_MODE_NONE = 0,
-  GGAME_WINDOW_ANALYSIS_MODE_CURRENT,
-  GGAME_WINDOW_ANALYSIS_MODE_FULL_GAME
-} GGameWindowAnalysisMode;
-
-typedef struct {
-  gint generation;
-  GGameWindowAnalysisMode mode;
-  gboolean done;
-  gboolean canceled;
-  gboolean is_payload;
-  char *status_text;
-  SgfNodeAnalysis *analysis;
-  const SgfNode *node;
-} GGameWindowAnalysisEvent;
-
-typedef struct {
-  const SgfNode *node;
-} GGameWindowFullNodeJob;
-
-typedef struct {
   guint side;
   guint8 *move;
 } GGameWindowPuzzleStep;
 
-typedef struct {
-  GGameWindow *self;
-  gint generation;
-  gboolean use_checkers_replay;
-  const CheckersRules *checkers_rules;
-  const GameBackend *backend;
-  const GameBackendVariant *variant;
-  guint depth;
-  GameAiTranspositionTable *tt;
-  GPtrArray *jobs;
-  guint64 explored_nodes;
-  guint current_job_index;
-  gint64 last_progress_publish_us;
-} GGameWindowFullAnalysisTask;
-
-static void ggame_window_analysis_sync_ui(GGameWindow *self);
-static void ggame_window_analysis_reset_runtime_state(GGameWindow *self);
-static void ggame_window_analysis_finish_session(GGameWindow *self);
 static void ggame_window_sync_mode_ui(GGameWindow *self);
 static void ggame_window_sync_move_report_ui(GGameWindow *self);
 static void ggame_window_capture_panel_widths(GGameWindow *self);
@@ -2083,10 +2021,7 @@ static void ggame_window_sync_board_orientation(GGameWindow *self);
 static void ggame_window_sync_puzzle_ui(GGameWindow *self);
 static void ggame_window_leave_puzzle_mode(GGameWindow *self, gboolean restore_drawers);
 static void ggame_window_sync_drawer_ui_with_capture(GGameWindow *self, gboolean capture_current_layout);
-static void ggame_window_stop_analysis(GGameWindow *self);
 static void ggame_window_sync_title(GGameWindow *self);
-static void ggame_window_set_analysis_status(GGameWindow *self, const char *text);
-static void ggame_window_show_analysis_for_current_node(GGameWindow *self);
 static gboolean ggame_window_puzzle_attempt_ensure_started(GGameWindow *self);
 static gboolean ggame_window_puzzle_attempt_finish_success(GGameWindow *self);
 static gboolean ggame_window_puzzle_attempt_finish_failure(GGameWindow *self,
@@ -2112,7 +2047,6 @@ enum {
   GGAME_WINDOW_PUZZLE_WRONG_MOVE_DELAY_MS = 1000,
 };
 
-static void ggame_window_refresh_analysis_graph(GGameWindow *self);
 
 static const GGameAppProfile *ggame_window_get_profile(GGameWindow *self) {
   g_return_val_if_fail(GGAME_IS_WINDOW(self), NULL);
@@ -2376,15 +2310,6 @@ static gboolean ggame_window_constrain_main_split_cb(GtkWidget * /*widget*/,
   return G_SOURCE_CONTINUE;
 }
 
-static void ggame_window_analysis_sync_ui(GGameWindow *self) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  gboolean full_game_active = self->analysis_mode == GGAME_WINDOW_ANALYSIS_MODE_FULL_GAME;
-  if (!full_game_active && self->analysis_graph != NULL) {
-    analysis_graph_clear_progress_node(self->analysis_graph);
-  }
-}
-
 static void ggame_window_sync_title(GGameWindow *self) {
   const GGameAppProfile *profile = ggame_window_get_profile(self);
   const char *window_title_name = profile != NULL ? profile->window_title_name : "ggame";
@@ -2634,26 +2559,6 @@ static void ggame_window_sync_puzzle_ui(GGameWindow *self) {
   }
 }
 
-static void ggame_window_analysis_reset_runtime_state(GGameWindow *self) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  self->analysis_expected_nodes = 0;
-  self->analysis_attached_nodes = 0;
-  self->analysis_processed_nodes = 0;
-  self->analysis_last_updated_node = NULL;
-  self->analysis_done_received = FALSE;
-  self->analysis_canceled = FALSE;
-}
-
-static void ggame_window_analysis_finish_session(GGameWindow *self) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  self->analysis_mode = GGAME_WINDOW_ANALYSIS_MODE_NONE;
-  ggame_window_analysis_reset_runtime_state(self);
-  ggame_window_set_analysis_status(self, "");
-  ggame_window_analysis_sync_ui(self);
-}
-
 static void ggame_window_sync_mode_ui(GGameWindow *self) {
   const GGameAppProfile *profile = ggame_window_get_profile(self);
   gboolean supports_analysis = FALSE;
@@ -2818,7 +2723,6 @@ static void ggame_window_leave_puzzle_mode(GGameWindow *self, gboolean restore_d
   ggame_window_sync_drawer_ui_with_capture(self, FALSE);
   ggame_window_sync_puzzle_ui(self);
   ggame_window_sync_mode_ui(self);
-  ggame_window_analysis_sync_ui(self);
 }
 
 static gboolean ggame_window_enter_puzzle_mode_with_path(GGameWindow *self, const char *path) {
@@ -2827,8 +2731,6 @@ static gboolean ggame_window_enter_puzzle_mode_with_path(GGameWindow *self, cons
 
   g_return_val_if_fail(GGAME_IS_WINDOW(self), FALSE);
   g_return_val_if_fail(path != NULL, FALSE);
-
-  ggame_window_stop_analysis(self);
 
   g_autoptr(GError) error = NULL;
   if (!ggame_sgf_controller_load_file(self->sgf_controller, path, &error)) {
@@ -2917,7 +2819,6 @@ static gboolean ggame_window_enter_puzzle_mode_with_path(GGameWindow *self, cons
   ggame_window_sync_drawer_ui_with_capture(self, FALSE);
   ggame_window_sync_puzzle_ui(self);
   ggame_window_sync_mode_ui(self);
-  ggame_window_analysis_sync_ui(self);
   return TRUE;
 }
 
@@ -3120,156 +3021,6 @@ void ggame_window_set_loaded_variant(GGameWindow *self, const GameBackendVariant
   g_return_if_fail(variant != NULL);
 }
 
-static void ggame_window_set_analysis_text(GGameWindow *self, const char *text) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(text != NULL);
-
-  if (!self->analysis_buffer) {
-    g_debug("Missing analysis buffer");
-    return;
-  }
-
-  gtk_text_buffer_set_text(self->analysis_buffer, text, -1);
-}
-
-static void ggame_window_set_analysis_status(GGameWindow *self, const char *text) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  if (self->analysis_status_label == NULL) {
-    g_debug("Missing analysis status label");
-    return;
-  }
-  if (!GTK_IS_LABEL(self->analysis_status_label)) {
-    g_debug("Analysis status label is no longer a live GtkLabel");
-    return;
-  }
-
-  gtk_label_set_text(self->analysis_status_label, text != NULL ? text : "");
-}
-
-static void ggame_window_show_analysis_for_current_node(GGameWindow *self) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  ggame_window_set_analysis_text(self, "");
-}
-
-static void ggame_window_analysis_event_free(gpointer data) {
-  GGameWindowAnalysisEvent *event = data;
-  if (event == NULL) {
-    return;
-  }
-
-  g_clear_pointer(&event->status_text, g_free);
-  sgf_node_analysis_free(event->analysis);
-  g_free(event);
-}
-
-static gboolean ggame_window_node_first_score(const SgfNode *node, gint *out_score) {
-  g_return_val_if_fail(node != NULL, FALSE);
-  g_return_val_if_fail(out_score != NULL, FALSE);
-
-  g_autoptr(SgfNodeAnalysis) analysis = sgf_node_get_analysis(node);
-  if (analysis == NULL || analysis->moves == NULL || analysis->moves->len == 0) {
-    return FALSE;
-  }
-
-  const SgfNodeScoredMove *entry = g_ptr_array_index(analysis->moves, 0);
-  if (entry == NULL) {
-    return FALSE;
-  }
-
-  *out_score = entry->score;
-  return TRUE;
-}
-
-static void ggame_window_refresh_analysis_graph(GGameWindow *self) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(ANALYSIS_IS_GRAPH(self->analysis_graph));
-
-  if (!ggame_window_get_profile(self)->features.supports_analysis) {
-    analysis_graph_set_nodes(self->analysis_graph, NULL, 0);
-    analysis_graph_clear_progress_node(self->analysis_graph);
-    return;
-  }
-
-  SgfTree *tree = ggame_sgf_controller_get_tree(self->sgf_controller);
-  if (tree == NULL) {
-    analysis_graph_set_nodes(self->analysis_graph, NULL, 0);
-    analysis_graph_clear_progress_node(self->analysis_graph);
-    return;
-  }
-
-  g_autoptr(GPtrArray) branch = sgf_tree_build_current_branch(tree);
-  if (branch == NULL) {
-    analysis_graph_set_nodes(self->analysis_graph, NULL, 0);
-    analysis_graph_clear_progress_node(self->analysis_graph);
-    return;
-  }
-
-  const SgfNode *current = sgf_tree_get_current(tree);
-  guint selected_index = 0;
-  for (guint i = 0; i < branch->len; ++i) {
-    if (g_ptr_array_index(branch, i) == current) {
-      selected_index = i;
-      break;
-    }
-  }
-
-  guint analyzed_count = 0;
-  for (guint i = 0; i < branch->len; ++i) {
-    const SgfNode *node = g_ptr_array_index(branch, i);
-    if (node == NULL) {
-      continue;
-    }
-    gint score = 0;
-    gboolean has_score = ggame_window_node_first_score(node, &score);
-    (void)score;
-    (void)current;
-    if (has_score) {
-      analyzed_count++;
-    }
-  }
-  (void)analyzed_count;
-
-  analysis_graph_set_nodes(self->analysis_graph, branch, selected_index);
-  if (self->analysis_mode != GGAME_WINDOW_ANALYSIS_MODE_FULL_GAME || self->analysis_last_updated_node == NULL) {
-    analysis_graph_clear_progress_node(self->analysis_graph);
-    return;
-  }
-
-  for (guint i = 0; i < branch->len; ++i) {
-    const SgfNode *branch_node = g_ptr_array_index(branch, i);
-    if (branch_node == self->analysis_last_updated_node) {
-      analysis_graph_set_progress_node(self->analysis_graph, branch_node);
-      return;
-    }
-  }
-  analysis_graph_clear_progress_node(self->analysis_graph);
-}
-
-char *ggame_window_format_analysis_score(gint score) {
-  return g_strdup_printf("%+d", score);
-}
-
-char *ggame_window_format_analysis_report(const SgfNodeAnalysis *analysis) {
-  g_return_val_if_fail(analysis != NULL, NULL);
-  g_return_val_if_fail(analysis->moves != NULL, NULL);
-
-  return g_strdup_printf("Analysis depth: %u\n", analysis->depth);
-}
-
-char *ggame_window_format_analysis_status(const SgfNodeAnalysis *analysis) {
-  g_return_val_if_fail(analysis != NULL, NULL);
-
-  return g_strdup_printf("Analysis depth: %u\nNodes: %" G_GUINT64_FORMAT, analysis->depth, analysis->nodes);
-}
-
-static void ggame_window_stop_analysis(GGameWindow *self) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  ggame_window_analysis_finish_session(self);
-}
-
 static void ggame_window_update_control_state(GGameWindow *self) {
   const GameBackend *backend = NULL;
   gconstpointer position = NULL;
@@ -3309,7 +3060,6 @@ static void ggame_window_on_state_changed(GGameModel *model, gpointer user_data)
   ggame_window_sync_board_orientation(self);
   ggame_window_update_status(self);
   ggame_window_update_control_state(self);
-  ggame_window_refresh_analysis_graph(self);
 }
 
 static void ggame_window_on_control_changed(PlayerControlsPanel * /*panel*/, gpointer user_data) {
@@ -3488,8 +3238,6 @@ static void ggame_window_on_manual_requested(GGameSgfController * /*controller*/
   g_clear_handle_id(&self->auto_move_source_id, g_source_remove);
   ggame_window_set_board_orientation_mode(self, GGAME_WINDOW_BOARD_ORIENTATION_FIXED);
   ggame_window_update_control_state(self);
-  ggame_window_show_analysis_for_current_node(self);
-  ggame_window_refresh_analysis_graph(self);
 }
 
 static void ggame_window_on_sgf_node_changed(GGameSgfController * /*controller*/,
@@ -3500,8 +3248,6 @@ static void ggame_window_on_sgf_node_changed(GGameSgfController * /*controller*/
   g_return_if_fail(node != NULL);
 
   ggame_window_sync_board_host_node(self, node);
-  ggame_window_show_analysis_for_current_node(self);
-  ggame_window_refresh_analysis_graph(self);
 }
 
 static void ggame_window_on_puzzle_next_clicked(GtkButton * /*button*/, gpointer user_data) {
@@ -3602,7 +3348,6 @@ static void ggame_window_set_model(GGameWindow *self, GGameModel *model) {
   ggame_window_update_status(self);
   ggame_window_update_control_state(self);
   ggame_window_set_current_computer_player_names(self);
-  ggame_window_refresh_analysis_graph(self);
 }
 
 static void ggame_window_rebuild_board_host(GGameWindow *self) {
@@ -3687,7 +3432,6 @@ static void ggame_window_dispose(GObject *object) {
   self->analysis_status_label = NULL;
   self->analysis_buffer = NULL;
 
-  ggame_window_stop_analysis(self);
   if (self->paned_tick_id != 0 && self->main_paned) {
     gtk_widget_remove_tick_callback(self->main_paned, self->paned_tick_id);
     self->paned_tick_id = 0;
@@ -3743,23 +3487,10 @@ static void ggame_window_dispose(GObject *object) {
   G_OBJECT_CLASS(ggame_window_parent_class)->dispose(object);
 }
 
-static void ggame_window_finalize(GObject *object) {
-  GGameWindow *self = GGAME_WINDOW(object);
-
-  if (self->analysis_report_queue != NULL) {
-    g_queue_free_full(self->analysis_report_queue, ggame_window_analysis_event_free);
-    self->analysis_report_queue = NULL;
-  }
-  g_mutex_clear(&self->analysis_report_mutex);
-
-  G_OBJECT_CLASS(ggame_window_parent_class)->finalize(object);
-}
-
 static void ggame_window_class_init(GGameWindowClass *klass) {
   GObjectClass *object_class = G_OBJECT_CLASS(klass);
 
   object_class->dispose = ggame_window_dispose;
-  object_class->finalize = ggame_window_finalize;
 }
 
 static void ggame_window_init(GGameWindow *self) {
@@ -3769,13 +3500,8 @@ static void ggame_window_init(GGameWindow *self) {
   layout = self->profile != NULL ? &self->profile->layout : NULL;
   self->auto_move_source_id = 0;
   self->paned_tick_id = 0;
-  self->analysis_mode = GGAME_WINDOW_ANALYSIS_MODE_NONE;
-  self->analysis_generation = 1;
   self->puzzle_wrong_move_source_id = 0;
   self->syncing_layout_default_size = FALSE;
-  g_mutex_init(&self->analysis_report_mutex);
-  self->analysis_report_queue = g_queue_new();
-  ggame_window_analysis_reset_runtime_state(self);
   self->applied_ruleset = PLAYER_RULESET_INTERNATIONAL;
 
   ggame_window_sync_title(self);
@@ -4091,9 +3817,6 @@ static void ggame_window_init(GGameWindow *self) {
   ggame_window_sync_drawer_ui_with_capture(self, FALSE);
   ggame_window_sync_puzzle_ui(self);
   ggame_window_sync_mode_ui(self);
-  ggame_window_analysis_sync_ui(self);
-  ggame_window_show_analysis_for_current_node(self);
-  ggame_window_refresh_analysis_graph(self);
 }
 
 PlayerControlsPanel *ggame_window_get_controls_panel(GGameWindow *self) {
