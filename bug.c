@@ -686,15 +686,6 @@ static gconstpointer ggame_window_get_game_position(GGameWindow *self) {
   return position;
 }
 
-static gboolean ggame_window_uses_square_board(GGameWindow *self) {
-  const GameBackend *backend = NULL;
-
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), FALSE);
-
-  backend = ggame_window_get_game_backend(self);
-  return backend != NULL && backend->supports_square_grid_board;
-}
-
 static void ggame_window_sync_side_labels(GGameWindow *self) {
   const GGameAppProfile *profile = ggame_window_get_profile(self);
   const GameBackend *backend = profile != NULL ? profile->backend : NULL;
@@ -1214,20 +1205,12 @@ static void ggame_window_update_control_state(GGameWindow *self) {
   (void)input_enabled;
 }
 
-static void ggame_window_update_status(GGameWindow *self) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(GGAME_IS_MODEL(self->game_model));
-
-  (void)ggame_window_uses_square_board(self);
-}
-
 static void ggame_window_on_state_changed(GGameModel *model, gpointer user_data) {
   GGameWindow *self = GGAME_WINDOW(user_data);
 
   g_return_if_fail(GGAME_IS_MODEL(model));
   g_return_if_fail(GGAME_IS_WINDOW(self));
 
-  ggame_window_update_status(self);
   ggame_window_update_control_state(self);
 }
 
@@ -1490,7 +1473,6 @@ static void ggame_window_set_model(GGameWindow *self, GGameModel *model) {
                                             self);
   ggame_sgf_controller_set_game_model(self->sgf_controller, self->game_model);
   ggame_window_rebuild_board_host(self);
-  ggame_window_update_status(self);
   ggame_window_update_control_state(self);
   ggame_window_set_current_computer_player_names(self);
 }
@@ -1510,20 +1492,14 @@ static void ggame_window_rebuild_board_host(GGameWindow *self) {
     self->board_host = NULL;
   }
 
-  if (self->profile != NULL && self->profile->ui.create_board_host != NULL) {
-    host = self->profile->ui.create_board_host(self->game_model,
-                                               NULL,
-                                               ggame_window_apply_player_move,
-                                               self,
-                                               &host_options);
-    g_return_if_fail(GTK_IS_WIDGET(host));
-  } else {
-    g_return_if_fail(ggame_window_uses_square_board(self));
-
-    host = gtk_aspect_frame_new(0.5f, 0.5f, 1.0f, FALSE);
-    gtk_widget_set_hexpand(host, TRUE);
-    gtk_widget_set_vexpand(host, TRUE);
-  }
+  g_return_if_fail(self->profile != NULL);
+  g_return_if_fail(self->profile->ui.create_board_host != NULL);
+  host = self->profile->ui.create_board_host(self->game_model,
+                                             NULL,
+                                             ggame_window_apply_player_move,
+                                             self,
+                                             &host_options);
+  g_return_if_fail(GTK_IS_WIDGET(host));
 
   self->board_host = host;
   gtk_box_append(GTK_BOX(self->board_host_box), host);
