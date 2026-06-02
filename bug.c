@@ -2981,15 +2981,12 @@ typedef struct {
 static void ggame_window_analysis_sync_ui(GGameWindow *self);
 static void ggame_window_analysis_reset_runtime_state(GGameWindow *self);
 static void ggame_window_analysis_finish_session(GGameWindow *self);
-static gboolean ggame_window_is_edit_mode(GGameWindow *self);
 static void ggame_window_sync_mode_ui(GGameWindow *self);
 static void ggame_window_sync_move_report_ui(GGameWindow *self);
 static void ggame_window_capture_panel_widths(GGameWindow *self);
 static gint ggame_window_current_extra_width(GGameWindow *self);
 static void ggame_window_apply_saved_panel_widths(GGameWindow *self);
 static gint ggame_window_expected_default_width(GGameWindow *self);
-static gboolean ggame_window_format_setup_point(uint8_t index, uint8_t board_size, char out_point[3]);
-static gboolean ggame_window_update_node_setup_piece(SgfNode *node, const char *point, CheckersPiece piece);
 static gboolean ggame_window_apply_player_move(gconstpointer move, gpointer user_data);
 static gboolean ggame_window_on_board_square_action(guint8 index, guint button, gpointer user_data);
 static void ggame_window_sync_board_orientation(GGameWindow *self);
@@ -3076,20 +3073,6 @@ static gconstpointer ggame_window_get_game_position(GGameWindow *self) {
   return position;
 }
 
-static const Game *ggame_window_get_checkers_game(GGameWindow *self) {
-  const GGameAppProfile *profile = ggame_window_get_profile(self);
-  gconstpointer position = NULL;
-
-  g_return_val_if_fail(profile != NULL, NULL);
-  if (profile->kind != GGAME_APP_KIND_CHECKERS) {
-    return NULL;
-  }
-
-  position = ggame_window_get_game_position(self);
-  g_return_val_if_fail(position != NULL, NULL);
-  return position;
-}
-
 static gboolean ggame_window_uses_square_board(GGameWindow *self) {
   const GameBackend *backend = NULL;
 
@@ -3105,16 +3088,6 @@ static void ggame_window_clear_board_selection(GGameWindow *self) {
   if (self->board_view != NULL && ggame_window_uses_square_board(self)) {
     board_view_clear_selection(self->board_view);
   }
-}
-
-static const GameState *ggame_window_get_checkers_state(GGameWindow *self) {
-  const Game *game = ggame_window_get_checkers_game(self);
-
-  if (game == NULL) {
-    return NULL;
-  }
-
-  return &game->state;
 }
 
 static const char *ggame_window_side_name(guint side) {
@@ -3884,12 +3857,6 @@ static void ggame_window_analysis_finish_session(GGameWindow *self) {
   ggame_window_analysis_sync_ui(self);
 }
 
-static gboolean ggame_window_is_edit_mode(GGameWindow *self) {
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), FALSE);
-
-  return self->edit_mode_enabled;
-}
-
 static void ggame_window_sync_mode_ui(GGameWindow *self) {
   const GGameAppProfile *profile = ggame_window_get_profile(self);
   gboolean supports_analysis = FALSE;
@@ -3921,78 +3888,6 @@ static void ggame_window_sync_mode_ui(GGameWindow *self) {
   if (self->sgf_mode_control != NULL) {
     gtk_widget_set_sensitive(GTK_WIDGET(self->sgf_mode_control), allow_edit_mode_selection);
   }
-}
-
-static gboolean ggame_window_format_setup_point(uint8_t index, uint8_t board_size, char out_point[3]) {
-  g_return_val_if_fail(out_point != NULL, FALSE);
-  g_return_val_if_fail(board_size > 0, FALSE);
-
-  gint row = 0;
-  gint col = 0;
-  board_coord_from_index(index, &row, &col, board_size);
-  if (row < 0 || col < 0 || row >= 26 || col >= 26) {
-    g_debug("Unsupported SGF setup coordinate for board size %u", board_size);
-    return FALSE;
-  }
-
-  out_point[0] = (char)('a' + col);
-  out_point[1] = (char)('a' + row);
-  out_point[2] = '\0';
-  return TRUE;
-}
-
-static const char *ggame_window_piece_label(CheckersPiece piece) {
-  switch (piece) {
-    case CHECKERS_PIECE_EMPTY:
-      return "empty";
-    case CHECKERS_PIECE_BLACK_MAN:
-      return "black-man";
-    case CHECKERS_PIECE_BLACK_KING:
-      return "black-king";
-    case CHECKERS_PIECE_WHITE_MAN:
-      return "white-man";
-    case CHECKERS_PIECE_WHITE_KING:
-      return "white-king";
-    default:
-      return "unknown";
-  }
-}
-
-static gboolean ggame_window_node_set_prop_has_point(SgfNode *node,
-                                                         const char *ident,
-                                                         const char *point,
-                                                         gboolean has_point) {
-  g_return_val_if_fail(node != NULL, FALSE);
-  g_return_val_if_fail(ident != NULL, FALSE);
-  g_return_val_if_fail(point != NULL, FALSE);
-
-  g_autoptr(GPtrArray) next_values = g_ptr_array_new_with_free_func(g_free);
-  const GPtrArray *existing = sgf_node_get_property_values(node, ident);
-  if (existing != NULL) {
-    for (guint i = 0; i < existing->len; ++i) {
-      const char *value = g_ptr_array_index((GPtrArray *)existing, i);
-      g_return_val_if_fail(value != NULL, FALSE);
-      if (g_strcmp0(value, point) == 0) {
-        continue;
-      }
-      g_ptr_array_add(next_values, g_strdup(value));
-    }
-  }
-  if (has_point) {
-    g_ptr_array_add(next_values, g_strdup(point));
-  }
-
-  sgf_node_clear_property(node, ident);
-  for (guint i = 0; i < next_values->len; ++i) {
-    const char *value = g_ptr_array_index(next_values, i);
-    g_return_val_if_fail(value != NULL, FALSE);
-    if (!sgf_node_add_property(node, ident, value)) {
-      g_debug("Failed to add SGF setup property value");
-      return FALSE;
-    }
-  }
-
-  return TRUE;
 }
 
 static const GameBackendVariant *ggame_window_variant_for_ruleset(PlayerRuleset ruleset) {
@@ -4037,110 +3932,13 @@ static char *ggame_window_build_puzzle_variant_dir(GGameWindow *self, const Game
                          : g_build_filename(puzzle_root, backend->id, NULL);
 }
 
-static gboolean ggame_window_update_node_setup_piece(SgfNode *node, const char *point, CheckersPiece piece) {
-  g_return_val_if_fail(node != NULL, FALSE);
-  g_return_val_if_fail(point != NULL, FALSE);
-
-  gboolean is_empty = piece == CHECKERS_PIECE_EMPTY;
-  gboolean is_black = piece == CHECKERS_PIECE_BLACK_MAN || piece == CHECKERS_PIECE_BLACK_KING;
-  gboolean is_white = piece == CHECKERS_PIECE_WHITE_MAN || piece == CHECKERS_PIECE_WHITE_KING;
-  gboolean is_black_king = piece == CHECKERS_PIECE_BLACK_KING;
-  gboolean is_white_king = piece == CHECKERS_PIECE_WHITE_KING;
-
-  if (!ggame_window_node_set_prop_has_point(node, "AE", point, is_empty) ||
-      !ggame_window_node_set_prop_has_point(node, "AB", point, is_black) ||
-      !ggame_window_node_set_prop_has_point(node, "AW", point, is_white) ||
-      !ggame_window_node_set_prop_has_point(node, "ABK", point, is_black_king) ||
-      !ggame_window_node_set_prop_has_point(node, "AWK", point, is_white_king)) {
-    g_debug("Edit update failed while setting SGF setup properties at point=%s target=%s",
-            point,
-            ggame_window_piece_label(piece));
-    return FALSE;
-  }
-
-  sgf_node_clear_analysis(node);
-  g_debug("Edit update wrote SGF setup properties at point=%s target=%s",
-          point,
-          ggame_window_piece_label(piece));
-  return TRUE;
-}
-
 static gboolean ggame_window_on_board_square_action(guint8 index, guint button, gpointer user_data) {
   GGameWindow *self = GGAME_WINDOW(user_data);
-  const GameState *state = NULL;
 
   g_return_val_if_fail(GGAME_IS_WINDOW(self), FALSE);
-  if (button != GDK_BUTTON_PRIMARY && button != GDK_BUTTON_SECONDARY) {
-    return FALSE;
-  }
-
-  if (!ggame_window_is_edit_mode(self)) {
-    return FALSE;
-  }
-
-  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self->sgf_controller), FALSE);
-
-  state = ggame_window_get_checkers_state(self);
-  if (state == NULL) {
-    g_debug("Missing game state for edit-mode square action");
-    return TRUE;
-  }
-
-  guint8 max_square = board_playable_squares(state->board.board_size);
-  if (index >= max_square) {
-    g_debug("Edit-mode square index out of range");
-    return TRUE;
-  }
-
-  CheckersPiece current = board_get(&state->board, index);
-  CheckersPiece next = CHECKERS_PIECE_EMPTY;
-  if (button == GDK_BUTTON_PRIMARY) {
-    if (current == CHECKERS_PIECE_EMPTY) {
-      next = CHECKERS_PIECE_WHITE_MAN;
-    } else if (current == CHECKERS_PIECE_WHITE_MAN) {
-      next = CHECKERS_PIECE_WHITE_KING;
-    }
-  } else {
-    if (current == CHECKERS_PIECE_EMPTY) {
-      next = CHECKERS_PIECE_BLACK_MAN;
-    } else if (current == CHECKERS_PIECE_BLACK_MAN) {
-      next = CHECKERS_PIECE_BLACK_KING;
-    }
-  }
-
-  SgfTree *tree = ggame_sgf_controller_get_tree(self->sgf_controller);
-  if (tree == NULL) {
-    g_debug("Missing SGF tree for edit-mode square action");
-    return TRUE;
-  }
-  SgfNode *current_node = (SgfNode *)sgf_tree_get_current(tree);
-  if (current_node == NULL) {
-    g_debug("Missing SGF current node for edit-mode square action");
-    return TRUE;
-  }
-
-  char point[3] = {0};
-  if (!ggame_window_format_setup_point(index, state->board.board_size, point)) {
-    g_debug("Edit click failed formatting setup point: index=%u board_size=%u", index, state->board.board_size);
-    return TRUE;
-  }
-  if (!ggame_window_update_node_setup_piece(current_node, point, next)) {
-    g_debug("Edit click failed SGF setup update: index=%u point=%s", index, point);
-    return TRUE;
-  }
-  if (!ggame_sgf_controller_refresh_current_node(self->sgf_controller)) {
-    g_debug("Failed to refresh model from edited SGF current node");
-    return TRUE;
-  }
-
-  const GameState *after = ggame_window_get_checkers_state(self);
-  if (after == NULL) {
-    g_debug("Edit click missing post-refresh game state: index=%u point=%s", index, point);
-    return TRUE;
-  }
-  (void)after;
-
-  return TRUE;
+  (void)index;
+  (void)button;
+  return FALSE;
 }
 
 static void ggame_window_start_new_game(GGameWindow *self) {
@@ -4725,79 +4523,15 @@ static void ggame_window_refresh_analysis_graph(GGameWindow *self) {
   analysis_graph_clear_progress_node(self->analysis_graph);
 }
 
-typedef struct {
-  gint score;
-  gint max_distance;
-} GGameWindowAnalysisWinScore;
-
-static const GGameWindowAnalysisWinScore ggame_window_analysis_win_scores[] = {
-  {1000, 100},
-  {3000, 100},
-  {10000, 100},
-  {100000, 1000}
-};
-
 char *ggame_window_format_analysis_score(gint score) {
-  gint abs_score = ABS(score);
-
-  for (guint i = 0; i < G_N_ELEMENTS(ggame_window_analysis_win_scores); ++i) {
-    gint win_score = ggame_window_analysis_win_scores[i].score;
-    gint min_score = win_score - ggame_window_analysis_win_scores[i].max_distance;
-
-    if (abs_score >= min_score && abs_score <= win_score) {
-      gint distance = win_score - abs_score;
-      return g_strdup_printf("%c#%d", score > 0 ? 'W' : 'B', distance);
-    }
-  }
-
   return g_strdup_printf("%+d", score);
-}
-
-static void ggame_window_analysis_append_scored_moves(GString *text, const SgfNodeAnalysis *analysis) {
-  g_return_if_fail(text != NULL);
-  g_return_if_fail(analysis != NULL);
-  g_return_if_fail(analysis->moves != NULL);
-
-  gsize score_width = 0;
-  for (guint i = 0; i < analysis->moves->len; ++i) {
-    const SgfNodeScoredMove *entry = g_ptr_array_index(analysis->moves, i);
-    if (entry == NULL) {
-      continue;
-    }
-
-    g_autofree char *score_text = ggame_window_format_analysis_score(entry->score);
-    if (score_text == NULL) {
-      g_debug("Failed to format analysis score");
-      continue;
-    }
-
-    score_width = MAX(score_width, strlen(score_text));
-  }
-
-  for (guint i = 0; i < analysis->moves->len; ++i) {
-    const SgfNodeScoredMove *entry = g_ptr_array_index(analysis->moves, i);
-    if (entry == NULL) {
-      continue;
-    }
-    const char *notation = entry->move_text != NULL ? entry->move_text : "?";
-
-    g_autofree char *score_text = ggame_window_format_analysis_score(entry->score);
-    if (score_text == NULL) {
-      g_debug("Failed to format analysis score");
-      continue;
-    }
-    g_string_append_printf(text, "%*s  %s\n", (gint)score_width, score_text, notation);
-  }
 }
 
 char *ggame_window_format_analysis_report(const SgfNodeAnalysis *analysis) {
   g_return_val_if_fail(analysis != NULL, NULL);
   g_return_val_if_fail(analysis->moves != NULL, NULL);
 
-  GString *text = g_string_new(NULL);
-  g_string_append_printf(text, "Analysis depth: %u\n", analysis->depth);
-  ggame_window_analysis_append_scored_moves(text, analysis);
-  return g_string_free(text, FALSE);
+  return g_strdup_printf("Analysis depth: %u\n", analysis->depth);
 }
 
 char *ggame_window_format_analysis_status(const SgfNodeAnalysis *analysis) {
