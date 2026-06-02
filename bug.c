@@ -4,11 +4,14 @@
  * or the reproducer stops proving that it is self-contained. Do not remove this comment when simplifying bug.c.
  */
 #include <gtk/gtk.h>
+
 /* Begin copied file: src/game_app_profile.c */
 #include "game_app_profile.h"
+
 #include "games/homeworlds/homeworlds_backend.h"
 #include "games/homeworlds/homeworlds_view.h"
 #include "player_controls_panel.h"
+
 static const GGameAppProfile homeworlds_app_profile = {
   .kind = GGAME_APP_KIND_HOMEWORLDS,
   .id = "homeworlds",
@@ -49,83 +52,111 @@ static const GGameAppProfile homeworlds_app_profile = {
       },
   .default_computer_depth = PLAYER_COMPUTER_DEPTH_MIN,
 };
+
 static const GGameAppProfile *const ggame_app_profiles[] = {
   &homeworlds_app_profile,
 };
+
 static const GGameAppProfile *active_app_profile = &homeworlds_app_profile;
+
 const GGameAppProfile *ggame_app_profile_lookup_by_id(const char *id) {
   g_return_val_if_fail(id != NULL, NULL);
+
   for (guint i = 0; i < G_N_ELEMENTS(ggame_app_profiles); ++i) {
     if (g_strcmp0(ggame_app_profiles[i]->id, id) == 0) {
       return ggame_app_profiles[i];
     }
   }
+
   g_debug("Unknown app profile id %s", id);
   return NULL;
 }
+
 const GGameAppProfile *ggame_active_app_profile(void) {
   return active_app_profile;
 }
+
 gboolean ggame_app_profile_supports_puzzle_catalog(const GGameAppProfile *profile) {
   g_return_val_if_fail(profile != NULL, FALSE);
+
   return profile->features.supports_puzzles &&
          profile->backend != NULL &&
          profile->backend->id != NULL &&
          (profile->backend->variant_count == 0 || profile->backend->variant_at != NULL);
 }
 /* End copied file: src/game_app_profile.c */
+
 /* Begin copied file: src/game_model.c */
 #include "game_model.h"
+
 #include <glib.h>
+
 struct _GGameModel {
   GObject parent_instance;
   const GameBackend *backend;
   gpointer position;
   const GameBackendVariant *variant;
 };
+
 G_DEFINE_TYPE(GGameModel, ggame_model, G_TYPE_OBJECT)
+
 enum {
   PROP_0,
   PROP_BACKEND,
   PROP_LAST,
 };
+
 enum {
   SIGNAL_STATE_CHANGED,
   SIGNAL_LAST,
 };
+
 static guint model_signals[SIGNAL_LAST] = {0};
 static GParamSpec *properties[PROP_LAST] = {0};
+
 static const GameBackendVariant *ggame_model_pick_initial_variant(const GameBackend *backend) {
   g_return_val_if_fail(backend != NULL, NULL);
+
   if (backend->variant_count == 0) {
     return NULL;
   }
+
   g_return_val_if_fail(backend->variant_at != NULL, NULL);
+
   return backend->variant_at(0);
 }
+
 static void ggame_model_emit_state_changed(GGameModel *self) {
   g_return_if_fail(GGAME_IS_MODEL(self));
+
   g_signal_emit(self, model_signals[SIGNAL_STATE_CHANGED], 0);
 }
+
 static void ggame_model_finalize(GObject *object) {
   GGameModel *self = GGAME_MODEL(object);
+
   if (self->position != NULL && self->backend != NULL && self->backend->position_clear != NULL) {
     self->backend->position_clear(self->position);
   }
   g_clear_pointer(&self->position, g_free);
+
   G_OBJECT_CLASS(ggame_model_parent_class)->finalize(object);
 }
+
 static void ggame_model_constructed(GObject *object) {
   GGameModel *self = GGAME_MODEL(object);
   gboolean has_move_list_api = FALSE;
   gboolean has_move_builder_api = FALSE;
   gboolean has_good_move_api = FALSE;
+
   G_OBJECT_CLASS(ggame_model_parent_class)->constructed(object);
+
   g_return_if_fail(self->backend != NULL);
   g_return_if_fail(self->backend->position_size > 0);
   g_return_if_fail(self->backend->position_init != NULL);
   g_return_if_fail(self->backend->position_clear != NULL);
   g_return_if_fail(self->backend->apply_move != NULL);
+
   has_move_list_api = self->backend->supports_move_list &&
                       self->backend->list_moves != NULL &&
                       self->backend->move_list_free != NULL &&
@@ -152,13 +183,17 @@ static void ggame_model_constructed(GObject *object) {
     g_return_if_fail(self->backend->terminal_score != NULL);
     g_return_if_fail(self->backend->hash_position != NULL);
   }
+
   self->position = g_malloc0(self->backend->position_size);
   g_return_if_fail(self->position != NULL);
+
   self->variant = ggame_model_pick_initial_variant(self->backend);
   self->backend->position_init(self->position, self->variant);
 }
+
 static void ggame_model_set_property(GObject *object, guint property_id, const GValue *value, GParamSpec *pspec) {
   GGameModel *self = GGAME_MODEL(object);
+
   switch (property_id) {
     case PROP_BACKEND:
       self->backend = g_value_get_pointer(value);
@@ -168,8 +203,10 @@ static void ggame_model_set_property(GObject *object, guint property_id, const G
       break;
   }
 }
+
 static void ggame_model_get_property(GObject *object, guint property_id, GValue *value, GParamSpec *pspec) {
   GGameModel *self = GGAME_MODEL(object);
+
   switch (property_id) {
     case PROP_BACKEND:
       g_value_set_pointer(value, (gpointer) self->backend);
@@ -179,18 +216,22 @@ static void ggame_model_get_property(GObject *object, guint property_id, GValue 
       break;
   }
 }
+
 static void ggame_model_class_init(GGameModelClass *klass) {
   GObjectClass *object_class = G_OBJECT_CLASS(klass);
+
   object_class->constructed = ggame_model_constructed;
   object_class->finalize = ggame_model_finalize;
   object_class->set_property = ggame_model_set_property;
   object_class->get_property = ggame_model_get_property;
+
   properties[PROP_BACKEND] = g_param_spec_pointer("backend",
                                                   "Backend",
                                                   "Active backend used by this model.",
                                                   G_PARAM_CONSTRUCT_ONLY | G_PARAM_READWRITE |
                                                       G_PARAM_STATIC_STRINGS);
   g_object_class_install_property(object_class, PROP_BACKEND, properties[PROP_BACKEND]);
+
   model_signals[SIGNAL_STATE_CHANGED] = g_signal_new("state-changed",
                                                      G_TYPE_FROM_CLASS(klass),
                                                      G_SIGNAL_RUN_LAST,
@@ -201,28 +242,36 @@ static void ggame_model_class_init(GGameModelClass *klass) {
                                                      G_TYPE_NONE,
                                                      0);
 }
+
 static void ggame_model_init(GGameModel *self) {
   self->backend = NULL;
   self->position = NULL;
   self->variant = NULL;
 }
+
 GGameModel *ggame_model_new(const GameBackend *backend) {
   g_return_val_if_fail(backend != NULL, NULL);
+
   return g_object_new(GGAME_TYPE_MODEL, "backend", backend, NULL);
 }
+
 void ggame_model_reset(GGameModel *self, const GameBackendVariant *variant_or_null) {
   g_return_if_fail(GGAME_IS_MODEL(self));
   g_return_if_fail(self->backend != NULL);
   g_return_if_fail(self->position != NULL);
+
   self->backend->position_clear(self->position);
   self->variant = variant_or_null != NULL ? variant_or_null : ggame_model_pick_initial_variant(self->backend);
   self->backend->position_init(self->position, self->variant);
   ggame_model_emit_state_changed(self);
 }
+
 gboolean ggame_model_set_position(GGameModel *self, gconstpointer position) {
   g_return_val_if_fail(GGAME_IS_MODEL(self), FALSE);
+
   return ggame_model_set_position_variant(self, position, self->variant);
 }
+
 gboolean ggame_model_set_position_variant(GGameModel *self,
                                           gconstpointer position,
                                           const GameBackendVariant *variant_or_null) {
@@ -231,13 +280,16 @@ gboolean ggame_model_set_position_variant(GGameModel *self,
   g_return_val_if_fail(self->position != NULL, FALSE);
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(self->backend->position_copy != NULL, FALSE);
+
   self->variant = variant_or_null != NULL ? variant_or_null : ggame_model_pick_initial_variant(self->backend);
   self->backend->position_copy(self->position, position);
   ggame_model_emit_state_changed(self);
   return TRUE;
 }
+
 GameBackendMoveList ggame_model_list_moves(GGameModel *self) {
   GameBackendMoveList empty = {0};
+
   g_return_val_if_fail(GGAME_IS_MODEL(self), empty);
   g_return_val_if_fail(self->backend != NULL, empty);
   g_return_val_if_fail(self->position != NULL, empty);
@@ -245,62 +297,83 @@ GameBackendMoveList ggame_model_list_moves(GGameModel *self) {
     g_debug("Move listing is not available for this backend");
     return empty;
   }
+
   return self->backend->list_moves(self->position);
 }
+
 gboolean ggame_model_apply_move(GGameModel *self, gconstpointer move) {
   GameBackendMoveList moves = {0};
   gboolean applied = FALSE;
+
   g_return_val_if_fail(GGAME_IS_MODEL(self), FALSE);
   g_return_val_if_fail(self->backend != NULL, FALSE);
   g_return_val_if_fail(self->position != NULL, FALSE);
   g_return_val_if_fail(move != NULL, FALSE);
+
   if (!self->backend->supports_move_list) {
     applied = self->backend->apply_move(self->position, move);
     if (!applied) {
       g_debug("Backend rejected move application without move-list validation");
       return FALSE;
     }
+
     ggame_model_emit_state_changed(self);
     return TRUE;
   }
+
   moves = self->backend->list_moves(self->position);
   for (gsize i = 0; i < moves.count; ++i) {
     const void *candidate = self->backend->move_list_get(&moves, i);
+
     if (candidate == NULL || !self->backend->moves_equal(candidate, move)) {
       continue;
     }
+
     applied = self->backend->apply_move(self->position, candidate);
     break;
   }
+
   self->backend->move_list_free(&moves);
+
   if (!applied) {
     g_debug("Attempted to apply a move that is not in the available move list");
     return FALSE;
   }
+
   ggame_model_emit_state_changed(self);
   return TRUE;
 }
+
 gconstpointer ggame_model_peek_position(GGameModel *self) {
   g_return_val_if_fail(GGAME_IS_MODEL(self), NULL);
+
   return self->position;
 }
+
 const GameBackend *ggame_model_peek_backend(GGameModel *self) {
   g_return_val_if_fail(GGAME_IS_MODEL(self), NULL);
+
   return self->backend;
 }
+
 const GameBackendVariant *ggame_model_peek_variant(GGameModel *self) {
   g_return_val_if_fail(GGAME_IS_MODEL(self), NULL);
+
   return self->variant;
 }
+
 char *ggame_model_format_status(GGameModel *self) {
   GameBackendMoveList moves = {0};
   const char *variant_name = "Default";
   char *status = NULL;
+
   g_return_val_if_fail(GGAME_IS_MODEL(self), NULL);
   g_return_val_if_fail(self->backend != NULL, NULL);
+
   if (self->variant != NULL && self->variant->name != NULL) {
     variant_name = self->variant->name;
   }
+
   if (self->backend->supports_move_list) {
     moves = ggame_model_list_moves(self);
     status = g_strdup_printf("Game: %s\nVariant: %s\nMoves available: %" G_GSIZE_FORMAT,
@@ -313,21 +386,27 @@ char *ggame_model_format_status(GGameModel *self) {
                              self->backend->display_name,
                              variant_name);
   }
+
   return status;
 }
 /* End copied file: src/game_model.c */
+
 /* Begin copied file: src/games/homeworlds/homeworlds_backend.c */
 #include "homeworlds_backend.h"
+
 #include "homeworlds_game.h"
 #include "homeworlds_move_builder.h"
 #include "homeworlds_position_text.h"
 #include "homeworlds_sgf_position.h"
+
 #include <stdlib.h>
 #include <string.h>
+
 enum {
   HOMEWORLDS_GOOD_MOVE_STATIC_PRUNE_LIMIT = 512,
   HOMEWORLDS_GOOD_MOVE_STATIC_PRUNE_WINDOW = 50,
 };
+
 typedef struct {
   HomeworldsMove *moves;
   GHashTable *seen_moves;
@@ -335,20 +414,24 @@ typedef struct {
   gsize capacity;
   gsize leaves_seen;
 } HomeworldsMoveBuffer;
+
 typedef struct {
   guint system_index;
   HomeworldsColor color;
   HomeworldsSystemRef system_ref;
 } HomeworldsProfitableCatastrophe;
+
 typedef struct {
   HomeworldsProfitableCatastrophe root_catastrophes[HOMEWORLDS_SYSTEM_SLOT_COUNT * 4];
   guint root_catastrophe_count;
 } HomeworldsGoodMoveContext;
+
 typedef struct {
   HomeworldsMove move;
   gint score;
   gsize original_index;
 } HomeworldsScoredMove;
+
 static const char *homeworlds_backend_side_label(guint side) {
   switch (side) {
     case 0:
@@ -360,6 +443,7 @@ static const char *homeworlds_backend_side_label(guint side) {
       return "Player";
   }
 }
+
 static const char *homeworlds_backend_outcome_banner_text(GameBackendOutcome outcome) {
   switch (outcome) {
     case GAME_BACKEND_OUTCOME_SIDE_0_WIN:
@@ -373,6 +457,7 @@ static const char *homeworlds_backend_outcome_banner_text(GameBackendOutcome out
       return NULL;
   }
 }
+
 static SgfColor homeworlds_backend_sgf_color_for_side(guint side) {
   switch (side) {
     case 0:
@@ -384,31 +469,46 @@ static SgfColor homeworlds_backend_sgf_color_for_side(guint side) {
       return SGF_COLOR_NONE;
   }
 }
+
 static void homeworlds_backend_position_init(gpointer position, const GameBackendVariant * /*variant_or_null*/) {
   HomeworldsPosition *homeworlds_position = position;
+
   g_return_if_fail(homeworlds_position != NULL);
+
   homeworlds_position_init(homeworlds_position);
 }
+
 static void homeworlds_backend_position_clear(gpointer position) {
   HomeworldsPosition *homeworlds_position = position;
+
   g_return_if_fail(homeworlds_position != NULL);
+
   homeworlds_position_clear(homeworlds_position);
 }
+
 static void homeworlds_backend_position_copy(gpointer dest, gconstpointer src) {
   HomeworldsPosition *dest_position = dest;
   const HomeworldsPosition *src_position = src;
+
   g_return_if_fail(dest_position != NULL);
   g_return_if_fail(src_position != NULL);
+
   homeworlds_position_copy(dest_position, src_position);
 }
+
 static GameBackendOutcome homeworlds_backend_position_outcome(gconstpointer position) {
   const HomeworldsPosition *homeworlds_position = position;
+
   g_return_val_if_fail(homeworlds_position != NULL, GAME_BACKEND_OUTCOME_ONGOING);
+
   return homeworlds_position_outcome(homeworlds_position);
 }
+
 static guint homeworlds_backend_position_turn(gconstpointer position) {
   const HomeworldsPosition *homeworlds_position = position;
+
   g_return_val_if_fail(homeworlds_position != NULL, 0);
+
   return homeworlds_position_turn(homeworlds_position);
 }
 
