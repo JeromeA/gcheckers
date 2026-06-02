@@ -2982,9 +2982,7 @@ static void ggame_window_analysis_sync_ui(GGameWindow *self);
 static void ggame_window_analysis_reset_runtime_state(GGameWindow *self);
 static void ggame_window_analysis_finish_session(GGameWindow *self);
 static gboolean ggame_window_is_edit_mode(GGameWindow *self);
-static void ggame_window_set_action_enabled(GActionMap *map, const char *name, gboolean enabled);
 static void ggame_window_sync_mode_ui(GGameWindow *self);
-static void ggame_window_sync_drawer_ui(GGameWindow *self);
 static void ggame_window_sync_move_report_ui(GGameWindow *self);
 static void ggame_window_capture_panel_widths(GGameWindow *self);
 static gint ggame_window_current_extra_width(GGameWindow *self);
@@ -3010,7 +3008,6 @@ static gboolean ggame_window_puzzle_attempt_finish_failure(GGameWindow *self,
 static void ggame_window_puzzle_attempt_reset(GGameWindow *self);
 static char *ggame_window_analysis_format_complete(const SgfNodeAnalysis *analysis);
 static void ggame_window_rebuild_board_host(GGameWindow *self);
-static void ggame_window_sync_drawer_action_states(GGameWindow *self);
 static void ggame_window_load_default_size(gint *out_width, gint *out_height);
 static void ggame_window_save_default_size(GGameWindow *self);
 static gboolean ggame_window_on_close_request(GtkWindow *window, gpointer user_data);
@@ -3618,27 +3615,6 @@ static void ggame_window_analysis_sync_ui(GGameWindow *self) {
   }
 }
 
-static void ggame_window_sync_drawer_action_states(GGameWindow *self) {
-  GAction *action = NULL;
-
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  action = g_action_map_lookup_action(G_ACTION_MAP(self), "view-show-navigation-drawer");
-  if (G_IS_SIMPLE_ACTION(action)) {
-    g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_boolean(self->show_navigation_drawer));
-  }
-
-  action = g_action_map_lookup_action(G_ACTION_MAP(self), "view-show-analysis-drawer");
-  if (G_IS_SIMPLE_ACTION(action)) {
-    g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_boolean(self->show_analysis_drawer));
-  }
-
-  action = g_action_map_lookup_action(G_ACTION_MAP(self), "view-show-move-report");
-  if (G_IS_SIMPLE_ACTION(action)) {
-    g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_boolean(self->show_move_report));
-  }
-}
-
 static void ggame_window_sync_title(GGameWindow *self) {
   const GGameAppProfile *profile = ggame_window_get_profile(self);
   const char *window_title_name = profile != NULL ? profile->window_title_name : "ggame";
@@ -3806,11 +3782,6 @@ static void ggame_window_apply_saved_panel_widths(GGameWindow *self) {
   }
 }
 
-static void ggame_window_sync_drawer_ui(GGameWindow *self) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  ggame_window_sync_drawer_ui_with_capture(self, TRUE);
-}
-
 static void ggame_window_sync_move_report_ui(GGameWindow *self) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
 
@@ -3893,45 +3864,6 @@ static void ggame_window_sync_puzzle_ui(GGameWindow *self) {
   }
 }
 
-static void ggame_window_on_show_navigation_drawer_change_state(GSimpleAction *action,
-                                                                    GVariant *value,
-                                                                    gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(G_IS_SIMPLE_ACTION(action));
-  g_return_if_fail(value != NULL);
-
-  self->show_navigation_drawer = g_variant_get_boolean(value);
-  g_simple_action_set_state(action, value);
-  ggame_window_sync_drawer_ui(self);
-}
-
-static void ggame_window_on_show_analysis_drawer_change_state(GSimpleAction *action,
-                                                                  GVariant *value,
-                                                                  gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(G_IS_SIMPLE_ACTION(action));
-  g_return_if_fail(value != NULL);
-
-  self->show_analysis_drawer = g_variant_get_boolean(value);
-  g_simple_action_set_state(action, value);
-  ggame_window_sync_drawer_ui(self);
-}
-
-static void ggame_window_on_show_move_report_change_state(GSimpleAction *action,
-                                                          GVariant *value,
-                                                          gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(G_IS_SIMPLE_ACTION(action));
-  g_return_if_fail(value != NULL);
-
-  self->show_move_report = g_variant_get_boolean(value);
-  g_simple_action_set_state(action, value);
-  ggame_window_sync_move_report_ui(self);
-}
-
 static void ggame_window_analysis_reset_runtime_state(GGameWindow *self) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
 
@@ -3958,63 +3890,19 @@ static gboolean ggame_window_is_edit_mode(GGameWindow *self) {
   return self->edit_mode_enabled;
 }
 
-static void ggame_window_set_action_enabled(GActionMap *map, const char *name, gboolean enabled) {
-  g_return_if_fail(map != NULL);
-  g_return_if_fail(name != NULL);
-
-  GAction *action = g_action_map_lookup_action(map, name);
-  if (action == NULL) {
-    g_debug("Missing action while toggling enabled state: %s", name);
-    return;
-  }
-
-  if (!G_IS_SIMPLE_ACTION(action)) {
-    g_debug("Unsupported non-simple action while toggling enabled state: %s", name);
-    return;
-  }
-
-  g_simple_action_set_enabled(G_SIMPLE_ACTION(action), enabled);
-}
-
 static void ggame_window_sync_mode_ui(GGameWindow *self) {
   const GGameAppProfile *profile = ggame_window_get_profile(self);
-  gboolean supports_save_position = FALSE;
   gboolean supports_analysis = FALSE;
   gboolean supports_edit_mode = FALSE;
 
   g_return_if_fail(GGAME_IS_WINDOW(self));
   g_return_if_fail(profile != NULL);
 
-  supports_save_position = profile->features.supports_save_position;
   supports_analysis = profile->features.supports_analysis;
   supports_edit_mode = profile->features.supports_edit_mode;
 
   gboolean allow_navigation = !self->edit_mode_enabled && !self->puzzle_mode;
-  gboolean allow_sgf_file_actions = !self->puzzle_mode;
-  gboolean allow_view_actions = !self->puzzle_mode;
   gboolean allow_edit_mode_selection = supports_edit_mode && !self->puzzle_mode;
-
-  ggame_window_set_action_enabled(G_ACTION_MAP(self), "game-force-move", allow_navigation);
-  ggame_window_set_action_enabled(G_ACTION_MAP(self), "navigation-rewind", allow_navigation);
-  ggame_window_set_action_enabled(G_ACTION_MAP(self), "navigation-step-backward", allow_navigation);
-  ggame_window_set_action_enabled(G_ACTION_MAP(self), "navigation-step-forward", allow_navigation);
-  ggame_window_set_action_enabled(G_ACTION_MAP(self), "navigation-step-forward-to-branch", allow_navigation);
-  ggame_window_set_action_enabled(G_ACTION_MAP(self), "navigation-step-forward-to-end", allow_navigation);
-  ggame_window_set_action_enabled(G_ACTION_MAP(self), "sgf-delete-node", allow_navigation);
-  ggame_window_set_action_enabled(G_ACTION_MAP(self), "sgf-load", allow_sgf_file_actions);
-  ggame_window_set_action_enabled(G_ACTION_MAP(self), "sgf-save-as", allow_sgf_file_actions);
-  ggame_window_set_action_enabled(G_ACTION_MAP(self),
-                                  "sgf-save-position",
-                                  allow_sgf_file_actions && supports_save_position);
-  ggame_window_set_action_enabled(G_ACTION_MAP(self), "view-show-navigation-drawer", allow_view_actions);
-  ggame_window_set_action_enabled(G_ACTION_MAP(self),
-                                  "view-show-analysis-drawer",
-                                  allow_view_actions && supports_analysis);
-  ggame_window_set_action_enabled(G_ACTION_MAP(self),
-                                  "view-show-move-report",
-                                  allow_view_actions &&
-                                  self->profile != NULL &&
-                                  self->profile->ui.set_move_report_enabled != NULL);
 
   if (self->analysis_graph != NULL) {
     GtkWidget *graph_widget = analysis_graph_get_widget(self->analysis_graph);
@@ -5174,79 +5062,12 @@ static void ggame_window_on_sgf_node_changed(GGameSgfController * /*controller*/
   ggame_window_refresh_analysis_graph(self);
 }
 
-static void ggame_window_on_analysis_graph_node_activated(AnalysisGraph * /*graph*/,
-                                                              const SgfNode *node,
-                                                              gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(node != NULL);
-}
-
-static void ggame_window_on_force_move_action(GSimpleAction * /*action*/,
-                                                  GVariant * /*parameter*/,
-                                                  gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-}
-
-static void ggame_window_on_game_information_action(GSimpleAction * /*action*/,
-                                                    GVariant * /*parameter*/,
-                                                    gpointer /*user_data*/) {
-}
-
-static void ggame_window_on_library_action(GSimpleAction * /*action*/,
-                                           GVariant * /*parameter*/,
-                                           gpointer /*user_data*/) {
-}
-
 static void ggame_window_on_puzzle_next_clicked(GtkButton * /*button*/, gpointer user_data) {
   GGameWindow *self = GGAME_WINDOW(user_data);
   g_return_if_fail(GGAME_IS_WINDOW(self));
 }
 
 static void ggame_window_on_puzzle_analyze_clicked(GtkButton * /*button*/, gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-}
-
-static void ggame_window_on_sgf_rewind(GSimpleAction * /*action*/,
-                                           GVariant * /*parameter*/,
-                                           gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-}
-
-static void ggame_window_on_sgf_step_backward(GSimpleAction * /*action*/,
-                                                  GVariant * /*parameter*/,
-                                                  gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-}
-
-static void ggame_window_on_sgf_step_forward(GSimpleAction * /*action*/,
-                                                 GVariant * /*parameter*/,
-                                                 gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-}
-
-static void ggame_window_on_sgf_step_forward_to_branch(GSimpleAction * /*action*/,
-                                                           GVariant * /*parameter*/,
-                                                           gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-}
-
-static void ggame_window_on_sgf_step_forward_to_end(GSimpleAction * /*action*/,
-                                                        GVariant * /*parameter*/,
-                                                        gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-}
-
-static void ggame_window_on_sgf_delete_node(GSimpleAction * /*action*/,
-                                            GVariant * /*parameter*/,
-                                            gpointer user_data) {
   GGameWindow *self = GGAME_WINDOW(user_data);
   g_return_if_fail(GGAME_IS_WINDOW(self));
 }
@@ -5555,109 +5376,6 @@ static void ggame_window_init(GGameWindow *self) {
   ggame_window_analysis_reset_runtime_state(self);
   self->applied_ruleset = PLAYER_RULESET_INTERNATIONAL;
 
-  static const GActionEntry window_actions[] = {
-      {
-          .name = "game-force-move",
-          .activate = ggame_window_on_force_move_action,
-          .parameter_type = NULL,
-          .state = NULL,
-          .change_state = NULL,
-          .padding = {0},
-      },
-      {
-          .name = "game-information",
-          .activate = ggame_window_on_game_information_action,
-          .parameter_type = NULL,
-          .state = NULL,
-          .change_state = NULL,
-          .padding = {0},
-      },
-      {
-          .name = "library",
-          .activate = ggame_window_on_library_action,
-          .parameter_type = NULL,
-          .state = NULL,
-          .change_state = NULL,
-          .padding = {0},
-      },
-      {
-          .name = "navigation-rewind",
-          .activate = ggame_window_on_sgf_rewind,
-          .parameter_type = NULL,
-          .state = NULL,
-          .change_state = NULL,
-          .padding = {0},
-      },
-      {
-          .name = "navigation-step-backward",
-          .activate = ggame_window_on_sgf_step_backward,
-          .parameter_type = NULL,
-          .state = NULL,
-          .change_state = NULL,
-          .padding = {0},
-      },
-      {
-          .name = "navigation-step-forward",
-          .activate = ggame_window_on_sgf_step_forward,
-          .parameter_type = NULL,
-          .state = NULL,
-          .change_state = NULL,
-          .padding = {0},
-      },
-      {
-          .name = "navigation-step-forward-to-branch",
-          .activate = ggame_window_on_sgf_step_forward_to_branch,
-          .parameter_type = NULL,
-          .state = NULL,
-          .change_state = NULL,
-          .padding = {0},
-      },
-      {
-          .name = "navigation-step-forward-to-end",
-          .activate = ggame_window_on_sgf_step_forward_to_end,
-          .parameter_type = NULL,
-          .state = NULL,
-          .change_state = NULL,
-          .padding = {0},
-      },
-      {
-          .name = "sgf-delete-node",
-          .activate = ggame_window_on_sgf_delete_node,
-          .parameter_type = NULL,
-          .state = NULL,
-          .change_state = NULL,
-          .padding = {0},
-      },
-      {
-          .name = "view-show-navigation-drawer",
-          .activate = NULL,
-          .parameter_type = NULL,
-          .state = "true",
-          .change_state = ggame_window_on_show_navigation_drawer_change_state,
-          .padding = {0},
-      },
-      {
-          .name = "view-show-analysis-drawer",
-          .activate = NULL,
-          .parameter_type = NULL,
-          .state = "true",
-          .change_state = ggame_window_on_show_analysis_drawer_change_state,
-          .padding = {0},
-      },
-      {
-          .name = "view-show-move-report",
-          .activate = NULL,
-          .parameter_type = NULL,
-          .state = "true",
-          .change_state = ggame_window_on_show_move_report_change_state,
-          .padding = {0},
-      },
-  };
-  g_action_map_add_action_entries(G_ACTION_MAP(self),
-                                  window_actions,
-                                  G_N_ELEMENTS(window_actions),
-                                  self);
-  ggame_window_install_sgf_file_actions(self);
   ggame_window_sync_title(self);
   gint default_width = 0;
   gint default_height = 0;
@@ -5909,10 +5627,6 @@ static void ggame_window_init(GGameWindow *self) {
 
   GtkWidget *graph_widget = analysis_graph_get_widget(self->analysis_graph);
   g_return_if_fail(graph_widget != NULL);
-  g_signal_connect(self->analysis_graph,
-                   "node-activated",
-                   G_CALLBACK(ggame_window_on_analysis_graph_node_activated),
-                   self);
   g_object_set_data(G_OBJECT(self), "analysis-graph", self->analysis_graph);
   gtk_box_append(GTK_BOX(analysis_panel), graph_widget);
 
@@ -5972,7 +5686,6 @@ static void ggame_window_init(GGameWindow *self) {
   self->puzzle_number = 0;
   self->puzzle_attempt_started = FALSE;
   self->puzzle_attempt_made_player_move = FALSE;
-  ggame_window_sync_drawer_action_states(self);
   ggame_window_sync_drawer_ui_with_capture(self, FALSE);
   ggame_window_sync_puzzle_ui(self);
   ggame_window_sync_mode_ui(self);
