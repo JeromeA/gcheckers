@@ -3083,171 +3083,38 @@ static void ggame_window_sync_side_labels(GGameWindow *self) {
   player_controls_panel_set_side_labels(self->controls_panel, side0_label, side1_label);
 }
 
-static GGameApplication *ggame_window_get_application_instance(GGameWindow *self) {
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), NULL);
-
-  GtkApplication *app = gtk_window_get_application(GTK_WINDOW(self));
-  if (!GGAME_IS_APPLICATION(app)) {
-    return NULL;
-  }
-
-  return GGAME_APPLICATION(app);
-}
-
-static void ggame_window_request_puzzle_progress_flush(GGameWindow *self) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  GGameApplication *app = ggame_window_get_application_instance(self);
-  if (app == NULL) {
-    return;
-  }
-
-  ggame_application_request_puzzle_progress_flush(app);
-}
-
 static gboolean ggame_window_puzzle_attempt_is_terminal(GGameWindow *self) {
   g_return_val_if_fail(GGAME_IS_WINDOW(self), FALSE);
 
-  if (!self->puzzle_attempt_started) {
-    return FALSE;
-  }
-
-  return ggame_puzzle_attempt_record_is_resolved(&self->puzzle_attempt);
-}
-
-static gboolean ggame_window_puzzle_attempt_store_update(GGameWindow *self, gboolean append_record) {
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), FALSE);
-
-  if (self->puzzle_progress_store == NULL) {
-    return FALSE;
-  }
-
-  g_autoptr(GError) error = NULL;
-  gboolean ok = append_record
-                    ? ggame_puzzle_progress_store_append_attempt(self->puzzle_progress_store,
-                                                                    &self->puzzle_attempt,
-                                                                    &error)
-                    : ggame_puzzle_progress_store_replace_attempt(self->puzzle_progress_store,
-                                                                     &self->puzzle_attempt,
-                                                                     &error);
-  if (!ok) {
-    g_debug("Failed to persist puzzle attempt: %s", error != NULL ? error->message : "unknown error");
-  }
-  return ok;
+  return FALSE;
 }
 
 static gboolean ggame_window_puzzle_attempt_ensure_started(GGameWindow *self) {
-  const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   g_return_val_if_fail(GGAME_IS_WINDOW(self), FALSE);
-  g_return_val_if_fail(backend != NULL, FALSE);
-  g_return_val_if_fail(backend->id != NULL, FALSE);
 
-  if (self->puzzle_attempt_started) {
-    return TRUE;
-  }
-  if (self->puzzle_progress_store == NULL) {
-    g_debug("Puzzle progress storage unavailable; attempt will not be persisted");
-    return FALSE;
-  }
-  if (self->puzzle_path == NULL || self->puzzle_path[0] == '\0') {
-    g_debug("Cannot start puzzle attempt without a puzzle path");
-    return FALSE;
-  }
-
-  const char *variant_key = self->puzzle_variant_key != NULL ? self->puzzle_variant_key : "default";
-  self->puzzle_attempt = (GGamePuzzleAttemptRecord){
-      .attempt_id = g_uuid_string_random(),
-      .puzzle_number = self->puzzle_number,
-      .puzzle_source_name = g_path_get_basename(self->puzzle_path),
-      .puzzle_variant = g_strdup(variant_key),
-      .attacker_side = self->puzzle_attacker_side,
-      .started_unix_ms = g_get_real_time() / 1000,
-      .finished_unix_ms = 0,
-      .result = GGAME_PUZZLE_ATTEMPT_RESULT_UNRESOLVED,
-      .failure_on_first_move = FALSE,
-      .has_failed_first_move = FALSE,
-      .first_reported_unix_ms = 0,
-      .report_count = 0,
-  };
-
-  g_autofree char *basename = g_path_get_basename(self->puzzle_path);
-  if (basename == NULL || variant_key == NULL) {
-    ggame_window_puzzle_attempt_reset(self);
-    return FALSE;
-  }
-  self->puzzle_attempt.puzzle_id = self->puzzle_variant != NULL
-                                       ? g_strdup_printf("%s/%s/%s", backend->id, variant_key, basename)
-                                       : g_strdup_printf("%s/%s", backend->id, basename);
-
-  if (!ggame_window_puzzle_attempt_store_update(self, TRUE)) {
-    ggame_window_puzzle_attempt_reset(self);
-    return FALSE;
-  }
-
-  self->puzzle_attempt_started = TRUE;
-  self->puzzle_attempt_made_player_move = FALSE;
-  return TRUE;
+  return FALSE;
 }
 
 static gboolean ggame_window_puzzle_attempt_finish_success(GGameWindow *self) {
   g_return_val_if_fail(GGAME_IS_WINDOW(self), FALSE);
 
-  if (!self->puzzle_attempt_started || ggame_window_puzzle_attempt_is_terminal(self)) {
-    return FALSE;
-  }
-
-  self->puzzle_attempt.finished_unix_ms = g_get_real_time() / 1000;
-  self->puzzle_attempt.result = GGAME_PUZZLE_ATTEMPT_RESULT_SUCCESS;
-  if (!ggame_window_puzzle_attempt_store_update(self, FALSE)) {
-    return FALSE;
-  }
-
-  ggame_window_request_puzzle_progress_flush(self);
-  return TRUE;
+  return FALSE;
 }
 
 static gboolean ggame_window_puzzle_attempt_finish_failure(GGameWindow *self,
                                                                gboolean failure_on_first_move,
                                                                gconstpointer failed_first_move) {
   g_return_val_if_fail(GGAME_IS_WINDOW(self), FALSE);
-
-  if (!self->puzzle_attempt_started || ggame_window_puzzle_attempt_is_terminal(self)) {
-    return FALSE;
-  }
-
-  self->puzzle_attempt.finished_unix_ms = g_get_real_time() / 1000;
-  self->puzzle_attempt.result = GGAME_PUZZLE_ATTEMPT_RESULT_FAILURE;
-  self->puzzle_attempt.failure_on_first_move = failure_on_first_move;
-  self->puzzle_attempt.has_failed_first_move = failure_on_first_move && failed_first_move != NULL;
-  if (self->puzzle_attempt.has_failed_first_move) {
-    char notation[128] = {0};
-    if (!sgf_move_props_format_notation(failed_first_move, notation, sizeof(notation), NULL)) {
-      g_debug("Failed to format failed first move for puzzle progress");
-      self->puzzle_attempt.has_failed_first_move = FALSE;
-    } else {
-      g_free(self->puzzle_attempt.failed_first_move_text);
-      self->puzzle_attempt.failed_first_move_text = g_strdup(notation);
-    }
-  }
-  if (!ggame_window_puzzle_attempt_store_update(self, FALSE)) {
-    return FALSE;
-  }
-
-  ggame_window_request_puzzle_progress_flush(self);
-  return TRUE;
+  (void)failure_on_first_move;
+  (void)failed_first_move;
+  return FALSE;
 }
 
 static void ggame_window_puzzle_attempt_reset(GGameWindow *self) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
 
-  if (!self->puzzle_attempt_started && self->puzzle_attempt.attempt_id == NULL &&
-      self->puzzle_attempt.puzzle_id == NULL && self->puzzle_attempt.puzzle_source_name == NULL) {
-    return;
-  }
-
   self->puzzle_attempt_started = FALSE;
   self->puzzle_attempt_made_player_move = FALSE;
-  ggame_puzzle_attempt_record_clear(&self->puzzle_attempt);
 }
 
 static gboolean ggame_window_analysis_depth_valid(guint depth) {
@@ -3314,38 +3181,11 @@ static void ggame_window_sync_board_orientation(GGameWindow *self) {
   board_view_set_bottom_side(self->board_view, bottom_color);
 }
 
-static gboolean ggame_window_puzzle_name_matches(const char *name) {
-  g_return_val_if_fail(name != NULL, FALSE);
-
-  return (g_str_has_prefix(name, "puzzle-") || g_str_has_prefix(name, "puzzles-")) &&
-         g_str_has_suffix(name, ".sgf");
-}
-
 static gboolean ggame_window_parse_puzzle_number_from_path(const char *path, guint *out_number) {
   g_return_val_if_fail(path != NULL, FALSE);
   g_return_val_if_fail(out_number != NULL, FALSE);
 
-  g_autofree char *name = g_path_get_basename(path);
-  g_return_val_if_fail(name != NULL, FALSE);
-
-  if (!ggame_window_puzzle_name_matches(name)) {
-    return FALSE;
-  }
-
-  const char *dash = strrchr(name, '-');
-  const char *dot = strrchr(name, '.');
-  if (dash == NULL || dot == NULL || dot <= dash + 1) {
-    return FALSE;
-  }
-
-  g_autofree char *number_text = g_strndup(dash + 1, (gsize)(dot - dash - 1));
-  char *end_ptr = NULL;
-  guint64 number = g_ascii_strtoull(number_text, &end_ptr, 10);
-  if (end_ptr == number_text || (end_ptr != NULL && *end_ptr != '\0') || number > G_MAXUINT) {
-    return FALSE;
-  }
-
-  *out_number = (guint)number;
+  *out_number = 0;
   return TRUE;
 }
 
@@ -3358,105 +3198,12 @@ static void ggame_window_puzzle_step_free(GGameWindowPuzzleStep *step) {
   g_free(step);
 }
 
-static GGameWindowPuzzleStep *ggame_window_puzzle_step_new(const GameBackend *backend,
-                                                           guint side,
-                                                           gconstpointer move) {
-  g_return_val_if_fail(backend != NULL, NULL);
-  g_return_val_if_fail(backend->move_size > 0, NULL);
-  g_return_val_if_fail(move != NULL, NULL);
-
-  GGameWindowPuzzleStep *step = g_new0(GGameWindowPuzzleStep, 1);
-  step->side = side;
-  step->move = g_memdup2(move, backend->move_size);
-  return step;
-}
-
 static gboolean ggame_window_load_puzzle_steps_from_tree(GGameWindow *self, SgfTree *tree, GPtrArray *out_steps) {
-  const GameBackend *backend = NULL;
-  const GameBackendVariant *variant = NULL;
-  gconstpointer root_position = NULL;
-  guint8 *position = NULL;
-  gboolean ok = FALSE;
-
   g_return_val_if_fail(GGAME_IS_WINDOW(self), FALSE);
   g_return_val_if_fail(SGF_IS_TREE(tree), FALSE);
   g_return_val_if_fail(out_steps != NULL, FALSE);
 
-  backend = ggame_window_get_game_backend(self);
-  variant = ggame_window_get_variant(self);
-  root_position = ggame_window_get_game_position(self);
-  g_return_val_if_fail(backend != NULL, FALSE);
-  g_return_val_if_fail(root_position != NULL, FALSE);
-  g_return_val_if_fail(backend->position_size > 0, FALSE);
-  g_return_val_if_fail(backend->move_size > 0, FALSE);
-  g_return_val_if_fail(backend->position_init != NULL, FALSE);
-  g_return_val_if_fail(backend->position_copy != NULL, FALSE);
-  g_return_val_if_fail(backend->position_clear != NULL, FALSE);
-  g_return_val_if_fail(backend->position_turn != NULL, FALSE);
-  g_return_val_if_fail(backend->apply_move != NULL, FALSE);
-  g_return_val_if_fail(backend->sgf_color_for_side != NULL, FALSE);
-
-  const SgfNode *node = sgf_tree_get_root(tree);
-  g_return_val_if_fail(node != NULL, FALSE);
-
-  position = g_malloc0(backend->position_size);
-  backend->position_init(position, variant);
-  backend->position_copy(position, root_position);
-
-  while (TRUE) {
-    const GPtrArray *children = sgf_node_get_children(node);
-    if (children == NULL || children->len == 0) {
-      ok = out_steps->len > 0;
-      break;
-    }
-
-    node = g_ptr_array_index((GPtrArray *)children, 0);
-    if (node == NULL) {
-      g_debug("Puzzle main line child node was missing");
-      break;
-    }
-
-    SgfColor sgf_color = SGF_COLOR_NONE;
-    g_autofree guint8 *move = g_malloc0(backend->move_size);
-    gboolean has_move = FALSE;
-    g_autoptr(GError) error = NULL;
-    if (!sgf_move_props_try_parse_node(node, &sgf_color, move, &has_move, &error)) {
-      g_debug("Failed to parse puzzle node move: %s", error != NULL ? error->message : "unknown error");
-      break;
-    }
-    if (!has_move) {
-      g_debug("Puzzle main line node was missing a move");
-      break;
-    }
-
-    if (sgf_color != SGF_COLOR_BLACK && sgf_color != SGF_COLOR_WHITE) {
-      g_debug("Puzzle main line node had unexpected color");
-      break;
-    }
-
-    guint side = backend->position_turn(position);
-    SgfColor expected_color = backend->sgf_color_for_side(side);
-    if (expected_color == SGF_COLOR_NONE || sgf_color != expected_color) {
-      g_debug("Puzzle main line move color did not match side to move");
-      break;
-    }
-
-    GGameWindowPuzzleStep *step = ggame_window_puzzle_step_new(backend, side, move);
-    if (step == NULL) {
-      g_debug("Failed to allocate puzzle step");
-      break;
-    }
-    g_ptr_array_add(out_steps, step);
-
-    if (!backend->apply_move(position, move)) {
-      g_debug("Puzzle main line move could not be replayed");
-      break;
-    }
-  }
-
-  backend->position_clear(position);
-  g_free(position);
-  return ok;
+  return FALSE;
 }
 
 static void ggame_window_set_puzzle_message(GGameWindow *self, const char *message) {
