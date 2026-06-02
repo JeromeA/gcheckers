@@ -4635,23 +4635,6 @@ static gboolean ggame_window_apply_player_move(gconstpointer move, gpointer user
   return TRUE;
 }
 
-static gboolean ggame_window_is_user_control(GGameWindow *self, guint side) {
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), FALSE);
-
-  if (!self->controls_panel) {
-    g_debug("Missing controls panel when checking control mode\n");
-    return TRUE;
-  }
-
-  return player_controls_panel_is_user_control(self->controls_panel, side);
-}
-
-static gboolean ggame_window_is_computer_control(GGameWindow *self, guint side) {
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), FALSE);
-
-  return !ggame_window_is_user_control(self, side);
-}
-
 guint ggame_window_get_analysis_depth(GGameWindow *self) {
   g_return_val_if_fail(GGAME_IS_WINDOW(self), GGAME_WINDOW_ANALYSIS_DEPTH_DEFAULT);
   g_return_val_if_fail(self->analysis_depth_scale != NULL, GGAME_WINDOW_ANALYSIS_DEPTH_DEFAULT);
@@ -4987,70 +4970,6 @@ static void ggame_window_update_status(GGameWindow *self) {
   }
 }
 
-static gboolean ggame_window_auto_force_move_cb(gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), G_SOURCE_REMOVE);
-
-  self->auto_move_source_id = 0;
-  ggame_window_force_move(self);
-  return G_SOURCE_REMOVE;
-}
-
-static void ggame_window_schedule_auto_force_move(GGameWindow *self) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  if (self->auto_move_source_id != 0) {
-    return;
-  }
-
-  self->auto_move_source_id = g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,
-                                              ggame_window_auto_force_move_cb,
-                                              g_object_ref(self),
-                                              (GDestroyNotify)g_object_unref);
-}
-
-static void ggame_window_maybe_trigger_auto_move(GGameWindow *self) {
-  const GameBackend *backend = NULL;
-  gconstpointer position = NULL;
-
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  if (ggame_window_is_edit_mode(self)) {
-    return;
-  }
-  if (self->puzzle_mode) {
-    return;
-  }
-
-  if (!self->sgf_controller) {
-    g_debug("Missing SGF controller for auto move\n");
-    return;
-  }
-  if (ggame_sgf_controller_is_replaying(self->sgf_controller)) {
-    return;
-  }
-
-  backend = ggame_window_get_game_backend(self);
-  position = ggame_window_get_game_position(self);
-  if (backend == NULL || position == NULL) {
-    return;
-  }
-  g_return_if_fail(backend->position_outcome != NULL);
-  g_return_if_fail(backend->position_turn != NULL);
-
-  if (backend->position_outcome(position) != GAME_BACKEND_OUTCOME_ONGOING) {
-    return;
-  }
-
-  guint side = backend->position_turn(position);
-  if (!ggame_window_is_computer_control(self, side)) {
-    return;
-  }
-
-  ggame_window_schedule_auto_force_move(self);
-}
-
 static void ggame_window_on_state_changed(GGameModel *model, gpointer user_data) {
   GGameWindow *self = GGAME_WINDOW(user_data);
 
@@ -5060,7 +4979,6 @@ static void ggame_window_on_state_changed(GGameModel *model, gpointer user_data)
   ggame_window_sync_board_orientation(self);
   ggame_window_update_status(self);
   ggame_window_update_control_state(self);
-  ggame_window_maybe_trigger_auto_move(self);
   ggame_window_refresh_analysis_graph(self);
 }
 
@@ -5262,14 +5180,6 @@ static void ggame_window_on_analysis_graph_node_activated(AnalysisGraph * /*grap
   GGameWindow *self = GGAME_WINDOW(user_data);
   g_return_if_fail(GGAME_IS_WINDOW(self));
   g_return_if_fail(node != NULL);
-
-  if (ggame_window_is_edit_mode(self)) {
-    return;
-  }
-
-  if (!ggame_sgf_controller_select_node(self->sgf_controller, node)) {
-    g_debug("Failed to select SGF node from analysis graph");
-  }
 }
 
 static void ggame_window_on_force_move_action(GSimpleAction * /*action*/,
@@ -5277,8 +5187,6 @@ static void ggame_window_on_force_move_action(GSimpleAction * /*action*/,
                                                   gpointer user_data) {
   GGameWindow *self = GGAME_WINDOW(user_data);
   g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  ggame_window_force_move(self);
 }
 
 static void ggame_window_on_game_information_action(GSimpleAction * /*action*/,
@@ -5305,96 +5213,42 @@ static void ggame_window_on_sgf_rewind(GSimpleAction * /*action*/,
                                            GVariant * /*parameter*/,
                                            gpointer user_data) {
   GGameWindow *self = GGAME_WINDOW(user_data);
-
   g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self->sgf_controller));
-  if (ggame_window_is_edit_mode(self)) {
-    return;
-  }
-
-  if (!ggame_sgf_controller_rewind_to_start(self->sgf_controller)) {
-    g_debug("SGF rewind ignored");
-  }
 }
 
 static void ggame_window_on_sgf_step_backward(GSimpleAction * /*action*/,
                                                   GVariant * /*parameter*/,
                                                   gpointer user_data) {
   GGameWindow *self = GGAME_WINDOW(user_data);
-
   g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self->sgf_controller));
-  if (ggame_window_is_edit_mode(self)) {
-    return;
-  }
-
-  if (!ggame_sgf_controller_step_backward(self->sgf_controller)) {
-    g_debug("SGF step backward ignored");
-  }
 }
 
 static void ggame_window_on_sgf_step_forward(GSimpleAction * /*action*/,
                                                  GVariant * /*parameter*/,
                                                  gpointer user_data) {
   GGameWindow *self = GGAME_WINDOW(user_data);
-
   g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self->sgf_controller));
-  if (ggame_window_is_edit_mode(self)) {
-    return;
-  }
-
-  if (!ggame_sgf_controller_step_forward(self->sgf_controller)) {
-    g_debug("SGF step forward ignored");
-  }
 }
 
 static void ggame_window_on_sgf_step_forward_to_branch(GSimpleAction * /*action*/,
                                                            GVariant * /*parameter*/,
                                                            gpointer user_data) {
   GGameWindow *self = GGAME_WINDOW(user_data);
-
   g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self->sgf_controller));
-  if (ggame_window_is_edit_mode(self)) {
-    return;
-  }
-
-  if (!ggame_sgf_controller_step_forward_to_branch(self->sgf_controller)) {
-    g_debug("SGF step forward to branch ignored");
-  }
 }
 
 static void ggame_window_on_sgf_step_forward_to_end(GSimpleAction * /*action*/,
                                                         GVariant * /*parameter*/,
                                                         gpointer user_data) {
   GGameWindow *self = GGAME_WINDOW(user_data);
-
   g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self->sgf_controller));
-  if (ggame_window_is_edit_mode(self)) {
-    return;
-  }
-
-  if (!ggame_sgf_controller_step_forward_to_end(self->sgf_controller)) {
-    g_debug("SGF step forward to end ignored");
-  }
 }
 
 static void ggame_window_on_sgf_delete_node(GSimpleAction * /*action*/,
                                             GVariant * /*parameter*/,
                                             gpointer user_data) {
   GGameWindow *self = GGAME_WINDOW(user_data);
-
   g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self->sgf_controller));
-  if (ggame_window_is_edit_mode(self)) {
-    return;
-  }
-
-  if (!ggame_sgf_controller_delete_current_node(self->sgf_controller)) {
-    g_debug("SGF delete node ignored");
-  }
 }
 
 static GtkWidget *ggame_window_new_toolbar_action_button(const char *icon_name,
@@ -5408,48 +5262,6 @@ static GtkWidget *ggame_window_new_toolbar_action_button(const char *icon_name,
   gtk_widget_set_tooltip_text(button, tooltip_text);
   gtk_actionable_set_action_name(GTK_ACTIONABLE(button), action_name);
   return button;
-}
-
-void ggame_window_force_move(GGameWindow *self) {
-  const GameBackend *backend = NULL;
-  gconstpointer position = NULL;
-  guint configured_depth = 0;
-  g_autofree guint8 *move = NULL;
-
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  if (self->puzzle_mode) {
-    g_debug("Ignoring forced move in puzzle mode");
-    return;
-  }
-
-  if (ggame_window_is_edit_mode(self)) {
-    return;
-  }
-
-  backend = ggame_window_get_game_backend(self);
-  position = ggame_window_get_game_position(self);
-  if (backend == NULL || position == NULL) {
-    return;
-  }
-  g_return_if_fail(backend->position_outcome != NULL);
-
-  if (backend->position_outcome(position) != GAME_BACKEND_OUTCOME_ONGOING) {
-    g_debug("Ignoring forced move after game end\n");
-    return;
-  }
-  if (ggame_sgf_controller_is_replaying(self->sgf_controller)) {
-    g_debug("Ignoring forced move while replaying SGF\n");
-    return;
-  }
-
-  g_return_if_fail(self->controls_panel != NULL);
-  configured_depth = player_controls_panel_get_computer_depth(self->controls_panel);
-  move = g_malloc0(backend->move_size);
-  g_return_if_fail(move != NULL);
-  if (!ggame_sgf_controller_step_ai_move(self->sgf_controller, configured_depth, move)) {
-    g_debug("Failed to choose a forced move for the active backend");
-  }
 }
 
 const GameBackendVariant *ggame_window_get_variant(GGameWindow *self) {
