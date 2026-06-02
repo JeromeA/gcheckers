@@ -1905,13 +1905,7 @@ static void ggame_window_init(GGameWindow *self) {
   gtk_box_append(GTK_BOX(sgf_mode_row), GTK_WIDGET(self->sgf_mode_control));
   gtk_box_append(GTK_BOX(middle_panel), sgf_mode_row);
 
-  gboolean square_board = self->profile != NULL && self->profile->backend != NULL &&
-                          self->profile->backend->supports_square_grid_board;
-  self->sgf_controller = ggame_sgf_controller_new(square_board ? self->board_view : NULL);
-  if (square_board) {
-    board_view_set_sgf_controller(self->board_view, self->sgf_controller);
-    board_view_set_move_handler(self->board_view, ggame_window_apply_player_move, self);
-  }
+  self->sgf_controller = ggame_sgf_controller_new(NULL);
   self->analysis_graph = analysis_graph_new();
   GtkWidget *sgf_widget = ggame_sgf_controller_get_widget(self->sgf_controller);
   g_return_if_fail(sgf_widget != NULL);
