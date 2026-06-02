@@ -1475,16 +1475,6 @@ static void ggame_window_on_sgf_node_changed(GGameSgfController * /*controller*/
   ggame_window_sync_board_host_node(self, node);
 }
 
-static void ggame_window_on_puzzle_next_clicked(GtkButton * /*button*/, gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-}
-
-static void ggame_window_on_puzzle_analyze_clicked(GtkButton * /*button*/, gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-}
-
 static GtkWidget *ggame_window_new_toolbar_action_button(const char *icon_name,
                                                              const char *tooltip_text,
                                                              const char *action_name) {
@@ -1846,19 +1836,11 @@ static void ggame_window_init(GGameWindow *self) {
   gtk_box_append(GTK_BOX(puzzle_panel), puzzle_button_row);
 
   GtkWidget *puzzle_next_button = gtk_button_new_with_label("Next puzzle");
-  g_signal_connect(puzzle_next_button,
-                   "clicked",
-                   G_CALLBACK(ggame_window_on_puzzle_next_clicked),
-                   self);
   gtk_box_append(GTK_BOX(puzzle_button_row), puzzle_next_button);
   self->puzzle_next_button = GTK_BUTTON(puzzle_next_button);
   g_object_set_data(G_OBJECT(self), "puzzle-next-button", puzzle_next_button);
 
   GtkWidget *puzzle_analyze_button = gtk_button_new_with_label("Analyze");
-  g_signal_connect(puzzle_analyze_button,
-                   "clicked",
-                   G_CALLBACK(ggame_window_on_puzzle_analyze_clicked),
-                   self);
   gtk_box_append(GTK_BOX(puzzle_button_row), puzzle_analyze_button);
   self->puzzle_analyze_button = GTK_BUTTON(puzzle_analyze_button);
   g_object_set_data(G_OBJECT(self), "puzzle-analyze-button", puzzle_analyze_button);
