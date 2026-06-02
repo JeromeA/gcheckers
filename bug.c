@@ -484,23 +484,6 @@ static gboolean homeworlds_backend_apply_move(gpointer position, gconstpointer m
   return homeworlds_position_apply_move(homeworlds_position, homeworlds_move);
 }
 
-static gboolean homeworlds_backend_format_move(gconstpointer move, char *buffer, gsize size) {
-  const HomeworldsMove *homeworlds_move = move;
-
-  g_return_val_if_fail(homeworlds_move != NULL, FALSE);
-
-  return homeworlds_move_format(homeworlds_move, buffer, size);
-}
-
-static gboolean homeworlds_backend_parse_move(const char *notation, gpointer out_move) {
-  HomeworldsMove *homeworlds_move = out_move;
-
-  g_return_val_if_fail(notation != NULL, FALSE);
-  g_return_val_if_fail(homeworlds_move != NULL, FALSE);
-
-  return homeworlds_move_parse(notation, homeworlds_move);
-}
-
 const GameBackend homeworlds_game_backend = {
   .id = "homeworlds",
   .display_name = "Homeworlds",
@@ -529,8 +512,6 @@ const GameBackend homeworlds_game_backend = {
   .move_builder_build_move = (gboolean (*)(const GameBackendMoveBuilder *, gpointer))
       homeworlds_move_builder_build_move,
   .apply_move = homeworlds_backend_apply_move,
-  .format_move = homeworlds_backend_format_move,
-  .parse_move = homeworlds_backend_parse_move,
   .sgf_apply_setup_node = homeworlds_sgf_position_apply_setup_node,
   .sgf_write_position_node = homeworlds_sgf_position_write_position_node,
   .supports_square_grid_board = FALSE,
