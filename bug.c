@@ -9,7 +9,6 @@
 #include "game_app_profile.h"
 
 #include "games/homeworlds/homeworlds_backend.h"
-#include "games/homeworlds/homeworlds_view.h"
 #include "player_controls_panel.h"
 
 static const GGameAppProfile homeworlds_app_profile = {
@@ -34,12 +33,6 @@ static const GGameAppProfile homeworlds_app_profile = {
       {
           .board_game_arena_game_id = 1515,
           .show_site_step = FALSE,
-      },
-  .ui =
-      {
-          .create_board_host = homeworlds_view_create_board_host,
-          .sync_board_host_node = homeworlds_view_sync_board_host_node,
-          .set_move_report_enabled = homeworlds_view_set_board_host_move_report_enabled,
       },
   .layout =
       {
