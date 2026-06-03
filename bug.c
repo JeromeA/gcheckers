@@ -98,24 +98,6 @@ enum {
 static guint model_signals[SIGNAL_LAST] = {0};
 static GParamSpec *properties[PROP_LAST] = {0};
 
-static const GameBackendVariant *ggame_model_pick_initial_variant(const GameBackend *backend) {
-  g_return_val_if_fail(backend != NULL, NULL);
-
-  if (backend->variant_count == 0) {
-    return NULL;
-  }
-
-  g_return_val_if_fail(backend->variant_at != NULL, NULL);
-
-  return backend->variant_at(0);
-}
-
-static void ggame_model_emit_state_changed(GGameModel *self) {
-  g_return_if_fail(GGAME_IS_MODEL(self));
-
-  g_signal_emit(self, model_signals[SIGNAL_STATE_CHANGED], 0);
-}
-
 static void ggame_model_finalize(GObject *object) {
   GGameModel *self = GGAME_MODEL(object);
 
@@ -129,9 +111,6 @@ static void ggame_model_finalize(GObject *object) {
 
 static void ggame_model_constructed(GObject *object) {
   GGameModel *self = GGAME_MODEL(object);
-  gboolean has_move_list_api = FALSE;
-  gboolean has_move_builder_api = FALSE;
-  gboolean has_good_move_api = FALSE;
 
   G_OBJECT_CLASS(ggame_model_parent_class)->constructed(object);
 
@@ -139,40 +118,11 @@ static void ggame_model_constructed(GObject *object) {
   g_return_if_fail(self->backend->position_size > 0);
   g_return_if_fail(self->backend->position_init != NULL);
   g_return_if_fail(self->backend->position_clear != NULL);
-  g_return_if_fail(self->backend->apply_move != NULL);
-
-  has_move_list_api = self->backend->supports_move_list &&
-                      self->backend->list_moves != NULL &&
-                      self->backend->move_list_free != NULL &&
-                      self->backend->move_list_get != NULL &&
-                      self->backend->moves_equal != NULL;
-  has_move_builder_api = self->backend->supports_move_builder &&
-                         self->backend->move_list_free != NULL &&
-                         self->backend->move_list_get != NULL &&
-                         self->backend->moves_equal != NULL &&
-                         self->backend->move_builder_init != NULL &&
-                         self->backend->move_builder_clear != NULL &&
-                         self->backend->move_builder_list_candidates != NULL &&
-                         self->backend->move_builder_step != NULL &&
-                         self->backend->move_builder_is_complete != NULL &&
-                         self->backend->move_builder_build_move != NULL;
-  has_good_move_api = self->backend->list_good_moves != NULL &&
-                      self->backend->move_list_free != NULL &&
-                      self->backend->move_list_get != NULL &&
-                      self->backend->moves_equal != NULL;
-  g_return_if_fail(has_move_list_api || has_move_builder_api);
-  if (self->backend->supports_ai_search) {
-    g_return_if_fail(has_good_move_api);
-    g_return_if_fail(self->backend->evaluate_static != NULL);
-    g_return_if_fail(self->backend->terminal_score != NULL);
-    g_return_if_fail(self->backend->hash_position != NULL);
-  }
 
   self->position = g_malloc0(self->backend->position_size);
   g_return_if_fail(self->position != NULL);
 
-  self->variant = ggame_model_pick_initial_variant(self->backend);
-  self->backend->position_init(self->position, self->variant);
+  self->backend->position_init(self->position, NULL);
 }
 
 static void ggame_model_set_property(GObject *object, guint property_id, const GValue *value, GParamSpec *pspec) {
@@ -227,11 +177,7 @@ static void ggame_model_class_init(GGameModelClass *klass) {
                                                      0);
 }
 
-static void ggame_model_init(GGameModel *self) {
-  self->backend = NULL;
-  self->position = NULL;
-  self->variant = NULL;
-}
+static void ggame_model_init(GGameModel * /*self*/) {}
 
 GGameModel *ggame_model_new(const GameBackend *backend) {
   g_return_val_if_fail(backend != NULL, NULL);
@@ -245,87 +191,41 @@ void ggame_model_reset(GGameModel *self, const GameBackendVariant *variant_or_nu
   g_return_if_fail(self->position != NULL);
 
   self->backend->position_clear(self->position);
-  self->variant = variant_or_null != NULL ? variant_or_null : ggame_model_pick_initial_variant(self->backend);
+  self->variant = variant_or_null;
   self->backend->position_init(self->position, self->variant);
-  ggame_model_emit_state_changed(self);
+  g_signal_emit(self, model_signals[SIGNAL_STATE_CHANGED], 0);
 }
 
-gboolean ggame_model_set_position(GGameModel *self, gconstpointer position) {
+gboolean ggame_model_set_position(GGameModel *self, gconstpointer /*position*/) {
   g_return_val_if_fail(GGAME_IS_MODEL(self), FALSE);
 
-  return ggame_model_set_position_variant(self, position, self->variant);
+  g_debug("Position replacement is not available in the reproducer");
+  return FALSE;
 }
 
 gboolean ggame_model_set_position_variant(GGameModel *self,
-                                          gconstpointer position,
-                                          const GameBackendVariant *variant_or_null) {
+                                          gconstpointer /*position*/,
+                                          const GameBackendVariant * /*variant_or_null*/) {
   g_return_val_if_fail(GGAME_IS_MODEL(self), FALSE);
-  g_return_val_if_fail(self->backend != NULL, FALSE);
-  g_return_val_if_fail(self->position != NULL, FALSE);
-  g_return_val_if_fail(position != NULL, FALSE);
-  g_return_val_if_fail(self->backend->position_copy != NULL, FALSE);
 
-  self->variant = variant_or_null != NULL ? variant_or_null : ggame_model_pick_initial_variant(self->backend);
-  self->backend->position_copy(self->position, position);
-  ggame_model_emit_state_changed(self);
-  return TRUE;
+  g_debug("Position replacement is not available in the reproducer");
+  return FALSE;
 }
 
 GameBackendMoveList ggame_model_list_moves(GGameModel *self) {
   GameBackendMoveList empty = {0};
 
   g_return_val_if_fail(GGAME_IS_MODEL(self), empty);
-  g_return_val_if_fail(self->backend != NULL, empty);
-  g_return_val_if_fail(self->position != NULL, empty);
-  if (!self->backend->supports_move_list || self->backend->list_moves == NULL) {
-    g_debug("Move listing is not available for this backend");
-    return empty;
-  }
 
-  return self->backend->list_moves(self->position);
+  g_debug("Move listing is not available in the reproducer");
+  return empty;
 }
 
-gboolean ggame_model_apply_move(GGameModel *self, gconstpointer move) {
-  GameBackendMoveList moves = {0};
-  gboolean applied = FALSE;
-
+gboolean ggame_model_apply_move(GGameModel *self, gconstpointer /*move*/) {
   g_return_val_if_fail(GGAME_IS_MODEL(self), FALSE);
-  g_return_val_if_fail(self->backend != NULL, FALSE);
-  g_return_val_if_fail(self->position != NULL, FALSE);
-  g_return_val_if_fail(move != NULL, FALSE);
 
-  if (!self->backend->supports_move_list) {
-    applied = self->backend->apply_move(self->position, move);
-    if (!applied) {
-      g_debug("Backend rejected move application without move-list validation");
-      return FALSE;
-    }
-
-    ggame_model_emit_state_changed(self);
-    return TRUE;
-  }
-
-  moves = self->backend->list_moves(self->position);
-  for (gsize i = 0; i < moves.count; ++i) {
-    const void *candidate = self->backend->move_list_get(&moves, i);
-
-    if (candidate == NULL || !self->backend->moves_equal(candidate, move)) {
-      continue;
-    }
-
-    applied = self->backend->apply_move(self->position, candidate);
-    break;
-  }
-
-  self->backend->move_list_free(&moves);
-
-  if (!applied) {
-    g_debug("Attempted to apply a move that is not in the available move list");
-    return FALSE;
-  }
-
-  ggame_model_emit_state_changed(self);
-  return TRUE;
+  g_debug("Move application is not available in the reproducer");
+  return FALSE;
 }
 
 gconstpointer ggame_model_peek_position(GGameModel *self) {
@@ -358,11 +258,7 @@ char *ggame_model_format_status(GGameModel *self) {
 #include "homeworlds_backend.h"
 
 #include "homeworlds_game.h"
-#include "homeworlds_move_builder.h"
-#include "homeworlds_position_text.h"
-#include "homeworlds_sgf_position.h"
 
-#include <stdlib.h>
 #include <string.h>
 
 static const char *homeworlds_backend_side_label(guint side) {
@@ -374,20 +270,6 @@ static const char *homeworlds_backend_side_label(guint side) {
     default:
       g_debug("Unsupported Homeworlds side index");
       return "Player";
-  }
-}
-
-static const char *homeworlds_backend_outcome_banner_text(GameBackendOutcome outcome) {
-  switch (outcome) {
-    case GAME_BACKEND_OUTCOME_SIDE_0_WIN:
-      return "Player 1 wins";
-    case GAME_BACKEND_OUTCOME_SIDE_1_WIN:
-      return "Player 2 wins";
-    case GAME_BACKEND_OUTCOME_DRAW:
-      return "Draw";
-    case GAME_BACKEND_OUTCOME_ONGOING:
-    default:
-      return NULL;
   }
 }
 
@@ -419,16 +301,6 @@ static void homeworlds_backend_position_clear(gpointer position) {
   homeworlds_position_clear(homeworlds_position);
 }
 
-static void homeworlds_backend_position_copy(gpointer dest, gconstpointer src) {
-  HomeworldsPosition *dest_position = dest;
-  const HomeworldsPosition *src_position = src;
-
-  g_return_if_fail(dest_position != NULL);
-  g_return_if_fail(src_position != NULL);
-
-  homeworlds_position_copy(dest_position, src_position);
-}
-
 static GameBackendOutcome homeworlds_backend_position_outcome(gconstpointer position) {
   const HomeworldsPosition *homeworlds_position = position;
 
@@ -437,77 +309,15 @@ static GameBackendOutcome homeworlds_backend_position_outcome(gconstpointer posi
   return homeworlds_position_outcome(homeworlds_position);
 }
 
-static guint homeworlds_backend_position_turn(gconstpointer position) {
-  const HomeworldsPosition *homeworlds_position = position;
-
-  g_return_val_if_fail(homeworlds_position != NULL, 0);
-
-  return homeworlds_position_turn(homeworlds_position);
-}
-
-static void homeworlds_backend_move_list_free(GameBackendMoveList *moves) {
-  g_return_if_fail(moves != NULL);
-
-  homeworlds_move_list_free(moves);
-}
-
-static const void *homeworlds_backend_move_list_get(const GameBackendMoveList *moves, gsize index) {
-  g_return_val_if_fail(moves != NULL, NULL);
-
-  return homeworlds_move_list_get(moves, index);
-}
-
-static gboolean homeworlds_backend_moves_equal(gconstpointer left, gconstpointer right) {
-  const HomeworldsMove *left_move = left;
-  const HomeworldsMove *right_move = right;
-
-  g_return_val_if_fail(left_move != NULL, FALSE);
-  g_return_val_if_fail(right_move != NULL, FALSE);
-
-  return homeworlds_moves_equal(left_move, right_move);
-}
-
-static gboolean homeworlds_backend_apply_move(gpointer position, gconstpointer move) {
-  HomeworldsPosition *homeworlds_position = position;
-  const HomeworldsMove *homeworlds_move = move;
-
-  g_return_val_if_fail(homeworlds_position != NULL, FALSE);
-  g_return_val_if_fail(homeworlds_move != NULL, FALSE);
-
-  return homeworlds_position_apply_move(homeworlds_position, homeworlds_move);
-}
-
 const GameBackend homeworlds_game_backend = {
   .id = "homeworlds",
   .display_name = "Homeworlds",
-  .variant_count = 0,
   .position_size = sizeof(HomeworldsPosition),
-  .move_size = sizeof(HomeworldsMove),
-  .supports_move_list = FALSE,
-  .supports_move_builder = TRUE,
   .side_label = homeworlds_backend_side_label,
   .sgf_color_for_side = homeworlds_backend_sgf_color_for_side,
-  .outcome_banner_text = homeworlds_backend_outcome_banner_text,
   .position_init = homeworlds_backend_position_init,
   .position_clear = homeworlds_backend_position_clear,
-  .position_copy = homeworlds_backend_position_copy,
   .position_outcome = homeworlds_backend_position_outcome,
-  .position_turn = homeworlds_backend_position_turn,
-  .move_list_free = homeworlds_backend_move_list_free,
-  .move_list_get = homeworlds_backend_move_list_get,
-  .moves_equal = homeworlds_backend_moves_equal,
-  .move_builder_init = (gboolean (*)(gconstpointer, GameBackendMoveBuilder *)) homeworlds_move_builder_init,
-  .move_builder_clear = homeworlds_move_builder_clear,
-  .move_builder_list_candidates = (GameBackendMoveList (*)(const GameBackendMoveBuilder *))
-      homeworlds_move_builder_list_candidates,
-  .move_builder_step = (gboolean (*)(GameBackendMoveBuilder *, gconstpointer)) homeworlds_move_builder_step,
-  .move_builder_is_complete = (gboolean (*)(const GameBackendMoveBuilder *)) homeworlds_move_builder_is_complete,
-  .move_builder_build_move = (gboolean (*)(const GameBackendMoveBuilder *, gpointer))
-      homeworlds_move_builder_build_move,
-  .apply_move = homeworlds_backend_apply_move,
-  .sgf_apply_setup_node = homeworlds_sgf_position_apply_setup_node,
-  .sgf_write_position_node = homeworlds_sgf_position_write_position_node,
-  .supports_square_grid_board = FALSE,
 };
 /* End copied file: src/games/homeworlds/homeworlds_backend.c */
 
