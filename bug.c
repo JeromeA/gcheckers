@@ -9,7 +9,6 @@
 #include "game_app_profile.h"
 
 #include "games/homeworlds/homeworlds_backend.h"
-#include "player_controls_panel.h"
 
 static const GGameAppProfile homeworlds_app_profile = {
   .kind = GGAME_APP_KIND_HOMEWORLDS,
@@ -17,23 +16,7 @@ static const GGameAppProfile homeworlds_app_profile = {
   .app_id = "io.github.jeromea.ghomeworlds",
   .display_name = "Homeworlds",
   .window_title_name = "ghomeworlds",
-  .settings_schema_id = NULL,
   .backend = &homeworlds_game_backend,
-  .features =
-      {
-          .supports_ai_players = FALSE,
-          .supports_analysis = FALSE,
-          .supports_puzzles = FALSE,
-          .supports_import = FALSE,
-          .supports_settings = FALSE,
-          .supports_save_position = FALSE,
-          .supports_edit_mode = FALSE,
-      },
-  .import =
-      {
-          .board_game_arena_game_id = 1515,
-          .show_site_step = FALSE,
-      },
   .layout =
       {
           .default_board_panel_width = 960,
@@ -43,10 +26,7 @@ static const GGameAppProfile homeworlds_app_profile = {
           .show_navigation_drawer_by_default = TRUE,
           .show_analysis_drawer_by_default = FALSE,
       },
-  .default_computer_depth = PLAYER_COMPUTER_DEPTH_MIN,
 };
-
-static const GGameAppProfile *active_app_profile = &homeworlds_app_profile;
 
 const GGameAppProfile *ggame_app_profile_lookup_by_id(const char *id) {
   g_return_val_if_fail(id != NULL, NULL);
@@ -60,7 +40,7 @@ const GGameAppProfile *ggame_app_profile_lookup_by_id(const char *id) {
 }
 
 const GGameAppProfile *ggame_active_app_profile(void) {
-  return active_app_profile;
+  return &homeworlds_app_profile;
 }
 
 gboolean ggame_app_profile_supports_puzzle_catalog(const GGameAppProfile *profile) {
@@ -73,127 +53,23 @@ gboolean ggame_app_profile_supports_puzzle_catalog(const GGameAppProfile *profil
 /* Begin copied file: src/game_model.c */
 #include "game_model.h"
 
-#include <glib.h>
-
 struct _GGameModel {
   GObject parent_instance;
-  const GameBackend *backend;
-  gpointer position;
-  const GameBackendVariant *variant;
 };
 
 G_DEFINE_TYPE(GGameModel, ggame_model, G_TYPE_OBJECT)
 
-enum {
-  PROP_0,
-  PROP_BACKEND,
-  PROP_LAST,
-};
-
-enum {
-  SIGNAL_STATE_CHANGED,
-  SIGNAL_LAST,
-};
-
-static guint model_signals[SIGNAL_LAST] = {0};
-static GParamSpec *properties[PROP_LAST] = {0};
-
-static void ggame_model_finalize(GObject *object) {
-  GGameModel *self = GGAME_MODEL(object);
-
-  if (self->position != NULL && self->backend != NULL && self->backend->position_clear != NULL) {
-    self->backend->position_clear(self->position);
-  }
-  g_clear_pointer(&self->position, g_free);
-
-  G_OBJECT_CLASS(ggame_model_parent_class)->finalize(object);
-}
-
-static void ggame_model_constructed(GObject *object) {
-  GGameModel *self = GGAME_MODEL(object);
-
-  G_OBJECT_CLASS(ggame_model_parent_class)->constructed(object);
-
-  g_return_if_fail(self->backend != NULL);
-  g_return_if_fail(self->backend->position_size > 0);
-  g_return_if_fail(self->backend->position_init != NULL);
-  g_return_if_fail(self->backend->position_clear != NULL);
-
-  self->position = g_malloc0(self->backend->position_size);
-  g_return_if_fail(self->position != NULL);
-
-  self->backend->position_init(self->position, NULL);
-}
-
-static void ggame_model_set_property(GObject *object, guint property_id, const GValue *value, GParamSpec *pspec) {
-  GGameModel *self = GGAME_MODEL(object);
-
-  switch (property_id) {
-    case PROP_BACKEND:
-      self->backend = g_value_get_pointer(value);
-      break;
-    default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
-      break;
-  }
-}
-
-static void ggame_model_get_property(GObject *object, guint property_id, GValue *value, GParamSpec *pspec) {
-  GGameModel *self = GGAME_MODEL(object);
-
-  switch (property_id) {
-    case PROP_BACKEND:
-      g_value_set_pointer(value, (gpointer) self->backend);
-      break;
-    default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
-      break;
-  }
-}
-
-static void ggame_model_class_init(GGameModelClass *klass) {
-  GObjectClass *object_class = G_OBJECT_CLASS(klass);
-
-  object_class->constructed = ggame_model_constructed;
-  object_class->finalize = ggame_model_finalize;
-  object_class->set_property = ggame_model_set_property;
-  object_class->get_property = ggame_model_get_property;
-
-  properties[PROP_BACKEND] = g_param_spec_pointer("backend",
-                                                  "Backend",
-                                                  "Active backend used by this model.",
-                                                  G_PARAM_CONSTRUCT_ONLY | G_PARAM_READWRITE |
-                                                      G_PARAM_STATIC_STRINGS);
-  g_object_class_install_property(object_class, PROP_BACKEND, properties[PROP_BACKEND]);
-
-  model_signals[SIGNAL_STATE_CHANGED] = g_signal_new("state-changed",
-                                                     G_TYPE_FROM_CLASS(klass),
-                                                     G_SIGNAL_RUN_LAST,
-                                                     0,
-                                                     NULL,
-                                                     NULL,
-                                                     NULL,
-                                                     G_TYPE_NONE,
-                                                     0);
-}
-
+static void ggame_model_class_init(GGameModelClass * /*klass*/) {}
 static void ggame_model_init(GGameModel * /*self*/) {}
 
 GGameModel *ggame_model_new(const GameBackend *backend) {
   g_return_val_if_fail(backend != NULL, NULL);
 
-  return g_object_new(GGAME_TYPE_MODEL, "backend", backend, NULL);
+  return g_object_new(GGAME_TYPE_MODEL, NULL);
 }
 
-void ggame_model_reset(GGameModel *self, const GameBackendVariant *variant_or_null) {
+void ggame_model_reset(GGameModel *self, const GameBackendVariant * /*variant_or_null*/) {
   g_return_if_fail(GGAME_IS_MODEL(self));
-  g_return_if_fail(self->backend != NULL);
-  g_return_if_fail(self->position != NULL);
-
-  self->backend->position_clear(self->position);
-  self->variant = variant_or_null;
-  self->backend->position_init(self->position, self->variant);
-  g_signal_emit(self, model_signals[SIGNAL_STATE_CHANGED], 0);
 }
 
 gboolean ggame_model_set_position(GGameModel *self, gconstpointer /*position*/) {
@@ -231,93 +107,34 @@ gboolean ggame_model_apply_move(GGameModel *self, gconstpointer /*move*/) {
 gconstpointer ggame_model_peek_position(GGameModel *self) {
   g_return_val_if_fail(GGAME_IS_MODEL(self), NULL);
 
-  return self->position;
+  return NULL;
 }
 
 const GameBackend *ggame_model_peek_backend(GGameModel *self) {
   g_return_val_if_fail(GGAME_IS_MODEL(self), NULL);
 
-  return self->backend;
+  return &homeworlds_game_backend;
 }
 
 const GameBackendVariant *ggame_model_peek_variant(GGameModel *self) {
   g_return_val_if_fail(GGAME_IS_MODEL(self), NULL);
 
-  return self->variant;
+  return NULL;
 }
 
 char *ggame_model_format_status(GGameModel *self) {
   g_return_val_if_fail(GGAME_IS_MODEL(self), NULL);
-  g_return_val_if_fail(self->backend != NULL, NULL);
 
-  return g_strdup(self->backend->display_name != NULL ? self->backend->display_name : "Game");
+  return g_strdup("Homeworlds");
 }
 /* End copied file: src/game_model.c */
 
 /* Begin copied file: src/games/homeworlds/homeworlds_backend.c */
 #include "homeworlds_backend.h"
 
-#include "homeworlds_game.h"
-
-#include <string.h>
-
-static const char *homeworlds_backend_side_label(guint side) {
-  switch (side) {
-    case 0:
-      return "Player 1";
-    case 1:
-      return "Player 2";
-    default:
-      g_debug("Unsupported Homeworlds side index");
-      return "Player";
-  }
-}
-
-static SgfColor homeworlds_backend_sgf_color_for_side(guint side) {
-  switch (side) {
-    case 0:
-      return SGF_COLOR_BLACK;
-    case 1:
-      return SGF_COLOR_WHITE;
-    default:
-      g_debug("Unsupported Homeworlds side index for SGF color");
-      return SGF_COLOR_NONE;
-  }
-}
-
-static void homeworlds_backend_position_init(gpointer position, const GameBackendVariant * /*variant_or_null*/) {
-  HomeworldsPosition *homeworlds_position = position;
-
-  g_return_if_fail(homeworlds_position != NULL);
-
-  homeworlds_position_init(homeworlds_position);
-}
-
-static void homeworlds_backend_position_clear(gpointer position) {
-  HomeworldsPosition *homeworlds_position = position;
-
-  g_return_if_fail(homeworlds_position != NULL);
-
-  homeworlds_position_clear(homeworlds_position);
-}
-
-static GameBackendOutcome homeworlds_backend_position_outcome(gconstpointer position) {
-  const HomeworldsPosition *homeworlds_position = position;
-
-  g_return_val_if_fail(homeworlds_position != NULL, GAME_BACKEND_OUTCOME_ONGOING);
-
-  return homeworlds_position_outcome(homeworlds_position);
-}
-
 const GameBackend homeworlds_game_backend = {
   .id = "homeworlds",
   .display_name = "Homeworlds",
-  .position_size = sizeof(HomeworldsPosition),
-  .side_label = homeworlds_backend_side_label,
-  .sgf_color_for_side = homeworlds_backend_sgf_color_for_side,
-  .position_init = homeworlds_backend_position_init,
-  .position_clear = homeworlds_backend_position_clear,
-  .position_outcome = homeworlds_backend_position_outcome,
 };
 /* End copied file: src/games/homeworlds/homeworlds_backend.c */
 
@@ -1013,8 +830,8 @@ void ggame_window_set_loaded_source_path(GGameWindow *self, const char *path) {
 
 GGameWindow *ggame_window_new(GtkApplication *app, GGameModel *model) {
   g_return_val_if_fail(GTK_IS_APPLICATION(app), NULL);
-  g_return_val_if_fail(GGAME_IS_MODEL(model), NULL);
 
+  (void)model;
   return g_object_new(GGAME_TYPE_WINDOW, "application", app, NULL);
 }
 /* End copied file: src/window.c */
@@ -1027,7 +844,7 @@ static void drain_main_context(void) {
   }
 }
 
-static GGameWindow *create_window(GtkApplication **out_app, GGameModel **out_model) {
+static GGameWindow *create_window(GtkApplication **out_app) {
   if (test_homeworlds_app == NULL) {
     test_homeworlds_app = gtk_application_new("io.github.jeromea.ghomeworlds.test",
                                               G_APPLICATION_DEFAULT_FLAGS | G_APPLICATION_NON_UNIQUE);
@@ -1035,36 +852,31 @@ static GGameWindow *create_window(GtkApplication **out_app, GGameModel **out_mod
   }
 
   GtkApplication *app = g_object_ref(test_homeworlds_app);
-  GGameModel *model = ggame_model_new(&homeworlds_game_backend);
-  GGameWindow *window = ggame_window_new(app, model);
+  GGameWindow *window = ggame_window_new(app, NULL);
 
   *out_app = app;
-  *out_model = model;
   return window;
 }
 
 int main(void) {
   GtkApplication *app = NULL;
-  GGameModel *model = NULL;
   GGameWindow *window = NULL;
 
   g_log_set_always_fatal(G_LOG_LEVEL_CRITICAL);
 
   gtk_init();
 
-  window = create_window(&app, &model);
+  window = create_window(&app);
   gtk_window_present(GTK_WINDOW(window));
   drain_main_context();
   gtk_window_destroy(GTK_WINDOW(window));
-  g_object_unref(model);
   g_object_unref(app);
 
-  window = create_window(&app, &model);
+  window = create_window(&app);
   gtk_window_set_default_size(GTK_WINDOW(window), 2000, 700);
   gtk_window_present(GTK_WINDOW(window));
   drain_main_context();
   gtk_paned_set_position(GTK_PANED(g_object_get_data(G_OBJECT(window), "main-paned")), 1400);
   gtk_window_destroy(GTK_WINDOW(window));
-  g_object_unref(model);
   g_object_unref(app);
 }
