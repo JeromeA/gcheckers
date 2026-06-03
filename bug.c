@@ -519,7 +519,6 @@ const GameBackend homeworlds_game_backend = {
 
 #include "ai_search.h"
 #include "app_paths.h"
-#include "analysis_graph.h"
 #include "common_settings.h"
 #include "puzzle_catalog.h"
 #include "games/checkers/rulesets.h"
@@ -552,13 +551,9 @@ struct _GGameWindow {
   GtkWidget *drawer_split;
   GtkWidget *navigation_panel;
   GtkWidget *analysis_panel;
-  GtkScale *analysis_depth_scale;
-  GtkLabel *analysis_status_label;
-  GtkTextBuffer *analysis_buffer;
   PlayerControlsPanel *controls_panel;
   GtkDropDown *sgf_mode_control;
   GGameSgfController *sgf_controller;
-  AnalysisGraph *analysis_graph;
   char *loaded_source_name;
   PlayerRuleset applied_ruleset;
   gulong state_handler_id;
@@ -590,10 +585,6 @@ struct _GGameWindow {
   guint puzzle_expected_step;
   guint puzzle_wrong_move_source_id;
   GPtrArray *puzzle_steps;
-  GtkWidget *puzzle_panel;
-  GtkLabel *puzzle_message_label;
-  GtkButton *puzzle_next_button;
-  GtkButton *puzzle_analyze_button;
   GGamePuzzleProgressStore *puzzle_progress_store;
   GGamePuzzleAttemptRecord puzzle_attempt;
   char *puzzle_path;
@@ -607,7 +598,6 @@ static void ggame_window_capture_panel_widths(GGameWindow *self);
 static gint ggame_window_current_extra_width(GGameWindow *self);
 static void ggame_window_apply_saved_panel_widths(GGameWindow *self);
 static gint ggame_window_expected_default_width(GGameWindow *self);
-static void ggame_window_sync_puzzle_ui(GGameWindow *self);
 static void ggame_window_sync_drawer_ui_with_capture(GGameWindow *self, gboolean capture_current_layout);
 static void ggame_window_sync_title(GGameWindow *self);
 static void ggame_window_rebuild_board_host(GGameWindow *self);
@@ -692,10 +682,6 @@ static void ggame_window_sync_side_labels(GGameWindow *self) {
   side0_label = backend->side_label(0);
   side1_label = backend->side_label(1);
   player_controls_panel_set_side_labels(self->controls_panel, side0_label, side1_label);
-}
-
-static gboolean ggame_window_analysis_depth_valid(guint depth) {
-  return depth >= GGAME_WINDOW_ANALYSIS_DEPTH_MIN && depth <= GGAME_WINDOW_ANALYSIS_DEPTH_MAX;
 }
 
 static gboolean ggame_window_layout_mode_valid(GGameWindowLayoutMode mode) {
@@ -989,43 +975,17 @@ static void ggame_window_sync_drawer_ui_with_capture(GGameWindow *self, gboolean
   gtk_widget_queue_allocate(GTK_WIDGET(self));
 }
 
-static void ggame_window_sync_puzzle_ui(GGameWindow *self) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  if (self->controls_panel != NULL) {
-    gtk_widget_set_visible(GTK_WIDGET(self->controls_panel), !self->puzzle_mode);
-  }
-  if (self->puzzle_panel != NULL) {
-    gtk_widget_set_visible(self->puzzle_panel, self->puzzle_mode);
-  }
-  if (self->puzzle_next_button != NULL) {
-    gtk_widget_set_sensitive(GTK_WIDGET(self->puzzle_next_button), self->puzzle_mode && self->puzzle_finished);
-  }
-  if (self->puzzle_analyze_button != NULL) {
-    gtk_widget_set_sensitive(GTK_WIDGET(self->puzzle_analyze_button), self->puzzle_mode);
-  }
-}
-
 static void ggame_window_sync_mode_ui(GGameWindow *self) {
   const GGameAppProfile *profile = ggame_window_get_profile(self);
-  gboolean supports_analysis = FALSE;
   gboolean supports_edit_mode = FALSE;
 
   g_return_if_fail(GGAME_IS_WINDOW(self));
   g_return_if_fail(profile != NULL);
 
-  supports_analysis = profile->features.supports_analysis;
   supports_edit_mode = profile->features.supports_edit_mode;
 
   gboolean allow_navigation = !self->edit_mode_enabled && !self->puzzle_mode;
   gboolean allow_edit_mode_selection = supports_edit_mode && !self->puzzle_mode;
-
-  if (self->analysis_graph != NULL) {
-    GtkWidget *graph_widget = analysis_graph_get_widget(self->analysis_graph);
-    if (graph_widget != NULL) {
-      gtk_widget_set_sensitive(graph_widget, allow_navigation && supports_analysis);
-    }
-  }
 
   if (self->sgf_controller != NULL) {
     GtkWidget *sgf_widget = ggame_sgf_controller_get_widget(self->sgf_controller);
@@ -1139,23 +1099,14 @@ static void ggame_window_set_current_computer_player_names(GGameWindow *self) {
 
 guint ggame_window_get_analysis_depth(GGameWindow *self) {
   g_return_val_if_fail(GGAME_IS_WINDOW(self), GGAME_WINDOW_ANALYSIS_DEPTH_DEFAULT);
-  g_return_val_if_fail(self->analysis_depth_scale != NULL, GGAME_WINDOW_ANALYSIS_DEPTH_DEFAULT);
 
-  guint depth = (guint)gtk_range_get_value(GTK_RANGE(self->analysis_depth_scale));
-  if (!ggame_window_analysis_depth_valid(depth)) {
-    g_debug("Unexpected analysis depth value");
-    return GGAME_WINDOW_ANALYSIS_DEPTH_DEFAULT;
-  }
-
-  return depth;
+  return GGAME_WINDOW_ANALYSIS_DEPTH_DEFAULT;
 }
 
 void ggame_window_set_analysis_depth(GGameWindow *self, guint depth) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(ggame_window_analysis_depth_valid(depth));
-  g_return_if_fail(self->analysis_depth_scale != NULL);
 
-  gtk_range_set_value(GTK_RANGE(self->analysis_depth_scale), (gdouble)depth);
+  (void)depth;
 }
 
 void ggame_window_set_loaded_variant(GGameWindow *self, const GameBackendVariant *variant) {
@@ -1503,15 +1454,11 @@ static void ggame_window_dispose(GObject *object) {
   g_clear_handle_id(&self->puzzle_wrong_move_source_id, g_source_remove);
 
   ggame_window_unparent_controls_panel(self);
-  self->analysis_status_label = NULL;
-  self->analysis_buffer = NULL;
-
   if (self->paned_tick_id != 0 && self->main_paned) {
     gtk_widget_remove_tick_callback(self->main_paned, self->paned_tick_id);
     self->paned_tick_id = 0;
   }
   g_clear_object(&self->sgf_controller);
-  g_clear_object(&self->analysis_graph);
   if (panel_removed) {
     g_clear_object(&self->controls_panel);
   } else {
@@ -1549,12 +1496,6 @@ static void ggame_window_dispose(GObject *object) {
   self->main_paned = NULL;
   self->board_panel = NULL;
   self->board_host_box = NULL;
-  self->puzzle_panel = NULL;
-  self->puzzle_message_label = NULL;
-  self->puzzle_next_button = NULL;
-  self->puzzle_analyze_button = NULL;
-  self->analysis_depth_scale = NULL;
-  self->analysis_buffer = NULL;
   self->sgf_mode_control = NULL;
   G_OBJECT_CLASS(ggame_window_parent_class)->dispose(object);
 }
@@ -1674,38 +1615,6 @@ static void ggame_window_init(GGameWindow *self) {
                    G_CALLBACK(ggame_window_on_control_changed),
                    self);
 
-  GtkWidget *puzzle_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-  gtk_widget_set_margin_bottom(puzzle_panel, 8);
-  gtk_widget_set_visible(puzzle_panel, FALSE);
-  gtk_box_append(GTK_BOX(left_panel), puzzle_panel);
-  self->puzzle_panel = puzzle_panel;
-  g_object_set_data(G_OBJECT(self), "puzzle-panel", puzzle_panel);
-
-  GtkWidget *puzzle_title = gtk_label_new("Puzzle mode");
-  gtk_widget_set_halign(puzzle_title, GTK_ALIGN_START);
-  gtk_widget_add_css_class(puzzle_title, "title-4");
-  gtk_box_append(GTK_BOX(puzzle_panel), puzzle_title);
-
-  GtkWidget *puzzle_message = gtk_label_new("");
-  gtk_label_set_wrap(GTK_LABEL(puzzle_message), TRUE);
-  gtk_widget_set_halign(puzzle_message, GTK_ALIGN_START);
-  gtk_box_append(GTK_BOX(puzzle_panel), puzzle_message);
-  self->puzzle_message_label = GTK_LABEL(puzzle_message);
-  g_object_set_data(G_OBJECT(self), "puzzle-message-label", puzzle_message);
-
-  GtkWidget *puzzle_button_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-  gtk_box_append(GTK_BOX(puzzle_panel), puzzle_button_row);
-
-  GtkWidget *puzzle_next_button = gtk_button_new_with_label("Next puzzle");
-  gtk_box_append(GTK_BOX(puzzle_button_row), puzzle_next_button);
-  self->puzzle_next_button = GTK_BUTTON(puzzle_next_button);
-  g_object_set_data(G_OBJECT(self), "puzzle-next-button", puzzle_next_button);
-
-  GtkWidget *puzzle_analyze_button = gtk_button_new_with_label("Analyze");
-  gtk_box_append(GTK_BOX(puzzle_button_row), puzzle_analyze_button);
-  self->puzzle_analyze_button = GTK_BUTTON(puzzle_analyze_button);
-  g_object_set_data(G_OBJECT(self), "puzzle-analyze-button", puzzle_analyze_button);
-
   GtkWidget *board_host_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_widget_set_hexpand(board_host_box, TRUE);
   gtk_widget_set_vexpand(board_host_box, TRUE);
@@ -1776,7 +1685,6 @@ static void ggame_window_init(GGameWindow *self) {
   gtk_box_append(GTK_BOX(middle_panel), sgf_mode_row);
 
   self->sgf_controller = ggame_sgf_controller_new(NULL);
-  self->analysis_graph = analysis_graph_new();
   GtkWidget *sgf_widget = ggame_sgf_controller_get_widget(self->sgf_controller);
   g_return_if_fail(sgf_widget != NULL);
   g_signal_connect(self->sgf_controller,
@@ -1790,54 +1698,6 @@ static void ggame_window_init(GGameWindow *self) {
   gtk_widget_add_css_class(sgf_widget, "sgf-panel");
   gtk_box_append(GTK_BOX(middle_panel), sgf_widget);
 
-  GtkWidget *analysis_depth_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
-  gtk_box_append(GTK_BOX(analysis_panel), analysis_depth_box);
-
-  GtkWidget *analysis_depth_label = gtk_label_new("Analysis depth");
-  gtk_widget_set_halign(analysis_depth_label, GTK_ALIGN_START);
-  gtk_box_append(GTK_BOX(analysis_depth_box), analysis_depth_label);
-
-  self->analysis_depth_scale = GTK_SCALE(gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL,
-                                                                  GGAME_WINDOW_ANALYSIS_DEPTH_MIN,
-                                                                  GGAME_WINDOW_ANALYSIS_DEPTH_MAX,
-                                                                  1));
-  gtk_scale_set_digits(self->analysis_depth_scale, 0);
-  gtk_scale_set_draw_value(self->analysis_depth_scale, TRUE);
-  gtk_widget_set_hexpand(GTK_WIDGET(self->analysis_depth_scale), TRUE);
-  gtk_widget_set_size_request(GTK_WIDGET(self->analysis_depth_scale), 100, -1);
-  gtk_box_append(GTK_BOX(analysis_depth_box), GTK_WIDGET(self->analysis_depth_scale));
-  g_object_set_data(G_OBJECT(self), "analysis-depth-scale", self->analysis_depth_scale);
-  ggame_window_set_analysis_depth(self, GGAME_WINDOW_ANALYSIS_DEPTH_DEFAULT);
-
-  GtkWidget *graph_widget = analysis_graph_get_widget(self->analysis_graph);
-  g_return_if_fail(graph_widget != NULL);
-  g_object_set_data(G_OBJECT(self), "analysis-graph", self->analysis_graph);
-  gtk_box_append(GTK_BOX(analysis_panel), graph_widget);
-
-  GtkWidget *analysis_status = gtk_label_new("");
-  gtk_widget_add_css_class(analysis_status, "analysis-status");
-  gtk_widget_set_halign(analysis_status, GTK_ALIGN_START);
-  gtk_label_set_wrap(GTK_LABEL(analysis_status), TRUE);
-  gtk_label_set_xalign(GTK_LABEL(analysis_status), 0.0f);
-  gtk_box_append(GTK_BOX(analysis_panel), analysis_status);
-  self->analysis_status_label = GTK_LABEL(analysis_status);
-  g_object_set_data(G_OBJECT(self), "analysis-status-label", analysis_status);
-
-  GtkWidget *analysis_scroller = gtk_scrolled_window_new();
-  gtk_widget_set_hexpand(analysis_scroller, TRUE);
-  gtk_widget_set_vexpand(analysis_scroller, TRUE);
-  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(analysis_scroller),
-                                 GTK_POLICY_AUTOMATIC,
-                                 GTK_POLICY_AUTOMATIC);
-  gtk_box_append(GTK_BOX(analysis_panel), analysis_scroller);
-
-  GtkWidget *analysis_view = gtk_text_view_new();
-  gtk_text_view_set_editable(GTK_TEXT_VIEW(analysis_view), FALSE);
-  gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(analysis_view), FALSE);
-  gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(analysis_view), GTK_WRAP_WORD_CHAR);
-  gtk_text_view_set_monospace(GTK_TEXT_VIEW(analysis_view), TRUE);
-  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(analysis_scroller), analysis_view);
-  self->analysis_buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(analysis_view));
   self->edit_mode_enabled = FALSE;
   self->show_navigation_drawer =
       layout != NULL ? layout->show_navigation_drawer_by_default : TRUE;
@@ -1867,7 +1727,6 @@ static void ggame_window_init(GGameWindow *self) {
   self->puzzle_attacker_side = 0;
   self->puzzle_number = 0;
   ggame_window_sync_drawer_ui_with_capture(self, FALSE);
-  ggame_window_sync_puzzle_ui(self);
   ggame_window_sync_mode_ui(self);
 }
 
