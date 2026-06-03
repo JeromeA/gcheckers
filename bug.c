@@ -322,24 +322,10 @@ const GameBackend homeworlds_game_backend = {
 /* End copied file: src/games/homeworlds/homeworlds_backend.c */
 
 /* Begin copied file: src/window.c */
-#include "application.h"
-#include "active_game_backend.h"
 #include "game_app_profile.h"
 #include "window.h"
 
-#include "ai_search.h"
-#include "app_paths.h"
 #include "common_settings.h"
-#include "puzzle_catalog.h"
-#include "games/checkers/rulesets.h"
-#include "sgf_file_actions.h"
-#include "sgf_controller.h"
-#include "sgf_io.h"
-#include "sgf_metadata.h"
-#include "sgf_move_props.h"
-#include "style.h"
-#include "player_controls_panel.h"
-#include "puzzle_progress.h"
 #include "widget_utils.h"
 
 #include <string.h>
@@ -352,27 +338,14 @@ typedef enum {
 struct _GGameWindow {
   GtkApplicationWindow parent_instance;
   const GGameAppProfile *profile;
-  GGameModel *game_model;
   GtkWidget *main_paned;
   GtkWidget *board_panel;
-  GtkWidget *board_host_box;
-  GtkWidget *board_host;
   GtkWidget *drawer_host;
   GtkWidget *drawer_split;
   GtkWidget *navigation_panel;
   GtkWidget *analysis_panel;
-  PlayerControlsPanel *controls_panel;
-  GtkDropDown *sgf_mode_control;
-  GGameSgfController *sgf_controller;
-  char *loaded_source_name;
-  PlayerRuleset applied_ruleset;
-  gulong state_handler_id;
-  guint auto_move_source_id;
   guint paned_tick_id;
   gboolean puzzle_mode;
-  gboolean puzzle_finished;
-  gboolean puzzle_feedback_locked;
-  gboolean edit_mode_enabled;
   gboolean puzzle_saved_show_navigation_drawer;
   gboolean puzzle_saved_show_analysis_drawer;
   gboolean show_navigation_drawer;
@@ -388,29 +361,15 @@ struct _GGameWindow {
   gint puzzle_navigation_panel_width;
   gint puzzle_analysis_panel_width;
   gint puzzle_extra_width;
-  const GameBackendVariant *puzzle_variant;
-  char *puzzle_variant_key;
-  guint puzzle_attacker_side;
-  guint puzzle_number;
-  guint puzzle_expected_step;
-  guint puzzle_wrong_move_source_id;
-  GPtrArray *puzzle_steps;
-  GGamePuzzleProgressStore *puzzle_progress_store;
-  GGamePuzzleAttemptRecord puzzle_attempt;
-  char *puzzle_path;
 };
 
 G_DEFINE_TYPE(GGameWindow, ggame_window, GTK_TYPE_APPLICATION_WINDOW)
 
-static void ggame_window_sync_mode_ui(GGameWindow *self);
-static void ggame_window_sync_move_report_ui(GGameWindow *self);
 static void ggame_window_capture_panel_widths(GGameWindow *self);
 static gint ggame_window_current_extra_width(GGameWindow *self);
 static void ggame_window_apply_saved_panel_widths(GGameWindow *self);
 static gint ggame_window_expected_default_width(GGameWindow *self);
 static void ggame_window_sync_drawer_ui_with_capture(GGameWindow *self, gboolean capture_current_layout);
-static void ggame_window_sync_title(GGameWindow *self);
-static void ggame_window_rebuild_board_host(GGameWindow *self);
 static void ggame_window_load_default_size(gint *out_width, gint *out_height);
 static void ggame_window_save_default_size(GGameWindow *self);
 static gboolean ggame_window_on_close_request(GtkWindow *window, gpointer user_data);
@@ -421,78 +380,9 @@ enum {
   GGAME_WINDOW_DEFAULT_ANALYSIS_PANEL_WIDTH = 300,
   GGAME_WINDOW_DEFAULT_WIDTH = 1100,
   GGAME_WINDOW_DEFAULT_HEIGHT = 700,
-  GGAME_WINDOW_ANALYSIS_PROGRESS_INTERVAL_MS = 100,
-  GGAME_WINDOW_ANALYSIS_TT_SIZE_MB = 256,
-  GGAME_WINDOW_ANALYSIS_DEPTH_MIN = 1,
-  GGAME_WINDOW_ANALYSIS_DEPTH_MAX = 16,
   GGAME_WINDOW_ANALYSIS_DEPTH_DEFAULT = 8,
-  GGAME_WINDOW_PUZZLE_WRONG_MOVE_DELAY_MS = 1000,
 };
 
-
-static const GGameAppProfile *ggame_window_get_profile(GGameWindow *self) {
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), NULL);
-
-  if (self->profile == NULL) {
-    g_debug("Missing active game application profile");
-    return NULL;
-  }
-
-  return self->profile;
-}
-
-static GGameModel *ggame_window_get_game_model(GGameWindow *self) {
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), NULL);
-
-  if (self->game_model == NULL) {
-    g_debug("Missing generic game model");
-    return NULL;
-  }
-
-  return self->game_model;
-}
-
-static const GameBackend *ggame_window_get_game_backend(GGameWindow *self) {
-  GGameModel *game_model = ggame_window_get_game_model(self);
-  g_return_val_if_fail(game_model != NULL, NULL);
-
-  const GameBackend *backend = ggame_model_peek_backend(game_model);
-  if (backend == NULL) {
-    g_debug("Missing active game backend");
-    return NULL;
-  }
-
-  return backend;
-}
-
-static gconstpointer ggame_window_get_game_position(GGameWindow *self) {
-  GGameModel *game_model = ggame_window_get_game_model(self);
-  g_return_val_if_fail(game_model != NULL, NULL);
-
-  gconstpointer position = ggame_model_peek_position(game_model);
-  if (position == NULL) {
-    g_debug("Missing active game position");
-    return NULL;
-  }
-
-  return position;
-}
-
-static void ggame_window_sync_side_labels(GGameWindow *self) {
-  const GGameAppProfile *profile = ggame_window_get_profile(self);
-  const GameBackend *backend = profile != NULL ? profile->backend : NULL;
-  const char *side0_label = NULL;
-  const char *side1_label = NULL;
-
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(self->controls_panel != NULL);
-  g_return_if_fail(backend != NULL);
-  g_return_if_fail(backend->side_label != NULL);
-
-  side0_label = backend->side_label(0);
-  side1_label = backend->side_label(1);
-  player_controls_panel_set_side_labels(self->controls_panel, side0_label, side1_label);
-}
 
 static gboolean ggame_window_layout_mode_valid(GGameWindowLayoutMode mode) {
   return mode == GGAME_WINDOW_LAYOUT_MODE_NORMAL || mode == GGAME_WINDOW_LAYOUT_MODE_PUZZLE;
@@ -551,21 +441,6 @@ static gboolean ggame_window_constrain_main_split_cb(GtkWidget * /*widget*/,
   }
 
   return G_SOURCE_CONTINUE;
-}
-
-static void ggame_window_sync_title(GGameWindow *self) {
-  const GGameAppProfile *profile = ggame_window_get_profile(self);
-  const char *window_title_name = profile != NULL ? profile->window_title_name : "ggame";
-
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  if (self->loaded_source_name == NULL || *self->loaded_source_name == '\0') {
-    gtk_window_set_title(GTK_WINDOW(self), window_title_name);
-    return;
-  }
-
-  g_autofree char *title = g_strdup_printf("%s - %s", window_title_name, self->loaded_source_name);
-  gtk_window_set_title(GTK_WINDOW(self), title);
 }
 
 static void ggame_window_capture_panel_widths(GGameWindow *self) {
@@ -720,16 +595,6 @@ static void ggame_window_apply_saved_panel_widths(GGameWindow *self) {
   }
 }
 
-static void ggame_window_sync_move_report_ui(GGameWindow *self) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  if (self->profile == NULL || self->profile->ui.set_move_report_enabled == NULL || self->board_host == NULL) {
-    return;
-  }
-
-  self->profile->ui.set_move_report_enabled(self->board_host, self->show_move_report);
-}
-
 static void ggame_window_sync_drawer_ui_with_capture(GGameWindow *self, gboolean capture_current_layout) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
 
@@ -785,128 +650,6 @@ static void ggame_window_sync_drawer_ui_with_capture(GGameWindow *self, gboolean
   gtk_widget_queue_allocate(GTK_WIDGET(self));
 }
 
-static void ggame_window_sync_mode_ui(GGameWindow *self) {
-  const GGameAppProfile *profile = ggame_window_get_profile(self);
-  gboolean supports_edit_mode = FALSE;
-
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(profile != NULL);
-
-  supports_edit_mode = profile->features.supports_edit_mode;
-
-  gboolean allow_navigation = !self->edit_mode_enabled && !self->puzzle_mode;
-  gboolean allow_edit_mode_selection = supports_edit_mode && !self->puzzle_mode;
-
-  if (self->sgf_controller != NULL) {
-    GtkWidget *sgf_widget = ggame_sgf_controller_get_widget(self->sgf_controller);
-    if (sgf_widget != NULL) {
-      gtk_widget_set_sensitive(sgf_widget, allow_navigation);
-    }
-  }
-
-  if (self->sgf_mode_control != NULL) {
-    gtk_widget_set_sensitive(GTK_WIDGET(self->sgf_mode_control), allow_edit_mode_selection);
-  }
-}
-
-static void ggame_window_start_new_game(GGameWindow *self) {
-  const GameBackendVariant *variant = NULL;
-
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(GGAME_IS_MODEL(self->game_model));
-
-  variant = ggame_window_get_variant(self);
-  ggame_model_reset(self->game_model, variant);
-  ggame_sgf_controller_new_game(self->sgf_controller);
-  g_clear_pointer(&self->loaded_source_name, g_free);
-  ggame_window_sync_title(self);
-}
-
-static void ggame_window_sync_board_host_node(GGameWindow *self, const SgfNode *node) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(node != NULL);
-
-  if (self->profile != NULL && self->profile->ui.sync_board_host_node != NULL && self->board_host != NULL) {
-    self->profile->ui.sync_board_host_node(self->board_host, node);
-  }
-}
-
-static const char *ggame_window_player_name_property_for_side(GGameWindow *self, guint side) {
-  const GameBackend *backend = NULL;
-  SgfColor color = SGF_COLOR_NONE;
-
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), NULL);
-  g_return_val_if_fail(side < 2, NULL);
-
-  backend = self->profile != NULL ? self->profile->backend : NULL;
-  if (backend != NULL && backend->sgf_color_for_side != NULL) {
-    color = backend->sgf_color_for_side(side);
-  }
-
-  if (color == SGF_COLOR_BLACK) {
-    return "PB";
-  }
-  if (color == SGF_COLOR_WHITE) {
-    return "PW";
-  }
-
-  g_debug("Falling back to player name SGF property for side %u", side);
-  return side == 0 ? "PB" : "PW";
-}
-
-static void ggame_window_set_root_text_property(SgfNode *root, const char *property, const char *value) {
-  g_return_if_fail(root != NULL);
-  g_return_if_fail(property != NULL);
-  g_return_if_fail(value != NULL);
-
-  sgf_node_clear_property(root, property);
-  if (value[0] != '\0' && !sgf_node_add_property(root, property, value)) {
-    g_debug("Failed to set SGF root property %s", property);
-  }
-}
-
-static void ggame_window_set_new_game_computer_player_names(GGameWindow *self,
-                                                            PlayerControlMode side0_mode,
-                                                            PlayerControlMode side1_mode) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self->sgf_controller));
-
-  SgfTree *tree = ggame_sgf_controller_get_tree(self->sgf_controller);
-  if (tree == NULL) {
-    g_debug("Unable to set computer player names without an SGF tree");
-    return;
-  }
-
-  SgfNode *root = (SgfNode *)sgf_tree_get_root(tree);
-  if (root == NULL) {
-    g_debug("Unable to set computer player names without an SGF root node");
-    return;
-  }
-
-  PlayerControlMode modes[2] = {side0_mode, side1_mode};
-  for (guint side = 0; side < 2; side++) {
-    if (modes[side] != PLAYER_CONTROL_MODE_COMPUTER) {
-      continue;
-    }
-
-    const char *property = ggame_window_player_name_property_for_side(self, side);
-    if (property == NULL) {
-      g_debug("Unable to set computer player name for side %u", side);
-      continue;
-    }
-    ggame_window_set_root_text_property(root, property, "Computer");
-  }
-}
-
-static void ggame_window_set_current_computer_player_names(GGameWindow *self) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(self->controls_panel != NULL);
-
-  ggame_window_set_new_game_computer_player_names(self,
-                                                  player_controls_panel_get_mode(self->controls_panel, 0),
-                                                  player_controls_panel_get_mode(self->controls_panel, 1));
-}
-
 guint ggame_window_get_analysis_depth(GGameWindow *self) {
   g_return_val_if_fail(GGAME_IS_WINDOW(self), GGAME_WINDOW_ANALYSIS_DEPTH_DEFAULT);
 
@@ -922,56 +665,6 @@ void ggame_window_set_analysis_depth(GGameWindow *self, guint depth) {
 void ggame_window_set_loaded_variant(GGameWindow *self, const GameBackendVariant *variant) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
   g_return_if_fail(variant != NULL);
-}
-
-static void ggame_window_update_control_state(GGameWindow *self) {
-  const GameBackend *backend = NULL;
-  gconstpointer position = NULL;
-  GameBackendOutcome outcome = GAME_BACKEND_OUTCOME_ONGOING;
-
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  backend = ggame_window_get_game_backend(self);
-  position = ggame_window_get_game_position(self);
-  g_return_if_fail(backend != NULL);
-  g_return_if_fail(position != NULL);
-  g_return_if_fail(backend->position_outcome != NULL);
-
-  outcome = backend->position_outcome(position);
-  gboolean input_enabled = outcome == GAME_BACKEND_OUTCOME_ONGOING;
-  (void)input_enabled;
-}
-
-static void ggame_window_on_state_changed(GGameModel *model, gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-
-  g_return_if_fail(GGAME_IS_MODEL(model));
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  ggame_window_update_control_state(self);
-}
-
-static void ggame_window_on_control_changed(PlayerControlsPanel * /*panel*/, gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  ggame_window_update_control_state(self);
-}
-
-static void ggame_window_on_mode_selected_notify(GObject * /*object*/,
-                                                     GParamSpec * /*pspec*/,
-                                                     gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(GTK_IS_DROP_DOWN(self->sgf_mode_control));
-
-  if (self->puzzle_mode) {
-    gtk_drop_down_set_selected(self->sgf_mode_control, 0);
-    return;
-  }
-
-  self->edit_mode_enabled = gtk_drop_down_get_selected(self->sgf_mode_control) == 1;
-  ggame_window_sync_mode_ui(self);
 }
 
 static void ggame_window_load_default_size(gint *out_width, gint *out_height) {
@@ -1113,62 +806,23 @@ static void ggame_window_on_default_size_notify(GObject *object,
   gtk_widget_queue_allocate(GTK_WIDGET(self));
 }
 
-static void ggame_window_on_manual_requested(GGameSgfController * /*controller*/,
-                                                 gpointer /*node*/,
-                                                 gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(self->controls_panel != NULL);
-
-  g_clear_handle_id(&self->auto_move_source_id, g_source_remove);
-  ggame_window_set_board_orientation_mode(self, GGAME_WINDOW_BOARD_ORIENTATION_FIXED);
-  ggame_window_update_control_state(self);
-}
-
-static void ggame_window_on_sgf_node_changed(GGameSgfController * /*controller*/,
-                                                 const SgfNode *node,
-                                                 gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(node != NULL);
-
-  ggame_window_sync_board_host_node(self, node);
-}
-
-static GtkWidget *ggame_window_new_toolbar_action_button(const char *icon_name,
-                                                             const char *tooltip_text,
-                                                             const char *action_name) {
-  g_return_val_if_fail(icon_name != NULL, NULL);
-  g_return_val_if_fail(tooltip_text != NULL, NULL);
-  g_return_val_if_fail(action_name != NULL, NULL);
-
-  GtkWidget *button = gtk_button_new_from_icon_name(icon_name);
-  gtk_widget_set_tooltip_text(button, tooltip_text);
-  gtk_actionable_set_action_name(GTK_ACTIONABLE(button), action_name);
-  return button;
-}
-
 const GameBackendVariant *ggame_window_get_variant(GGameWindow *self) {
   g_return_val_if_fail(GGAME_IS_WINDOW(self), NULL);
 
-  return self->game_model != NULL ? ggame_model_peek_variant(self->game_model) : NULL;
+  return NULL;
 }
 
 void ggame_window_apply_new_game_settings(GGameWindow *self,
                                           const GameBackendVariant *variant,
-                                              PlayerControlMode white_mode,
-                                              PlayerControlMode black_mode,
-                                              guint computer_depth) {
+                                          PlayerControlMode white_mode,
+                                          PlayerControlMode black_mode,
+                                          guint computer_depth) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(self->controls_panel != NULL);
 
   (void)variant;
-  player_controls_panel_set_mode(self->controls_panel, 0, white_mode);
-  player_controls_panel_set_mode(self->controls_panel, 1, black_mode);
-  player_controls_panel_set_computer_depth(self->controls_panel, computer_depth);
-  ggame_window_start_new_game(self);
-  ggame_window_set_current_computer_player_names(self);
+  (void)white_mode;
+  (void)black_mode;
+  (void)computer_depth;
 }
 
 void ggame_window_set_board_orientation_mode(GGameWindow *self,
@@ -1190,89 +844,12 @@ CheckersColor ggame_window_get_board_bottom_color(GGameWindow *self) {
   return CHECKERS_COLOR_WHITE;
 }
 
-static void ggame_window_set_model(GGameWindow *self, GGameModel *model) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(GGAME_IS_MODEL(model));
-
-  g_clear_handle_id(&self->auto_move_source_id, g_source_remove);
-
-  if (self->game_model != NULL && self->state_handler_id != 0) {
-    g_signal_handler_disconnect(self->game_model, self->state_handler_id);
-    self->state_handler_id = 0;
-  }
-  g_clear_object(&self->game_model);
-
-  self->game_model = g_object_ref(model);
-  self->state_handler_id = g_signal_connect(self->game_model,
-                                            "state-changed",
-                                            G_CALLBACK(ggame_window_on_state_changed),
-                                            self);
-  ggame_sgf_controller_set_game_model(self->sgf_controller, self->game_model);
-  ggame_window_rebuild_board_host(self);
-  ggame_window_update_control_state(self);
-  ggame_window_set_current_computer_player_names(self);
-}
-
-static void ggame_window_rebuild_board_host(GGameWindow *self) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(self->board_host_box != NULL);
-  g_return_if_fail(GGAME_IS_MODEL(self->game_model));
-
-  if (self->board_host != NULL) {
-    ggame_widget_remove_from_parent(self->board_host);
-    self->board_host = NULL;
-  }
-
-  GtkWidget *host = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-  gtk_widget_set_hexpand(host, TRUE);
-  gtk_widget_set_vexpand(host, TRUE);
-  self->board_host = host;
-  gtk_box_append(GTK_BOX(self->board_host_box), host);
-  ggame_window_sync_move_report_ui(self);
-}
-
-static gboolean ggame_window_unparent_controls_panel(GGameWindow *self) {
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), FALSE);
-
-  if (!self->controls_panel) {
-    return TRUE;
-  }
-
-  GtkWidget *panel_widget = GTK_WIDGET(self->controls_panel);
-  gboolean removed = ggame_widget_remove_from_parent(panel_widget);
-  if (!removed && gtk_widget_get_parent(panel_widget)) {
-    g_debug("Failed to remove controls panel from parent during dispose\n");
-    return FALSE;
-  }
-
-  return TRUE;
-}
-
 static void ggame_window_dispose(GObject *object) {
   GGameWindow *self = GGAME_WINDOW(object);
 
-  self->edit_mode_enabled = FALSE;
-  ggame_window_sync_mode_ui(self);
-
-  if (self->game_model != NULL && self->state_handler_id != 0) {
-    g_signal_handler_disconnect(self->game_model, self->state_handler_id);
-    self->state_handler_id = 0;
-  }
-
-  gboolean panel_removed = ggame_window_unparent_controls_panel(self);
-  g_clear_handle_id(&self->auto_move_source_id, g_source_remove);
-  g_clear_handle_id(&self->puzzle_wrong_move_source_id, g_source_remove);
-
-  ggame_window_unparent_controls_panel(self);
   if (self->paned_tick_id != 0 && self->main_paned) {
     gtk_widget_remove_tick_callback(self->main_paned, self->paned_tick_id);
     self->paned_tick_id = 0;
-  }
-  g_clear_object(&self->sgf_controller);
-  if (panel_removed) {
-    g_clear_object(&self->controls_panel);
-  } else {
-    self->controls_panel = NULL;
   }
   if (self->navigation_panel != NULL) {
     ggame_widget_remove_from_parent(self->navigation_panel);
@@ -1282,11 +859,6 @@ static void ggame_window_dispose(GObject *object) {
     ggame_widget_remove_from_parent(self->analysis_panel);
     g_clear_object(&self->analysis_panel);
   }
-  g_clear_pointer(&self->loaded_source_name, g_free);
-  if (self->puzzle_steps != NULL) {
-    g_ptr_array_unref(self->puzzle_steps);
-    self->puzzle_steps = NULL;
-  }
   if (self->drawer_split != NULL) {
     ggame_widget_remove_from_parent(self->drawer_split);
     g_clear_object(&self->drawer_split);
@@ -1295,18 +867,8 @@ static void ggame_window_dispose(GObject *object) {
     ggame_widget_remove_from_parent(self->drawer_host);
     g_clear_object(&self->drawer_host);
   }
-  if (self->board_host != NULL) {
-    ggame_widget_remove_from_parent(self->board_host);
-    self->board_host = NULL;
-  }
-  g_clear_object(&self->game_model);
-  g_clear_pointer(&self->puzzle_variant_key, g_free);
-  g_clear_pointer(&self->puzzle_path, g_free);
-  self->puzzle_progress_store = NULL;
   self->main_paned = NULL;
   self->board_panel = NULL;
-  self->board_host_box = NULL;
-  self->sgf_mode_control = NULL;
   G_OBJECT_CLASS(ggame_window_parent_class)->dispose(object);
 }
 
@@ -1321,75 +883,21 @@ static void ggame_window_init(GGameWindow *self) {
 
   self->profile = ggame_active_app_profile();
   layout = self->profile != NULL ? &self->profile->layout : NULL;
-  self->auto_move_source_id = 0;
   self->paned_tick_id = 0;
-  self->puzzle_wrong_move_source_id = 0;
   self->syncing_layout_default_size = FALSE;
-  self->applied_ruleset = PLAYER_RULESET_INTERNATIONAL;
 
-  ggame_window_sync_title(self);
   gint default_width = 0;
   gint default_height = 0;
   ggame_window_load_default_size(&default_width, &default_height);
   gtk_window_set_default_size(GTK_WINDOW(self), default_width, default_height);
   g_signal_connect(self, "close-request", G_CALLBACK(ggame_window_on_close_request), self);
-
-  ggame_style_init();
+  g_signal_connect(self,
+                   "notify::default-width",
+                   G_CALLBACK(ggame_window_on_default_size_notify),
+                   self);
 
   GtkWidget *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_window_set_child(GTK_WINDOW(self), content);
-
-  GApplication *app = g_application_get_default();
-  if (GTK_IS_APPLICATION(app)) {
-    GMenuModel *menubar = gtk_application_get_menubar(GTK_APPLICATION(app));
-    if (menubar != NULL) {
-      GtkWidget *menu_bar = gtk_popover_menu_bar_new_from_model(menubar);
-      gtk_box_append(GTK_BOX(content), menu_bar);
-    }
-  }
-
-  GtkWidget *toolbar = gtk_action_bar_new();
-  GtkWidget *new_game_button =
-      ggame_window_new_toolbar_action_button("document-new-symbolic", "New game...", "app.new-game");
-  gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), new_game_button);
-
-  GtkWidget *force_move_button =
-      ggame_window_new_toolbar_action_button("media-playback-start-symbolic",
-                                                 "Force move",
-                                                 "win.game-force-move");
-  gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), force_move_button);
-
-  GtkWidget *toolbar_separator = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
-  gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), toolbar_separator);
-
-  GtkWidget *rewind_button = ggame_window_new_toolbar_action_button("media-skip-backward-symbolic",
-                                                                         "Rewind to start",
-                                                                         "win.navigation-rewind");
-  gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), rewind_button);
-
-  GtkWidget *step_backward_button =
-      ggame_window_new_toolbar_action_button("go-previous-symbolic",
-                                                 "Back one move",
-                                                 "win.navigation-step-backward");
-  gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), step_backward_button);
-
-  GtkWidget *step_forward_button = ggame_window_new_toolbar_action_button("go-next-symbolic",
-                                                                               "Forward one move",
-                                                                               "win.navigation-step-forward");
-  gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), step_forward_button);
-
-  GtkWidget *step_to_branch_button =
-      ggame_window_new_toolbar_action_button("media-seek-forward-symbolic",
-                                                 "Forward to next branch point",
-                                                 "win.navigation-step-forward-to-branch");
-  gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), step_to_branch_button);
-
-  GtkWidget *step_to_end_button = ggame_window_new_toolbar_action_button("media-skip-forward-symbolic",
-                                                                              "Forward to main line end",
-                                                                              "win.navigation-step-forward-to-end");
-  gtk_action_bar_pack_start(GTK_ACTION_BAR(toolbar), step_to_end_button);
-
-  gtk_box_append(GTK_BOX(content), toolbar);
 
   GtkWidget *paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
   gtk_widget_set_hexpand(paned, TRUE);
@@ -1413,24 +921,6 @@ static void ggame_window_init(GGameWindow *self) {
   gtk_paned_set_shrink_start_child(GTK_PANED(paned), FALSE);
   self->board_panel = left_panel;
   g_object_set_data(G_OBJECT(self), "board-panel", left_panel);
-
-  self->controls_panel = g_object_ref_sink(player_controls_panel_new());
-  if (self->profile != NULL) {
-    player_controls_panel_set_computer_depth(self->controls_panel, self->profile->default_computer_depth);
-  }
-  ggame_window_sync_side_labels(self);
-  gtk_box_append(GTK_BOX(left_panel), GTK_WIDGET(self->controls_panel));
-  g_signal_connect(self->controls_panel,
-                   "control-changed",
-                   G_CALLBACK(ggame_window_on_control_changed),
-                   self);
-
-  GtkWidget *board_host_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-  gtk_widget_set_hexpand(board_host_box, TRUE);
-  gtk_widget_set_vexpand(board_host_box, TRUE);
-  gtk_box_append(GTK_BOX(left_panel), board_host_box);
-  self->board_host_box = board_host_box;
-  g_object_set_data(G_OBJECT(self), "board-host-box", board_host_box);
 
   GtkWidget *right_split = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
   g_object_ref_sink(right_split);
@@ -1475,40 +965,6 @@ static void ggame_window_init(GGameWindow *self) {
   g_object_set_data(G_OBJECT(self), "analysis-panel", analysis_panel);
   gtk_paned_set_position(GTK_PANED(paned), 500);
   gtk_paned_set_position(GTK_PANED(right_split), 300);
-
-  GtkWidget *sgf_mode_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-  GtkWidget *sgf_mode_label = gtk_label_new("Mode");
-  gtk_widget_set_halign(sgf_mode_label, GTK_ALIGN_START);
-  gtk_box_append(GTK_BOX(sgf_mode_row), sgf_mode_label);
-  self->sgf_mode_control = GTK_DROP_DOWN(gtk_drop_down_new_from_strings(
-      (const char *[]){"Play", "Edit", NULL}));
-  gtk_drop_down_set_selected(self->sgf_mode_control, 0);
-  g_signal_connect(self->sgf_mode_control,
-                   "notify::selected",
-                   G_CALLBACK(ggame_window_on_mode_selected_notify),
-                   self);
-  g_signal_connect(self,
-                   "notify::default-width",
-                   G_CALLBACK(ggame_window_on_default_size_notify),
-                   self);
-  gtk_box_append(GTK_BOX(sgf_mode_row), GTK_WIDGET(self->sgf_mode_control));
-  gtk_box_append(GTK_BOX(middle_panel), sgf_mode_row);
-
-  self->sgf_controller = ggame_sgf_controller_new(NULL);
-  GtkWidget *sgf_widget = ggame_sgf_controller_get_widget(self->sgf_controller);
-  g_return_if_fail(sgf_widget != NULL);
-  g_signal_connect(self->sgf_controller,
-                   "manual-requested",
-                   G_CALLBACK(ggame_window_on_manual_requested),
-                   self);
-  g_signal_connect(self->sgf_controller,
-                   "node-changed",
-                   G_CALLBACK(ggame_window_on_sgf_node_changed),
-                   self);
-  gtk_widget_add_css_class(sgf_widget, "sgf-panel");
-  gtk_box_append(GTK_BOX(middle_panel), sgf_widget);
-
-  self->edit_mode_enabled = FALSE;
   self->show_navigation_drawer =
       layout != NULL ? layout->show_navigation_drawer_by_default : TRUE;
   self->show_analysis_drawer =
@@ -1532,57 +988,34 @@ static void ggame_window_init(GGameWindow *self) {
   self->puzzle_navigation_panel_width = self->navigation_panel_width;
   self->puzzle_analysis_panel_width = self->analysis_panel_width;
   self->puzzle_extra_width = 0;
-  self->puzzle_variant = NULL;
-  self->puzzle_variant_key = NULL;
-  self->puzzle_attacker_side = 0;
-  self->puzzle_number = 0;
   ggame_window_sync_drawer_ui_with_capture(self, FALSE);
-  ggame_window_sync_mode_ui(self);
 }
 
 PlayerControlsPanel *ggame_window_get_controls_panel(GGameWindow *self) {
   g_return_val_if_fail(GGAME_IS_WINDOW(self), NULL);
 
-  if (!self->controls_panel) {
-    g_debug("Missing controls panel\n");
-    return NULL;
-  }
-
-  return self->controls_panel;
+  g_debug("Controls panel is not available in the reproducer");
+  return NULL;
 }
 
 GGameSgfController *ggame_window_get_sgf_controller(GGameWindow *self) {
   g_return_val_if_fail(GGAME_IS_WINDOW(self), NULL);
 
-  if (!self->sgf_controller) {
-    g_debug("Missing SGF controller\n");
-    return NULL;
-  }
-
-  return self->sgf_controller;
+  g_debug("SGF controller is not available in the reproducer");
+  return NULL;
 }
 
 void ggame_window_set_loaded_source_path(GGameWindow *self, const char *path) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
 
-  g_clear_pointer(&self->loaded_source_name, g_free);
-  if (path != NULL && *path != '\0') {
-    self->loaded_source_name = g_path_get_basename(path);
-  }
-  ggame_window_sync_title(self);
+  (void)path;
 }
 
 GGameWindow *ggame_window_new(GtkApplication *app, GGameModel *model) {
   g_return_val_if_fail(GTK_IS_APPLICATION(app), NULL);
   g_return_val_if_fail(GGAME_IS_MODEL(model), NULL);
 
-  GGameWindow *window = g_object_new(GGAME_TYPE_WINDOW, "application", app, NULL);
-  if (GGAME_IS_APPLICATION(app) && window->profile != NULL && window->profile->features.supports_puzzles) {
-    window->puzzle_progress_store =
-        ggame_application_get_puzzle_progress_store(GGAME_APPLICATION(app));
-  }
-  ggame_window_set_model(window, model);
-  return window;
+  return g_object_new(GGAME_TYPE_WINDOW, "application", app, NULL);
 }
 /* End copied file: src/window.c */
 
