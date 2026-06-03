@@ -142,15 +142,7 @@ const GameBackend homeworlds_game_backend = {
 #include "game_app_profile.h"
 #include "window.h"
 
-#include "common_settings.h"
 #include "widget_utils.h"
-
-#include <string.h>
-
-typedef enum {
-  GGAME_WINDOW_LAYOUT_MODE_NORMAL = 0,
-  GGAME_WINDOW_LAYOUT_MODE_PUZZLE
-} GGameWindowLayoutMode;
 
 struct _GGameWindow {
   GtkApplicationWindow parent_instance;
@@ -162,79 +154,14 @@ struct _GGameWindow {
   GtkWidget *navigation_panel;
   GtkWidget *analysis_panel;
   guint paned_tick_id;
-  gboolean puzzle_mode;
-  gboolean puzzle_saved_show_navigation_drawer;
-  gboolean puzzle_saved_show_analysis_drawer;
-  gboolean show_navigation_drawer;
-  gboolean show_analysis_drawer;
-  gboolean show_move_report;
-  GGameWindowLayoutMode layout_mode;
-  gboolean syncing_layout_default_size;
-  gint board_panel_width;
-  gint navigation_panel_width;
-  gint analysis_panel_width;
-  gint extra_width;
-  gint puzzle_board_panel_width;
-  gint puzzle_navigation_panel_width;
-  gint puzzle_analysis_panel_width;
-  gint puzzle_extra_width;
 };
 
 G_DEFINE_TYPE(GGameWindow, ggame_window, GTK_TYPE_APPLICATION_WINDOW)
 
-static void ggame_window_capture_panel_widths(GGameWindow *self);
-static gint ggame_window_current_extra_width(GGameWindow *self);
-static void ggame_window_apply_saved_panel_widths(GGameWindow *self);
-static gint ggame_window_expected_default_width(GGameWindow *self);
-static void ggame_window_sync_drawer_ui_with_capture(GGameWindow *self, gboolean capture_current_layout);
-static void ggame_window_load_default_size(gint *out_width, gint *out_height);
-static void ggame_window_save_default_size(GGameWindow *self);
-static gboolean ggame_window_on_close_request(GtkWindow *window, gpointer user_data);
-
 enum {
-  GGAME_WINDOW_DEFAULT_BOARD_PANEL_WIDTH = 500,
-  GGAME_WINDOW_DEFAULT_NAVIGATION_PANEL_WIDTH = 300,
-  GGAME_WINDOW_DEFAULT_ANALYSIS_PANEL_WIDTH = 300,
-  GGAME_WINDOW_DEFAULT_WIDTH = 1100,
   GGAME_WINDOW_DEFAULT_HEIGHT = 700,
   GGAME_WINDOW_ANALYSIS_DEPTH_DEFAULT = 8,
 };
-
-
-static gboolean ggame_window_layout_mode_valid(GGameWindowLayoutMode mode) {
-  return mode == GGAME_WINDOW_LAYOUT_MODE_NORMAL || mode == GGAME_WINDOW_LAYOUT_MODE_PUZZLE;
-}
-
-static gint *ggame_window_saved_board_panel_width_ptr(GGameWindow *self) {
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), NULL);
-  g_return_val_if_fail(ggame_window_layout_mode_valid(self->layout_mode), NULL);
-
-  return self->layout_mode == GGAME_WINDOW_LAYOUT_MODE_PUZZLE ? &self->puzzle_board_panel_width
-                                                                  : &self->board_panel_width;
-}
-
-static gint *ggame_window_saved_navigation_panel_width_ptr(GGameWindow *self) {
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), NULL);
-  g_return_val_if_fail(ggame_window_layout_mode_valid(self->layout_mode), NULL);
-
-  return self->layout_mode == GGAME_WINDOW_LAYOUT_MODE_PUZZLE ? &self->puzzle_navigation_panel_width
-                                                                  : &self->navigation_panel_width;
-}
-
-static gint *ggame_window_saved_analysis_panel_width_ptr(GGameWindow *self) {
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), NULL);
-  g_return_val_if_fail(ggame_window_layout_mode_valid(self->layout_mode), NULL);
-
-  return self->layout_mode == GGAME_WINDOW_LAYOUT_MODE_PUZZLE ? &self->puzzle_analysis_panel_width
-                                                                  : &self->analysis_panel_width;
-}
-
-static gint *ggame_window_saved_extra_width_ptr(GGameWindow *self) {
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), NULL);
-  g_return_val_if_fail(ggame_window_layout_mode_valid(self->layout_mode), NULL);
-
-  return self->layout_mode == GGAME_WINDOW_LAYOUT_MODE_PUZZLE ? &self->puzzle_extra_width : &self->extra_width;
-}
 
 static gboolean ggame_window_constrain_main_split_cb(GtkWidget * /*widget*/,
                                                          GdkFrameClock * /*frame_clock*/,
@@ -260,213 +187,6 @@ static gboolean ggame_window_constrain_main_split_cb(GtkWidget * /*widget*/,
   return G_SOURCE_CONTINUE;
 }
 
-static void ggame_window_capture_panel_widths(GGameWindow *self) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  gint *board_panel_width = ggame_window_saved_board_panel_width_ptr(self);
-  gint *navigation_panel_width = ggame_window_saved_navigation_panel_width_ptr(self);
-  gint *analysis_panel_width = ggame_window_saved_analysis_panel_width_ptr(self);
-  g_return_if_fail(board_panel_width != NULL);
-  g_return_if_fail(navigation_panel_width != NULL);
-  g_return_if_fail(analysis_panel_width != NULL);
-
-  gboolean drawer_attached = self->drawer_host != NULL && gtk_widget_get_parent(self->drawer_host) != NULL;
-  gboolean drawer_split_attached = self->drawer_split != NULL && gtk_widget_get_parent(self->drawer_split) != NULL;
-
-  if (drawer_attached && self->main_paned != NULL) {
-    gint position = gtk_paned_get_position(GTK_PANED(self->main_paned));
-    if (position > 0) {
-      *board_panel_width = position;
-    }
-  } else if (drawer_attached && self->board_panel != NULL && gtk_widget_get_visible(self->board_panel)) {
-    gint width = gtk_widget_get_width(self->board_panel);
-    if (width > 0) {
-      *board_panel_width = width;
-    }
-  }
-
-  if (drawer_split_attached && self->drawer_split != NULL) {
-    gint position = gtk_paned_get_position(GTK_PANED(self->drawer_split));
-    if (position > 0) {
-      *navigation_panel_width = position;
-    }
-  } else if (self->navigation_panel != NULL && gtk_widget_get_parent(self->navigation_panel) != NULL) {
-    gint width = gtk_widget_get_width(self->navigation_panel);
-    if (width > 0) {
-      *navigation_panel_width = width;
-    }
-  }
-
-  if (self->analysis_panel != NULL && gtk_widget_get_parent(self->analysis_panel) != NULL) {
-    gint width = gtk_widget_get_width(self->analysis_panel);
-    if (width > 0) {
-      *analysis_panel_width = width;
-    }
-  }
-
-  gint *extra_width = ggame_window_saved_extra_width_ptr(self);
-  g_return_if_fail(extra_width != NULL);
-  *extra_width = ggame_window_current_extra_width(self);
-}
-
-static gint ggame_window_current_extra_width(GGameWindow *self) {
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), 0);
-
-  gint window_width = gtk_widget_get_width(GTK_WIDGET(self));
-  if (window_width <= 0) {
-    return 0;
-  }
-
-  gint panel_width = 0;
-  if (self->board_panel != NULL) {
-    panel_width += MAX(0, gtk_widget_get_width(self->board_panel));
-  }
-  if (self->navigation_panel != NULL && gtk_widget_get_parent(self->navigation_panel) != NULL) {
-    panel_width += MAX(0, gtk_widget_get_width(self->navigation_panel));
-  }
-  if (self->analysis_panel != NULL && gtk_widget_get_parent(self->analysis_panel) != NULL) {
-    panel_width += MAX(0, gtk_widget_get_width(self->analysis_panel));
-  }
-
-  return MAX(0, window_width - panel_width);
-}
-
-static gint ggame_window_expected_default_width(GGameWindow *self) {
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), GGAME_WINDOW_DEFAULT_BOARD_PANEL_WIDTH);
-
-  gint *board_panel_width = ggame_window_saved_board_panel_width_ptr(self);
-  gint *navigation_panel_width = ggame_window_saved_navigation_panel_width_ptr(self);
-  gint *analysis_panel_width = ggame_window_saved_analysis_panel_width_ptr(self);
-  gint *extra_width = ggame_window_saved_extra_width_ptr(self);
-  g_return_val_if_fail(board_panel_width != NULL, GGAME_WINDOW_DEFAULT_BOARD_PANEL_WIDTH);
-  g_return_val_if_fail(navigation_panel_width != NULL, GGAME_WINDOW_DEFAULT_NAVIGATION_PANEL_WIDTH);
-  g_return_val_if_fail(analysis_panel_width != NULL, GGAME_WINDOW_DEFAULT_ANALYSIS_PANEL_WIDTH);
-  g_return_val_if_fail(extra_width != NULL, 0);
-
-  gint drawer_width = 0;
-  if (self->show_navigation_drawer) {
-    drawer_width += MAX(1, *navigation_panel_width);
-  }
-  if (self->show_analysis_drawer) {
-    drawer_width += MAX(1, *analysis_panel_width);
-  }
-
-  return MAX(1, *board_panel_width) + drawer_width + MAX(0, *extra_width);
-}
-
-static void ggame_window_apply_saved_panel_widths(GGameWindow *self) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  gint *board_panel_width = ggame_window_saved_board_panel_width_ptr(self);
-  gint *navigation_panel_width = ggame_window_saved_navigation_panel_width_ptr(self);
-  gint *analysis_panel_width = ggame_window_saved_analysis_panel_width_ptr(self);
-  gint *extra_width = ggame_window_saved_extra_width_ptr(self);
-  g_return_if_fail(board_panel_width != NULL);
-  g_return_if_fail(navigation_panel_width != NULL);
-  g_return_if_fail(analysis_panel_width != NULL);
-  g_return_if_fail(extra_width != NULL);
-
-  gint board_width = MAX(1, *board_panel_width);
-  gint board_min_width = board_width;
-  gint navigation_width = MAX(1, *navigation_panel_width);
-  gint analysis_width = MAX(1, *analysis_panel_width);
-  gint drawer_width = 0;
-
-  if (self->profile != NULL && self->profile->layout.minimum_board_panel_width > 0) {
-    board_min_width = MIN(board_width, self->profile->layout.minimum_board_panel_width);
-  }
-
-  if (self->show_navigation_drawer) {
-    drawer_width += navigation_width;
-  }
-  if (self->show_analysis_drawer) {
-    drawer_width += analysis_width;
-  }
-
-  gint current_height = gtk_widget_get_height(GTK_WIDGET(self));
-  if (current_height <= 0) {
-    gint default_width = 0;
-    gint default_height = 0;
-    gtk_window_get_default_size(GTK_WINDOW(self), &default_width, &default_height);
-    current_height = default_height > 0 ? default_height : GGAME_WINDOW_DEFAULT_HEIGHT;
-  }
-
-  self->syncing_layout_default_size = TRUE;
-  gtk_window_set_default_size(GTK_WINDOW(self), board_width + drawer_width + MAX(0, *extra_width), current_height);
-  self->syncing_layout_default_size = FALSE;
-
-  if (self->main_paned != NULL && (self->show_navigation_drawer || self->show_analysis_drawer)) {
-    gtk_paned_set_position(GTK_PANED(self->main_paned), board_width);
-  }
-  if (self->drawer_split != NULL && self->show_navigation_drawer && self->show_analysis_drawer) {
-    gtk_paned_set_position(GTK_PANED(self->drawer_split), navigation_width);
-  }
-  if (self->board_panel != NULL) {
-    gtk_widget_set_size_request(self->board_panel, board_min_width, -1);
-  }
-  if (self->drawer_host != NULL) {
-    gtk_widget_set_size_request(self->drawer_host, -1, -1);
-  }
-  if (self->drawer_split != NULL) {
-    gtk_widget_set_size_request(self->drawer_split, -1, -1);
-  }
-}
-
-static void ggame_window_sync_drawer_ui_with_capture(GGameWindow *self, gboolean capture_current_layout) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  if (capture_current_layout) {
-    ggame_window_capture_panel_widths(self);
-  }
-
-  if (self->navigation_panel != NULL) {
-    ggame_widget_remove_from_parent(self->navigation_panel);
-  }
-  if (self->analysis_panel != NULL) {
-    ggame_widget_remove_from_parent(self->analysis_panel);
-  }
-  if (self->drawer_host != NULL) {
-    ggame_widget_remove_from_parent(self->drawer_host);
-  }
-  if (self->drawer_split != NULL) {
-    ggame_widget_remove_from_parent(self->drawer_split);
-  }
-
-  if (self->show_navigation_drawer && self->show_analysis_drawer) {
-    g_return_if_fail(self->drawer_host != NULL);
-    g_return_if_fail(self->drawer_split != NULL);
-    g_return_if_fail(self->navigation_panel != NULL);
-    g_return_if_fail(self->analysis_panel != NULL);
-    gtk_paned_set_start_child(GTK_PANED(self->drawer_split), self->navigation_panel);
-    gtk_paned_set_end_child(GTK_PANED(self->drawer_split), self->analysis_panel);
-    gtk_box_append(GTK_BOX(self->drawer_host), self->drawer_split);
-    gtk_widget_set_visible(self->navigation_panel, TRUE);
-    gtk_widget_set_visible(self->analysis_panel, TRUE);
-    gtk_widget_set_visible(self->drawer_split, TRUE);
-    gtk_widget_set_visible(self->drawer_host, TRUE);
-    gtk_paned_set_end_child(GTK_PANED(self->main_paned), self->drawer_host);
-  } else if (self->show_navigation_drawer) {
-    g_return_if_fail(self->drawer_host != NULL);
-    g_return_if_fail(self->navigation_panel != NULL);
-    gtk_box_append(GTK_BOX(self->drawer_host), self->navigation_panel);
-    gtk_widget_set_visible(self->navigation_panel, TRUE);
-    gtk_widget_set_visible(self->drawer_host, TRUE);
-    gtk_paned_set_end_child(GTK_PANED(self->main_paned), self->drawer_host);
-  } else if (self->show_analysis_drawer) {
-    g_return_if_fail(self->drawer_host != NULL);
-    g_return_if_fail(self->analysis_panel != NULL);
-    gtk_box_append(GTK_BOX(self->drawer_host), self->analysis_panel);
-    gtk_widget_set_visible(self->analysis_panel, TRUE);
-    gtk_widget_set_visible(self->drawer_host, TRUE);
-    gtk_paned_set_end_child(GTK_PANED(self->main_paned), self->drawer_host);
-  } else {
-    gtk_paned_set_end_child(GTK_PANED(self->main_paned), NULL);
-  }
-
-  ggame_window_apply_saved_panel_widths(self);
-  gtk_widget_queue_allocate(GTK_WIDGET(self));
-}
-
 guint ggame_window_get_analysis_depth(GGameWindow *self) {
   g_return_val_if_fail(GGAME_IS_WINDOW(self), GGAME_WINDOW_ANALYSIS_DEPTH_DEFAULT);
 
@@ -482,145 +202,6 @@ void ggame_window_set_analysis_depth(GGameWindow *self, guint depth) {
 void ggame_window_set_loaded_variant(GGameWindow *self, const GameBackendVariant *variant) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
   g_return_if_fail(variant != NULL);
-}
-
-static void ggame_window_load_default_size(gint *out_width, gint *out_height) {
-  g_return_if_fail(out_width != NULL);
-  g_return_if_fail(out_height != NULL);
-
-  *out_width = GGAME_WINDOW_DEFAULT_WIDTH;
-  *out_height = GGAME_WINDOW_DEFAULT_HEIGHT;
-
-  g_autoptr(GSettings) settings = ggame_common_settings_create();
-  if (!G_IS_SETTINGS(settings)) {
-    return;
-  }
-
-  gint saved_width = g_settings_get_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_WIDTH);
-  gint saved_height = g_settings_get_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_HEIGHT);
-  if (saved_width > 0 && saved_height > 0) {
-    *out_width = saved_width;
-    *out_height = saved_height;
-  }
-}
-
-static void ggame_window_load_saved_layout(GGameWindow *self) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  g_autoptr(GSettings) settings = ggame_common_settings_create();
-  if (!G_IS_SETTINGS(settings)) {
-    return;
-  }
-
-  gint board_panel_width = g_settings_get_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_BOARD_PANEL_WIDTH);
-  if (board_panel_width > 0) {
-    self->board_panel_width = board_panel_width;
-  }
-
-  gint navigation_panel_width = g_settings_get_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_NAVIGATION_PANEL_WIDTH);
-  if (navigation_panel_width > 0) {
-    self->navigation_panel_width = navigation_panel_width;
-  }
-
-  gint analysis_panel_width = g_settings_get_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_ANALYSIS_PANEL_WIDTH);
-  if (analysis_panel_width > 0) {
-    self->analysis_panel_width = analysis_panel_width;
-  }
-
-  if (!g_settings_get_boolean(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_LAYOUT_SAVED)) {
-    return;
-  }
-
-  self->show_navigation_drawer =
-      g_settings_get_boolean(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_SHOW_NAVIGATION_DRAWER);
-  self->show_analysis_drawer =
-      g_settings_get_boolean(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_SHOW_ANALYSIS_DRAWER);
-  self->show_move_report = g_settings_get_boolean(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_SHOW_MOVE_REPORT);
-}
-
-static void ggame_window_save_default_size(GGameWindow *self) {
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  if (self->layout_mode == GGAME_WINDOW_LAYOUT_MODE_NORMAL &&
-      (self->show_navigation_drawer ||
-       self->show_analysis_drawer ||
-       (self->drawer_host != NULL && gtk_widget_get_parent(self->drawer_host) != NULL))) {
-    ggame_window_capture_panel_widths(self);
-  }
-
-  gint width = gtk_widget_get_width(GTK_WIDGET(self));
-  gint height = gtk_widget_get_height(GTK_WIDGET(self));
-  if (width <= 0 || height <= 0) {
-    gtk_window_get_default_size(GTK_WINDOW(self), &width, &height);
-  }
-  if (width <= 0 || height <= 0) {
-    return;
-  }
-
-  g_autoptr(GSettings) settings = ggame_common_settings_create();
-  if (!G_IS_SETTINGS(settings)) {
-    return;
-  }
-
-  g_settings_set_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_WIDTH, width);
-  g_settings_set_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_HEIGHT, height);
-  g_settings_set_boolean(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_LAYOUT_SAVED, TRUE);
-  g_settings_set_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_BOARD_PANEL_WIDTH, self->board_panel_width);
-  g_settings_set_int(settings,
-                     GGAME_COMMON_SETTINGS_KEY_WINDOW_NAVIGATION_PANEL_WIDTH,
-                     self->navigation_panel_width);
-  g_settings_set_int(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_ANALYSIS_PANEL_WIDTH, self->analysis_panel_width);
-
-  gboolean show_navigation_drawer = self->show_navigation_drawer;
-  gboolean show_analysis_drawer = self->show_analysis_drawer;
-  if (self->puzzle_mode) {
-    show_navigation_drawer = self->puzzle_saved_show_navigation_drawer;
-    show_analysis_drawer = self->puzzle_saved_show_analysis_drawer;
-  }
-
-  g_settings_set_boolean(settings,
-                         GGAME_COMMON_SETTINGS_KEY_WINDOW_SHOW_NAVIGATION_DRAWER,
-                         show_navigation_drawer);
-  g_settings_set_boolean(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_SHOW_ANALYSIS_DRAWER, show_analysis_drawer);
-  g_settings_set_boolean(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_SHOW_MOVE_REPORT, self->show_move_report);
-}
-
-static gboolean ggame_window_on_close_request(GtkWindow *window, gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), FALSE);
-  g_return_val_if_fail(GTK_IS_WINDOW(window), FALSE);
-
-  ggame_window_save_default_size(self);
-  return FALSE;
-}
-
-static void ggame_window_on_default_size_notify(GObject *object,
-                                                    GParamSpec *pspec,
-                                                    gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-  g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(GTK_IS_WINDOW(object));
-  g_return_if_fail(pspec != NULL);
-
-  if (self->syncing_layout_default_size) {
-    return;
-  }
-  if (!self->puzzle_mode || self->layout_mode != GGAME_WINDOW_LAYOUT_MODE_PUZZLE) {
-    return;
-  }
-  if (g_strcmp0(g_param_spec_get_name(pspec), "default-width") != 0) {
-    return;
-  }
-
-  gint default_width = -1;
-  gtk_window_get_default_size(GTK_WINDOW(self), &default_width, NULL);
-  gint expected_width = ggame_window_expected_default_width(self);
-  if (default_width == expected_width || default_width <= 0) {
-    return;
-  }
-
-  ggame_window_apply_saved_panel_widths(self);
-  gtk_widget_queue_allocate(GTK_WIDGET(self));
 }
 
 const GameBackendVariant *ggame_window_get_variant(GGameWindow *self) {
@@ -696,22 +277,10 @@ static void ggame_window_class_init(GGameWindowClass *klass) {
 }
 
 static void ggame_window_init(GGameWindow *self) {
-  const GGameAppLayout *layout = NULL;
-
   self->profile = ggame_active_app_profile();
-  layout = self->profile != NULL ? &self->profile->layout : NULL;
   self->paned_tick_id = 0;
-  self->syncing_layout_default_size = FALSE;
 
-  gint default_width = 0;
-  gint default_height = 0;
-  ggame_window_load_default_size(&default_width, &default_height);
-  gtk_window_set_default_size(GTK_WINDOW(self), default_width, default_height);
-  g_signal_connect(self, "close-request", G_CALLBACK(ggame_window_on_close_request), self);
-  g_signal_connect(self,
-                   "notify::default-width",
-                   G_CALLBACK(ggame_window_on_default_size_notify),
-                   self);
+  gtk_window_set_default_size(GTK_WINDOW(self), 1260, GGAME_WINDOW_DEFAULT_HEIGHT);
 
   GtkWidget *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_window_set_child(GTK_WINDOW(self), content);
@@ -780,32 +349,16 @@ static void ggame_window_init(GGameWindow *self) {
   gtk_paned_set_shrink_end_child(GTK_PANED(right_split), FALSE);
   self->analysis_panel = analysis_panel;
   g_object_set_data(G_OBJECT(self), "analysis-panel", analysis_panel);
-  gtk_paned_set_position(GTK_PANED(paned), 500);
+
+  ggame_widget_remove_from_parent(middle_panel);
+  ggame_widget_remove_from_parent(analysis_panel);
+  ggame_widget_remove_from_parent(drawer_host);
+  ggame_widget_remove_from_parent(right_split);
+  gtk_box_append(GTK_BOX(drawer_host), middle_panel);
+  gtk_paned_set_end_child(GTK_PANED(paned), drawer_host);
+  gtk_widget_set_size_request(left_panel, 760, -1);
+  gtk_paned_set_position(GTK_PANED(paned), 960);
   gtk_paned_set_position(GTK_PANED(right_split), 300);
-  self->show_navigation_drawer =
-      layout != NULL ? layout->show_navigation_drawer_by_default : TRUE;
-  self->show_analysis_drawer =
-      layout != NULL ? layout->show_analysis_drawer_by_default : TRUE;
-  self->show_move_report = TRUE;
-  self->layout_mode = GGAME_WINDOW_LAYOUT_MODE_NORMAL;
-  self->board_panel_width =
-      layout != NULL && layout->default_board_panel_width > 0 ? layout->default_board_panel_width
-                                                              : GGAME_WINDOW_DEFAULT_BOARD_PANEL_WIDTH;
-  self->navigation_panel_width =
-      layout != NULL && layout->default_navigation_panel_width > 0 ? layout->default_navigation_panel_width
-                                                                   : GGAME_WINDOW_DEFAULT_NAVIGATION_PANEL_WIDTH;
-  self->analysis_panel_width =
-      layout != NULL && layout->default_analysis_panel_width > 0 ? layout->default_analysis_panel_width
-                                                                 : GGAME_WINDOW_DEFAULT_ANALYSIS_PANEL_WIDTH;
-  ggame_window_load_saved_layout(self);
-  self->puzzle_saved_show_navigation_drawer = self->show_navigation_drawer;
-  self->puzzle_saved_show_analysis_drawer = self->show_analysis_drawer;
-  self->extra_width = MAX(0, default_width - ggame_window_expected_default_width(self));
-  self->puzzle_board_panel_width = self->board_panel_width;
-  self->puzzle_navigation_panel_width = self->navigation_panel_width;
-  self->puzzle_analysis_panel_width = self->analysis_panel_width;
-  self->puzzle_extra_width = 0;
-  ggame_window_sync_drawer_ui_with_capture(self, FALSE);
 }
 
 PlayerControlsPanel *ggame_window_get_controls_panel(GGameWindow *self) {
