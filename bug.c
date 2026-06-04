@@ -8,9 +8,6 @@ static GtkWindow *create_window(void) {
   GtkWidget *paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
   gtk_window_set_child(window, paned);
 
-  GtkWidget *left_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-  gtk_paned_set_start_child(GTK_PANED(paned), left_panel);
-
   drawer_host = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   g_object_ref_sink(drawer_host);
   gtk_paned_set_end_child(GTK_PANED(paned), drawer_host);
