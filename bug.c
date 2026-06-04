@@ -19,7 +19,6 @@ static void create_and_detroy_window(void) {
   }
 
   /* Destroy window. */
-  gtk_paned_set_end_child(GTK_PANED(gtk_widget_get_parent(drawer_host)), NULL);
   gtk_window_destroy(window);
 }
 
