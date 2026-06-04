@@ -4,7 +4,6 @@ static GtkWidget *drawer_host;
 
 static GtkWindow *create_window(void) {
   GtkWindow *window = GTK_WINDOW(gtk_window_new());
-  gtk_window_set_default_size(window, 1260, 700);
 
   GtkWidget *paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
   gtk_window_set_child(window, paned);
@@ -34,7 +33,11 @@ static void destroy_window(GtkWindow *window) {
   gtk_window_destroy(window);
 }
 
-#define drain_main_context() for (guint i = 0; i < 256; ++i) g_main_context_iteration(NULL, FALSE)
+static void drain_main_context(void) {
+  for (guint i = 0; i < 256; ++i) {
+    g_main_context_iteration(NULL, FALSE);
+  }
+}
 
 int main(void) {
   gtk_init();
