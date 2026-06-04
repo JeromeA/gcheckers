@@ -97,7 +97,6 @@ const GameBackend homeworlds_game_backend = {
 struct _GGameWindow {
   GtkApplicationWindow parent_instance;
   GtkWidget *main_paned;
-  GtkWidget *board_panel;
   GtkWidget *drawer_host;
   GtkWidget *drawer_split;
   GtkWidget *navigation_panel;
@@ -158,7 +157,6 @@ static void ggame_window_dispose(GObject *object) {
     g_clear_object(&self->drawer_host);
   }
   self->main_paned = NULL;
-  self->board_panel = NULL;
   G_OBJECT_CLASS(ggame_window_parent_class)->dispose(object);
 }
 
@@ -184,21 +182,14 @@ static void ggame_window_init(GGameWindow *self) {
   GtkWidget *left_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_widget_set_hexpand(left_panel, TRUE);
   gtk_widget_set_vexpand(left_panel, TRUE);
-  gtk_widget_set_margin_top(left_panel, 8);
-  gtk_widget_set_margin_bottom(left_panel, 8);
-  gtk_widget_set_margin_start(left_panel, 8);
-  gtk_widget_set_margin_end(left_panel, 8);
   gtk_paned_set_start_child(GTK_PANED(paned), left_panel);
   gtk_paned_set_shrink_start_child(GTK_PANED(paned), FALSE);
-  self->board_panel = left_panel;
-  g_object_set_data(G_OBJECT(self), "board-panel", left_panel);
 
   GtkWidget *right_split = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
   g_object_ref_sink(right_split);
   gtk_widget_set_hexpand(right_split, TRUE);
   gtk_widget_set_vexpand(right_split, TRUE);
   self->drawer_split = right_split;
-  g_object_set_data(G_OBJECT(self), "drawer-split", right_split);
 
   GtkWidget *drawer_host = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   g_object_ref_sink(drawer_host);
@@ -207,33 +198,22 @@ static void ggame_window_init(GGameWindow *self) {
   gtk_paned_set_end_child(GTK_PANED(paned), drawer_host);
   gtk_paned_set_shrink_end_child(GTK_PANED(paned), FALSE);
   self->drawer_host = drawer_host;
-  g_object_set_data(G_OBJECT(self), "drawer-host", drawer_host);
 
   GtkWidget *middle_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   g_object_ref_sink(middle_panel);
   gtk_widget_set_hexpand(middle_panel, TRUE);
   gtk_widget_set_vexpand(middle_panel, TRUE);
-  gtk_widget_set_margin_top(middle_panel, 8);
-  gtk_widget_set_margin_bottom(middle_panel, 8);
-  gtk_widget_set_margin_start(middle_panel, 8);
-  gtk_widget_set_margin_end(middle_panel, 8);
   gtk_paned_set_start_child(GTK_PANED(right_split), middle_panel);
   gtk_paned_set_shrink_start_child(GTK_PANED(right_split), FALSE);
   self->navigation_panel = middle_panel;
-  g_object_set_data(G_OBJECT(self), "navigation-panel", middle_panel);
 
   GtkWidget *analysis_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   g_object_ref_sink(analysis_panel);
   gtk_widget_set_hexpand(analysis_panel, TRUE);
   gtk_widget_set_vexpand(analysis_panel, TRUE);
-  gtk_widget_set_margin_top(analysis_panel, 8);
-  gtk_widget_set_margin_bottom(analysis_panel, 8);
-  gtk_widget_set_margin_start(analysis_panel, 8);
-  gtk_widget_set_margin_end(analysis_panel, 8);
   gtk_paned_set_end_child(GTK_PANED(right_split), analysis_panel);
   gtk_paned_set_shrink_end_child(GTK_PANED(right_split), FALSE);
   self->analysis_panel = analysis_panel;
-  g_object_set_data(G_OBJECT(self), "analysis-panel", analysis_panel);
 
   ggame_widget_remove_from_parent(middle_panel);
   ggame_widget_remove_from_parent(analysis_panel);
