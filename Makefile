@@ -341,8 +341,8 @@ $(TEST_HOMEWORLDS_WINDOW_BIN): tests/test_homeworlds_window.c $(HOMEWORLDS_UI_SR
 		src/sgf_view_scroller.c src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(SRCS) \
 		$(BOOP_UI_SRCS) $(HOMEWORLDS_UI_SRCS) $(LDLIBS) $(GTK_LIBS)
 
-bug: bug.c src/window.h $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
-	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ bug.c $(WIDGET_UTILS_SRCS) $(LDLIBS) $(GTK_LIBS)
+bug: bug.c
+	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ bug.c $(LDLIBS) $(GTK_LIBS)
 
 bug-repro: bug
 	@/bin/bash -lc 'set -u; \

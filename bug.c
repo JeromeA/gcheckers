@@ -1,8 +1,69 @@
 #include <gtk/gtk.h>
 
-#include "window.h"
+static gboolean ggame_widget_remove_from_overlay(GtkWidget *parent, GtkWidget *widget) {
+  g_return_val_if_fail(GTK_IS_OVERLAY(parent), FALSE);
+  g_return_val_if_fail(GTK_IS_WIDGET(widget), FALSE);
 
-#include "widget_utils.h"
+  GtkOverlay *overlay = GTK_OVERLAY(parent);
+  GtkWidget *child = gtk_overlay_get_child(overlay);
+  if (child == widget) {
+    gtk_overlay_set_child(overlay, NULL);
+    return TRUE;
+  }
+
+  gtk_overlay_remove_overlay(overlay, widget);
+  return TRUE;
+}
+
+static gboolean ggame_widget_remove_from_parent(GtkWidget *widget) {
+  g_return_val_if_fail(GTK_IS_WIDGET(widget), FALSE);
+
+  GtkWidget *parent = gtk_widget_get_parent(widget);
+  if (!parent) {
+    return TRUE;
+  }
+
+  if (GTK_IS_BOX(parent)) {
+    gtk_box_remove(GTK_BOX(parent), widget);
+    return TRUE;
+  }
+
+  if (GTK_IS_GRID(parent)) {
+    gtk_grid_remove(GTK_GRID(parent), widget);
+    return TRUE;
+  }
+
+  if (GTK_IS_OVERLAY(parent)) {
+    return ggame_widget_remove_from_overlay(parent, widget);
+  }
+
+  if (GTK_IS_PANED(parent)) {
+    GtkPaned *paned = GTK_PANED(parent);
+    if (gtk_paned_get_start_child(paned) == widget) {
+      gtk_paned_set_start_child(paned, NULL);
+      return TRUE;
+    }
+    if (gtk_paned_get_end_child(paned) == widget) {
+      gtk_paned_set_end_child(paned, NULL);
+      return TRUE;
+    }
+
+    g_debug("Widget was not a paned child during removal\n");
+    return FALSE;
+  }
+
+  if (GTK_IS_STACK(parent)) {
+    gtk_stack_remove(GTK_STACK(parent), widget);
+    return TRUE;
+  }
+
+  g_debug("Unsupported parent type %s when removing widget\n", G_OBJECT_TYPE_NAME(parent));
+  return FALSE;
+}
+
+#define GGAME_TYPE_WINDOW (ggame_window_get_type())
+
+G_DECLARE_FINAL_TYPE(GGameWindow, ggame_window, GGAME, WINDOW, GtkApplicationWindow)
 
 struct _GGameWindow {
   GtkApplicationWindow parent_instance;
@@ -59,7 +120,7 @@ static void ggame_window_init(GGameWindow *self) {
   gtk_paned_set_position(GTK_PANED(paned), 960);
 }
 
-GGameWindow *ggame_window_new(GtkApplication *app, GGameModel * /*model*/) {
+static GGameWindow *ggame_window_new(GtkApplication *app) {
   g_return_val_if_fail(GTK_IS_APPLICATION(app), NULL);
 
   return g_object_new(GGAME_TYPE_WINDOW, "application", app, NULL);
@@ -80,12 +141,12 @@ int main(void) {
                                             G_APPLICATION_DEFAULT_FLAGS | G_APPLICATION_NON_UNIQUE);
   g_application_register(G_APPLICATION(app), NULL, NULL);
 
-  GGameWindow *window = ggame_window_new(app, NULL);
+  GGameWindow *window = ggame_window_new(app);
   gtk_window_present(GTK_WINDOW(window));
   drain_main_context();
   gtk_window_destroy(GTK_WINDOW(window));
 
-  window = ggame_window_new(app, NULL);
+  window = ggame_window_new(app);
   gtk_window_set_default_size(GTK_WINDOW(window), 2000, 700);
   gtk_window_present(GTK_WINDOW(window));
   drain_main_context();
