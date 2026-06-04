@@ -23,7 +23,6 @@ static GtkWindow *create_window(void) {
 
 static void destroy_window(GtkWindow *window) {
   gtk_paned_set_end_child(GTK_PANED(gtk_widget_get_parent(drawer_host)), NULL);
-  g_clear_object(&drawer_host);
   gtk_window_destroy(window);
 }
 
