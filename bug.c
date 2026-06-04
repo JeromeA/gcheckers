@@ -1,20 +1,5 @@
 #include <gtk/gtk.h>
 
-static gboolean ggame_widget_remove_from_overlay(GtkWidget *parent, GtkWidget *widget) {
-  g_return_val_if_fail(GTK_IS_OVERLAY(parent), FALSE);
-  g_return_val_if_fail(GTK_IS_WIDGET(widget), FALSE);
-
-  GtkOverlay *overlay = GTK_OVERLAY(parent);
-  GtkWidget *child = gtk_overlay_get_child(overlay);
-  if (child == widget) {
-    gtk_overlay_set_child(overlay, NULL);
-    return TRUE;
-  }
-
-  gtk_overlay_remove_overlay(overlay, widget);
-  return TRUE;
-}
-
 static gboolean ggame_widget_remove_from_parent(GtkWidget *widget) {
   g_return_val_if_fail(GTK_IS_WIDGET(widget), FALSE);
 
@@ -26,15 +11,6 @@ static gboolean ggame_widget_remove_from_parent(GtkWidget *widget) {
   if (GTK_IS_BOX(parent)) {
     gtk_box_remove(GTK_BOX(parent), widget);
     return TRUE;
-  }
-
-  if (GTK_IS_GRID(parent)) {
-    gtk_grid_remove(GTK_GRID(parent), widget);
-    return TRUE;
-  }
-
-  if (GTK_IS_OVERLAY(parent)) {
-    return ggame_widget_remove_from_overlay(parent, widget);
   }
 
   if (GTK_IS_PANED(parent)) {
@@ -50,11 +26,6 @@ static gboolean ggame_widget_remove_from_parent(GtkWidget *widget) {
 
     g_debug("Widget was not a paned child during removal\n");
     return FALSE;
-  }
-
-  if (GTK_IS_STACK(parent)) {
-    gtk_stack_remove(GTK_STACK(parent), widget);
-    return TRUE;
   }
 
   g_debug("Unsupported parent type %s when removing widget\n", G_OBJECT_TYPE_NAME(parent));
