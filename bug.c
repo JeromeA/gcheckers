@@ -11,32 +11,13 @@
 #include "games/homeworlds/homeworlds_backend.h"
 
 static const GGameAppProfile homeworlds_app_profile = {
-  .kind = GGAME_APP_KIND_HOMEWORLDS,
-  .id = "homeworlds",
-  .app_id = "io.github.jeromea.ghomeworlds",
-  .display_name = "Homeworlds",
-  .window_title_name = "ghomeworlds",
   .backend = &homeworlds_game_backend,
-  .layout =
-      {
-          .default_board_panel_width = 960,
-          .minimum_board_panel_width = 760,
-          .default_navigation_panel_width = 300,
-          .default_analysis_panel_width = 300,
-          .show_navigation_drawer_by_default = TRUE,
-          .show_analysis_drawer_by_default = FALSE,
-      },
 };
 
 const GGameAppProfile *ggame_app_profile_lookup_by_id(const char *id) {
   g_return_val_if_fail(id != NULL, NULL);
 
-  if (g_strcmp0(id, homeworlds_app_profile.id) == 0) {
-    return &homeworlds_app_profile;
-  }
-
-  g_debug("Unknown app profile id %s", id);
-  return NULL;
+  return &homeworlds_app_profile;
 }
 
 const GGameAppProfile *ggame_active_app_profile(void) {
@@ -133,8 +114,7 @@ char *ggame_model_format_status(GGameModel *self) {
 #include "homeworlds_backend.h"
 
 const GameBackend homeworlds_game_backend = {
-  .id = "homeworlds",
-  .display_name = "Homeworlds",
+  0
 };
 /* End copied file: src/games/homeworlds/homeworlds_backend.c */
 
