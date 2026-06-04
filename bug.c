@@ -34,15 +34,9 @@ static void destroy_window(GtkWindow *window) {
   gtk_window_destroy(window);
 }
 
-static void drain_main_context(void) {
-  for (guint i = 0; i < 256; ++i) {
-    g_main_context_iteration(NULL, FALSE);
-  }
-}
+#define drain_main_context() for (guint i = 0; i < 256; ++i) g_main_context_iteration(NULL, FALSE)
 
 int main(void) {
-  g_log_set_always_fatal(G_LOG_LEVEL_CRITICAL);
-
   gtk_init();
 
   GtkWindow *window = create_window();
