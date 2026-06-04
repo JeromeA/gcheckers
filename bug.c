@@ -258,7 +258,6 @@ static void ggame_window_class_init(GGameWindowClass *klass) {
 
 static void ggame_window_init(GGameWindow *self) {
   self->profile = ggame_active_app_profile();
-  self->paned_tick_id = 0;
 
   gtk_window_set_default_size(GTK_WINDOW(self), 1260, GGAME_WINDOW_DEFAULT_HEIGHT);
 
@@ -369,26 +368,10 @@ GGameWindow *ggame_window_new(GtkApplication *app, GGameModel *model) {
 }
 /* End copied file: src/window.c */
 
-static GtkApplication *test_homeworlds_app = NULL;
-
 static void drain_main_context(void) {
   for (guint i = 0; i < 256; ++i) {
     g_main_context_iteration(NULL, FALSE);
   }
-}
-
-static GGameWindow *create_window(GtkApplication **out_app) {
-  if (test_homeworlds_app == NULL) {
-    test_homeworlds_app = gtk_application_new("io.github.jeromea.ghomeworlds.test",
-                                              G_APPLICATION_DEFAULT_FLAGS | G_APPLICATION_NON_UNIQUE);
-    g_application_register(G_APPLICATION(test_homeworlds_app), NULL, NULL);
-  }
-
-  GtkApplication *app = g_object_ref(test_homeworlds_app);
-  GGameWindow *window = ggame_window_new(app, NULL);
-
-  *out_app = app;
-  return window;
 }
 
 int main(void) {
@@ -399,13 +382,16 @@ int main(void) {
 
   gtk_init();
 
-  window = create_window(&app);
+  app = gtk_application_new("io.github.jeromea.ghomeworlds.test",
+                            G_APPLICATION_DEFAULT_FLAGS | G_APPLICATION_NON_UNIQUE);
+  g_application_register(G_APPLICATION(app), NULL, NULL);
+
+  window = ggame_window_new(app, NULL);
   gtk_window_present(GTK_WINDOW(window));
   drain_main_context();
   gtk_window_destroy(GTK_WINDOW(window));
-  g_object_unref(app);
 
-  window = create_window(&app);
+  window = ggame_window_new(app, NULL);
   gtk_window_set_default_size(GTK_WINDOW(window), 2000, 700);
   gtk_window_present(GTK_WINDOW(window));
   drain_main_context();
