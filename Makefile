@@ -341,36 +341,8 @@ $(TEST_HOMEWORLDS_WINDOW_BIN): tests/test_homeworlds_window.c $(HOMEWORLDS_UI_SR
 		src/sgf_view_scroller.c src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(SRCS) \
 		$(BOOP_UI_SRCS) $(HOMEWORLDS_UI_SRCS) $(LDLIBS) $(GTK_LIBS)
 
-bug: bug.c $(HOMEWORLDS_UI_SRCS) \
-	$(BUG_HOMEWORLDS_ALL_SRCS) src/application.c $(APP_PATHS_SRCS) $(PUZZLE_PROGRESS_SRCS) \
-	$(PUZZLE_CATALOG_SRCS) src/app_settings.c src/app_settings.h $(COMMON_SETTINGS_SRCS) src/common_settings.h \
-	src/settings_dialog.c src/settings_dialog.h \
-	src/new_game_dialog.c $(CHECKERS_DIR)/rulesets.c \
-	$(CHECKERS_DIR)/rulesets.h src/import_dialog.c src/sgf_file_actions.c src/sgf_file_actions.h \
-	src/file_dialog_history.c src/file_dialog_history.h src/bga_client.c src/bga_client.h src/window.h \
-	src/style.c src/style.h src/player_controls_panel.c src/player_controls_panel.h src/analysis_graph.c \
-	src/analysis_graph.h $(SGF_AUTOSAVE_SRCS) src/sgf_autosave.h src/sgf_controller.c \
-	src/sgf_controller.h src/board_view.c src/board_view.h \
-	src/board_grid.c src/board_grid.h src/board_square.c src/board_square.h src/board_move_overlay.c \
-	src/board_move_overlay.h src/board_selection_controller.c src/board_selection_controller.h \
-	src/piece_palette.c src/piece_palette.h src/man_paintable.c src/man_paintable.h src/sgf_io.c src/sgf_io.h \
-	src/sgf_move_props.c src/sgf_move_props.h src/sgf_tree.c src/sgf_tree.h src/sgf_view.c src/sgf_view.h \
-	src/sgf_view_disc_factory.c src/sgf_view_disc_factory.h src/sgf_view_layout.c src/sgf_view_layout.h \
-	src/sgf_view_link_renderer.c src/sgf_view_link_renderer.h src/sgf_view_scroller.c \
-	src/sgf_view_scroller.h src/sgf_view_selection_controller.c src/sgf_view_selection_controller.h \
-	$(BUG_SRCS) $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS) \
-	$(HOMEWORLDS_DIR)/homeworlds_view.h
-	$(CC) $(CFLAGS) $(GTK_CFLAGS) -I$(HOMEWORLDS_DIR) -o $@ bug.c \
-		src/application.c $(APP_PATHS_SRCS) $(COMMON_SETTINGS_SRCS) $(PUZZLE_PROGRESS_SRCS) \
-		$(PUZZLE_CATALOG_SRCS) \
-		src/app_settings.c src/settings_dialog.c src/new_game_dialog.c \
-		src/import_dialog.c src/sgf_file_actions.c src/file_dialog_history.c src/bga_client.c src/style.c \
-		src/player_controls_panel.c src/analysis_graph.c src/sgf_controller.c $(SGF_AUTOSAVE_SRCS) src/board_view.c \
-		src/board_grid.c src/board_square.c src/board_move_overlay.c src/board_selection_controller.c \
-		src/piece_palette.c src/man_paintable.c src/sgf_io.c src/sgf_move_props.c src/sgf_tree.c \
-		src/sgf_view.c src/sgf_view_disc_factory.c src/sgf_view_layout.c src/sgf_view_link_renderer.c \
-		src/sgf_view_scroller.c src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(BUG_SRCS) \
-		$(HOMEWORLDS_UI_SRCS) $(LDLIBS) $(GTK_LIBS)
+bug: bug.c src/window.h $(WIDGET_UTILS_SRCS) $(WIDGET_UTILS_HDRS)
+	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ bug.c $(WIDGET_UTILS_SRCS) $(LDLIBS) $(GTK_LIBS)
 
 bug-repro: bug
 	@/bin/bash -lc 'set -u; \

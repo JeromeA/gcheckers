@@ -1,95 +1,7 @@
-/*
- * This crash reproducer embeds copies of src/game_app_profile.c, src/game_model.c,
- * src/games/homeworlds/homeworlds_backend.c, and src/window.c below. Do not link those original source files again
- * or the reproducer stops proving that it is self-contained. Do not remove this comment when simplifying bug.c.
- */
+/* This crash reproducer embeds reduced window code below. Do not link src/window.c here. */
 #include <gtk/gtk.h>
 
-/* Begin copied file: src/game_app_profile.c */
-#include "game_app_profile.h"
-
-#include "games/homeworlds/homeworlds_backend.h"
-
-static const GGameAppProfile homeworlds_app_profile = {
-  .backend = &homeworlds_game_backend,
-};
-
-const GGameAppProfile *ggame_app_profile_lookup_by_id(const char * /*id*/) {
-  return &homeworlds_app_profile;
-}
-
-const GGameAppProfile *ggame_active_app_profile(void) {
-  return &homeworlds_app_profile;
-}
-
-gboolean ggame_app_profile_supports_puzzle_catalog(const GGameAppProfile * /*profile*/) {
-  return FALSE;
-}
-/* End copied file: src/game_app_profile.c */
-
-/* Begin copied file: src/game_model.c */
-#include "game_model.h"
-
-struct _GGameModel {
-  GObject parent_instance;
-};
-
-G_DEFINE_TYPE(GGameModel, ggame_model, G_TYPE_OBJECT)
-
-static void ggame_model_class_init(GGameModelClass * /*klass*/) {}
-static void ggame_model_init(GGameModel * /*self*/) {}
-
-GGameModel *ggame_model_new(const GameBackend * /*backend*/) {
-  return g_object_new(GGAME_TYPE_MODEL, NULL);
-}
-
-void ggame_model_reset(GGameModel * /*self*/, const GameBackendVariant * /*variant_or_null*/) {}
-
-gboolean ggame_model_set_position(GGameModel * /*self*/, gconstpointer /*position*/) {
-  return FALSE;
-}
-
-gboolean ggame_model_set_position_variant(GGameModel * /*self*/,
-                                          gconstpointer /*position*/,
-                                          const GameBackendVariant * /*variant_or_null*/) {
-  return FALSE;
-}
-
-GameBackendMoveList ggame_model_list_moves(GGameModel * /*self*/) {
-  return (GameBackendMoveList){0};
-}
-
-gboolean ggame_model_apply_move(GGameModel * /*self*/, gconstpointer /*move*/) {
-  return FALSE;
-}
-
-gconstpointer ggame_model_peek_position(GGameModel * /*self*/) {
-  return NULL;
-}
-
-const GameBackend *ggame_model_peek_backend(GGameModel * /*self*/) {
-  return &homeworlds_game_backend;
-}
-
-const GameBackendVariant *ggame_model_peek_variant(GGameModel * /*self*/) {
-  return NULL;
-}
-
-char *ggame_model_format_status(GGameModel * /*self*/) {
-  return g_strdup("Homeworlds");
-}
-/* End copied file: src/game_model.c */
-
-/* Begin copied file: src/games/homeworlds/homeworlds_backend.c */
-#include "homeworlds_backend.h"
-
-const GameBackend homeworlds_game_backend = {
-  0
-};
-/* End copied file: src/games/homeworlds/homeworlds_backend.c */
-
 /* Begin copied file: src/window.c */
-#include "game_app_profile.h"
 #include "window.h"
 
 #include "widget_utils.h"
@@ -107,35 +19,7 @@ G_DEFINE_TYPE(GGameWindow, ggame_window, GTK_TYPE_APPLICATION_WINDOW)
 
 enum {
   GGAME_WINDOW_DEFAULT_HEIGHT = 700,
-  GGAME_WINDOW_ANALYSIS_DEPTH_DEFAULT = 8,
 };
-
-guint ggame_window_get_analysis_depth(GGameWindow * /*self*/) {
-  return GGAME_WINDOW_ANALYSIS_DEPTH_DEFAULT;
-}
-
-void ggame_window_set_analysis_depth(GGameWindow * /*self*/, guint /*depth*/) {}
-
-void ggame_window_set_loaded_variant(GGameWindow * /*self*/, const GameBackendVariant * /*variant*/) {}
-
-const GameBackendVariant *ggame_window_get_variant(GGameWindow * /*self*/) {
-  return NULL;
-}
-
-void ggame_window_apply_new_game_settings(GGameWindow * /*self*/,
-                                          const GameBackendVariant * /*variant*/,
-                                          PlayerControlMode /*white_mode*/,
-                                          PlayerControlMode /*black_mode*/,
-                                          guint /*computer_depth*/) {}
-
-void ggame_window_set_board_orientation_mode(GGameWindow * /*self*/,
-                                             GGameWindowBoardOrientationMode /*mode*/) {}
-
-void ggame_window_set_board_bottom_color(GGameWindow * /*self*/, CheckersColor /*bottom_color*/) {}
-
-CheckersColor ggame_window_get_board_bottom_color(GGameWindow * /*self*/) {
-  return CHECKERS_COLOR_WHITE;
-}
 
 static void ggame_window_dispose(GObject *object) {
   GGameWindow *self = GGAME_WINDOW(object);
@@ -225,16 +109,6 @@ static void ggame_window_init(GGameWindow *self) {
   gtk_paned_set_position(GTK_PANED(paned), 960);
   gtk_paned_set_position(GTK_PANED(right_split), 300);
 }
-
-PlayerControlsPanel *ggame_window_get_controls_panel(GGameWindow * /*self*/) {
-  return NULL;
-}
-
-GGameSgfController *ggame_window_get_sgf_controller(GGameWindow * /*self*/) {
-  return NULL;
-}
-
-void ggame_window_set_loaded_source_path(GGameWindow * /*self*/, const char * /*path*/) {}
 
 GGameWindow *ggame_window_new(GtkApplication *app, GGameModel * /*model*/) {
   g_return_val_if_fail(GTK_IS_APPLICATION(app), NULL);
