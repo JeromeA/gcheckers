@@ -96,14 +96,12 @@ const GameBackend homeworlds_game_backend = {
 
 struct _GGameWindow {
   GtkApplicationWindow parent_instance;
-  const GGameAppProfile *profile;
   GtkWidget *main_paned;
   GtkWidget *board_panel;
   GtkWidget *drawer_host;
   GtkWidget *drawer_split;
   GtkWidget *navigation_panel;
   GtkWidget *analysis_panel;
-  guint paned_tick_id;
 };
 
 G_DEFINE_TYPE(GGameWindow, ggame_window, GTK_TYPE_APPLICATION_WINDOW)
@@ -112,30 +110,6 @@ enum {
   GGAME_WINDOW_DEFAULT_HEIGHT = 700,
   GGAME_WINDOW_ANALYSIS_DEPTH_DEFAULT = 8,
 };
-
-static gboolean ggame_window_constrain_main_split_cb(GtkWidget * /*widget*/,
-                                                         GdkFrameClock * /*frame_clock*/,
-                                                         gpointer user_data) {
-  GGameWindow *self = GGAME_WINDOW(user_data);
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), G_SOURCE_CONTINUE);
-
-  if (!self->main_paned || !GTK_IS_PANED(self->main_paned)) {
-    return G_SOURCE_CONTINUE;
-  }
-  if (self->profile == NULL ||
-      self->profile->backend == NULL ||
-      !self->profile->backend->supports_square_grid_board) {
-    return G_SOURCE_CONTINUE;
-  }
-
-  int height = gtk_widget_get_height(self->main_paned);
-  int position = gtk_paned_get_position(GTK_PANED(self->main_paned));
-  if (height > 0 && position > height) {
-    gtk_paned_set_position(GTK_PANED(self->main_paned), height);
-  }
-
-  return G_SOURCE_CONTINUE;
-}
 
 guint ggame_window_get_analysis_depth(GGameWindow * /*self*/) {
   return GGAME_WINDOW_ANALYSIS_DEPTH_DEFAULT;
@@ -167,10 +141,6 @@ CheckersColor ggame_window_get_board_bottom_color(GGameWindow * /*self*/) {
 static void ggame_window_dispose(GObject *object) {
   GGameWindow *self = GGAME_WINDOW(object);
 
-  if (self->paned_tick_id != 0 && self->main_paned) {
-    gtk_widget_remove_tick_callback(self->main_paned, self->paned_tick_id);
-    self->paned_tick_id = 0;
-  }
   if (self->navigation_panel != NULL) {
     ggame_widget_remove_from_parent(self->navigation_panel);
     g_clear_object(&self->navigation_panel);
@@ -199,8 +169,6 @@ static void ggame_window_class_init(GGameWindowClass *klass) {
 }
 
 static void ggame_window_init(GGameWindow *self) {
-  self->profile = ggame_active_app_profile();
-
   gtk_window_set_default_size(GTK_WINDOW(self), 1260, GGAME_WINDOW_DEFAULT_HEIGHT);
 
   GtkWidget *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
@@ -212,10 +180,6 @@ static void ggame_window_init(GGameWindow *self) {
   gtk_box_append(GTK_BOX(content), paned);
   self->main_paned = paned;
   g_object_set_data(G_OBJECT(self), "main-paned", paned);
-  self->paned_tick_id = gtk_widget_add_tick_callback(paned,
-                                                      ggame_window_constrain_main_split_cb,
-                                                      self,
-                                                      NULL);
 
   GtkWidget *left_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_widget_set_hexpand(left_panel, TRUE);
