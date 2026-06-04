@@ -46,7 +46,6 @@ int main(void) {
   destroy_window(window);
 
   window = create_window();
-  gtk_window_set_default_size(window, 2000, 700);
   gtk_window_present(window);
   drain_main_context();
   gtk_paned_set_position(GTK_PANED(gtk_window_get_child(window)), 1400);
