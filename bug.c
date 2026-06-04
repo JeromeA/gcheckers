@@ -1,37 +1,5 @@
 #include <gtk/gtk.h>
 
-static gboolean ggame_widget_remove_from_parent(GtkWidget *widget) {
-  g_return_val_if_fail(GTK_IS_WIDGET(widget), FALSE);
-
-  GtkWidget *parent = gtk_widget_get_parent(widget);
-  if (!parent) {
-    return TRUE;
-  }
-
-  if (GTK_IS_BOX(parent)) {
-    gtk_box_remove(GTK_BOX(parent), widget);
-    return TRUE;
-  }
-
-  if (GTK_IS_PANED(parent)) {
-    GtkPaned *paned = GTK_PANED(parent);
-    if (gtk_paned_get_start_child(paned) == widget) {
-      gtk_paned_set_start_child(paned, NULL);
-      return TRUE;
-    }
-    if (gtk_paned_get_end_child(paned) == widget) {
-      gtk_paned_set_end_child(paned, NULL);
-      return TRUE;
-    }
-
-    g_debug("Widget was not a paned child during removal\n");
-    return FALSE;
-  }
-
-  g_debug("Unsupported parent type %s when removing widget\n", G_OBJECT_TYPE_NAME(parent));
-  return FALSE;
-}
-
 #define GGAME_TYPE_WINDOW (ggame_window_get_type())
 
 G_DECLARE_FINAL_TYPE(GGameWindow, ggame_window, GGAME, WINDOW, GtkApplicationWindow)
@@ -49,11 +17,11 @@ static void ggame_window_dispose(GObject *object) {
   GGameWindow *self = GGAME_WINDOW(object);
 
   if (self->navigation_panel != NULL) {
-    ggame_widget_remove_from_parent(self->navigation_panel);
+    gtk_box_remove(GTK_BOX(self->drawer_host), self->navigation_panel);
     g_clear_object(&self->navigation_panel);
   }
   if (self->drawer_host != NULL) {
-    ggame_widget_remove_from_parent(self->drawer_host);
+    gtk_paned_set_end_child(GTK_PANED(gtk_widget_get_parent(self->drawer_host)), NULL);
     g_clear_object(&self->drawer_host);
   }
   G_OBJECT_CLASS(ggame_window_parent_class)->dispose(object);
@@ -84,7 +52,7 @@ static void ggame_window_init(GGameWindow *self) {
   g_object_ref_sink(middle_panel);
   self->navigation_panel = middle_panel;
 
-  ggame_widget_remove_from_parent(drawer_host);
+  gtk_paned_set_end_child(GTK_PANED(paned), NULL);
   gtk_box_append(GTK_BOX(drawer_host), middle_panel);
   gtk_paned_set_end_child(GTK_PANED(paned), drawer_host);
   gtk_widget_set_size_request(left_panel, 760, -1);
