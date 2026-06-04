@@ -56,7 +56,6 @@ void ggame_model_reset(GGameModel *self, const GameBackendVariant * /*variant_or
 gboolean ggame_model_set_position(GGameModel *self, gconstpointer /*position*/) {
   g_return_val_if_fail(GGAME_IS_MODEL(self), FALSE);
 
-  g_debug("Position replacement is not available in the reproducer");
   return FALSE;
 }
 
@@ -65,7 +64,6 @@ gboolean ggame_model_set_position_variant(GGameModel *self,
                                           const GameBackendVariant * /*variant_or_null*/) {
   g_return_val_if_fail(GGAME_IS_MODEL(self), FALSE);
 
-  g_debug("Position replacement is not available in the reproducer");
   return FALSE;
 }
 
@@ -74,14 +72,12 @@ GameBackendMoveList ggame_model_list_moves(GGameModel *self) {
 
   g_return_val_if_fail(GGAME_IS_MODEL(self), empty);
 
-  g_debug("Move listing is not available in the reproducer");
   return empty;
 }
 
 gboolean ggame_model_apply_move(GGameModel *self, gconstpointer /*move*/) {
   g_return_val_if_fail(GGAME_IS_MODEL(self), FALSE);
 
-  g_debug("Move application is not available in the reproducer");
   return FALSE;
 }
 
@@ -173,15 +169,12 @@ guint ggame_window_get_analysis_depth(GGameWindow *self) {
   return GGAME_WINDOW_ANALYSIS_DEPTH_DEFAULT;
 }
 
-void ggame_window_set_analysis_depth(GGameWindow *self, guint depth) {
+void ggame_window_set_analysis_depth(GGameWindow *self, guint /*depth*/) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  (void)depth;
 }
 
-void ggame_window_set_loaded_variant(GGameWindow *self, const GameBackendVariant *variant) {
+void ggame_window_set_loaded_variant(GGameWindow *self, const GameBackendVariant * /*variant*/) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(variant != NULL);
 }
 
 const GameBackendVariant *ggame_window_get_variant(GGameWindow *self) {
@@ -191,29 +184,20 @@ const GameBackendVariant *ggame_window_get_variant(GGameWindow *self) {
 }
 
 void ggame_window_apply_new_game_settings(GGameWindow *self,
-                                          const GameBackendVariant *variant,
-                                          PlayerControlMode white_mode,
-                                          PlayerControlMode black_mode,
-                                          guint computer_depth) {
+                                          const GameBackendVariant * /*variant*/,
+                                          PlayerControlMode /*white_mode*/,
+                                          PlayerControlMode /*black_mode*/,
+                                          guint /*computer_depth*/) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  (void)variant;
-  (void)white_mode;
-  (void)black_mode;
-  (void)computer_depth;
 }
 
 void ggame_window_set_board_orientation_mode(GGameWindow *self,
-                                                 GGameWindowBoardOrientationMode mode) {
+                                             GGameWindowBoardOrientationMode /*mode*/) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
-  (void)mode;
 }
 
-void ggame_window_set_board_bottom_color(GGameWindow *self, CheckersColor bottom_color) {
+void ggame_window_set_board_bottom_color(GGameWindow *self, CheckersColor /*bottom_color*/) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
-  g_return_if_fail(bottom_color == CHECKERS_COLOR_WHITE || bottom_color == CHECKERS_COLOR_BLACK);
-
-  (void)bottom_color;
 }
 
 CheckersColor ggame_window_get_board_bottom_color(GGameWindow *self) {
@@ -343,27 +327,22 @@ static void ggame_window_init(GGameWindow *self) {
 PlayerControlsPanel *ggame_window_get_controls_panel(GGameWindow *self) {
   g_return_val_if_fail(GGAME_IS_WINDOW(self), NULL);
 
-  g_debug("Controls panel is not available in the reproducer");
   return NULL;
 }
 
 GGameSgfController *ggame_window_get_sgf_controller(GGameWindow *self) {
   g_return_val_if_fail(GGAME_IS_WINDOW(self), NULL);
 
-  g_debug("SGF controller is not available in the reproducer");
   return NULL;
 }
 
-void ggame_window_set_loaded_source_path(GGameWindow *self, const char *path) {
+void ggame_window_set_loaded_source_path(GGameWindow *self, const char * /*path*/) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
-
-  (void)path;
 }
 
-GGameWindow *ggame_window_new(GtkApplication *app, GGameModel *model) {
+GGameWindow *ggame_window_new(GtkApplication *app, GGameModel * /*model*/) {
   g_return_val_if_fail(GTK_IS_APPLICATION(app), NULL);
 
-  (void)model;
   return g_object_new(GGAME_TYPE_WINDOW, "application", app, NULL);
 }
 /* End copied file: src/window.c */
