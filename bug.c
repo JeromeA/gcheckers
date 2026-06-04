@@ -20,7 +20,6 @@ static GtkWindow *create_window(void) {
   gtk_paned_set_end_child(GTK_PANED(paned), NULL);
   gtk_box_append(GTK_BOX(drawer_host), middle_panel);
   gtk_paned_set_end_child(GTK_PANED(paned), drawer_host);
-  gtk_paned_set_position(GTK_PANED(paned), 960);
 
   return window;
 }
