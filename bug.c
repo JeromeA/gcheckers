@@ -8,7 +8,6 @@ static void create_and_detroy_window(void) {
   gtk_window_set_child(window, paned);
 
   GtkWidget *drawer_host = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-  g_object_ref_sink(drawer_host);
 
   gtk_paned_set_end_child(GTK_PANED(paned), drawer_host);
 
@@ -21,7 +20,6 @@ static void create_and_detroy_window(void) {
 
   /* Destroy window. */
   gtk_paned_set_end_child(GTK_PANED(gtk_widget_get_parent(drawer_host)), NULL);
-  g_object_unref(drawer_host);
   gtk_window_destroy(window);
 }
 
