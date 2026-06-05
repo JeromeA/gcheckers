@@ -215,6 +215,35 @@ static int sgf_view_count_discs(SgfView *view) {
   return sgf_view_count_children(grid);
 }
 
+static GtkWidget *test_ggame_sgf_controller_find_text_view(GtkWidget *widget) {
+  g_return_val_if_fail(GTK_IS_WIDGET(widget), NULL);
+
+  if (GTK_IS_TEXT_VIEW(widget)) {
+    return widget;
+  }
+
+  GtkWidget *child = gtk_widget_get_first_child(widget);
+  while (child != NULL) {
+    GtkWidget *match = test_ggame_sgf_controller_find_text_view(child);
+    if (match != NULL) {
+      return match;
+    }
+    child = gtk_widget_get_next_sibling(child);
+  }
+
+  return NULL;
+}
+
+static char *test_ggame_sgf_controller_get_text_buffer_text(GtkTextBuffer *buffer) {
+  GtkTextIter start;
+  GtkTextIter end;
+
+  g_return_val_if_fail(GTK_IS_TEXT_BUFFER(buffer), NULL);
+
+  gtk_text_buffer_get_bounds(buffer, &start, &end);
+  return gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
+}
+
 typedef struct {
   guint count;
   const SgfNode *last_node;
@@ -229,6 +258,54 @@ static void test_ggame_sgf_controller_on_node_changed(GGameSgfController * /*con
 
   probe->count++;
   probe->last_node = node;
+}
+
+static void test_ggame_sgf_controller_comment_area_reads_and_writes_current_node(void) {
+  GGameSgfController *controller = ggame_sgf_controller_new(NULL);
+  GtkWidget *root_widget = ggame_sgf_controller_get_widget(controller);
+  g_assert_true(GTK_IS_PANED(root_widget));
+  g_assert_cmpint(gtk_orientable_get_orientation(GTK_ORIENTABLE(root_widget)), ==, GTK_ORIENTATION_VERTICAL);
+
+  GtkWidget *comment_view = test_ggame_sgf_controller_find_text_view(root_widget);
+  g_assert_true(GTK_IS_TEXT_VIEW(comment_view));
+  g_assert_true(gtk_text_view_get_editable(GTK_TEXT_VIEW(comment_view)));
+  g_assert_cmpint(gtk_text_view_get_wrap_mode(GTK_TEXT_VIEW(comment_view)), ==, GTK_WRAP_WORD_CHAR);
+
+  GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(comment_view));
+  g_assert_true(GTK_IS_TEXT_BUFFER(buffer));
+
+  SgfTree *tree = ggame_sgf_controller_get_tree(controller);
+  SgfNode *root = (SgfNode *)sgf_tree_get_root(tree);
+  g_assert_nonnull(root);
+  g_assert_true(sgf_node_add_property(root, "C", "root note"));
+
+  SgfNode *child = (SgfNode *)sgf_tree_append_node(tree);
+  g_assert_nonnull(child);
+  g_assert_true(sgf_node_add_property(child, "C", "child note"));
+  sgf_view_refresh(ggame_sgf_controller_get_view(controller));
+
+  g_assert_true(ggame_sgf_controller_select_node(controller, (const SgfNode *)root));
+  g_autofree char *text = test_ggame_sgf_controller_get_text_buffer_text(buffer);
+  g_assert_cmpstr(text, ==, "root note");
+
+  gtk_text_buffer_set_text(buffer, "edited root note", -1);
+  g_assert_cmpstr(sgf_node_get_property_first((const SgfNode *)root, "C"), ==, "edited root note");
+
+  g_autoptr(GError) error = NULL;
+  g_autofree char *serialized = sgf_io_save_data(tree, &error);
+  g_assert_no_error(error);
+  g_assert_nonnull(serialized);
+  g_assert_nonnull(strstr(serialized, "C[edited root note]"));
+
+  g_assert_true(ggame_sgf_controller_select_node(controller, (const SgfNode *)child));
+  g_free(text);
+  text = test_ggame_sgf_controller_get_text_buffer_text(buffer);
+  g_assert_cmpstr(text, ==, "child note");
+
+  gtk_text_buffer_set_text(buffer, "", -1);
+  g_assert_null(sgf_node_get_property_first((const SgfNode *)child, "C"));
+
+  g_clear_object(&controller);
 }
 
 static void test_ggame_sgf_controller_appends_move_property(void) {
@@ -1376,6 +1453,7 @@ int main(int argc, char **argv) {
   g_assert_nonnull(profile);
 
   if (!gtk_init_check()) {
+    g_test_add_func("/sgf-controller/comment-area", test_ggame_sgf_controller_skip);
     g_test_add_func("/sgf-controller/appends-move-property", test_ggame_sgf_controller_skip);
     g_test_add_func("/sgf-controller/autosaves-after-move", test_ggame_sgf_controller_skip);
     g_test_add_func("/sgf-controller/replay-branching", test_ggame_sgf_controller_skip);
@@ -1393,6 +1471,9 @@ int main(int argc, char **argv) {
     g_test_add_func("/sgf-controller/load-file-applies-ruleset-from-ru", test_ggame_sgf_controller_skip);
     return g_test_run();
   }
+
+  g_test_add_func("/sgf-controller/comment-area",
+                  test_ggame_sgf_controller_comment_area_reads_and_writes_current_node);
 
   switch (profile->kind) {
     case GGAME_APP_KIND_BOOP:

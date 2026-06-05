@@ -220,9 +220,12 @@ model back to that parent, refreshes the SGF view, and saves the edited SGF thro
 application.
 Selection-only navigation updates SGF view selection in place (`sgf_view_set_selected`) instead of rebuilding the
 entire SGF layout.
+The controller widget is a vertical split: the top pane contains the SGF move tree, and the bottom pane contains an
+editable text view for the selected node's `C` comment property. Selection changes load the current node comment into
+that buffer, and user edits replace that node's `C` value so later SGF saves and autosaves include the change.
 Exposes a current-node refresh helper that replays SGF state into the model after setup-property edits on the current
 node.
-Owns: `SgfTree` and `SgfView`, plus replay guard (`is_replaying`).
+Owns: `SgfTree`, `SgfView`, the split SGF/comment widget, plus replay guard (`is_replaying`).
 Signals: `manual-requested` when analysis panel content should refresh for the selected node, and `node-changed`
 whenever SGF current node changes so other UI (analysis graph) can synchronize cursor state.
 Collaborates with: `GCheckersModel` compatibility callers plus generic `GGameModel` callers for move

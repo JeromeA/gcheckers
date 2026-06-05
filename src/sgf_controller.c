@@ -6,6 +6,7 @@
 #include "sgf_autosave.h"
 #include "sgf_io.h"
 #include "sgf_move_props.h"
+#include "widget_utils.h"
 
 #include <string.h>
 
@@ -16,7 +17,11 @@ struct _GGameSgfController {
   GGameModel *game_model;
   SgfTree *sgf_tree;
   SgfView *sgf_view;
+  GtkWidget *root;
+  GtkWidget *comment_view;
+  GtkTextBuffer *comment_buffer;
   char *autosave_game_started_at;
+  gboolean syncing_comment;
   gboolean is_replaying;
 };
 
@@ -87,11 +92,121 @@ enum {
 
 static guint controller_signals[SIGNAL_LAST] = {0};
 
+static void ggame_sgf_controller_sync_comment_from_node(GGameSgfController *self, const SgfNode *node);
+
 static void ggame_sgf_controller_emit_node_changed(GGameSgfController *self, const SgfNode *node) {
   g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self));
   g_return_if_fail(node != NULL);
 
+  ggame_sgf_controller_sync_comment_from_node(self, node);
   g_signal_emit(self, controller_signals[SIGNAL_NODE_CHANGED], 0, node);
+}
+
+static void ggame_sgf_controller_autosave_comment_change(GGameSgfController *self) {
+  GGameModel *game_model = NULL;
+  const GameBackend *backend = NULL;
+
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self));
+
+  game_model = ggame_sgf_controller_peek_active_game_model(self);
+  if (!GGAME_IS_MODEL(game_model)) {
+    return;
+  }
+
+  backend = ggame_model_peek_backend(game_model);
+  if (backend == NULL) {
+    g_debug("Failed to autosave SGF comment: active model has no backend");
+    return;
+  }
+
+  ggame_sgf_controller_autosave_current_sgf(self, backend);
+}
+
+static gboolean ggame_sgf_controller_replace_node_comment(SgfNode *node, const char *text) {
+  g_return_val_if_fail(node != NULL, FALSE);
+  g_return_val_if_fail(text != NULL, FALSE);
+
+  if (sgf_node_get_property_values(node, "C") != NULL && !sgf_node_clear_property(node, "C")) {
+    g_debug("Failed to clear existing SGF comment");
+    return FALSE;
+  }
+
+  if (text[0] == '\0') {
+    return TRUE;
+  }
+
+  if (!sgf_node_add_property(node, "C", text)) {
+    g_debug("Failed to write SGF comment");
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
+static char *ggame_sgf_controller_get_comment_buffer_text(GGameSgfController *self) {
+  GtkTextIter start;
+  GtkTextIter end;
+
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), NULL);
+  g_return_val_if_fail(GTK_IS_TEXT_BUFFER(self->comment_buffer), NULL);
+
+  gtk_text_buffer_get_bounds(self->comment_buffer, &start, &end);
+  return gtk_text_buffer_get_text(self->comment_buffer, &start, &end, FALSE);
+}
+
+static void ggame_sgf_controller_sync_comment_from_node(GGameSgfController *self, const SgfNode *node) {
+  const char *comment = NULL;
+
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self));
+  g_return_if_fail(node != NULL);
+
+  if (!GTK_IS_TEXT_BUFFER(self->comment_buffer)) {
+    return;
+  }
+
+  comment = sgf_node_get_property_first(node, "C");
+  self->syncing_comment = TRUE;
+  gtk_text_buffer_set_text(self->comment_buffer, comment != NULL ? comment : "", -1);
+  self->syncing_comment = FALSE;
+}
+
+static void ggame_sgf_controller_on_comment_buffer_changed(GtkTextBuffer *buffer, gpointer user_data) {
+  GGameSgfController *self = GGAME_SGF_CONTROLLER(user_data);
+  SgfNode *current = NULL;
+
+  g_return_if_fail(GTK_IS_TEXT_BUFFER(buffer));
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self));
+
+  if (self->syncing_comment) {
+    return;
+  }
+
+  if (!SGF_IS_TREE(self->sgf_tree)) {
+    g_debug("Failed to record SGF comment: missing SGF tree");
+    return;
+  }
+
+  current = (SgfNode *)sgf_tree_get_current(self->sgf_tree);
+  if (current == NULL) {
+    g_debug("Failed to record SGF comment: missing SGF current node");
+    return;
+  }
+
+  g_autofree char *text = ggame_sgf_controller_get_comment_buffer_text(self);
+  if (text == NULL) {
+    g_debug("Failed to read SGF comment buffer");
+    return;
+  }
+
+  if (g_strcmp0(sgf_node_get_property_first(current, "C"), text) == 0) {
+    return;
+  }
+
+  if (!ggame_sgf_controller_replace_node_comment(current, text)) {
+    return;
+  }
+
+  ggame_sgf_controller_autosave_comment_change(self);
 }
 
 static SgfColor ggame_sgf_controller_color_from_side(const GameBackend *backend, guint side) {
@@ -453,6 +568,7 @@ static gboolean ggame_sgf_controller_navigate_to(GGameSgfController *self, const
     return FALSE;
   }
 
+  ggame_sgf_controller_sync_comment_from_node(self, node);
   g_signal_emit(self, controller_signals[SIGNAL_MANUAL_REQUESTED], 0, node);
   sgf_view_set_selected(self->sgf_view, node);
   return TRUE;
@@ -470,17 +586,111 @@ static void ggame_sgf_controller_on_node_selected(SgfView * /*view*/,
     return;
   }
 
+  ggame_sgf_controller_sync_comment_from_node(self, node);
   g_signal_emit(self, controller_signals[SIGNAL_MANUAL_REQUESTED], 0, node);
   sgf_view_set_selected(self->sgf_view, node);
+}
+
+static GtkWidget *ggame_sgf_controller_create_comment_panel(GGameSgfController *self) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), NULL);
+
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+  gtk_widget_set_hexpand(box, TRUE);
+  gtk_widget_set_vexpand(box, TRUE);
+
+  GtkWidget *label = gtk_label_new("Comment");
+  gtk_widget_set_halign(label, GTK_ALIGN_START);
+  gtk_box_append(GTK_BOX(box), label);
+
+  GtkWidget *scroller = gtk_scrolled_window_new();
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroller), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+  gtk_widget_set_hexpand(scroller, TRUE);
+  gtk_widget_set_vexpand(scroller, TRUE);
+  gtk_widget_set_size_request(scroller, -1, 120);
+  gtk_widget_add_css_class(scroller, "sgf-comment-panel");
+  gtk_box_append(GTK_BOX(box), scroller);
+
+  self->comment_view = gtk_text_view_new();
+  gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(self->comment_view), GTK_WRAP_WORD_CHAR);
+  gtk_text_view_set_accepts_tab(GTK_TEXT_VIEW(self->comment_view), FALSE);
+  gtk_widget_set_hexpand(self->comment_view, TRUE);
+  gtk_widget_set_vexpand(self->comment_view, TRUE);
+  gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroller), self->comment_view);
+
+  self->comment_buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(self->comment_view));
+  g_signal_connect(self->comment_buffer,
+                   "changed",
+                   G_CALLBACK(ggame_sgf_controller_on_comment_buffer_changed),
+                   self);
+
+  return box;
+}
+
+static void ggame_sgf_controller_create_widget(GGameSgfController *self) {
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self));
+  g_return_if_fail(SGF_IS_VIEW(self->sgf_view));
+
+  GtkWidget *sgf_widget = sgf_view_get_widget(self->sgf_view);
+  g_return_if_fail(sgf_widget != NULL);
+
+  self->root = gtk_paned_new(GTK_ORIENTATION_VERTICAL);
+  g_object_ref_sink(self->root);
+  gtk_widget_set_hexpand(self->root, TRUE);
+  gtk_widget_set_vexpand(self->root, TRUE);
+  gtk_paned_set_wide_handle(GTK_PANED(self->root), TRUE);
+
+  gtk_paned_set_start_child(GTK_PANED(self->root), sgf_widget);
+  gtk_paned_set_resize_start_child(GTK_PANED(self->root), TRUE);
+  gtk_paned_set_shrink_start_child(GTK_PANED(self->root), TRUE);
+
+  GtkWidget *comment_panel = ggame_sgf_controller_create_comment_panel(self);
+  g_return_if_fail(comment_panel != NULL);
+  gtk_paned_set_end_child(GTK_PANED(self->root), comment_panel);
+  gtk_paned_set_resize_end_child(GTK_PANED(self->root), FALSE);
+  gtk_paned_set_shrink_end_child(GTK_PANED(self->root), FALSE);
+  gtk_paned_set_position(GTK_PANED(self->root), 360);
+}
+
+static void ggame_sgf_controller_clear_comment_focus(GGameSgfController *self) {
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self));
+
+  if (!GTK_IS_WIDGET(self->comment_view)) {
+    return;
+  }
+
+  GtkRoot *root = gtk_widget_get_root(self->comment_view);
+  if (GTK_IS_WINDOW(root)) {
+    gtk_window_set_focus(GTK_WINDOW(root), NULL);
+  }
 }
 
 static void ggame_sgf_controller_dispose(GObject *object) {
   GGameSgfController *self = GGAME_SGF_CONTROLLER(object);
 
+  if (self->comment_buffer != NULL) {
+    g_signal_handlers_disconnect_by_data(self->comment_buffer, self);
+  }
+  ggame_sgf_controller_clear_comment_focus(self);
+
+  gboolean root_removed = TRUE;
+  if (self->root != NULL) {
+    root_removed = ggame_widget_remove_from_parent(self->root);
+    if (!root_removed && gtk_widget_get_parent(self->root) != NULL) {
+      g_debug("Failed to remove SGF controller root from parent during dispose");
+    }
+  }
+
   ggame_sgf_controller_disconnect_model(self);
   g_clear_object(&self->board_view);
+  if (root_removed) {
+    g_clear_object(&self->root);
+  } else {
+    self->root = NULL;
+  }
   g_clear_object(&self->sgf_view);
   g_clear_object(&self->sgf_tree);
+  self->comment_buffer = NULL;
+  self->comment_view = NULL;
   g_clear_pointer(&self->autosave_game_started_at, g_free);
 
   G_OBJECT_CLASS(ggame_sgf_controller_parent_class)->dispose(object);
@@ -518,6 +728,7 @@ static void ggame_sgf_controller_init(GGameSgfController *self) {
   self->sgf_tree = sgf_tree_new();
   self->sgf_view = sgf_view_new();
   sgf_view_set_tree(self->sgf_view, self->sgf_tree);
+  ggame_sgf_controller_create_widget(self);
   g_signal_connect(self->sgf_view,
                    "node-selected",
                    G_CALLBACK(ggame_sgf_controller_on_node_selected),
@@ -525,6 +736,10 @@ static void ggame_sgf_controller_init(GGameSgfController *self) {
 
   self->is_replaying = FALSE;
   ggame_sgf_controller_reset_autosave_game_started_at(self);
+  const SgfNode *root = sgf_tree_get_root(self->sgf_tree);
+  if (root != NULL) {
+    ggame_sgf_controller_sync_comment_from_node(self, root);
+  }
 }
 
 GGameSgfController *ggame_sgf_controller_new(BoardView *board_view) {
@@ -1119,13 +1334,12 @@ gboolean ggame_sgf_controller_save_position_file(GGameSgfController *self, const
 GtkWidget *ggame_sgf_controller_get_widget(GGameSgfController *self) {
   g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), NULL);
 
-  GtkWidget *widget = sgf_view_get_widget(self->sgf_view);
-  if (!widget) {
-    g_debug("Missing SGF view widget");
+  if (self->root == NULL) {
+    g_debug("Missing SGF controller widget");
     return NULL;
   }
 
-  return widget;
+  return self->root;
 }
 
 SgfTree *ggame_sgf_controller_get_tree(GGameSgfController *self) {
