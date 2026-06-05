@@ -1570,7 +1570,6 @@ static gboolean ggame_window_revert_wrong_puzzle_move_cb(gpointer user_data) {
   ggame_window_clear_board_banner(self);
   ggame_window_set_default_puzzle_message(self);
   ggame_window_sync_puzzle_ui(self);
-  g_object_unref(self);
   return G_SOURCE_REMOVE;
 }
 
@@ -1774,6 +1773,7 @@ gboolean ggame_window_start_puzzle_mode_for_path(GGameWindow *self,
     self->puzzle_variant = variant;
     self->puzzle_variant_key = g_strdup(variant->short_name);
   }
+  ggame_window_start_opened_puzzle_attempt(self);
   return TRUE;
 }
 
@@ -1828,7 +1828,6 @@ static gboolean ggame_window_start_next_puzzle_mode(GGameWindow *self) {
     return FALSE;
   }
 
-  ggame_window_start_opened_puzzle_attempt(self);
   return TRUE;
 }
 
@@ -1854,8 +1853,6 @@ static void ggame_window_on_puzzle_dialog_done(gboolean selected,
     g_debug("Failed to load selected puzzle %s", path);
     return;
   }
-
-  ggame_window_start_opened_puzzle_attempt(self);
 }
 
 void ggame_window_present_puzzle_dialog(GGameWindow *self) {
@@ -2213,7 +2210,7 @@ static gboolean ggame_window_apply_player_move(gconstpointer move, gpointer user
                                                              GGAME_WINDOW_PUZZLE_WRONG_MOVE_DELAY_MS,
                                                              ggame_window_revert_wrong_puzzle_move_cb,
                                                              g_object_ref(self),
-                                                             NULL);
+                                                             (GDestroyNotify)g_object_unref);
       return TRUE;
     }
 

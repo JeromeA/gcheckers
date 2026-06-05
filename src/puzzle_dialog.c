@@ -23,6 +23,7 @@ typedef struct {
 typedef struct {
   GtkScrolledWindow *scroller;
   guint row;
+  guint retries;
 } GGameWindowPuzzleScrollData;
 
 static gboolean ggame_window_puzzle_dialog_destroy_hidden_cb(gpointer user_data) {
@@ -65,6 +66,11 @@ static gboolean ggame_window_puzzle_dialog_scroll_to_row_cb(gpointer user_data) 
   double upper = gtk_adjustment_get_upper(adjustment);
   double page_size = gtk_adjustment_get_page_size(adjustment);
   double max_value = MAX(lower, upper - page_size);
+  if (max_value <= lower) {
+    data->retries++;
+    return data->retries < 60 ? G_SOURCE_CONTINUE : G_SOURCE_REMOVE;
+  }
+
   gtk_adjustment_set_value(adjustment, CLAMP(target, lower, max_value));
   return G_SOURCE_REMOVE;
 }
@@ -286,6 +292,8 @@ static void ggame_window_puzzle_dialog_rebuild_grid(GGameWindowPuzzleDialogData 
   GtkWidget *scroller = gtk_scrolled_window_new();
   gtk_widget_set_vexpand(scroller, TRUE);
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroller), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+  gtk_scrolled_window_set_max_content_height(GTK_SCROLLED_WINDOW(scroller), 300);
+  gtk_scrolled_window_set_propagate_natural_height(GTK_SCROLLED_WINDOW(scroller), TRUE);
   gtk_box_append(GTK_BOX(data->puzzle_area), scroller);
 
   GtkWidget *grid = gtk_grid_new();
@@ -324,10 +332,11 @@ static void ggame_window_puzzle_dialog_rebuild_grid(GGameWindowPuzzleDialogData 
     GGameWindowPuzzleScrollData *scroll_data = g_new0(GGameWindowPuzzleScrollData, 1);
     scroll_data->scroller = g_object_ref(GTK_SCROLLED_WINDOW(scroller));
     scroll_data->row = first_untried_row;
-    g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,
-                    ggame_window_puzzle_dialog_scroll_to_row_cb,
-                    scroll_data,
-                    (GDestroyNotify)ggame_window_puzzle_scroll_data_free);
+    g_timeout_add_full(G_PRIORITY_DEFAULT,
+                       16,
+                       ggame_window_puzzle_dialog_scroll_to_row_cb,
+                       scroll_data,
+                       (GDestroyNotify)ggame_window_puzzle_scroll_data_free);
   }
 }
 

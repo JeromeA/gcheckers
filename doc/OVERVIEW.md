@@ -93,12 +93,14 @@ wrapping to the first puzzle after the last one, and no longer selects a random 
 mode, rewinds fully to move 0, and then starts the same full-game analysis path used by the Analysis menu. The current
 node report still follows normal SGF selection instead of being replaced by a generic completion message. Picker
 squares keep custom status colors and now define an explicit darker `:active` state so mouse presses remain visible
-even with the custom button styling.
+even with the custom button styling. The chooser caps the picker grid's natural height and retries its initial
+scroll-to-first-untried request until the scroller has an allocated adjustment range.
 Puzzle mode now also records local progress for each opened puzzle entry. Opening the puzzle creates an append-only
 attempt record with `started_unix_ms`, terminal outcomes are `success`, `failure`, or `analyze`, and the first wrong
 move is stored only when the failure happened on the very first attempted move. A started-but-unfinished puzzle entry
 is resolved as `failure` when the user starts a different puzzle, starts a new game, imports another game, or closes
-the window.
+the window. Wrong-move rollback timeouts own their window reference through the source destroy notifier, so canceled
+feedback cannot outlive cleanup.
 Puzzle entry forces a fixed attacker-at-bottom orientation, while puzzle exit restores only layout/drawer state and
 leaves the current board orientation unchanged.
 Adds an `Analysis` menubar submenu for current-position and whole-game analysis, plus a `View` submenu with

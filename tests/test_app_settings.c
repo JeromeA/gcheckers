@@ -46,10 +46,10 @@ static void test_app_settings_active_profile_puzzle_catalog_support(void) {
 
   switch (profile->kind) {
     case GGAME_APP_KIND_CHECKERS:
+    case GGAME_APP_KIND_BOOP:
       g_assert_true(ggame_app_profile_supports_puzzle_catalog(profile));
       break;
     case GGAME_APP_KIND_HOMEWORLDS:
-    case GGAME_APP_KIND_BOOP:
       g_assert_false(ggame_app_profile_supports_puzzle_catalog(profile));
       break;
     default:

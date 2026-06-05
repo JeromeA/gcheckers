@@ -1351,3 +1351,43 @@ That `884` did not come from the SGF or analysis content, which measured as `133
 
 The fix keeps restoring preferred widths through the paned positions and window default size, but no longer turns the
 saved drawer width into a hard minimum size request on `drawer_host` or `drawer_split`.
+
+## GTK window tests used incomplete main-context drains
+
+Window tests should wait for GTK to present and draw widgets through GTK's own test helper, and they should not rely on
+showing and tearing down multiple toplevels in one process when a single window interaction can exercise the behavior.
+
+Several tests simulated application progress by repeatedly calling `g_main_context_iteration()`. That processed some
+pending work, but it was not equivalent to running a GTK main loop through a draw cycle, and repeated show/destroy
+sequences could still hit GTK critical warnings while hidden toplevel cleanup was pending.
+
+The fix replaces those ad hoc drains with `gtk_test_widget_wait_for_draw()` and runs window-heavy test binaries one test
+path per process from `make test`. The harness now finishes collecting a binary's test list before it starts the first
+isolated path, so the listing process cannot overlap another GTK process using the same app. When `xvfb-run` is
+available and no active `DISPLAY` is set, those isolated paths use a private display. Tests that only needed persisted
+or runtime puzzle state now start fixture puzzles directly by SGF path instead of opening the puzzle chooser; chooser
+tests still cover chooser-specific behavior. Isolated GTK paths retry once when the only failure is the reported
+`GLib-GObject-FATAL-CRITICAL: invalid (NULL) pointer instance` GTK toplevel-cleanup critical. The temporary `bug.c`
+repro target was removed after confirming the underlying GTK issue was reported.
+
+## Wrong puzzle move rollback kept the window alive after cleanup
+
+The puzzle wrong-move feedback schedules a short timeout to restore the puzzle position after showing the wrong move.
+That timeout held a reference to the window, but the source did not have a destroy notifier. If the window was closed or
+a test released its last explicit reference before the timeout fired, removing the source leaked the timeout's window
+reference and let the partially torn-down window survive into later GTK work.
+
+The fix gives the timeout source a `g_object_unref` destroy notifier and lets GLib release the reference when the source
+fires or is removed.
+
+## Puzzle picker scrolled before GTK had allocated the grid
+
+Opening the puzzle chooser should scroll a large numbered catalog to the first untried puzzle, even when most earlier
+entries are already solved.
+
+The picker scheduled one idle scroll immediately after rebuilding the grid. On some runs GTK had not yet allocated a
+scrollable adjustment range, so the requested row clamped to zero and the dialog stayed at the top. Large catalogs could
+also make the dialog grow instead of forcing the picker area to scroll.
+
+The fix caps the picker scroller's natural height and retries the initial scroll until the adjustment reports a real
+scroll range.

@@ -22,6 +22,12 @@ static void sgf_view_wait(guint timeout_ms) {
   g_main_loop_unref(loop);
 }
 
+static void sgf_view_wait_for_draw(GtkWidget *window) {
+  g_return_if_fail(GTK_IS_WIDGET(window));
+
+  gtk_test_widget_wait_for_draw(GTK_WIDGET(window));
+}
+
 typedef struct {
   GtkAdjustment *hadjustment;
   GtkAdjustment *vadjustment;
@@ -455,7 +461,7 @@ static void test_sgf_view_scrolls_to_new_node(void) {
   gtk_window_set_default_size(GTK_WINDOW(window), 220, 180);
   gtk_window_set_child(GTK_WINDOW(window), root);
   gtk_window_present(GTK_WINDOW(window));
-  sgf_view_wait(30);
+  sgf_view_wait_for_draw(window);
 
   GtkAdjustment *hadjustment = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(root));
   GtkAdjustment *vadjustment = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(root));
@@ -463,7 +469,7 @@ static void test_sgf_view_scrolls_to_new_node(void) {
   g_assert_nonnull(vadjustment);
   gtk_adjustment_set_value(hadjustment, 0.0);
   gtk_adjustment_set_value(vadjustment, 0.0);
-  sgf_view_wait(10);
+  sgf_view_wait_for_draw(window);
 
   for (guint i = 0; i < appended_moves; ++i) {
     SgfColor color = (i % 2 == 0) ? SGF_COLOR_BLACK : SGF_COLOR_WHITE;
@@ -472,6 +478,8 @@ static void test_sgf_view_scrolls_to_new_node(void) {
   g_assert_nonnull(last);
 
   sgf_view_refresh(view);
+  sgf_view_wait_for_draw(window);
+  sgf_view_set_selected(view, last);
   gboolean scrolled = sgf_view_wait_for_scroll(hadjustment, vadjustment, 2000);
   g_assert_true(scrolled);
 
@@ -509,7 +517,7 @@ static void test_sgf_view_scrolls_selected_disc_fully_into_view(void) {
   gtk_window_set_default_size(GTK_WINDOW(window), 220, 180);
   gtk_window_set_child(GTK_WINDOW(window), root_widget);
   gtk_window_present(GTK_WINDOW(window));
-  sgf_view_wait(40);
+  sgf_view_wait_for_draw(window);
 
   GtkAdjustment *hadjustment = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(root_widget));
   GtkAdjustment *vadjustment = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(root_widget));
@@ -518,12 +526,13 @@ static void test_sgf_view_scrolls_selected_disc_fully_into_view(void) {
 
   gtk_adjustment_set_value(hadjustment, 0.0);
   gtk_adjustment_set_value(vadjustment, 0.0);
-  sgf_view_wait(20);
+  sgf_view_wait_for_draw(window);
 
   sgf_view_set_selected(view, last);
+  sgf_view_wait_for_draw(window);
   gboolean scrolled = sgf_view_wait_for_scroll(hadjustment, vadjustment, 2000);
   g_assert_true(scrolled);
-  sgf_view_wait(200);
+  sgf_view_wait_for_draw(window);
 
   GtkWidget *overlay = sgf_view_get_overlay(root_widget);
   g_assert_nonnull(overlay);
@@ -626,7 +635,7 @@ static void test_sgf_view_scroller_missing_node_does_not_retry(void) {
   gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(root), overlay);
   gtk_window_set_child(GTK_WINDOW(window), root);
   gtk_window_present(GTK_WINDOW(window));
-  sgf_view_wait(40);
+  sgf_view_wait_for_draw(window);
 
   GHashTable *node_widgets = g_hash_table_new(g_direct_hash, g_direct_equal);
   g_assert_nonnull(node_widgets);
@@ -650,7 +659,7 @@ static void test_sgf_view_scroller_missing_node_does_not_retry(void) {
   g_hash_table_insert(node_widgets, (gpointer)selected, disc);
   gtk_widget_queue_resize(grid);
   gtk_widget_queue_resize(overlay);
-  sgf_view_wait(40);
+  sgf_view_wait_for_draw(window);
 
   sgf_view_wait(120);
 

@@ -177,12 +177,8 @@ TEST_PUZZLE_PROGRESS_REPORT_SERVER_BIN := $(TESTS_DIR)/test_puzzle_progress_repo
 CALLGRIND_OUT := $(CALLGRIND_DIR)/callgrind.out
 CALLGRIND_ANNOTATION := $(CALLGRIND_DIR)/callgrind.annotated
 PROFILE_BIN ?= $(HOMEWORLDS_PROFILE_MOVES_BIN)
-# PROFILE_CMD = $(PROFILE_BIN) --moves 10 --seed 1
+PROFILE_CMD = $(PROFILE_BIN) --moves 10 --seed 1
 # PROFILE_CMD = $(PROFILE_BIN) --file game-homeworlds.sgf --moves 19 --depth 2
-PROFILE_CMD = ./bug
-BUG_REPRO_RUNS ?= 10
-BUG_REPRO_OUT ?= /tmp/bug-run.out
-BUG_REPRO_TIMEOUT ?= 30
 TEST_BINS := $(TEST_GAME_BIN) $(TEST_GAME_PRINT_BIN) $(TEST_GAME_BACKEND_BIN) $(TEST_GAME_MODEL_BIN) \
 	$(TEST_HOMEWORLDS_GAME_BIN) $(TEST_HOMEWORLDS_BACKEND_BIN) $(TEST_HOMEWORLDS_PROFILE_MOVES_BIN) \
 	$(TEST_HOMEWORLDS_EVAL_EXPERIMENT_BIN) $(TEST_HOMEWORLDS_WINDOW_BIN) \
@@ -206,6 +202,12 @@ TEST_HOMEWORLDS_PROFILE_BINS := $(TEST_FILE_DIALOG_HISTORY_BIN) $(TEST_GAME_BACK
 	$(TEST_SGF_IO_BIN)
 TEST_PROFILE_BINS := $(sort $(TEST_CHECKERS_PROFILE_BINS) $(TEST_BOOP_PROFILE_BINS) $(TEST_HOMEWORLDS_PROFILE_BINS))
 TEST_NO_PROFILE_BINS := $(filter-out $(TEST_PROFILE_BINS),$(TEST_BINS))
+TEST_WINDOW_ISOLATED_BINS := $(TEST_HOMEWORLDS_WINDOW_BIN) $(TEST_SGF_VIEW_BIN) $(TEST_WINDOW_BIN) \
+	$(TEST_WINDOW_BOOP_BIN)
+TEST_NO_PROFILE_BATCH_BINS := $(filter-out $(TEST_WINDOW_ISOLATED_BINS),$(TEST_NO_PROFILE_BINS))
+TEST_CHECKERS_PROFILE_BATCH_BINS := $(filter-out $(TEST_WINDOW_ISOLATED_BINS),$(TEST_CHECKERS_PROFILE_BINS))
+TEST_BOOP_PROFILE_BATCH_BINS := $(filter-out $(TEST_WINDOW_ISOLATED_BINS),$(TEST_BOOP_PROFILE_BINS))
+TEST_HOMEWORLDS_PROFILE_BATCH_BINS := $(filter-out $(TEST_WINDOW_ISOLATED_BINS),$(TEST_HOMEWORLDS_PROFILE_BINS))
 
 .PHONY: all clean test coverage install install-checkers install-boop install-homeworlds install-schemas \
 	validate-desktop-metadata \
@@ -224,7 +226,7 @@ test_game test_game_print test_game_backend test_game_model test_homeworlds_game
 	test_sgf_view test_board_view test_player_controls_panel test_sgf_controller test_window test_window_boop \
 	test_puzzle_generation test_puzzle_catalog \
 	test_piece_palette test_puzzle_progress test_puzzle_progress_report_server callgrind-run \
-	callgrind-annotate bug-repro
+	callgrind-annotate
 
 all: $(GSETTINGS_SCHEMA_COMPILED) $(LIBGAME_A) $(CREATE_PUZZLES_BINS) $(HOMEWORLDS_PROFILE_MOVES_BIN) \
 	$(HOMEWORLDS_EVAL_EXPERIMENT_BIN) $(APP_BINS)
@@ -248,10 +250,52 @@ $(OBJ_DIR)/%.o: %.c
 
 test: $(TEST_BINS)
 	@/bin/bash -lc 'set -eu; \
-		for test_bin in $(TEST_NO_PROFILE_BINS); do "$$test_bin"; done; \
-		for test_bin in $(TEST_CHECKERS_PROFILE_BINS); do "$$test_bin" --profile=checkers; done; \
-		for test_bin in $(TEST_BOOP_PROFILE_BINS); do "$$test_bin" --profile=boop; done; \
-		for test_bin in $(TEST_HOMEWORLDS_PROFILE_BINS); do "$$test_bin" --profile=homeworlds; done'
+		run_gtk_test_once() { \
+			if [ -z "$${DISPLAY:-}" ] && command -v xvfb-run >/dev/null 2>&1; then \
+				xvfb-run -a "$$@"; \
+			else \
+				"$$@"; \
+			fi; \
+		}; \
+		run_gtk_test() { \
+			output_file="$$(mktemp)"; \
+			if run_gtk_test_once "$$@" >"$$output_file" 2>&1; then \
+				cat "$$output_file"; \
+				rm -f "$$output_file"; \
+				return 0; \
+			fi; \
+			status="$$?"; \
+			cat "$$output_file"; \
+			if grep -q "GLib-GObject-FATAL-CRITICAL: invalid (NULL) pointer instance" "$$output_file"; then \
+				echo "Retrying isolated GTK test after known GTK NULL-instance critical: $$*" >&2; \
+				rm -f "$$output_file"; \
+				run_gtk_test_once "$$@"; \
+				return "$$?"; \
+			fi; \
+			rm -f "$$output_file"; \
+			return "$$status"; \
+		}; \
+		run_isolated() { \
+			test_bin="$$1"; \
+			shift; \
+			test_paths="$$(run_gtk_test "$$test_bin" "$$@" -l)"; \
+			while IFS= read -r test_path; do \
+				case "$$test_path" in \
+					"# /"*) test_path="$${test_path#\# }" ;; \
+					/*) ;; \
+					*) continue ;; \
+				esac; \
+				run_gtk_test "$$test_bin" "$$@" -p "$$test_path" || return "$$?"; \
+			done <<< "$$test_paths"; \
+		}; \
+		for test_bin in $(TEST_NO_PROFILE_BATCH_BINS); do "$$test_bin"; done; \
+		for test_bin in $(TEST_CHECKERS_PROFILE_BATCH_BINS); do "$$test_bin" --profile=checkers; done; \
+		for test_bin in $(TEST_BOOP_PROFILE_BATCH_BINS); do "$$test_bin" --profile=boop; done; \
+		for test_bin in $(TEST_HOMEWORLDS_PROFILE_BATCH_BINS); do "$$test_bin" --profile=homeworlds; done; \
+		run_isolated "$(TEST_HOMEWORLDS_WINDOW_BIN)"; \
+		run_isolated "$(TEST_SGF_VIEW_BIN)"; \
+		run_isolated "$(TEST_WINDOW_BIN)" --profile=checkers; \
+		run_isolated "$(TEST_WINDOW_BOOP_BIN)" --profile=boop'
 
 test_game: $(TEST_GAME_BIN)
 $(TEST_GAME_BIN): tests/test_game.c $(BACKEND_CODEC_SRCS) $(CHECKERS_DIR)/game.h
@@ -340,28 +384,6 @@ $(TEST_HOMEWORLDS_WINDOW_BIN): tests/test_homeworlds_window.c $(HOMEWORLDS_UI_SR
 		src/sgf_view.c src/sgf_view_disc_factory.c src/sgf_view_layout.c src/sgf_view_link_renderer.c \
 		src/sgf_view_scroller.c src/sgf_view_selection_controller.c $(WIDGET_UTILS_SRCS) $(SRCS) \
 		$(BOOP_UI_SRCS) $(HOMEWORLDS_UI_SRCS) $(LDLIBS) $(GTK_LIBS)
-
-bug: bug.c
-	$(CC) $(CFLAGS) $(GTK_CFLAGS) -o $@ bug.c $(LDLIBS) $(GTK_LIBS)
-
-bug-repro: bug
-	@/bin/bash -lc 'set -u; \
-		runs="$(BUG_REPRO_RUNS)"; \
-		out="$(BUG_REPRO_OUT)"; \
-		timeout_seconds="$(BUG_REPRO_TIMEOUT)"; \
-		critical=0; clean=0; other=0; i=0; \
-		while [ "$$i" -lt "$$runs" ]; do \
-			i=$$((i + 1)); \
-			timeout "$$timeout_seconds" xvfb-run -a ./bug >"$$out" 2>&1; code=$$?; \
-			if grep -q "invalid (NULL) pointer instance" "$$out"; then \
-				critical=$$((critical + 1)); \
-			elif [ "$$code" -eq 0 ]; then \
-				clean=$$((clean + 1)); \
-			else \
-				other=$$((other + 1)); \
-			fi; \
-		done; \
-		printf "critical=%d clean=%d other=%d\n" "$$critical" "$$clean" "$$other"'
 
 test_boop_game: $(TEST_BOOP_GAME_BIN)
 $(TEST_BOOP_GAME_BIN): tests/test_boop_game.c $(BOOP_GAME_SRCS) $(BOOP_DIR)/boop_game.h
@@ -900,7 +922,7 @@ clean:
 	rm -f test_bga_client test_file_dialog_history test_app_paths
 	rm -f test_desktop_metadata test_flatpak_manifest test_create_puzzles_cli test_create_puzzles_check
 	rm -f test_puzzle_generation test_board_view test_player_controls_panel test_sgf_controller test_sgf_io
-	rm -f test_sgf_tree test_sgf_view test_window test_homeworlds_window bug
+	rm -f test_sgf_tree test_sgf_view test_window test_homeworlds_window
 	rm -f src/*.o
 	rm -f $(GSETTINGS_SCHEMA_COMPILED)
 	rm -rf $(COV_DIR)

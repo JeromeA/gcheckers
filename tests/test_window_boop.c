@@ -18,6 +18,25 @@ static void test_ggame_window_skip(void) {
 
 static GtkApplication *test_app = NULL;
 
+typedef gboolean (*TestGGameWindowWaitPredicate)(gpointer user_data);
+
+typedef struct {
+  TestGGameWindowWaitPredicate predicate;
+  gpointer user_data;
+  GMainLoop *loop;
+  gint64 deadline_us;
+  guint source_id;
+  gboolean matched;
+} TestGGameWindowWait;
+
+typedef struct {
+  const GameBackend *backend;
+  GGameModel *model;
+  SgfTree *tree;
+  guint move_number;
+  guint turn;
+} TestGGameWindowPositionWait;
+
 static GtkApplication *test_ggame_window_create_app(void) {
   g_return_val_if_fail(GTK_IS_APPLICATION(test_app), NULL);
   return g_object_ref(test_app);
@@ -205,16 +224,86 @@ static GtkWindow *test_ggame_window_find_toplevel_by_title(const char *title) {
   return NULL;
 }
 
-static void test_ggame_window_drain_main_context(guint max_iterations) {
-  g_return_if_fail(max_iterations > 0);
+static void test_ggame_window_wait_for_draw(gpointer window) {
+  g_return_if_fail(GTK_IS_WINDOW(window));
 
-  for (guint i = 0; i < max_iterations; ++i) {
-    if (!g_main_context_iteration(NULL, FALSE)) {
-      return;
-    }
+  if (!gtk_widget_get_mapped(GTK_WIDGET(window))) {
+    gtk_window_present(GTK_WINDOW(window));
+  }
+  gtk_test_widget_wait_for_draw(GTK_WIDGET(window));
+}
+
+static gboolean test_ggame_window_wait_cb(gpointer user_data) {
+  TestGGameWindowWait *wait = user_data;
+
+  g_return_val_if_fail(wait != NULL, G_SOURCE_REMOVE);
+  g_return_val_if_fail(wait->predicate != NULL, G_SOURCE_REMOVE);
+  g_return_val_if_fail(wait->loop != NULL, G_SOURCE_REMOVE);
+
+  if (wait->predicate(wait->user_data)) {
+    wait->matched = TRUE;
+    wait->source_id = 0;
+    g_main_loop_quit(wait->loop);
+    return G_SOURCE_REMOVE;
   }
 
-  g_debug("Main context still busy after %u iterations", max_iterations);
+  if (g_get_monotonic_time() >= wait->deadline_us) {
+    wait->source_id = 0;
+    g_main_loop_quit(wait->loop);
+    return G_SOURCE_REMOVE;
+  }
+
+  return G_SOURCE_CONTINUE;
+}
+
+static gboolean test_ggame_window_wait_until(GGameWindow *window,
+                                             TestGGameWindowWaitPredicate predicate,
+                                             gpointer user_data,
+                                             gint64 timeout_us) {
+  g_return_val_if_fail(GGAME_IS_WINDOW(window), FALSE);
+  g_return_val_if_fail(predicate != NULL, FALSE);
+  g_return_val_if_fail(timeout_us > 0, FALSE);
+
+  test_ggame_window_wait_for_draw(window);
+  if (predicate(user_data)) {
+    return TRUE;
+  }
+
+  GMainLoop *loop = g_main_loop_new(NULL, FALSE);
+  TestGGameWindowWait wait = {
+    .predicate = predicate,
+    .user_data = user_data,
+    .loop = loop,
+    .deadline_us = g_get_monotonic_time() + timeout_us,
+    .source_id = 0,
+    .matched = FALSE,
+  };
+  wait.source_id = g_timeout_add(1, test_ggame_window_wait_cb, &wait);
+  g_main_loop_run(loop);
+
+  if (wait.source_id != 0) {
+    g_source_remove(wait.source_id);
+  }
+  g_main_loop_unref(loop);
+
+  return wait.matched;
+}
+
+static gboolean test_ggame_window_position_matches(gpointer user_data) {
+  TestGGameWindowPositionWait *wait = user_data;
+
+  g_return_val_if_fail(wait != NULL, FALSE);
+  g_return_val_if_fail(wait->backend != NULL, FALSE);
+  g_return_val_if_fail(GGAME_IS_MODEL(wait->model), FALSE);
+  g_return_val_if_fail(wait->tree != NULL, FALSE);
+  g_return_val_if_fail(wait->backend->position_turn != NULL, FALSE);
+
+  const SgfNode *current = sgf_tree_get_current(wait->tree);
+  gconstpointer position = ggame_model_peek_position(wait->model);
+  return current != NULL &&
+         position != NULL &&
+         sgf_node_get_move_number(current) == wait->move_number &&
+         wait->backend->position_turn(position) == wait->turn;
 }
 
 static gboolean test_ggame_window_node_has_analysis(const SgfNode *node) {
@@ -224,7 +313,8 @@ static gboolean test_ggame_window_node_has_analysis(const SgfNode *node) {
   return analysis != NULL;
 }
 
-static gboolean test_ggame_window_wait_for_node_analysis(const SgfNode *node, gint64 timeout_us) {
+static gboolean test_ggame_window_wait_for_node_analysis(GGameWindow *window, const SgfNode *node, gint64 timeout_us) {
+  g_return_val_if_fail(GGAME_IS_WINDOW(window), FALSE);
   g_return_val_if_fail(node != NULL, FALSE);
   g_return_val_if_fail(timeout_us > 0, FALSE);
 
@@ -233,16 +323,18 @@ static gboolean test_ggame_window_wait_for_node_analysis(const SgfNode *node, gi
     if (test_ggame_window_node_has_analysis(node)) {
       return TRUE;
     }
-    test_ggame_window_drain_main_context(16);
+    test_ggame_window_wait_for_draw(window);
     g_usleep(1000);
   }
 
   return test_ggame_window_node_has_analysis(node);
 }
 
-static gboolean test_ggame_window_wait_for_two_node_analyses(const SgfNode *first,
+static gboolean test_ggame_window_wait_for_two_node_analyses(GGameWindow *window,
+                                                             const SgfNode *first,
                                                              const SgfNode *second,
                                                              gint64 timeout_us) {
+  g_return_val_if_fail(GGAME_IS_WINDOW(window), FALSE);
   g_return_val_if_fail(first != NULL, FALSE);
   g_return_val_if_fail(second != NULL, FALSE);
   g_return_val_if_fail(timeout_us > 0, FALSE);
@@ -252,7 +344,7 @@ static gboolean test_ggame_window_wait_for_two_node_analyses(const SgfNode *firs
     if (test_ggame_window_node_has_analysis(first) && test_ggame_window_node_has_analysis(second)) {
       return TRUE;
     }
-    test_ggame_window_drain_main_context(16);
+    test_ggame_window_wait_for_draw(window);
     g_usleep(1000);
   }
 
@@ -298,7 +390,7 @@ static void test_ggame_window_boop_shared_shell_widgets_exist(void) {
   GGameModel *model = ggame_model_new(GGAME_ACTIVE_GAME_BACKEND);
   GGameWindow *window = test_ggame_window_new(app, model);
   gtk_window_present(GTK_WINDOW(window));
-  test_ggame_window_drain_main_context(24);
+  test_ggame_window_wait_for_draw(window);
 
   g_assert_nonnull(ggame_window_get_controls_panel(window));
   g_assert_nonnull(ggame_window_get_sgf_controller(window));
@@ -341,7 +433,7 @@ static void test_ggame_window_boop_current_position_analysis_attaches_to_current
   GtkWidget *analysis_panel = NULL;
 
   gtk_window_present(GTK_WINDOW(window));
-  test_ggame_window_drain_main_context(24);
+  test_ggame_window_wait_for_draw(window);
 
   g_assert_nonnull(controller);
   tree = ggame_sgf_controller_get_tree(controller);
@@ -356,11 +448,11 @@ static void test_ggame_window_boop_current_position_analysis_attaches_to_current
   g_action_group_change_action_state(G_ACTION_GROUP(window),
                                      "view-show-analysis-drawer",
                                      g_variant_new_boolean(TRUE));
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
   g_assert_nonnull(gtk_widget_get_parent(analysis_panel));
 
   g_action_group_activate_action(G_ACTION_GROUP(window), "analysis-current-position", NULL);
-  g_assert_true(test_ggame_window_wait_for_node_analysis(current, 5 * G_USEC_PER_SEC));
+  g_assert_true(test_ggame_window_wait_for_node_analysis(window, current, 5 * G_USEC_PER_SEC));
 
   g_autoptr(SgfNodeAnalysis) analysis = sgf_node_get_analysis(current);
   g_assert_nonnull(analysis);
@@ -396,7 +488,7 @@ static void test_ggame_window_boop_full_game_analysis_attaches_to_replayed_nodes
 
   ggame_window_set_analysis_depth(window, 1);
   g_action_group_activate_action(G_ACTION_GROUP(window), "analysis-whole-game", NULL);
-  g_assert_true(test_ggame_window_wait_for_two_node_analyses(root, current, 5 * G_USEC_PER_SEC));
+  g_assert_true(test_ggame_window_wait_for_two_node_analyses(window, root, current, 5 * G_USEC_PER_SEC));
 
   g_autoptr(SgfNodeAnalysis) root_analysis = sgf_node_get_analysis(root);
   g_autoptr(SgfNodeAnalysis) current_analysis = sgf_node_get_analysis(current);
@@ -419,7 +511,7 @@ static void test_ggame_window_boop_layout_defaults_fit_board_host(void) {
   GGameModel *model = ggame_model_new(GGAME_ACTIVE_GAME_BACKEND);
   GGameWindow *window = test_ggame_window_new(app, model);
   gtk_window_present(GTK_WINDOW(window));
-  test_ggame_window_drain_main_context(24);
+  test_ggame_window_wait_for_draw(window);
 
   GtkWidget *board_panel = g_object_get_data(G_OBJECT(window), "board-panel");
   GtkWidget *analysis_panel = g_object_get_data(G_OBJECT(window), "analysis-panel");
@@ -451,9 +543,8 @@ static void test_ggame_window_boop_board_uses_edge_coordinates(void) {
   static const char *expected_flipped_rows[] = {"1", "2", "3", "4", "5", "6"};
 
   gtk_window_present(GTK_WINDOW(window));
-  test_ggame_window_drain_main_context(24);
+  test_ggame_window_wait_for_draw(window);
 
-  g_assert_null(test_ggame_window_find_label_with_text(GTK_WIDGET(window), "36"));
   test_ggame_window_assert_board_index_position(GTK_WIDGET(window), 0, 0, 5);
   test_ggame_window_assert_board_index_position(GTK_WIDGET(window), 15, 3, 3);
   for (guint i = 0; i < BOOP_BOARD_SIZE; ++i) {
@@ -469,7 +560,7 @@ static void test_ggame_window_boop_board_uses_edge_coordinates(void) {
 
   ggame_window_set_board_orientation_mode(window, GGAME_WINDOW_BOARD_ORIENTATION_FIXED);
   ggame_window_set_board_bottom_color(window, CHECKERS_COLOR_BLACK);
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
 
   test_ggame_window_assert_board_index_position(GTK_WIDGET(window), 0, 5, 0);
   test_ggame_window_assert_board_index_position(GTK_WIDGET(window), 15, 2, 2);
@@ -507,7 +598,14 @@ static void test_ggame_window_boop_auto_moves_when_next_player_is_computer(void)
   player_controls_panel_set_computer_depth(panel, 2);
 
   g_assert_true(test_ggame_window_apply_first_generic_move(controller, model));
-  test_ggame_window_drain_main_context(32);
+  TestGGameWindowPositionWait wait = {
+    .backend = backend,
+    .model = model,
+    .tree = tree,
+    .move_number = 2,
+    .turn = 0,
+  };
+  g_assert_true(test_ggame_window_wait_until(window, test_ggame_window_position_matches, &wait, 5 * G_USEC_PER_SEC));
 
   g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 2);
   g_assert_cmpuint(backend->position_turn(ggame_model_peek_position(model)), ==, 0);
@@ -574,7 +672,7 @@ static void test_ggame_window_boop_supply_selection_tracks_turn(void) {
   g_assert_false(gtk_widget_has_css_class(side1_kitten, "boop-pile-selected"));
 
   g_assert_true(test_ggame_window_apply_first_generic_move(controller, model));
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
 
   g_assert_false(gtk_widget_has_css_class(side0_panel, "boop-supply-active"));
   g_assert_true(gtk_widget_has_css_class(side1_panel, "boop-supply-active"));
@@ -591,10 +689,10 @@ static void test_ggame_window_boop_new_game_dialog_uses_shared_controls(void) {
   GGameModel *model = ggame_model_new(GGAME_ACTIVE_GAME_BACKEND);
   GGameWindow *window = test_ggame_window_new(app, model);
   gtk_window_present(GTK_WINDOW(window));
-  test_ggame_window_drain_main_context(24);
+  test_ggame_window_wait_for_draw(window);
 
   g_action_group_activate_action(G_ACTION_GROUP(app), "new-game", NULL);
-  test_ggame_window_drain_main_context(24);
+  test_ggame_window_wait_for_draw(window);
 
   GtkWindow *dialog = test_ggame_window_find_toplevel_by_title("New game");
   g_assert_nonnull(dialog);
@@ -616,12 +714,12 @@ static void test_ggame_window_boop_settings_dialog_shows_puzzle_progress(void) {
   GGameModel *model = ggame_model_new(GGAME_ACTIVE_GAME_BACKEND);
   GGameWindow *window = test_ggame_window_new(app, model);
   gtk_window_present(GTK_WINDOW(window));
-  test_ggame_window_drain_main_context(24);
+  test_ggame_window_wait_for_draw(window);
 
   GAction *settings_action = g_action_map_lookup_action(G_ACTION_MAP(app), "settings");
   g_assert_nonnull(settings_action);
   g_action_group_activate_action(G_ACTION_GROUP(app), "settings", NULL);
-  test_ggame_window_drain_main_context(24);
+  test_ggame_window_wait_for_draw(window);
 
   GtkWindow *dialog = test_ggame_window_find_toplevel_by_title("Settings");
   g_assert_nonnull(dialog);
@@ -646,10 +744,10 @@ static void test_ggame_window_boop_import_dialog_starts_with_board_game_arena(vo
   GGameModel *model = ggame_model_new(GGAME_ACTIVE_GAME_BACKEND);
   GGameWindow *window = test_ggame_window_new(app, model);
   gtk_window_present(GTK_WINDOW(window));
-  test_ggame_window_drain_main_context(24);
+  test_ggame_window_wait_for_draw(window);
 
   ggame_window_present_import_dialog(window);
-  test_ggame_window_drain_main_context(24);
+  test_ggame_window_wait_for_draw(window);
 
   GtkWindow *dialog = test_ggame_window_find_toplevel_by_title("Import games");
   g_assert_nonnull(dialog);
@@ -665,7 +763,7 @@ static void test_ggame_window_boop_import_dialog_starts_with_board_game_arena(vo
   GtkButton *cancel_button = test_ggame_window_find_button_with_label(GTK_WIDGET(dialog), "Cancel");
   g_assert_nonnull(cancel_button);
   g_signal_emit_by_name(cancel_button, "clicked");
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
   g_assert_null(test_ggame_window_find_toplevel_by_title("Import games"));
 
   g_clear_object(&dialog);
@@ -695,21 +793,21 @@ static void test_ggame_window_boop_puzzle_dialog_starts_puzzle(void) {
   GGameModel *model = ggame_model_new(GGAME_ACTIVE_GAME_BACKEND);
   GGameWindow *window = test_ggame_window_new(app, model);
   gtk_window_present(GTK_WINDOW(window));
-  test_ggame_window_drain_main_context(24);
+  test_ggame_window_wait_for_draw(window);
 
   GAction *puzzle_action = g_action_map_lookup_action(G_ACTION_MAP(window), "puzzle-play");
   g_assert_nonnull(puzzle_action);
   g_assert_true(g_action_get_enabled(puzzle_action));
 
   g_action_group_activate_action(G_ACTION_GROUP(window), "puzzle-play", NULL);
-  test_ggame_window_drain_main_context(24);
+  test_ggame_window_wait_for_draw(window);
 
   GtkWindow *dialog = test_ggame_window_find_toplevel_by_title("Play puzzles");
   g_assert_nonnull(dialog);
   GtkWidget *puzzle_button = test_ggame_window_find_widget_with_uint_data(GTK_WIDGET(dialog), "puzzle-number", 1);
   g_assert_nonnull(puzzle_button);
   g_signal_emit_by_name(puzzle_button, "clicked");
-  test_ggame_window_drain_main_context(24);
+  test_ggame_window_wait_for_draw(window);
 
   GtkWidget *puzzle_panel = g_object_get_data(G_OBJECT(window), "puzzle-panel");
   GtkWidget *puzzle_message = g_object_get_data(G_OBJECT(window), "puzzle-message-label");

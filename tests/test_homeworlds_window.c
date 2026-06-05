@@ -21,16 +21,13 @@ static void test_homeworlds_window_skip(void) {
 
 static GtkApplication *test_homeworlds_app = NULL;
 
-static void test_homeworlds_drain_main_context(guint max_iterations) {
-  g_return_if_fail(max_iterations > 0);
+static void test_homeworlds_window_wait_for_draw(gpointer window) {
+  g_return_if_fail(GTK_IS_WINDOW(window));
 
-  for (guint i = 0; i < max_iterations; ++i) {
-    if (!g_main_context_iteration(NULL, FALSE)) {
-      return;
-    }
+  if (!gtk_widget_get_mapped(GTK_WIDGET(window))) {
+    gtk_window_present(GTK_WINDOW(window));
   }
-
-  g_debug("Main context still busy after %u iterations\n", max_iterations);
+  gtk_test_widget_wait_for_draw(GTK_WIDGET(window));
 }
 
 static GtkWidget *test_homeworlds_find_widget_named(GtkWidget *root, const char *name) {
@@ -957,7 +954,7 @@ static void test_homeworlds_view_text_panel_has_fixed_width(void) {
   homeworlds_view_set_move_report_enabled(window_view, FALSE);
   gtk_window_set_default_size(GTK_WINDOW(window), 1200, 700);
   gtk_window_present(GTK_WINDOW(window));
-  test_homeworlds_drain_main_context(64);
+  test_homeworlds_window_wait_for_draw(window);
 
   board_viewport_width = gtk_widget_get_width(window_board_scroller);
   g_assert_cmpint(board_viewport_width, >, 0);
@@ -978,7 +975,7 @@ static void test_homeworlds_view_text_panel_has_fixed_width(void) {
   g_assert_cmpfloat(label_bounds.origin.x + label_bounds.size.width, <=, (double)allocated_width + 1.0);
   for (guint step = 0; step < 3; step++) {
     g_assert_true(homeworlds_view_apply_candidate_at(window_view, 0));
-    test_homeworlds_drain_main_context(64);
+    test_homeworlds_window_wait_for_draw(window);
     g_assert_cmpint(gtk_widget_get_width(window_text_panel), ==, allocated_width);
     g_assert_true(gtk_widget_compute_bounds(window_text_panel_content, window_text_panel, &content_bounds));
     g_assert_cmpfloat(content_bounds.origin.x + content_bounds.size.width, <=, (double)allocated_width + 1.0);
@@ -1075,14 +1072,14 @@ static void test_homeworlds_window_main_split_can_exceed_height(void) {
 
   gtk_window_set_default_size(GTK_WINDOW(window), 2000, 700);
   gtk_window_present(GTK_WINDOW(window));
-  test_homeworlds_drain_main_context(64);
+  test_homeworlds_window_wait_for_draw(window);
 
   height = gtk_widget_get_height(main_paned);
   g_assert_cmpint(height, >, 0);
   g_assert_cmpint(target_position, >, height);
 
   gtk_paned_set_position(GTK_PANED(main_paned), target_position);
-  test_homeworlds_drain_main_context(64);
+  test_homeworlds_window_wait_for_draw(window);
 
   g_assert_cmpint(gtk_paned_get_position(GTK_PANED(main_paned)), >=, target_position);
 
@@ -1923,14 +1920,11 @@ static void test_homeworlds_import_dialog_starts_with_board_game_arena(void) {
   GGameModel *model = NULL;
   GGameWindow *window = test_homeworlds_create_window(&app, &model);
 
-  gtk_window_present(GTK_WINDOW(window));
-  test_homeworlds_drain_main_context(16);
-
   ggame_window_present_import_dialog(window);
-  test_homeworlds_drain_main_context(32);
 
   GtkWindow *dialog = test_homeworlds_find_toplevel_by_title("Import games");
   g_assert_nonnull(dialog);
+  test_homeworlds_window_wait_for_draw(dialog);
 
   GtkButton *next_button = test_homeworlds_find_button_with_label(GTK_WIDGET(dialog), "Fetch game history");
   g_assert_nonnull(next_button);
@@ -1946,7 +1940,6 @@ static void test_homeworlds_import_dialog_starts_with_board_game_arena(void) {
   GtkButton *cancel_button = test_homeworlds_find_button_with_label(GTK_WIDGET(dialog), "Cancel");
   g_assert_nonnull(cancel_button);
   g_signal_emit_by_name(cancel_button, "clicked");
-  test_homeworlds_drain_main_context(16);
   g_assert_null(test_homeworlds_find_toplevel_by_title("Import games"));
 
   g_clear_object(&dialog);

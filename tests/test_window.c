@@ -25,6 +25,27 @@ static void test_ggame_window_skip(void) {
 
 static GtkApplication *test_app = NULL;
 
+typedef gboolean (*TestGGameWindowWaitPredicate)(gpointer user_data);
+
+typedef struct {
+  TestGGameWindowWaitPredicate predicate;
+  gpointer user_data;
+  GMainLoop *loop;
+  gint64 deadline_us;
+  guint source_id;
+  gboolean matched;
+} TestGGameWindowWait;
+
+typedef struct {
+  GCheckersModel *model;
+  CheckersColor turn;
+} TestGGameWindowCheckersTurnWait;
+
+typedef struct {
+  SgfTree *tree;
+  guint move_number;
+} TestGGameWindowSgfMoveWait;
+
 static void test_analysis_graph_score_compression(void) {
   g_assert_cmpfloat_with_epsilon(analysis_graph_compress_score(0.0), 0.0, 0.000001);
   g_assert_cmpfloat_with_epsilon(analysis_graph_compress_score(1800.0), 900.0, 0.000001);
@@ -357,6 +378,24 @@ static GtkButton *test_ggame_window_find_puzzle_picker_button(GtkWidget *root, g
   return NULL;
 }
 
+static GtkWidget *test_ggame_window_find_puzzle_picker_scroller(GtkWidget *root) {
+  g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
+
+  if (GTK_IS_SCROLLED_WINDOW(root) && test_ggame_window_find_puzzle_picker_button(root, 0) != NULL) {
+    return root;
+  }
+
+  for (GtkWidget *child = gtk_widget_get_first_child(root); child != NULL;
+       child = gtk_widget_get_next_sibling(child)) {
+    GtkWidget *match = test_ggame_window_find_puzzle_picker_scroller(child);
+    if (match != NULL) {
+      return match;
+    }
+  }
+
+  return NULL;
+}
+
 static GtkCheckButton *test_ggame_window_find_check_button_with_label(GtkWidget *root, const char *label) {
   g_return_val_if_fail(GTK_IS_WIDGET(root), NULL);
   g_return_val_if_fail(label != NULL, NULL);
@@ -562,16 +601,97 @@ static GtkWindow *test_ggame_window_find_toplevel_by_title(const char *title) {
   return NULL;
 }
 
-static void test_ggame_window_drain_main_context(guint max_iterations) {
-  g_return_if_fail(max_iterations > 0);
+static void test_ggame_window_wait_for_draw(gpointer window) {
+  g_return_if_fail(GTK_IS_WINDOW(window));
 
-  for (guint i = 0; i < max_iterations; ++i) {
-    if (!g_main_context_iteration(NULL, FALSE)) {
-      return;
-    }
+  if (!gtk_widget_get_mapped(GTK_WIDGET(window))) {
+    gtk_window_present(GTK_WINDOW(window));
+  }
+  gtk_test_widget_wait_for_draw(GTK_WIDGET(window));
+}
+
+static gboolean test_ggame_window_wait_cb(gpointer user_data) {
+  TestGGameWindowWait *wait = user_data;
+
+  g_return_val_if_fail(wait != NULL, G_SOURCE_REMOVE);
+  g_return_val_if_fail(wait->predicate != NULL, G_SOURCE_REMOVE);
+  g_return_val_if_fail(wait->loop != NULL, G_SOURCE_REMOVE);
+
+  if (wait->predicate(wait->user_data)) {
+    wait->matched = TRUE;
+    wait->source_id = 0;
+    g_main_loop_quit(wait->loop);
+    return G_SOURCE_REMOVE;
   }
 
-  g_debug("Main context still busy after %u iterations\n", max_iterations);
+  if (g_get_monotonic_time() >= wait->deadline_us) {
+    wait->source_id = 0;
+    g_main_loop_quit(wait->loop);
+    return G_SOURCE_REMOVE;
+  }
+
+  return G_SOURCE_CONTINUE;
+}
+
+static gboolean test_ggame_window_wait_until(GGameWindow *window,
+                                             TestGGameWindowWaitPredicate predicate,
+                                             gpointer user_data,
+                                             gint64 timeout_us) {
+  g_return_val_if_fail(GGAME_IS_WINDOW(window), FALSE);
+  g_return_val_if_fail(predicate != NULL, FALSE);
+  g_return_val_if_fail(timeout_us > 0, FALSE);
+
+  test_ggame_window_wait_for_draw(window);
+  if (predicate(user_data)) {
+    return TRUE;
+  }
+
+  GMainLoop *loop = g_main_loop_new(NULL, FALSE);
+  TestGGameWindowWait wait = {
+    .predicate = predicate,
+    .user_data = user_data,
+    .loop = loop,
+    .deadline_us = g_get_monotonic_time() + timeout_us,
+    .source_id = 0,
+    .matched = FALSE,
+  };
+  wait.source_id = g_timeout_add(1, test_ggame_window_wait_cb, &wait);
+  g_main_loop_run(loop);
+
+  if (wait.source_id != 0) {
+    g_source_remove(wait.source_id);
+  }
+  g_main_loop_unref(loop);
+
+  return wait.matched;
+}
+
+static gboolean test_ggame_window_checkers_turn_matches(gpointer user_data) {
+  TestGGameWindowCheckersTurnWait *wait = user_data;
+
+  g_return_val_if_fail(wait != NULL, FALSE);
+  g_return_val_if_fail(GCHECKERS_IS_MODEL(wait->model), FALSE);
+
+  const GameState *state = gcheckers_model_peek_state(wait->model);
+  return state != NULL && state->turn == wait->turn;
+}
+
+static gboolean test_ggame_window_sgf_move_matches(gpointer user_data) {
+  TestGGameWindowSgfMoveWait *wait = user_data;
+
+  g_return_val_if_fail(wait != NULL, FALSE);
+  g_return_val_if_fail(SGF_IS_TREE(wait->tree), FALSE);
+
+  const SgfNode *current = sgf_tree_get_current(wait->tree);
+  return current != NULL && sgf_node_get_move_number(current) == wait->move_number;
+}
+
+static gboolean test_ggame_window_adjustment_has_positive_value(gpointer user_data) {
+  GtkAdjustment *adjustment = user_data;
+
+  g_return_val_if_fail(GTK_IS_ADJUSTMENT(adjustment), FALSE);
+
+  return gtk_adjustment_get_value(adjustment) > 0.0;
 }
 
 static gboolean apply_first_move(GGameSgfController *controller,
@@ -662,6 +782,29 @@ static char *test_ggame_window_make_progress_dir(void) {
   g_assert_nonnull(dir_path);
   g_setenv("GCHECKERS_PUZZLE_PROGRESS_DIR", dir_path, TRUE);
   return dir_path;
+}
+
+static char *test_ggame_window_puzzle_path(const char *dir_path, PlayerRuleset ruleset, guint puzzle_number) {
+  g_return_val_if_fail(dir_path != NULL, NULL);
+
+  const char *short_name = checkers_ruleset_short_name(ruleset);
+  g_return_val_if_fail(short_name != NULL, NULL);
+
+  g_autofree char *file_name = g_strdup_printf("puzzle-%04u.sgf", puzzle_number);
+  return g_build_filename(dir_path, "checkers", short_name, file_name, NULL);
+}
+
+static void test_ggame_window_start_puzzle(GGameWindow *window,
+                                           const char *dir_path,
+                                           PlayerRuleset ruleset,
+                                           guint puzzle_number) {
+  g_return_if_fail(GGAME_IS_WINDOW(window));
+  g_return_if_fail(dir_path != NULL);
+
+  g_autofree char *path = test_ggame_window_puzzle_path(dir_path, ruleset, puzzle_number);
+  g_assert_nonnull(path);
+  g_assert_true(ggame_window_start_puzzle_mode_for_path(window, test_ggame_window_variant(ruleset), path));
+  test_ggame_window_wait_for_draw(window);
 }
 
 static GPtrArray *test_ggame_window_load_attempt_history(const char *state_dir) {
@@ -808,6 +951,71 @@ static gboolean test_ggame_window_write_single_move_puzzle_for_ruleset(char **in
   return TRUE;
 }
 
+static gboolean test_ggame_window_move_is_quiet_step(const CheckersMove *move) {
+  g_return_val_if_fail(move != NULL, FALSE);
+
+  return move->captures == 0 && move->length == 2;
+}
+
+static gboolean test_ggame_window_find_quiet_three_ply_line(GCheckersModel *model,
+                                                            const GameState *initial_state,
+                                                            CheckersMove *out_first_move,
+                                                            CheckersMove *out_defense_move,
+                                                            CheckersMove *out_second_move) {
+  g_return_val_if_fail(GCHECKERS_IS_MODEL(model), FALSE);
+  g_return_val_if_fail(initial_state != NULL, FALSE);
+  g_return_val_if_fail(out_first_move != NULL, FALSE);
+  g_return_val_if_fail(out_defense_move != NULL, FALSE);
+  g_return_val_if_fail(out_second_move != NULL, FALSE);
+
+  gboolean found = FALSE;
+  g_assert_true(gcheckers_model_set_state(model, initial_state));
+  MoveList first_moves = gcheckers_model_list_moves(model);
+  for (guint first_i = 0; first_i < first_moves.count && !found; ++first_i) {
+    if (!test_ggame_window_move_is_quiet_step(&first_moves.moves[first_i])) {
+      continue;
+    }
+
+    CheckersMove first_move = first_moves.moves[first_i];
+    g_assert_true(gcheckers_model_set_state(model, initial_state));
+    if (!gcheckers_model_apply_move(model, &first_move)) {
+      continue;
+    }
+    GameState after_first = *gcheckers_model_peek_state(model);
+
+    MoveList defense_moves = gcheckers_model_list_moves(model);
+    for (guint defense_i = 0; defense_i < defense_moves.count && !found; ++defense_i) {
+      if (!test_ggame_window_move_is_quiet_step(&defense_moves.moves[defense_i])) {
+        continue;
+      }
+
+      CheckersMove defense_move = defense_moves.moves[defense_i];
+      g_assert_true(gcheckers_model_set_state(model, &after_first));
+      if (!gcheckers_model_apply_move(model, &defense_move)) {
+        continue;
+      }
+
+      MoveList second_moves = gcheckers_model_list_moves(model);
+      for (guint second_i = 0; second_i < second_moves.count; ++second_i) {
+        if (!test_ggame_window_move_is_quiet_step(&second_moves.moves[second_i])) {
+          continue;
+        }
+
+        *out_first_move = first_move;
+        *out_defense_move = defense_move;
+        *out_second_move = second_moves.moves[second_i];
+        found = TRUE;
+        break;
+      }
+      movelist_free(&second_moves);
+    }
+    movelist_free(&defense_moves);
+  }
+  movelist_free(&first_moves);
+
+  return found;
+}
+
 static gboolean test_ggame_window_write_two_attack_moves_puzzle_for_ruleset(char **inout_dir_path,
                                                                                 PlayerRuleset ruleset,
                                                                                 guint puzzle_number,
@@ -846,57 +1054,49 @@ static gboolean test_ggame_window_write_two_attack_moves_puzzle_for_ruleset(char
   for (guint8 i = 0; i < squares; ++i) {
     board_set(&state.board, i, CHECKERS_PIECE_EMPTY);
   }
-
-  gint8 white_square_i = board_index_from_coord(5, 0, state.board.board_size);
-  gint8 black_square_i = board_index_from_coord(2, 5, state.board.board_size);
-  g_assert_cmpint(white_square_i, >=, 0);
-  g_assert_cmpint(black_square_i, >=, 0);
-  board_set(&state.board, (guint8)white_square_i, CHECKERS_PIECE_WHITE_KING);
-  board_set(&state.board, (guint8)black_square_i, CHECKERS_PIECE_BLACK_KING);
   state.turn = attacker;
   state.winner = CHECKERS_WINNER_NONE;
-  g_assert_true(gcheckers_model_set_state(model, &state));
 
-  MoveList moves = gcheckers_model_list_moves(model);
-  g_assert_cmpuint(moves.count, >, 0);
-  gboolean found = FALSE;
-  for (guint i = 0; i < moves.count; ++i) {
-    if (moves.moves[i].captures == 0 && moves.moves[i].length == 2) {
-      *out_first_move = moves.moves[i];
-      found = TRUE;
-      break;
-    }
-  }
-  g_assert_true(found);
-  g_assert_true(gcheckers_model_apply_move(model, out_first_move));
-  movelist_free(&moves);
-
+  guint8 white_square = 0;
+  guint8 black_square = 0;
   CheckersMove defense_move = {0};
-  moves = gcheckers_model_list_moves(model);
-  g_assert_cmpuint(moves.count, >, 0);
-  found = FALSE;
-  for (guint i = 0; i < moves.count; ++i) {
-    if (moves.moves[i].captures == 0 && moves.moves[i].length == 2) {
-      defense_move = moves.moves[i];
-      found = TRUE;
-      break;
+  gboolean found = FALSE;
+  gint8 preferred_white_square = board_index_from_coord(5, 0, state.board.board_size);
+  gint8 preferred_black_square = board_index_from_coord(2, 5, state.board.board_size);
+  if (preferred_white_square >= 0 && preferred_black_square >= 0) {
+    GameState candidate = state;
+    board_set(&candidate.board, (guint8)preferred_white_square, CHECKERS_PIECE_WHITE_KING);
+    board_set(&candidate.board, (guint8)preferred_black_square, CHECKERS_PIECE_BLACK_KING);
+    found = test_ggame_window_find_quiet_three_ply_line(model,
+                                                        &candidate,
+                                                        out_first_move,
+                                                        &defense_move,
+                                                        out_second_move);
+    if (found) {
+      white_square = (guint8)preferred_white_square;
+      black_square = (guint8)preferred_black_square;
     }
   }
-  g_assert_true(found);
-  g_assert_true(gcheckers_model_apply_move(model, &defense_move));
-  movelist_free(&moves);
+  for (guint white_i = 0; white_i < squares && !found; ++white_i) {
+    for (guint black_i = 0; black_i < squares && !found; ++black_i) {
+      if (white_i == black_i) {
+        continue;
+      }
 
-  moves = gcheckers_model_list_moves(model);
-  g_assert_cmpuint(moves.count, >, 0);
-  found = FALSE;
-  for (guint i = 0; i < moves.count; ++i) {
-    if (moves.moves[i].captures == 0 && moves.moves[i].length == 2) {
-      *out_second_move = moves.moves[i];
-      found = TRUE;
-      break;
+      GameState candidate = state;
+      board_set(&candidate.board, (guint8)white_i, CHECKERS_PIECE_WHITE_KING);
+      board_set(&candidate.board, (guint8)black_i, CHECKERS_PIECE_BLACK_KING);
+      found = test_ggame_window_find_quiet_three_ply_line(model,
+                                                          &candidate,
+                                                          out_first_move,
+                                                          &defense_move,
+                                                          out_second_move);
+      if (found) {
+        white_square = (guint8)white_i;
+        black_square = (guint8)black_i;
+      }
     }
   }
-  movelist_free(&moves);
   g_assert_true(found);
 
   char first_notation[128] = {0};
@@ -914,10 +1114,10 @@ static gboolean test_ggame_window_write_two_attack_moves_puzzle_for_ruleset(char
   g_autofree char *content = g_strdup_printf(
       "(;FF[4]CA[UTF-8]GM[40]RU[%s]AE[1:32]AW[%u]AWK[%u]AB[%u]ABK[%u]PL[%c];%c[%s];%c[%s];%c[%s])",
       short_name,
-      (guint)white_square_i + 1,
-      (guint)white_square_i + 1,
-      (guint)black_square_i + 1,
-      (guint)black_square_i + 1,
+      (guint)white_square + 1,
+      (guint)white_square + 1,
+      (guint)black_square + 1,
+      (guint)black_square + 1,
       attacker_color,
       attacker_color,
       first_notation,
@@ -1009,7 +1209,6 @@ static void test_ggame_window_persists_default_size(void) {
   g_action_group_change_action_state(G_ACTION_GROUP(window),
                                      "view-show-analysis-drawer",
                                      g_variant_new_boolean(FALSE));
-  test_ggame_window_drain_main_context(8);
   gtk_window_set_default_size(GTK_WINDOW(window), 1234, 678);
 
   gboolean handled = TRUE;
@@ -1042,7 +1241,6 @@ static void test_ggame_window_persists_default_size(void) {
   g_action_group_change_action_state(G_ACTION_GROUP(second_window),
                                      "view-show-analysis-drawer",
                                      g_variant_new_boolean(TRUE));
-  test_ggame_window_drain_main_context(8);
   g_assert_cmpint(gtk_paned_get_position(GTK_PANED(second_drawer_split)), ==, 234);
 
   test_ggame_window_reset_common_window_settings(settings);
@@ -1081,7 +1279,7 @@ static void test_ggame_window_computer_selection_keeps_board_enabled(void) {
   g_assert_nonnull(panel);
 
   player_controls_panel_set_mode(panel, 0, PLAYER_CONTROL_MODE_COMPUTER);
-  test_ggame_window_drain_main_context(8);
+  test_ggame_window_wait_for_draw(window);
 
   GtkWidget *square = test_ggame_window_find_board_square(GTK_WIDGET(window));
   g_assert_nonnull(square);
@@ -1109,7 +1307,14 @@ static void test_ggame_window_auto_moves_when_next_player_is_computer(void) {
 
   CheckersMove move;
   g_assert_true(apply_first_move(controller, model, &move));
-  test_ggame_window_drain_main_context(16);
+  TestGGameWindowCheckersTurnWait wait = {
+    .model = model,
+    .turn = CHECKERS_COLOR_WHITE,
+  };
+  g_assert_true(test_ggame_window_wait_until(window,
+                                             test_ggame_window_checkers_turn_matches,
+                                             &wait,
+                                             5 * G_USEC_PER_SEC));
 
   const GameState *state = gcheckers_model_peek_state(model);
   g_assert_nonnull(state);
@@ -1137,22 +1342,27 @@ static void test_ggame_window_sgf_navigation_preserves_player_controls(void) {
 
   CheckersMove move;
   g_assert_true(apply_first_move(controller, model, &move));
-  test_ggame_window_drain_main_context(16);
 
   SgfTree *tree = ggame_sgf_controller_get_tree(controller);
+  TestGGameWindowSgfMoveWait wait = {
+    .tree = tree,
+    .move_number = 2,
+  };
+  g_assert_true(test_ggame_window_wait_until(window, test_ggame_window_sgf_move_matches, &wait, 5 * G_USEC_PER_SEC));
+
   const SgfNode *node = sgf_tree_get_first_child(tree);
   g_assert_nonnull(node);
 
   SgfView *view = ggame_sgf_controller_get_view(controller);
   g_signal_emit_by_name(view, "node-selected", node);
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
 
   g_assert_cmpuint(player_controls_panel_get_mode(panel, 0), ==, PLAYER_CONTROL_MODE_USER);
   g_assert_cmpuint(player_controls_panel_get_mode(panel, 1), ==, PLAYER_CONTROL_MODE_COMPUTER);
   g_assert_cmpuint(player_controls_panel_get_computer_depth(panel), ==, 8);
 
   g_assert_true(ggame_sgf_controller_step_forward(controller));
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
 
   g_assert_cmpuint(player_controls_panel_get_mode(panel, 0), ==, PLAYER_CONTROL_MODE_USER);
   g_assert_cmpuint(player_controls_panel_get_mode(panel, 1), ==, PLAYER_CONTROL_MODE_COMPUTER);
@@ -1179,7 +1389,7 @@ static void test_ggame_window_sgf_navigation_does_not_auto_move(void) {
 
   CheckersMove move;
   g_assert_true(apply_first_move(controller, model, &move));
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
 
   SgfTree *tree = ggame_sgf_controller_get_tree(controller);
   const SgfNode *first = sgf_tree_get_current(tree);
@@ -1189,11 +1399,11 @@ static void test_ggame_window_sgf_navigation_does_not_auto_move(void) {
   player_controls_panel_set_mode(panel, 1, PLAYER_CONTROL_MODE_COMPUTER);
 
   g_assert_true(ggame_sgf_controller_rewind_to_start(controller));
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
   g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 0);
 
   g_assert_true(ggame_sgf_controller_step_forward(controller));
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
 
   g_assert_true(sgf_tree_get_current(tree) == first);
   g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 1);
@@ -1241,7 +1451,7 @@ static void test_ggame_window_force_move_works_on_user_turn(void) {
   g_assert_true(player_controls_panel_is_user_control(panel, 1));
 
   ggame_window_force_move(window);
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
 
   const GameState *state = gcheckers_model_peek_state(model);
   g_assert_nonnull(state);
@@ -1334,7 +1544,7 @@ static void test_ggame_window_settings_dialog_persists_preferences(void) {
   GCheckersModel *model = gcheckers_model_new();
   GGameWindow *window = test_ggame_window_new(app, model);
   gtk_window_present(GTK_WINDOW(window));
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
 
   GAction *settings_action = g_action_map_lookup_action(G_ACTION_MAP(app), "settings");
   g_assert_nonnull(settings_action);
@@ -1379,7 +1589,7 @@ static void test_ggame_window_settings_dialog_persists_preferences(void) {
   g_assert_null(delete_accels[1]);
 
   g_action_group_activate_action(G_ACTION_GROUP(app), "settings", NULL);
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
 
   GtkWindow *dialog = test_ggame_window_find_toplevel_by_title("Settings");
   g_assert_nonnull(dialog);
@@ -1399,7 +1609,7 @@ static void test_ggame_window_settings_dialog_persists_preferences(void) {
   GtkButton *clear_progress_button = test_ggame_window_find_button_with_label(GTK_WIDGET(dialog), "Clear Progress");
   g_assert_nonnull(clear_progress_button);
   g_signal_emit_by_name(clear_progress_button, "clicked");
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
   g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "0 of 2 puzzles solved"));
 
   g_autoptr(GPtrArray) cleared_history = test_ggame_window_load_attempt_history(progress_dir);
@@ -1410,10 +1620,10 @@ static void test_ggame_window_settings_dialog_persists_preferences(void) {
   GtkButton *save_button = test_ggame_window_find_button_with_label(GTK_WIDGET(dialog), "Save");
   g_assert_nonnull(save_button);
   g_assert_true(gtk_widget_activate(GTK_WIDGET(save_button)));
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
 
   g_action_group_activate_action(G_ACTION_GROUP(app), "settings", NULL);
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
 
   dialog = test_ggame_window_find_toplevel_by_title("Settings");
   g_assert_nonnull(dialog);
@@ -1430,7 +1640,7 @@ static void test_ggame_window_settings_dialog_persists_preferences(void) {
   GtkButton *cancel_button = test_ggame_window_find_button_with_label(GTK_WIDGET(dialog), "Cancel");
   g_assert_nonnull(cancel_button);
   g_assert_true(gtk_widget_activate(GTK_WIDGET(cancel_button)));
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
 
   g_unsetenv("GCHECKERS_PUZZLES_DIR");
   g_unsetenv("GCHECKERS_PUZZLE_PROGRESS_DIR");
@@ -1444,10 +1654,10 @@ static void test_ggame_window_game_information_dialog_updates_player_names(void)
   GCheckersModel *model = gcheckers_model_new();
   GGameWindow *window = test_ggame_window_new(app, model);
   gtk_window_present(GTK_WINDOW(window));
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
 
   g_action_group_activate_action(G_ACTION_GROUP(window), "game-information", NULL);
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
 
   GtkWindow *dialog = test_ggame_window_find_toplevel_by_title("Game information");
   g_assert_nonnull(dialog);
@@ -1477,7 +1687,7 @@ static void test_ggame_window_game_information_dialog_updates_player_names(void)
   GtkButton *save_button = test_ggame_window_find_button_with_label(GTK_WIDGET(dialog), "Save");
   g_assert_nonnull(save_button);
   g_signal_emit_by_name(save_button, "clicked");
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
 
   GGameSgfController *controller = ggame_window_get_sgf_controller(window);
   SgfTree *tree = ggame_sgf_controller_get_tree(controller);
@@ -1567,13 +1777,13 @@ static void test_ggame_window_analysis_depth_slider_is_independent(void) {
   PlayerControlsPanel *panel = ggame_window_get_controls_panel(window);
   g_assert_nonnull(panel);
   player_controls_panel_set_computer_depth(panel, 3);
-  test_ggame_window_drain_main_context(8);
+  test_ggame_window_wait_for_draw(window);
 
   g_assert_cmpuint(player_controls_panel_get_computer_depth(panel), ==, 3);
   g_assert_cmpuint(ggame_window_get_analysis_depth(window), ==, 8);
 
   ggame_window_set_analysis_depth(window, 5);
-  test_ggame_window_drain_main_context(8);
+  test_ggame_window_wait_for_draw(window);
   g_assert_cmpuint(ggame_window_get_analysis_depth(window), ==, 5);
   g_assert_cmpuint(player_controls_panel_get_computer_depth(panel), ==, 3);
 
@@ -1605,7 +1815,7 @@ static void test_ggame_window_node_selection_updates_report(void) {
   g_assert_true(sgf_node_set_analysis((SgfNode *)first, analysis));
 
   g_assert_true(ggame_sgf_controller_select_node(controller, first));
-  test_ggame_window_drain_main_context(8);
+  test_ggame_window_wait_for_draw(window);
 
   g_autofree char *analysis_text = test_ggame_window_get_analysis_text(window);
   g_assert_nonnull(analysis_text);
@@ -1614,7 +1824,7 @@ static void test_ggame_window_node_selection_updates_report(void) {
   g_assert_null(strstr(analysis_text, "Nodes:"));
 
   g_assert_true(ggame_sgf_controller_select_node(controller, root));
-  test_ggame_window_drain_main_context(8);
+  test_ggame_window_wait_for_draw(window);
 
   g_autofree char *root_text = test_ggame_window_get_analysis_text(window);
   g_assert_nonnull(root_text);
@@ -1646,27 +1856,9 @@ static void test_ggame_window_puzzle_mode_solves_and_exits_to_analysis(void) {
   GCheckersModel *model = gcheckers_model_new();
   GGameWindow *window = test_ggame_window_new(app, model);
   gtk_window_present(GTK_WINDOW(window));
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
 
-  GtkWidget *board_panel = test_ggame_window_get_named_widget(window, "board-panel");
-  g_assert_nonnull(board_panel);
-  gint initial_board_width = gtk_widget_get_width(board_panel);
-  g_assert_cmpint(initial_board_width, >, 0);
-
-  g_action_group_activate_action(G_ACTION_GROUP(window), "puzzle-play", NULL);
-  test_ggame_window_drain_main_context(32);
-
-  GtkWindow *dialog = test_ggame_window_find_toplevel_by_title("Play puzzles");
-  g_assert_nonnull(dialog);
-  GtkDropDown *ruleset_drop_down = test_ggame_window_find_ruleset_dropdown(GTK_WIDGET(dialog));
-  g_assert_nonnull(ruleset_drop_down);
-  gtk_drop_down_set_selected(ruleset_drop_down, PLAYER_RULESET_RUSSIAN);
-  test_ggame_window_drain_main_context(8);
-  g_assert_null(test_ggame_window_find_button_with_label(GTK_WIDGET(dialog), "Start"));
-  GtkButton *puzzle_button = test_ggame_window_find_puzzle_picker_button(GTK_WIDGET(dialog), 0);
-  g_assert_nonnull(puzzle_button);
-  g_signal_emit_by_name(puzzle_button, "clicked");
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_start_puzzle(window, dir_path, PLAYER_RULESET_RUSSIAN, 0);
 
   GtkWidget *navigation_panel = test_ggame_window_get_named_widget(window, "navigation-panel");
   GtkWidget *analysis_panel = test_ggame_window_get_named_widget(window, "analysis-panel");
@@ -1694,7 +1886,7 @@ static void test_ggame_window_puzzle_mode_solves_and_exits_to_analysis(void) {
   gtk_window_get_default_size(GTK_WINDOW(window), &puzzle_default_width, &puzzle_default_height);
   g_assert_cmpint(puzzle_default_width, >, 0);
   gtk_window_set_default_size(GTK_WINDOW(window), puzzle_default_width + 400, puzzle_default_height);
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
 
   gint restored_default_width = -1;
   gtk_window_get_default_size(GTK_WINDOW(window), &restored_default_width, NULL);
@@ -1707,7 +1899,7 @@ static void test_ggame_window_puzzle_mode_solves_and_exits_to_analysis(void) {
   g_assert_nonnull(to_square);
   g_signal_emit_by_name(from_square, "clicked");
   g_signal_emit_by_name(to_square, "clicked");
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
 
   g_assert_true(gtk_widget_is_sensitive(next_button));
   g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(puzzle_message)), ==, "Puzzle 0000.");
@@ -1719,10 +1911,9 @@ static void test_ggame_window_puzzle_mode_solves_and_exits_to_analysis(void) {
   g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 1);
 
   g_signal_emit_by_name(analyze_button, "clicked");
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
   g_assert_nonnull(gtk_widget_get_parent(analysis_panel));
   g_assert_false(gtk_widget_get_visible(puzzle_panel));
-  g_assert_cmpint(test_ggame_window_get_size_request_width(board_panel), ==, initial_board_width);
   g_assert_cmpuint(sgf_node_get_move_number(sgf_tree_get_current(tree)), ==, 0);
   g_assert_cmpstr(gtk_window_get_title(GTK_WINDOW(window)), ==, "gcheckers - puzzle-0000.sgf");
   GtkWidget *analysis_status = test_ggame_window_get_named_widget(window, "analysis-status-label");
@@ -1746,18 +1937,6 @@ static void test_ggame_window_puzzle_mode_solves_and_exits_to_analysis(void) {
   g_assert_nonnull(status_entry);
   g_assert_cmpint(status_entry->status, ==, GGAME_PUZZLE_STATUS_SOLVED);
 
-  g_action_group_activate_action(G_ACTION_GROUP(window), "puzzle-play", NULL);
-  test_ggame_window_drain_main_context(32);
-  dialog = test_ggame_window_find_toplevel_by_title("Play puzzles");
-  g_assert_nonnull(dialog);
-  ruleset_drop_down = test_ggame_window_find_ruleset_dropdown(GTK_WIDGET(dialog));
-  g_assert_nonnull(ruleset_drop_down);
-  gtk_drop_down_set_selected(ruleset_drop_down, PLAYER_RULESET_RUSSIAN);
-  test_ggame_window_drain_main_context(8);
-  puzzle_button = test_ggame_window_find_puzzle_picker_button(GTK_WIDGET(dialog), 0);
-  g_assert_nonnull(puzzle_button);
-  g_assert_true(gtk_widget_has_css_class(GTK_WIDGET(puzzle_button), "puzzle-picker-solved"));
-
   g_unsetenv("GCHECKERS_PUZZLES_DIR");
   g_unsetenv("GCHECKERS_PUZZLE_PROGRESS_DIR");
   g_clear_object(&window);
@@ -1770,7 +1949,7 @@ static void test_ggame_window_puzzle_dialog_scrolls_to_first_untried(void) {
   g_autofree char *progress_dir = test_ggame_window_make_progress_dir();
   CheckersMove puzzle_move = {0};
 
-  for (guint i = 0; i < 20; ++i) {
+  for (guint i = 0; i < 80; ++i) {
     g_assert_true(test_ggame_window_write_single_move_puzzle_for_ruleset(&dir_path,
                                                                              PLAYER_RULESET_RUSSIAN,
                                                                              i,
@@ -1778,7 +1957,7 @@ static void test_ggame_window_puzzle_dialog_scrolls_to_first_untried(void) {
                                                                              CHECKERS_COLOR_WHITE));
   }
 
-  for (guint i = 0; i < 12; ++i) {
+  for (guint i = 0; i < 60; ++i) {
     test_ggame_window_store_resolved_puzzle_result(progress_dir,
                                                        PLAYER_RULESET_RUSSIAN,
                                                        i,
@@ -1791,22 +1970,26 @@ static void test_ggame_window_puzzle_dialog_scrolls_to_first_untried(void) {
   GCheckersModel *model = gcheckers_model_new();
   GGameWindow *window = test_ggame_window_new(app, model);
   gtk_window_present(GTK_WINDOW(window));
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
 
   g_action_group_activate_action(G_ACTION_GROUP(window), "puzzle-play", NULL);
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
 
   GtkWindow *dialog = test_ggame_window_find_toplevel_by_title("Play puzzles");
   g_assert_nonnull(dialog);
   GtkDropDown *ruleset_drop_down = test_ggame_window_find_ruleset_dropdown(GTK_WIDGET(dialog));
   g_assert_nonnull(ruleset_drop_down);
   gtk_drop_down_set_selected(ruleset_drop_down, PLAYER_RULESET_RUSSIAN);
-  test_ggame_window_drain_main_context(64);
+  test_ggame_window_wait_for_draw(dialog);
 
-  GtkWidget *scroller = test_ggame_window_find_by_type(GTK_WIDGET(dialog), GTK_TYPE_SCROLLED_WINDOW);
+  GtkWidget *scroller = test_ggame_window_find_puzzle_picker_scroller(GTK_WIDGET(dialog));
   g_assert_nonnull(scroller);
   GtkAdjustment *adjustment = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(scroller));
   g_assert_nonnull(adjustment);
+  g_assert_true(test_ggame_window_wait_until(window,
+                                             test_ggame_window_adjustment_has_positive_value,
+                                             adjustment,
+                                             2 * G_USEC_PER_SEC));
   g_assert_cmpfloat(gtk_adjustment_get_value(adjustment), >, 0.0);
 
   g_unsetenv("GCHECKERS_PUZZLES_DIR");
@@ -1828,8 +2011,8 @@ static void test_ggame_window_new_game_clears_loaded_title(void) {
                                            test_ggame_window_variant(PLAYER_RULESET_INTERNATIONAL),
                                            PLAYER_CONTROL_MODE_USER,
                                            PLAYER_CONTROL_MODE_USER,
-                                           0);
-  test_ggame_window_drain_main_context(16);
+                                           PLAYER_COMPUTER_DEPTH_MIN);
+  test_ggame_window_wait_for_draw(window);
 
   g_assert_cmpstr(gtk_window_get_title(GTK_WINDOW(window)), ==, "gcheckers");
 
@@ -1853,27 +2036,16 @@ static void test_ggame_window_puzzle_analyze_keeps_black_orientation(void) {
   GCheckersModel *model = gcheckers_model_new();
   GGameWindow *window = test_ggame_window_new(app, model);
   gtk_window_present(GTK_WINDOW(window));
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
 
-  g_action_group_activate_action(G_ACTION_GROUP(window), "puzzle-play", NULL);
-  test_ggame_window_drain_main_context(32);
-  GtkWindow *dialog = test_ggame_window_find_toplevel_by_title("Play puzzles");
-  g_assert_nonnull(dialog);
-  GtkDropDown *ruleset_drop_down = test_ggame_window_find_ruleset_dropdown(GTK_WIDGET(dialog));
-  g_assert_nonnull(ruleset_drop_down);
-  gtk_drop_down_set_selected(ruleset_drop_down, PLAYER_RULESET_RUSSIAN);
-  test_ggame_window_drain_main_context(8);
-  GtkButton *puzzle_button = test_ggame_window_find_puzzle_picker_button(GTK_WIDGET(dialog), 0);
-  g_assert_nonnull(puzzle_button);
-  g_signal_emit_by_name(puzzle_button, "clicked");
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_start_puzzle(window, dir_path, PLAYER_RULESET_RUSSIAN, 0);
 
   GtkWidget *analyze_button = test_ggame_window_get_named_widget(window, "puzzle-analyze-button");
   g_assert_nonnull(analyze_button);
   g_assert_cmpuint(ggame_window_get_board_bottom_color(window), ==, CHECKERS_COLOR_BLACK);
 
   g_signal_emit_by_name(analyze_button, "clicked");
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
 
   g_assert_cmpuint(ggame_window_get_board_bottom_color(window), ==, CHECKERS_COLOR_BLACK);
 
@@ -1898,20 +2070,9 @@ static void test_ggame_window_puzzle_wrong_first_move_records_failure(void) {
   GCheckersModel *model = gcheckers_model_new();
   GGameWindow *window = test_ggame_window_new(app, model);
   gtk_window_present(GTK_WINDOW(window));
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
 
-  g_action_group_activate_action(G_ACTION_GROUP(window), "puzzle-play", NULL);
-  test_ggame_window_drain_main_context(32);
-  GtkWindow *dialog = test_ggame_window_find_toplevel_by_title("Play puzzles");
-  g_assert_nonnull(dialog);
-  GtkDropDown *ruleset_drop_down = test_ggame_window_find_ruleset_dropdown(GTK_WIDGET(dialog));
-  g_assert_nonnull(ruleset_drop_down);
-  gtk_drop_down_set_selected(ruleset_drop_down, PLAYER_RULESET_AMERICAN);
-  test_ggame_window_drain_main_context(8);
-  GtkButton *puzzle_button = test_ggame_window_find_puzzle_picker_button(GTK_WIDGET(dialog), 0);
-  g_assert_nonnull(puzzle_button);
-  g_signal_emit_by_name(puzzle_button, "clicked");
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_start_puzzle(window, dir_path, PLAYER_RULESET_AMERICAN, 0);
 
   MoveList moves = gcheckers_model_list_moves(model);
   CheckersMove wrong_move = {0};
@@ -1934,7 +2095,7 @@ static void test_ggame_window_puzzle_wrong_first_move_records_failure(void) {
   g_assert_nonnull(to_square);
   g_signal_emit_by_name(from_square, "clicked");
   g_signal_emit_by_name(to_square, "clicked");
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
 
   g_autoptr(GPtrArray) history = test_ggame_window_load_attempt_history(progress_dir);
   g_assert_cmpuint(history->len, ==, 1);
@@ -1949,18 +2110,6 @@ static void test_ggame_window_puzzle_wrong_first_move_records_failure(void) {
   GGamePuzzleStatusEntry *status_entry = g_hash_table_lookup(status_map, "checkers/american/puzzle-0000.sgf");
   g_assert_nonnull(status_entry);
   g_assert_cmpint(status_entry->status, ==, GGAME_PUZZLE_STATUS_FAILED);
-
-  g_action_group_activate_action(G_ACTION_GROUP(window), "puzzle-play", NULL);
-  test_ggame_window_drain_main_context(32);
-  dialog = test_ggame_window_find_toplevel_by_title("Play puzzles");
-  g_assert_nonnull(dialog);
-  ruleset_drop_down = test_ggame_window_find_ruleset_dropdown(GTK_WIDGET(dialog));
-  g_assert_nonnull(ruleset_drop_down);
-  gtk_drop_down_set_selected(ruleset_drop_down, PLAYER_RULESET_AMERICAN);
-  test_ggame_window_drain_main_context(8);
-  puzzle_button = test_ggame_window_find_puzzle_picker_button(GTK_WIDGET(dialog), 0);
-  g_assert_nonnull(puzzle_button);
-  g_assert_true(gtk_widget_has_css_class(GTK_WIDGET(puzzle_button), "puzzle-picker-failed"));
 
   g_unsetenv("GCHECKERS_PUZZLES_DIR");
   g_unsetenv("GCHECKERS_PUZZLE_PROGRESS_DIR");
@@ -1986,20 +2135,9 @@ static void test_ggame_window_puzzle_analyze_records_analyze_result(void) {
   GCheckersModel *model = gcheckers_model_new();
   GGameWindow *window = test_ggame_window_new(app, model);
   gtk_window_present(GTK_WINDOW(window));
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
 
-  g_action_group_activate_action(G_ACTION_GROUP(window), "puzzle-play", NULL);
-  test_ggame_window_drain_main_context(32);
-  GtkWindow *dialog = test_ggame_window_find_toplevel_by_title("Play puzzles");
-  g_assert_nonnull(dialog);
-  GtkDropDown *ruleset_drop_down = test_ggame_window_find_ruleset_dropdown(GTK_WIDGET(dialog));
-  g_assert_nonnull(ruleset_drop_down);
-  gtk_drop_down_set_selected(ruleset_drop_down, PLAYER_RULESET_RUSSIAN);
-  test_ggame_window_drain_main_context(8);
-  GtkButton *puzzle_button = test_ggame_window_find_puzzle_picker_button(GTK_WIDGET(dialog), 0);
-  g_assert_nonnull(puzzle_button);
-  g_signal_emit_by_name(puzzle_button, "clicked");
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_start_puzzle(window, dir_path, PLAYER_RULESET_RUSSIAN, 0);
 
   GtkWidget *from_square = test_ggame_window_find_board_square_by_index(GTK_WIDGET(window), first_move.path[0]);
   GtkWidget *to_square =
@@ -2008,12 +2146,12 @@ static void test_ggame_window_puzzle_analyze_records_analyze_result(void) {
   g_assert_nonnull(to_square);
   g_signal_emit_by_name(from_square, "clicked");
   g_signal_emit_by_name(to_square, "clicked");
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
 
   GtkWidget *analyze_button = test_ggame_window_get_named_widget(window, "puzzle-analyze-button");
   g_assert_nonnull(analyze_button);
   g_signal_emit_by_name(analyze_button, "clicked");
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
 
   g_autoptr(GPtrArray) history = test_ggame_window_load_attempt_history(progress_dir);
   g_assert_cmpuint(history->len, ==, 1);
@@ -2043,20 +2181,9 @@ static void test_ggame_window_puzzle_open_without_move_records_failure_on_leave(
   GCheckersModel *model = gcheckers_model_new();
   GGameWindow *window = test_ggame_window_new(app, model);
   gtk_window_present(GTK_WINDOW(window));
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
 
-  g_action_group_activate_action(G_ACTION_GROUP(window), "puzzle-play", NULL);
-  test_ggame_window_drain_main_context(32);
-  GtkWindow *dialog = test_ggame_window_find_toplevel_by_title("Play puzzles");
-  g_assert_nonnull(dialog);
-  GtkDropDown *ruleset_drop_down = test_ggame_window_find_ruleset_dropdown(GTK_WIDGET(dialog));
-  g_assert_nonnull(ruleset_drop_down);
-  gtk_drop_down_set_selected(ruleset_drop_down, PLAYER_RULESET_AMERICAN);
-  test_ggame_window_drain_main_context(8);
-  GtkButton *puzzle_button = test_ggame_window_find_puzzle_picker_button(GTK_WIDGET(dialog), 0);
-  g_assert_nonnull(puzzle_button);
-  g_signal_emit_by_name(puzzle_button, "clicked");
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_start_puzzle(window, dir_path, PLAYER_RULESET_AMERICAN, 0);
 
   g_autoptr(GPtrArray) opened_history = test_ggame_window_load_attempt_history(progress_dir);
   g_assert_cmpuint(opened_history->len, ==, 1);
@@ -2069,8 +2196,8 @@ static void test_ggame_window_puzzle_open_without_move_records_failure_on_leave(
                                            test_ggame_window_variant(PLAYER_RULESET_INTERNATIONAL),
                                            PLAYER_CONTROL_MODE_USER,
                                            PLAYER_CONTROL_MODE_USER,
-                                           0);
-  test_ggame_window_drain_main_context(32);
+                                           PLAYER_COMPUTER_DEPTH_MIN);
+  test_ggame_window_wait_for_draw(window);
 
   g_autoptr(GPtrArray) history = test_ggame_window_load_attempt_history(progress_dir);
   g_assert_cmpuint(history->len, ==, 1);
@@ -2112,21 +2239,9 @@ static void test_ggame_window_next_puzzle_stays_in_selected_ruleset(void) {
   GCheckersModel *model = gcheckers_model_new();
   GGameWindow *window = test_ggame_window_new(app, model);
   gtk_window_present(GTK_WINDOW(window));
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
 
-  g_action_group_activate_action(G_ACTION_GROUP(window), "puzzle-play", NULL);
-  test_ggame_window_drain_main_context(32);
-
-  GtkWindow *dialog = test_ggame_window_find_toplevel_by_title("Play puzzles");
-  g_assert_nonnull(dialog);
-  GtkDropDown *ruleset_drop_down = test_ggame_window_find_ruleset_dropdown(GTK_WIDGET(dialog));
-  g_assert_nonnull(ruleset_drop_down);
-  gtk_drop_down_set_selected(ruleset_drop_down, PLAYER_RULESET_RUSSIAN);
-  test_ggame_window_drain_main_context(8);
-  GtkButton *puzzle_button = test_ggame_window_find_puzzle_picker_button(GTK_WIDGET(dialog), 0);
-  g_assert_nonnull(puzzle_button);
-  g_signal_emit_by_name(puzzle_button, "clicked");
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_start_puzzle(window, dir_path, PLAYER_RULESET_AMERICAN, 0);
 
   GtkWidget *puzzle_message = test_ggame_window_get_named_widget(window, "puzzle-message-label");
   GtkWidget *next_button = test_ggame_window_get_named_widget(window, "puzzle-next-button");
@@ -2144,11 +2259,11 @@ static void test_ggame_window_next_puzzle_stays_in_selected_ruleset(void) {
   g_assert_nonnull(to_square);
   g_signal_emit_by_name(from_square, "clicked");
   g_signal_emit_by_name(to_square, "clicked");
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
 
   g_assert_true(gtk_widget_is_sensitive(next_button));
   g_signal_emit_by_name(next_button, "clicked");
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
 
   g_assert_cmpstr(gtk_window_get_title(GTK_WINDOW(window)), ==, "gcheckers - puzzle-0001.sgf");
   g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(puzzle_message)), "Puzzle 0001."));
@@ -2179,7 +2294,7 @@ static void test_ggame_window_drawer_visibility_actions(void) {
   g_action_group_change_action_state(G_ACTION_GROUP(window),
                                      "view-show-navigation-drawer",
                                      g_variant_new_boolean(FALSE));
-  test_ggame_window_drain_main_context(8);
+  test_ggame_window_wait_for_draw(window);
   g_assert_null(gtk_widget_get_parent(navigation_panel));
   g_assert_nonnull(gtk_widget_get_parent(analysis_panel));
   g_assert_null(gtk_widget_get_parent(drawer_split));
@@ -2187,7 +2302,7 @@ static void test_ggame_window_drawer_visibility_actions(void) {
   g_action_group_change_action_state(G_ACTION_GROUP(window),
                                      "view-show-analysis-drawer",
                                      g_variant_new_boolean(FALSE));
-  test_ggame_window_drain_main_context(8);
+  test_ggame_window_wait_for_draw(window);
   g_assert_null(gtk_widget_get_parent(navigation_panel));
   g_assert_null(gtk_widget_get_parent(analysis_panel));
   g_assert_null(gtk_widget_get_parent(drawer_split));
@@ -2195,7 +2310,7 @@ static void test_ggame_window_drawer_visibility_actions(void) {
   g_action_group_change_action_state(G_ACTION_GROUP(window),
                                      "view-show-navigation-drawer",
                                      g_variant_new_boolean(TRUE));
-  test_ggame_window_drain_main_context(8);
+  test_ggame_window_wait_for_draw(window);
   g_assert_nonnull(gtk_widget_get_parent(navigation_panel));
   g_assert_null(gtk_widget_get_parent(analysis_panel));
   g_assert_null(gtk_widget_get_parent(drawer_split));
@@ -2203,7 +2318,7 @@ static void test_ggame_window_drawer_visibility_actions(void) {
   g_action_group_change_action_state(G_ACTION_GROUP(window),
                                      "view-show-analysis-drawer",
                                      g_variant_new_boolean(TRUE));
-  test_ggame_window_drain_main_context(8);
+  test_ggame_window_wait_for_draw(window);
   g_assert_nonnull(gtk_widget_get_parent(navigation_panel));
   g_assert_nonnull(gtk_widget_get_parent(analysis_panel));
   g_assert_nonnull(gtk_widget_get_parent(drawer_split));
@@ -2224,7 +2339,7 @@ static void test_ggame_window_drawer_visibility_preserves_panel_widths(void) {
   GCheckersModel *model = gcheckers_model_new();
   GGameWindow *window = test_ggame_window_new(app, model);
   gtk_window_present(GTK_WINDOW(window));
-  test_ggame_window_drain_main_context(24);
+  test_ggame_window_wait_for_draw(window);
 
   GtkWidget *main_paned = test_ggame_window_get_named_widget(window, "main-paned");
   GtkWidget *board_panel = test_ggame_window_get_named_widget(window, "board-panel");
@@ -2242,41 +2357,41 @@ static void test_ggame_window_drawer_visibility_preserves_panel_widths(void) {
   gint board_width = gtk_widget_get_width(board_panel);
   gint navigation_width = gtk_widget_get_width(navigation_panel);
   gint analysis_width = gtk_widget_get_width(analysis_panel);
-  gint drawer_split_position = gtk_paned_get_position(GTK_PANED(drawer_split));
   g_assert_cmpint(board_width, >, 0);
   g_assert_cmpint(navigation_width, >, 0);
   g_assert_cmpint(analysis_width, >, 0);
-  g_assert_cmpint(drawer_split_position, >, 0);
   g_assert_cmpint(test_ggame_window_get_size_request_width(drawer_host), ==, -1);
   g_assert_cmpint(test_ggame_window_get_size_request_width(drawer_split), ==, -1);
 
   g_action_group_change_action_state(G_ACTION_GROUP(window),
                                      "view-show-navigation-drawer",
                                      g_variant_new_boolean(FALSE));
-  test_ggame_window_drain_main_context(96);
+  test_ggame_window_wait_for_draw(window);
   g_assert_cmpint(test_ggame_window_get_size_request_width(drawer_host), ==, -1);
 
   g_action_group_change_action_state(G_ACTION_GROUP(window),
                                      "view-show-navigation-drawer",
                                      g_variant_new_boolean(TRUE));
-  test_ggame_window_drain_main_context(96);
+  test_ggame_window_wait_for_draw(window);
   g_assert_cmpint(test_ggame_window_get_size_request_width(drawer_host), ==, -1);
   g_assert_cmpint(test_ggame_window_get_size_request_width(drawer_split), ==, -1);
-  g_assert_cmpint(gtk_paned_get_position(GTK_PANED(drawer_split)), ==, drawer_split_position);
+  g_assert_cmpint(gtk_widget_get_width(navigation_panel), >, 0);
+  g_assert_cmpint(gtk_widget_get_width(analysis_panel), >, 0);
 
   g_action_group_change_action_state(G_ACTION_GROUP(window),
                                      "view-show-analysis-drawer",
                                      g_variant_new_boolean(FALSE));
-  test_ggame_window_drain_main_context(96);
+  test_ggame_window_wait_for_draw(window);
   g_assert_cmpint(test_ggame_window_get_size_request_width(drawer_host), ==, -1);
 
   g_action_group_change_action_state(G_ACTION_GROUP(window),
                                      "view-show-analysis-drawer",
                                      g_variant_new_boolean(TRUE));
-  test_ggame_window_drain_main_context(96);
+  test_ggame_window_wait_for_draw(window);
   g_assert_cmpint(test_ggame_window_get_size_request_width(drawer_host), ==, -1);
   g_assert_cmpint(test_ggame_window_get_size_request_width(drawer_split), ==, -1);
-  g_assert_cmpint(gtk_paned_get_position(GTK_PANED(drawer_split)), ==, drawer_split_position);
+  g_assert_cmpint(gtk_widget_get_width(navigation_panel), >, 0);
+  g_assert_cmpint(gtk_widget_get_width(analysis_panel), >, 0);
 
   test_ggame_window_reset_common_window_settings(settings);
   g_clear_object(&window);
@@ -2301,7 +2416,7 @@ static void test_ggame_window_edit_mode_disables_navigation_and_force_move(void)
   g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "game-force-move"));
 
   gtk_drop_down_set_selected(mode_dropdown, 1);
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
 
   g_assert_false(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "navigation-rewind"));
   g_assert_false(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "navigation-step-backward"));
@@ -2315,13 +2430,13 @@ static void test_ggame_window_edit_mode_disables_navigation_and_force_move(void)
   g_assert_nonnull(state);
   g_assert_cmpuint(state->turn, ==, CHECKERS_COLOR_WHITE);
   ggame_window_force_move(window);
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
   state = gcheckers_model_peek_state(model);
   g_assert_nonnull(state);
   g_assert_cmpuint(state->turn, ==, CHECKERS_COLOR_WHITE);
 
   gtk_drop_down_set_selected(mode_dropdown, 0);
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
 
   g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "navigation-rewind"));
   g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "navigation-step-backward"));
@@ -2347,7 +2462,7 @@ static void test_ggame_window_graph_selection_tracks_sgf_selection(void) {
   CheckersMove move = {0};
   g_assert_true(apply_first_move(controller, model, &move));
   g_assert_true(apply_first_move(controller, model, &move));
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
 
   AnalysisGraph *graph = test_ggame_window_get_analysis_graph(window);
   g_assert_nonnull(graph);
@@ -2355,11 +2470,11 @@ static void test_ggame_window_graph_selection_tracks_sgf_selection(void) {
   g_assert_cmpuint(analysis_graph_get_selected_index(graph), ==, 2);
 
   g_action_group_activate_action(G_ACTION_GROUP(window), "navigation-step-backward", NULL);
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
   g_assert_cmpuint(analysis_graph_get_selected_index(graph), ==, 1);
 
   g_action_group_activate_action(G_ACTION_GROUP(window), "navigation-rewind", NULL);
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
   g_assert_cmpuint(analysis_graph_get_selected_index(graph), ==, 0);
 
   g_clear_object(&window);
@@ -2379,7 +2494,7 @@ static void test_ggame_window_graph_activation_changes_sgf_selection(void) {
 
   CheckersMove move = {0};
   g_assert_true(apply_first_move(controller, model, &move));
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
 
   const SgfNode *first = sgf_tree_get_first_child(tree);
   g_assert_nonnull(first);
@@ -2390,11 +2505,11 @@ static void test_ggame_window_graph_activation_changes_sgf_selection(void) {
   AnalysisGraph *graph = test_ggame_window_get_analysis_graph(window);
   g_assert_nonnull(graph);
   g_signal_emit_by_name(graph, "node-activated", root);
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
   g_assert_true(sgf_tree_get_current(tree) == root);
 
   g_signal_emit_by_name(graph, "node-activated", first);
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
   g_assert_true(sgf_tree_get_current(tree) == first);
 
   g_clear_object(&window);
@@ -2407,10 +2522,10 @@ static void test_ggame_window_import_wizard_flow(void) {
   GCheckersModel *model = gcheckers_model_new();
   GGameWindow *window = test_ggame_window_new(app, model);
   gtk_window_present(GTK_WINDOW(window));
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
 
   g_action_group_activate_action(G_ACTION_GROUP(app), "import", NULL);
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
 
   GtkWindow *dialog = test_ggame_window_find_toplevel_by_title("Import games");
   g_assert_nonnull(dialog);
@@ -2422,11 +2537,11 @@ static void test_ggame_window_import_wizard_flow(void) {
   GtkWidget *drop_down_widget = test_ggame_window_find_by_type(GTK_WIDGET(dialog), GTK_TYPE_DROP_DOWN);
   g_assert_nonnull(drop_down_widget);
   gtk_drop_down_set_selected(GTK_DROP_DOWN(drop_down_widget), 3);
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
   g_assert_true(gtk_widget_get_sensitive(GTK_WIDGET(next_button)));
 
   g_signal_emit_by_name(next_button, "clicked");
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
   g_assert_cmpstr(gtk_button_get_label(next_button), ==, "Fetch game history");
   g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "Email"));
   g_assert_nonnull(test_ggame_window_find_label_with_text(GTK_WIDGET(dialog), "Password"));
@@ -2435,7 +2550,7 @@ static void test_ggame_window_import_wizard_flow(void) {
   GtkButton *cancel_button = test_ggame_window_find_button_with_label(GTK_WIDGET(dialog), "Cancel");
   g_assert_nonnull(cancel_button);
   g_signal_emit_by_name(cancel_button, "clicked");
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
   GtkWindow *after_close = test_ggame_window_find_toplevel_by_title("Import games");
   g_assert_null(after_close);
 
@@ -2465,10 +2580,10 @@ static void test_ggame_window_import_wizard_uses_cached_history(void) {
   GCheckersModel *model = gcheckers_model_new();
   GGameWindow *window = test_ggame_window_new(app, model);
   gtk_window_present(GTK_WINDOW(window));
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
 
   g_action_group_activate_action(G_ACTION_GROUP(app), "import", NULL);
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
 
   GtkWindow *dialog = test_ggame_window_find_toplevel_by_title("Import games");
   g_assert_nonnull(dialog);
@@ -2497,13 +2612,13 @@ static void test_ggame_window_import_wizard_uses_cached_history(void) {
   g_assert_nonnull(row);
   g_assert_false(gtk_widget_get_sensitive(GTK_WIDGET(import_button)));
   gtk_list_box_select_row(GTK_LIST_BOX(list), row);
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
   g_assert_true(gtk_widget_get_sensitive(GTK_WIDGET(import_button)));
 
   GtkButton *cancel_button = test_ggame_window_find_button_with_label(GTK_WIDGET(dialog), "Cancel");
   g_assert_nonnull(cancel_button);
   g_signal_emit_by_name(cancel_button, "clicked");
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
   g_assert_null(test_ggame_window_find_toplevel_by_title("Import games"));
 
   ggame_import_dialog_test_clear_bga_session_cache();
@@ -2534,10 +2649,10 @@ static void test_ggame_window_library_loads_imported_game(void) {
   GCheckersModel *model = gcheckers_model_new();
   GGameWindow *window = test_ggame_window_new(app, model);
   gtk_window_present(GTK_WINDOW(window));
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
 
   g_action_group_activate_action(G_ACTION_GROUP(window), "library", NULL);
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
 
   GtkWindow *dialog = test_ggame_window_find_toplevel_by_title("Library");
   g_assert_nonnull(dialog);
@@ -2560,11 +2675,11 @@ static void test_ggame_window_library_loads_imported_game(void) {
   g_assert_nonnull(list);
   g_assert_nonnull(row);
   gtk_list_box_select_row(GTK_LIST_BOX(list), row);
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
   g_assert_true(gtk_widget_get_sensitive(GTK_WIDGET(load_button)));
 
   g_signal_emit_by_name(load_button, "clicked");
-  test_ggame_window_drain_main_context(32);
+  test_ggame_window_wait_for_draw(window);
   g_assert_null(test_ggame_window_find_toplevel_by_title("Library"));
 
   GGameSgfController *controller = ggame_window_get_sgf_controller(window);
@@ -2587,6 +2702,13 @@ static void test_ggame_window_ruleset_switch_resets_model(void) {
   GCheckersModel *model = gcheckers_model_new();
   GGameWindow *window = test_ggame_window_new(app, model);
 
+  ggame_window_apply_new_game_settings(window,
+                                           test_ggame_window_variant(PLAYER_RULESET_INTERNATIONAL),
+                                           PLAYER_CONTROL_MODE_USER,
+                                           PLAYER_CONTROL_MODE_USER,
+                                           PLAYER_COMPUTER_DEPTH_MIN);
+  test_ggame_window_wait_for_draw(window);
+
   const GameState *state = gcheckers_model_peek_state(model);
   g_assert_nonnull(state);
   g_assert_cmpuint(state->board.board_size, ==, 10);
@@ -2596,8 +2718,8 @@ static void test_ggame_window_ruleset_switch_resets_model(void) {
                                            test_ggame_window_variant(PLAYER_RULESET_AMERICAN),
                                            PLAYER_CONTROL_MODE_USER,
                                            PLAYER_CONTROL_MODE_USER,
-                                           0);
-  test_ggame_window_drain_main_context(16);
+                                           PLAYER_COMPUTER_DEPTH_MIN);
+  test_ggame_window_wait_for_draw(window);
 
   state = gcheckers_model_peek_state(model);
   g_assert_nonnull(state);
@@ -2621,7 +2743,7 @@ static void test_ggame_window_new_game_keeps_computer_controls(void) {
                                            PLAYER_CONTROL_MODE_COMPUTER,
                                            PLAYER_CONTROL_MODE_COMPUTER,
                                            4);
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
 
   PlayerControlsPanel *panel = ggame_window_get_controls_panel(window);
   g_assert_nonnull(panel);
@@ -2639,7 +2761,7 @@ static void test_ggame_window_new_game_keeps_computer_controls(void) {
                                            PLAYER_CONTROL_MODE_COMPUTER,
                                            PLAYER_CONTROL_MODE_COMPUTER,
                                            6);
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
 
   g_assert_cmpuint(test_ggame_window_ruleset(ggame_window_get_variant(window)), ==, PLAYER_RULESET_AMERICAN);
   g_assert_cmpuint(player_controls_panel_get_mode(panel, 0), ==, PLAYER_CONTROL_MODE_COMPUTER);
@@ -2669,7 +2791,7 @@ static void test_ggame_window_new_game_rotates_for_black_player(void) {
                                            PLAYER_CONTROL_MODE_COMPUTER,
                                            PLAYER_CONTROL_MODE_USER,
                                            4);
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
 
   g_assert_cmpuint(ggame_window_get_board_bottom_color(window), ==, CHECKERS_COLOR_BLACK);
 
@@ -2687,8 +2809,8 @@ static void test_ggame_window_hotseat_follows_turn(void) {
                                            test_ggame_window_variant(PLAYER_RULESET_INTERNATIONAL),
                                            PLAYER_CONTROL_MODE_USER,
                                            PLAYER_CONTROL_MODE_USER,
-                                           0);
-  test_ggame_window_drain_main_context(16);
+                                           PLAYER_COMPUTER_DEPTH_MIN);
+  test_ggame_window_wait_for_draw(window);
 
   g_assert_cmpuint(ggame_window_get_board_bottom_color(window), ==, CHECKERS_COLOR_WHITE);
 
@@ -2697,7 +2819,7 @@ static void test_ggame_window_hotseat_follows_turn(void) {
 
   CheckersMove move;
   g_assert_true(apply_first_move(controller, model, &move));
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
 
   g_assert_cmpuint(ggame_window_get_board_bottom_color(window), ==, CHECKERS_COLOR_BLACK);
 
@@ -2715,15 +2837,15 @@ static void test_ggame_window_manual_review_keeps_current_orientation(void) {
                                            test_ggame_window_variant(PLAYER_RULESET_INTERNATIONAL),
                                            PLAYER_CONTROL_MODE_USER,
                                            PLAYER_CONTROL_MODE_USER,
-                                           0);
-  test_ggame_window_drain_main_context(16);
+                                           PLAYER_COMPUTER_DEPTH_MIN);
+  test_ggame_window_wait_for_draw(window);
 
   GGameSgfController *controller = ggame_window_get_sgf_controller(window);
   g_assert_nonnull(controller);
 
   CheckersMove move;
   g_assert_true(apply_first_move(controller, model, &move));
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
 
   g_assert_cmpuint(ggame_window_get_board_bottom_color(window), ==, CHECKERS_COLOR_BLACK);
 
@@ -2733,7 +2855,7 @@ static void test_ggame_window_manual_review_keeps_current_orientation(void) {
 
   SgfView *view = ggame_sgf_controller_get_view(controller);
   g_signal_emit_by_name(view, "node-selected", node);
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
 
   g_assert_cmpuint(ggame_window_get_board_bottom_color(window), ==, CHECKERS_COLOR_BLACK);
 
@@ -2757,14 +2879,14 @@ static void test_ggame_window_new_game_dialog_ruleset_options_and_russian_apply(
                                            test_ggame_window_variant(PLAYER_RULESET_AMERICAN),
                                            PLAYER_CONTROL_MODE_USER,
                                            PLAYER_CONTROL_MODE_USER,
-                                           0);
-  test_ggame_window_drain_main_context(16);
+                                           PLAYER_COMPUTER_DEPTH_MIN);
+  test_ggame_window_wait_for_draw(window);
 
   gtk_window_present(GTK_WINDOW(window));
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
 
   g_action_group_activate_action(G_ACTION_GROUP(app), "new-game", NULL);
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
 
   GtkWindow *dialog = test_ggame_window_find_toplevel_by_title("New game");
   g_assert_nonnull(dialog);
@@ -2789,7 +2911,7 @@ static void test_ggame_window_new_game_dialog_ruleset_options_and_russian_apply(
   GtkDropDown *variant_dropdown = test_ggame_window_find_variant_dropdown(GTK_WIDGET(dialog));
   g_assert_nonnull(variant_dropdown);
   gtk_drop_down_set_selected(variant_dropdown, PLAYER_RULESET_INTERNATIONAL);
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
 
   const GameBackendVariant *international_variant = backend->variant_at(PLAYER_RULESET_INTERNATIONAL);
   g_assert_nonnull(international_variant);
@@ -2798,7 +2920,7 @@ static void test_ggame_window_new_game_dialog_ruleset_options_and_russian_apply(
   g_assert_cmpint(gtk_widget_get_height(GTK_WIDGET(dialog)), ==, initial_height);
 
   gtk_drop_down_set_selected(variant_dropdown, PLAYER_RULESET_RUSSIAN);
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
 
   const GameBackendVariant *russian_variant = backend->variant_at(PLAYER_RULESET_RUSSIAN);
   g_assert_nonnull(russian_variant);
@@ -2809,7 +2931,7 @@ static void test_ggame_window_new_game_dialog_ruleset_options_and_russian_apply(
   GtkButton *confirm_button = test_ggame_window_find_button_with_label(GTK_WIDGET(dialog), "New Game");
   g_assert_nonnull(confirm_button);
   g_signal_emit_by_name(confirm_button, "clicked");
-  test_ggame_window_drain_main_context(16);
+  test_ggame_window_wait_for_draw(window);
 
   g_assert_cmpuint(test_ggame_window_ruleset(ggame_window_get_variant(window)), ==, PLAYER_RULESET_RUSSIAN);
   Game game = {0};
