@@ -137,6 +137,8 @@ static void ggame_window_on_sgf_save_dialog_finish(GObject *source_object,
     g_autofree char *text =
         g_strdup_printf("Unable to save SGF file.\n%s", error != NULL ? error->message : "Unknown error");
     ggame_window_show_file_error_dialog(self, "Save failed", text);
+  } else {
+    ggame_window_set_loaded_source_path(self, path);
   }
 
   g_object_unref(self);
@@ -205,6 +207,27 @@ static void ggame_window_on_sgf_load_action(GSimpleAction * /*action*/,
   g_object_unref(dialog);
 }
 
+static void ggame_window_on_sgf_save_action(GSimpleAction * /*action*/,
+                                            GVariant * /*parameter*/,
+                                            gpointer user_data) {
+  GGameWindow *self = GGAME_WINDOW(user_data);
+  g_return_if_fail(GGAME_IS_WINDOW(self));
+
+  const char *path = ggame_window_get_loaded_source_path(self);
+  if (path == NULL || path[0] == '\0') {
+    ggame_window_show_file_error_dialog(self, "Save failed", "No current SGF file is known.");
+    return;
+  }
+
+  g_autoptr(GError) error = NULL;
+  GGameSgfController *controller = ggame_window_get_sgf_controller(self);
+  if (!ggame_sgf_controller_save_file(controller, path, &error)) {
+    g_autofree char *text =
+        g_strdup_printf("Unable to save SGF file.\n%s", error != NULL ? error->message : "Unknown error");
+    ggame_window_show_file_error_dialog(self, "Save failed", text);
+  }
+}
+
 static void ggame_window_on_sgf_save_as_action(GSimpleAction * /*action*/,
                                                    GVariant * /*parameter*/,
                                                    gpointer user_data) {
@@ -260,6 +283,14 @@ void ggame_window_install_sgf_file_actions(GGameWindow *self) {
       {
           .name = "sgf-load",
           .activate = ggame_window_on_sgf_load_action,
+          .parameter_type = NULL,
+          .state = NULL,
+          .change_state = NULL,
+          .padding = {0},
+      },
+      {
+          .name = "sgf-save",
+          .activate = ggame_window_on_sgf_save_action,
           .parameter_type = NULL,
           .state = NULL,
           .change_state = NULL,

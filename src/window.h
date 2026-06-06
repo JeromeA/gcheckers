@@ -30,6 +30,7 @@ void ggame_window_present_library_dialog(GGameWindow *self);
 void ggame_window_present_settings_dialog(GGameWindow *self);
 void ggame_window_present_game_information_dialog(GGameWindow *self);
 void ggame_window_set_loaded_source_path(GGameWindow *self, const char *path);
+const char *ggame_window_get_loaded_source_path(GGameWindow *self);
 void ggame_window_set_loaded_variant(GGameWindow *self, const GameBackendVariant *variant);
 void ggame_window_force_move(GGameWindow *self);
 char *ggame_window_format_analysis_score(gint score);

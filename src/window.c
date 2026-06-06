@@ -48,6 +48,7 @@ struct _GGameWindow {
   GtkDropDown *sgf_mode_control;
   GGameSgfController *sgf_controller;
   AnalysisGraph *analysis_graph;
+  char *loaded_source_path;
   char *loaded_source_name;
   PlayerRuleset applied_ruleset;
   gulong state_handler_id;
@@ -1277,6 +1278,9 @@ static void ggame_window_sync_mode_ui(GGameWindow *self) {
 
   gboolean allow_navigation = !self->edit_mode_enabled && !self->puzzle_mode;
   gboolean allow_sgf_file_actions = !self->puzzle_mode;
+  gboolean allow_sgf_save = allow_sgf_file_actions &&
+                            self->loaded_source_path != NULL &&
+                            self->loaded_source_path[0] != '\0';
   gboolean allow_view_actions = !self->puzzle_mode;
   gboolean allow_edit_mode_selection = supports_edit_mode && !self->puzzle_mode;
 
@@ -1289,6 +1293,7 @@ static void ggame_window_sync_mode_ui(GGameWindow *self) {
   ggame_window_set_action_enabled(G_ACTION_MAP(self), "navigation-step-forward-to-end", allow_navigation);
   ggame_window_set_action_enabled(G_ACTION_MAP(self), "sgf-delete-node", allow_navigation);
   ggame_window_set_action_enabled(G_ACTION_MAP(self), "sgf-load", allow_sgf_file_actions);
+  ggame_window_set_action_enabled(G_ACTION_MAP(self), "sgf-save", allow_sgf_save);
   ggame_window_set_action_enabled(G_ACTION_MAP(self), "sgf-save-as", allow_sgf_file_actions);
   ggame_window_set_action_enabled(G_ACTION_MAP(self),
                                   "sgf-save-position",
@@ -1553,8 +1558,10 @@ static void ggame_window_start_new_game(GGameWindow *self) {
   ggame_model_reset(self->game_model, variant);
   ggame_window_clear_board_selection(self);
   ggame_sgf_controller_new_game(self->sgf_controller);
+  g_clear_pointer(&self->loaded_source_path, g_free);
   g_clear_pointer(&self->loaded_source_name, g_free);
   ggame_window_sync_title(self);
+  ggame_window_sync_mode_ui(self);
 }
 
 static gboolean ggame_window_revert_wrong_puzzle_move_cb(gpointer user_data) {
@@ -4011,6 +4018,7 @@ static void ggame_window_dispose(GObject *object) {
     ggame_widget_remove_from_parent(self->analysis_panel);
     g_clear_object(&self->analysis_panel);
   }
+  g_clear_pointer(&self->loaded_source_path, g_free);
   g_clear_pointer(&self->loaded_source_name, g_free);
   if (self->puzzle_steps != NULL) {
     g_ptr_array_unref(self->puzzle_steps);
@@ -4571,11 +4579,20 @@ GGameSgfController *ggame_window_get_sgf_controller(GGameWindow *self) {
 void ggame_window_set_loaded_source_path(GGameWindow *self, const char *path) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
 
+  g_clear_pointer(&self->loaded_source_path, g_free);
   g_clear_pointer(&self->loaded_source_name, g_free);
   if (path != NULL && *path != '\0') {
+    self->loaded_source_path = g_strdup(path);
     self->loaded_source_name = g_path_get_basename(path);
   }
   ggame_window_sync_title(self);
+  ggame_window_sync_mode_ui(self);
+}
+
+const char *ggame_window_get_loaded_source_path(GGameWindow *self) {
+  g_return_val_if_fail(GGAME_IS_WINDOW(self), NULL);
+
+  return self->loaded_source_path;
 }
 
 GGameWindow *ggame_window_new(GtkApplication *app, GGameModel *model) {

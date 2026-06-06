@@ -361,6 +361,7 @@ static void ggame_application_startup(GApplication *app) {
   g_menu_append(file_primary_menu, "Import...", "app.import");
   g_menu_append(file_primary_menu, "Library...", "win.library");
   g_menu_append(file_primary_menu, "Load...", "win.sgf-load");
+  g_menu_append(file_primary_menu, "Save", "win.sgf-save");
   g_menu_append(file_primary_menu, "Save as...", "win.sgf-save-as");
   g_menu_append(file_primary_menu, "Save position...", "win.sgf-save-position");
   g_menu_append_section(file_menu, NULL, G_MENU_MODEL(file_primary_menu));
@@ -409,6 +410,9 @@ static void ggame_application_startup(GApplication *app) {
   gtk_application_set_accels_for_action(GTK_APPLICATION(app),
                                         "app.quit",
                                         (const char *[]){"<Primary>q", NULL});
+  gtk_application_set_accels_for_action(GTK_APPLICATION(app),
+                                        "win.sgf-save",
+                                        (const char *[]){"<Primary>s", NULL});
   gtk_application_set_accels_for_action(GTK_APPLICATION(app),
                                         "win.navigation-step-backward",
                                         (const char *[]){"Left", NULL});

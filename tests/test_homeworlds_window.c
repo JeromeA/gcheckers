@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "../src/application.h"
+#include "../src/common_settings.h"
 #include "../src/game_app_profile.h"
 #include "../src/game_model.h"
 #include "../src/games/homeworlds/homeworlds_backend.h"
@@ -20,6 +21,17 @@ static void test_homeworlds_window_skip(void) {
 }
 
 static GtkApplication *test_homeworlds_app = NULL;
+
+static void test_homeworlds_window_reset_layout_settings(void) {
+  g_autoptr(GSettings) settings = ggame_common_settings_create();
+
+  if (!G_IS_SETTINGS(settings)) {
+    return;
+  }
+
+  g_settings_set_boolean(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_LAYOUT_SAVED, FALSE);
+  g_settings_set_boolean(settings, GGAME_COMMON_SETTINGS_KEY_WINDOW_SHOW_MOVE_REPORT, TRUE);
+}
 
 static void test_homeworlds_window_wait_for_draw(gpointer window) {
   g_return_if_fail(GTK_IS_WINDOW(window));
@@ -1961,6 +1973,7 @@ int main(int argc, char **argv) {
 
   g_assert_nonnull(profile);
   g_assert_true(ggame_app_profile_set_active(profile));
+  test_homeworlds_window_reset_layout_settings();
 
   g_test_add_func("/homeworlds/view/homeworld-layout", test_homeworlds_view_homeworld_layout_uses_player_perspective);
   g_test_add_func("/homeworlds/view/system-layout", test_homeworlds_view_system_layout_groups_by_reachability);

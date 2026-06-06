@@ -850,10 +850,10 @@ Class: `GGameApplication` (`GtkApplication`) for the shared-shell checkers and b
 for the separate Homeworlds prototype.
 Role: define the GTK application type and activation flow that creates the main window and model, installs app actions
 (`app.new-game`, `app.import`, `app.quit`, `app.settings`), installs window game/SGF/navigation/analysis/puzzle/view
-actions, and publishes one shared menubar model (`File` -> `New game...`, `Import...`, `Load...`, `Save as...`,
-`Save position...`, `Settings`, `Quit`; `Move` -> `Force move` + SGF navigation/delete-node section; `Analysis` ->
-current-position and whole-game analysis; `Puzzle` -> `Play puzzles`; `View` -> drawer toggles and `Show move report`)
-with keyboard accelerators, including Delete for SGF node deletion. Both
+actions, and publishes one shared menubar model (`File` -> `New game...`, `Import...`, `Load...`, `Save`,
+`Save as...`, `Save position...`, `Settings`, `Quit`; `Move` -> `Force move` + SGF navigation/delete-node section;
+`Analysis` -> current-position and whole-game analysis; `Puzzle` -> `Play puzzles`; `View` -> drawer toggles and
+`Show move report`) with keyboard accelerators, including Ctrl+S for SGF save and Delete for SGF node deletion. Both
 `gcheckers` and `gboop` are built from this same shell and diverge through `GGameAppProfile` feature flags and boop's
 optional board-host hook. Unsupported actions stay in the same shared shell but are disabled for profiles that do not
 support them. `src/ghomeworlds.c` selects the Homeworlds profile and opens the same shared shell with the Homeworlds
@@ -1041,6 +1041,8 @@ Collaborates with: `SgfView`, the SGF tree, and the scroller.
 
 ### SGF file actions (`src/sgf_file_actions.c`, `src/sgf_file_actions.h`)
 Module: GTK SGF file action integration.
-Role: register `win.sgf-load` and `win.sgf-save-as` actions, present `GtkFileDialog` file pickers, reopen them in the
-last remembered SGF folder, call SGF controller load/save APIs, and show errors as modal dialogs.
+Role: register `win.sgf-load`, `win.sgf-save`, and `win.sgf-save-as` actions, present `GtkFileDialog` file pickers,
+reopen them in the last remembered SGF folder, call SGF controller load/save APIs, and show errors as modal dialogs.
+The shared window keeps the current SGF source path when a game is loaded from a file/library source or successfully
+saved as a file; `win.sgf-save` is enabled only while that path is known and overwrites it directly.
 Collaborates with: `GGameWindow` action map, `GGameSgfController`, and `file_dialog_history.c`.

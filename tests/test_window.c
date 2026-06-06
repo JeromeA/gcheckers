@@ -1494,6 +1494,7 @@ static void test_ggame_window_toolbar_actions_exist(void) {
   g_assert_nonnull(analyze_current_button);
   g_assert_nonnull(analyze_full_action_widget);
   g_assert_nonnull(g_action_map_lookup_action(G_ACTION_MAP(window), "sgf-load"));
+  g_assert_nonnull(g_action_map_lookup_action(G_ACTION_MAP(window), "sgf-save"));
   g_assert_nonnull(g_action_map_lookup_action(G_ACTION_MAP(window), "sgf-save-as"));
   g_assert_nonnull(g_action_map_lookup_action(G_ACTION_MAP(window), "sgf-save-position"));
   g_assert_nonnull(g_action_map_lookup_action(G_ACTION_MAP(window), "sgf-delete-node"));
@@ -1507,6 +1508,7 @@ static void test_ggame_window_toolbar_actions_exist(void) {
   GMenuModel *file_menu = test_ggame_window_find_submenu(menubar, "File");
   g_assert_nonnull(file_menu);
   g_assert_true(test_ggame_window_menu_contains_item(file_menu, "Library..."));
+  g_assert_true(test_ggame_window_menu_contains_item(file_menu, "Save"));
 
   g_clear_object(&window);
   g_clear_object(&model);
@@ -1563,6 +1565,7 @@ static void test_ggame_window_settings_dialog_persists_preferences(void) {
   GMenuModel *file_menu = test_ggame_window_find_submenu(menubar, "File");
   g_assert_nonnull(file_menu);
   g_assert_true(test_ggame_window_menu_contains_item(file_menu, "Library..."));
+  g_assert_true(test_ggame_window_menu_contains_item(file_menu, "Save"));
   g_assert_true(test_ggame_window_menu_contains_item(file_menu, "Settings..."));
 
   GMenuModel *edit_menu = test_ggame_window_find_submenu(menubar, "Edit");
@@ -1587,6 +1590,12 @@ static void test_ggame_window_settings_dialog_persists_preferences(void) {
   g_assert_nonnull(delete_accels);
   g_assert_cmpstr(delete_accels[0], ==, "Delete");
   g_assert_null(delete_accels[1]);
+
+  g_auto(GStrv) save_accels =
+      gtk_application_get_accels_for_action(GTK_APPLICATION(app), "win.sgf-save");
+  g_assert_nonnull(save_accels);
+  g_assert_cmpstr(save_accels[0], ==, "<Control>s");
+  g_assert_null(save_accels[1]);
 
   g_action_group_activate_action(G_ACTION_GROUP(app), "settings", NULL);
   test_ggame_window_wait_for_draw(window);
@@ -2003,9 +2012,14 @@ static void test_ggame_window_new_game_clears_loaded_title(void) {
   GtkApplication *app = test_ggame_window_create_app();
   GCheckersModel *model = gcheckers_model_new();
   GGameWindow *window = test_ggame_window_new(app, model);
+  GAction *save_action = g_action_map_lookup_action(G_ACTION_MAP(window), "sgf-save");
+  g_assert_nonnull(save_action);
+  g_assert_false(g_action_get_enabled(save_action));
 
   ggame_window_set_loaded_source_path(window, "/tmp/example-game.sgf");
+  g_assert_cmpstr(ggame_window_get_loaded_source_path(window), ==, "/tmp/example-game.sgf");
   g_assert_cmpstr(gtk_window_get_title(GTK_WINDOW(window)), ==, "gcheckers - example-game.sgf");
+  g_assert_true(g_action_get_enabled(save_action));
 
   ggame_window_apply_new_game_settings(window,
                                            test_ggame_window_variant(PLAYER_RULESET_INTERNATIONAL),
@@ -2015,6 +2029,8 @@ static void test_ggame_window_new_game_clears_loaded_title(void) {
   test_ggame_window_wait_for_draw(window);
 
   g_assert_cmpstr(gtk_window_get_title(GTK_WINDOW(window)), ==, "gcheckers");
+  g_assert_null(ggame_window_get_loaded_source_path(window));
+  g_assert_false(g_action_get_enabled(save_action));
 
   g_clear_object(&window);
   g_clear_object(&model);
@@ -2685,11 +2701,26 @@ static void test_ggame_window_library_loads_imported_game(void) {
   GGameSgfController *controller = ggame_window_get_sgf_controller(window);
   SgfTree *tree = ggame_sgf_controller_get_tree(controller);
   const SgfNode *root = sgf_tree_get_root(tree);
+  GAction *save_action = g_action_map_lookup_action(G_ACTION_MAP(window), "sgf-save");
+  g_assert_nonnull(save_action);
+  g_assert_cmpstr(ggame_window_get_loaded_source_path(window), ==, path);
+  g_assert_true(g_action_get_enabled(save_action));
   g_assert_cmpstr(sgf_node_get_property_first(root, GGAME_SGF_PROP_DATE), ==, "2025-08-18 03:01");
   g_assert_cmpstr(sgf_node_get_property_first(root, "PB"), ==, "SenetMaster");
   g_assert_cmpstr(sgf_node_get_property_first(root, "PW"), ==, "JeromeLon");
   g_assert_cmpstr(sgf_node_get_property_first(root, GGAME_SGF_PROP_RESULT), ==, "SenetMaster");
   g_assert_cmpstr(sgf_node_get_property_first(root, GGAME_SGF_PROP_BGA_TABLE_ID), ==, "716050283");
+
+  g_assert_true(sgf_node_add_property((SgfNode *)root, "C", "Saved through File/Save"));
+  g_action_group_activate_action(G_ACTION_GROUP(window), "sgf-save", NULL);
+  test_ggame_window_wait_for_draw(window);
+
+  g_autofree char *saved = NULL;
+  gsize saved_len = 0;
+  g_assert_true(g_file_get_contents(path, &saved, &saved_len, &error));
+  g_assert_no_error(error);
+  g_assert_cmpuint(saved_len, >, 0);
+  g_assert_nonnull(strstr(saved, "C[Saved through File/Save]"));
 
   g_unsetenv("GCHECKERS_BGA_IMPORT_DIR");
   g_clear_object(&window);
