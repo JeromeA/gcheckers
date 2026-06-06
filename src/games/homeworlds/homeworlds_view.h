@@ -26,6 +26,26 @@ typedef struct {
   double height;
 } HomeworldsViewPyramidMetrics;
 
+#define HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_CAPACITY (HOMEWORLDS_MAX_MOVE_STEPS * HOMEWORLDS_STAR_SLOT_COUNT)
+
+typedef enum {
+  HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_BUILD = 0,
+  HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_TRADE,
+  HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_MOVE,
+  HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_CAPTURE,
+  HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_CATASTROPHE,
+} HomeworldsViewPreviousMoveMarkerKind;
+
+typedef struct {
+  HomeworldsViewPreviousMoveMarkerKind kind;
+  guint8 system_index;
+  guint8 side;
+  guint8 slot;
+  gboolean is_ship;
+  HomeworldsPyramid pyramid;
+  HomeworldsColor color;
+} HomeworldsViewPreviousMoveMarker;
+
 HomeworldsView *homeworlds_view_new(GGameModel *model);
 void homeworlds_view_free(HomeworldsView *view);
 GtkWidget *homeworlds_view_create_board_host(GGameModel *model,
@@ -72,6 +92,13 @@ double homeworlds_view_calculate_board_content_width(const HomeworldsPosition *p
 gboolean homeworlds_view_pyramid_metrics(HomeworldsSize size, HomeworldsViewPyramidMetrics *out_metrics);
 double homeworlds_view_pip_radius(void);
 double homeworlds_view_star_side(HomeworldsSize size);
+gboolean homeworlds_view_collect_previous_move_markers(const HomeworldsPosition *before_position,
+                                                       const HomeworldsPosition *after_position,
+                                                       const HomeworldsMove *move,
+                                                       guint move_side,
+                                                       HomeworldsViewPreviousMoveMarker *markers,
+                                                       gsize max_markers,
+                                                       gsize *out_marker_count);
 
 G_END_DECLS
 

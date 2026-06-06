@@ -214,22 +214,6 @@ static void board_move_overlay_draw_checkers_last_move(BoardMoveOverlay *self,
   cairo_restore(cr);
 }
 
-static gboolean board_move_overlay_replay_position_for_node(BoardMoveOverlay *self,
-                                                            const SgfNode *node,
-                                                            gpointer position,
-                                                            GError **error) {
-  const GameBackend *backend = NULL;
-
-  g_return_val_if_fail(self != NULL, FALSE);
-  g_return_val_if_fail(node != NULL, FALSE);
-  g_return_val_if_fail(position != NULL, FALSE);
-  g_return_val_if_fail(GGAME_IS_MODEL(self->model), FALSE);
-
-  backend = ggame_model_peek_backend(self->model);
-  g_return_val_if_fail(backend != NULL, FALSE);
-  return ggame_sgf_controller_replay_node_into_position(node, backend, position, error);
-}
-
 void board_move_overlay_render_boop_overlay_info(cairo_t *cr,
                                                  const BoopMoveOverlayInfo *overlay_info,
                                                  guint rows,
@@ -333,8 +317,9 @@ static void board_move_overlay_draw_boop_last_move(BoardMoveOverlay *self,
   BoopMove move = {0};
   BoopMoveOverlayInfo overlay_info = {0};
   const SgfNode *current = NULL;
-  const SgfNode *parent = NULL;
   const GameBackendVariant *variant = NULL;
+  SgfColor color = SGF_COLOR_NONE;
+  gboolean has_move = FALSE;
 
   g_return_if_fail(self != NULL);
   g_return_if_fail(backend != NULL);
@@ -345,17 +330,8 @@ static void board_move_overlay_draw_boop_last_move(BoardMoveOverlay *self,
   g_return_if_fail(backend->position_init != NULL);
   g_return_if_fail(backend->position_clear != NULL);
 
-  if (!ggame_sgf_controller_get_current_node_move(self->sgf_controller, &move)) {
-    return;
-  }
-
   current = sgf_tree_get_current(ggame_sgf_controller_get_tree(self->sgf_controller));
   if (current == NULL) {
-    return;
-  }
-
-  parent = sgf_node_get_parent(current);
-  if (parent == NULL) {
     return;
   }
 
@@ -365,12 +341,23 @@ static void board_move_overlay_draw_boop_last_move(BoardMoveOverlay *self,
   backend->position_init(before_position, variant);
 
   g_autoptr(GError) replay_error = NULL;
-  if (!board_move_overlay_replay_position_for_node(self, parent, before_position, &replay_error)) {
+  if (!ggame_sgf_controller_replay_parent_node_for_move(current,
+                                                        backend,
+                                                        before_position,
+                                                        &move,
+                                                        &color,
+                                                        &has_move,
+                                                        &replay_error)) {
     g_debug("Failed to reconstruct boop parent position for overlay: %s",
             replay_error != NULL ? replay_error->message : "unknown error");
     backend->position_clear(before_position);
     return;
   }
+  if (!has_move) {
+    backend->position_clear(before_position);
+    return;
+  }
+  (void)color;
 
   if (!boop_move_describe_overlay((const BoopPosition *)before_position, &move, &overlay_info)) {
     backend->position_clear(before_position);

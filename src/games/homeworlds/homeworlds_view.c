@@ -3,7 +3,7 @@
 #include "homeworlds_game.h"
 #include "homeworlds_move_builder.h"
 #include "homeworlds_move_report.h"
-#include "../../sgf_move_props.h"
+#include "../../sgf_controller.h"
 #include "../../sgf_tree.h"
 
 #include <math.h>
@@ -31,7 +31,7 @@ typedef struct {
 #define HOMEWORLDS_VIEW_PIP_REFERENCE_RATIO 0.055
 #define HOMEWORLDS_VIEW_ITEM_GAP 7.0
 #define HOMEWORLDS_VIEW_SYSTEM_PADDING_X 14.0
-#define HOMEWORLDS_VIEW_SYSTEM_PADDING_BOTTOM 14.0
+#define HOMEWORLDS_VIEW_SYSTEM_PADDING_BOTTOM 30.0
 #define HOMEWORLDS_VIEW_SYSTEM_LABEL_HEIGHT 32.0
 #define HOMEWORLDS_VIEW_SYSTEM_CORNER_RADIUS 16.0
 #define HOMEWORLDS_VIEW_PIECE_BUTTON_PAD 5.0
@@ -54,6 +54,14 @@ typedef struct {
 #define HOMEWORLDS_VIEW_INITIAL_BOARD_WIDTH 1
 #define HOMEWORLDS_VIEW_INITIAL_BOARD_HEIGHT 1
 #define HOMEWORLDS_VIEW_SYSTEM_PIECE_MAX (HOMEWORLDS_STAR_SLOT_COUNT + (2 * HOMEWORLDS_SHIP_SLOT_COUNT))
+#define HOMEWORLDS_VIEW_PREVIOUS_MARKER_OFFSET 16.0
+#define HOMEWORLDS_VIEW_PREVIOUS_MARKER_PLUS_HALF_LENGTH 7.2
+#define HOMEWORLDS_VIEW_PREVIOUS_MARKER_DISC_RADIUS 5.5
+#define HOMEWORLDS_VIEW_PREVIOUS_MARKER_ARROW_HALF_LENGTH 7.0
+#define HOMEWORLDS_VIEW_PREVIOUS_MARKER_ARROW_HEAD 5.0
+#define HOMEWORLDS_VIEW_PREVIOUS_MARKER_LINE_WIDTH 2.5
+#define HOMEWORLDS_VIEW_PREVIOUS_DISC_LINE_WIDTH 1.4
+#define HOMEWORLDS_VIEW_PREVIOUS_CATASTROPHE_LINE_WIDTH 1.3
 typedef enum {
   HOMEWORLDS_VIEW_SYSTEM_ROW_TOP = 0,
   HOMEWORLDS_VIEW_SYSTEM_ROW_MIDDLE,
@@ -148,6 +156,8 @@ struct _HomeworldsView {
   guint board_layout_settle_tick_id;
   gulong root_destroy_handler_id;
   char *player_names[2];
+  HomeworldsViewPreviousMoveMarker previous_move_markers[HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_CAPACITY];
+  gsize previous_move_marker_count;
 };
 
 static void homeworlds_view_update_from_current_builder(HomeworldsView *view);
@@ -297,6 +307,395 @@ static const char *homeworlds_view_color_name(HomeworldsColor color) {
   g_return_val_if_fail(color <= HOMEWORLDS_COLOR_BLUE, "unknown");
 
   return homeworlds_view_color_styles[color].name;
+}
+
+static gboolean homeworlds_view_previous_move_marker_append(HomeworldsViewPreviousMoveMarker *markers,
+                                                            gsize max_markers,
+                                                            gsize *marker_count,
+                                                            const HomeworldsViewPreviousMoveMarker *marker) {
+  g_return_val_if_fail(marker_count != NULL, FALSE);
+  g_return_val_if_fail(marker != NULL, FALSE);
+  g_return_val_if_fail(markers != NULL || max_markers == 0, FALSE);
+
+  if (*marker_count >= max_markers) {
+    g_debug("Too many Homeworlds previous-move markers");
+    return FALSE;
+  }
+
+  markers[*marker_count] = *marker;
+  (*marker_count)++;
+  return TRUE;
+}
+
+static gboolean homeworlds_view_find_ship_marker_slot(const HomeworldsPosition *position,
+                                                      guint system_index,
+                                                      guint side,
+                                                      HomeworldsPyramid pyramid,
+                                                      guint *out_slot) {
+  g_return_val_if_fail(position != NULL, FALSE);
+  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
+  g_return_val_if_fail(side < 2, FALSE);
+  g_return_val_if_fail(homeworlds_pyramid_is_valid(pyramid), FALSE);
+  g_return_val_if_fail(out_slot != NULL, FALSE);
+
+  *out_slot = HOMEWORLDS_INVALID_INDEX;
+  const HomeworldsSystem *system = &position->systems[system_index];
+  for (guint slot = 0; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
+    HomeworldsPyramid ship = system->ships[side][slot];
+
+    if (!homeworlds_pyramid_is_valid(ship)) {
+      break;
+    }
+    if (ship != pyramid) {
+      continue;
+    }
+
+    *out_slot = slot;
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
+static gboolean homeworlds_view_resolve_step_target_system(const HomeworldsPosition *position,
+                                                           const HomeworldsTurnStep *step,
+                                                           guint *out_system_index) {
+  g_return_val_if_fail(position != NULL, FALSE);
+  g_return_val_if_fail(step != NULL, FALSE);
+  g_return_val_if_fail(out_system_index != NULL, FALSE);
+
+  if (step->kind == HOMEWORLDS_STEP_DISCOVER &&
+      step->target_system.kind == HOMEWORLDS_SYSTEM_REF_SYSTEM &&
+      step->target_system.system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT &&
+      homeworlds_pyramid_is_valid(step->target_system.star)) {
+    *out_system_index = step->target_system.system_index;
+    return TRUE;
+  }
+
+  return homeworlds_position_resolve_system_ref(position, &step->target_system, out_system_index);
+}
+
+static gboolean homeworlds_view_previous_move_step_action_color(const HomeworldsTurnStep *step,
+                                                                HomeworldsColor *out_color) {
+  g_return_val_if_fail(step != NULL, FALSE);
+  g_return_val_if_fail(out_color != NULL, FALSE);
+
+  switch ((HomeworldsStepKind) step->kind) {
+    case HOMEWORLDS_STEP_BUILD:
+      *out_color = HOMEWORLDS_COLOR_GREEN;
+      return TRUE;
+    case HOMEWORLDS_STEP_TRADE:
+      *out_color = HOMEWORLDS_COLOR_BLUE;
+      return TRUE;
+    case HOMEWORLDS_STEP_ATTACK:
+      *out_color = HOMEWORLDS_COLOR_RED;
+      return TRUE;
+    case HOMEWORLDS_STEP_MOVE:
+    case HOMEWORLDS_STEP_DISCOVER:
+      *out_color = HOMEWORLDS_COLOR_YELLOW;
+      return TRUE;
+    case HOMEWORLDS_STEP_NONE:
+    case HOMEWORLDS_STEP_PASS:
+    case HOMEWORLDS_STEP_SACRIFICE:
+    case HOMEWORLDS_STEP_CATASTROPHE:
+    default:
+      return FALSE;
+  }
+}
+
+static gboolean homeworlds_view_previous_move_append_ship_marker(const HomeworldsPosition *after_position,
+                                                                 guint system_index,
+                                                                 guint side,
+                                                                 HomeworldsPyramid pyramid,
+                                                                 HomeworldsViewPreviousMoveMarkerKind kind,
+                                                                 HomeworldsColor marker_color,
+                                                                 HomeworldsViewPreviousMoveMarker *markers,
+                                                                 gsize max_markers,
+                                                                 gsize *marker_count) {
+  guint slot = 0;
+
+  g_return_val_if_fail(after_position != NULL, FALSE);
+  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
+  g_return_val_if_fail(side < 2, FALSE);
+  g_return_val_if_fail(homeworlds_pyramid_is_valid(pyramid), FALSE);
+
+  if (!homeworlds_view_find_ship_marker_slot(after_position, system_index, side, pyramid, &slot)) {
+    return TRUE;
+  }
+
+  HomeworldsViewPreviousMoveMarker marker = {
+    .kind = kind,
+    .system_index = (guint8)system_index,
+    .side = (guint8)side,
+    .slot = (guint8)slot,
+    .is_ship = TRUE,
+    .pyramid = pyramid,
+    .color = marker_color,
+  };
+  return homeworlds_view_previous_move_marker_append(markers, max_markers, marker_count, &marker);
+}
+
+static gboolean homeworlds_view_previous_move_append_catastrophe_markers(
+    const HomeworldsPosition *after_position,
+    const HomeworldsTurnStep *step,
+    guint move_side,
+    HomeworldsViewPreviousMoveMarker *markers,
+    gsize max_markers,
+    gsize *marker_count) {
+  guint system_index = 0;
+
+  g_return_val_if_fail(after_position != NULL, FALSE);
+  g_return_val_if_fail(step != NULL, FALSE);
+  g_return_val_if_fail(move_side < 2, FALSE);
+
+  if (step->target_color > HOMEWORLDS_COLOR_BLUE) {
+    g_debug("Ignoring previous-move catastrophe marker with invalid color");
+    return FALSE;
+  }
+  if (!homeworlds_position_resolve_system_ref(after_position, &step->target_system, &system_index)) {
+    return TRUE;
+  }
+
+  const HomeworldsSystem *system = &after_position->systems[system_index];
+  if (!homeworlds_system_has_star(system)) {
+    return TRUE;
+  }
+
+  HomeworldsViewPreviousMoveMarker marker = {
+    .kind = HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_CATASTROPHE,
+    .system_index = (guint8)system_index,
+    .side = (guint8)move_side,
+    .slot = HOMEWORLDS_INVALID_INDEX,
+    .is_ship = FALSE,
+    .pyramid = 0,
+    .color = (HomeworldsColor)step->target_color,
+  };
+  return homeworlds_view_previous_move_marker_append(markers, max_markers, marker_count, &marker);
+}
+
+static gboolean homeworlds_view_previous_move_append_step_marker(
+    const HomeworldsPosition *working_position,
+    const HomeworldsPosition *after_position,
+    const HomeworldsTurnStep *step,
+    guint move_side,
+    HomeworldsViewPreviousMoveMarker *markers,
+    gsize max_markers,
+    gsize *marker_count) {
+  guint system_index = 0;
+  HomeworldsPyramid marker_pyramid = 0;
+  HomeworldsColor marker_color = HOMEWORLDS_COLOR_RED;
+  HomeworldsViewPreviousMoveMarkerKind marker_kind = HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_BUILD;
+
+  g_return_val_if_fail(working_position != NULL, FALSE);
+  g_return_val_if_fail(after_position != NULL, FALSE);
+  g_return_val_if_fail(step != NULL, FALSE);
+  g_return_val_if_fail(move_side < 2, FALSE);
+
+  switch ((HomeworldsStepKind) step->kind) {
+    case HOMEWORLDS_STEP_BUILD:
+      if (step->target_color > HOMEWORLDS_COLOR_BLUE ||
+          !homeworlds_position_resolve_system_ref(working_position, &step->actor.system, &system_index) ||
+          !homeworlds_system_find_smallest_bank_ship(working_position,
+                                                     (HomeworldsColor)step->target_color,
+                                                     &marker_pyramid)) {
+        return FALSE;
+      }
+      marker_kind = HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_BUILD;
+      marker_color = HOMEWORLDS_COLOR_GREEN;
+      break;
+    case HOMEWORLDS_STEP_TRADE:
+      if (step->target_color > HOMEWORLDS_COLOR_BLUE ||
+          !homeworlds_pyramid_is_valid(step->actor.ship) ||
+          !homeworlds_position_resolve_system_ref(working_position, &step->actor.system, &system_index)) {
+        return FALSE;
+      }
+      marker_pyramid = homeworlds_pyramid_make((HomeworldsColor)step->target_color,
+                                               homeworlds_pyramid_size(step->actor.ship));
+      marker_kind = HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_TRADE;
+      marker_color = homeworlds_pyramid_color(step->actor.ship);
+      break;
+    case HOMEWORLDS_STEP_ATTACK:
+      if (!homeworlds_pyramid_is_valid(step->target_ship.ship) ||
+          !homeworlds_position_resolve_system_ref(working_position, &step->actor.system, &system_index)) {
+        return FALSE;
+      }
+      marker_pyramid = step->target_ship.ship;
+      marker_kind = HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_CAPTURE;
+      marker_color = HOMEWORLDS_COLOR_RED;
+      break;
+    case HOMEWORLDS_STEP_MOVE:
+    case HOMEWORLDS_STEP_DISCOVER:
+      if (!homeworlds_pyramid_is_valid(step->actor.ship) ||
+          !homeworlds_view_resolve_step_target_system(working_position, step, &system_index)) {
+        return FALSE;
+      }
+      marker_pyramid = step->actor.ship;
+      marker_kind = HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_MOVE;
+      marker_color = HOMEWORLDS_COLOR_YELLOW;
+      break;
+    case HOMEWORLDS_STEP_CATASTROPHE:
+      return homeworlds_view_previous_move_append_catastrophe_markers(after_position,
+                                                                      step,
+                                                                      move_side,
+                                                                      markers,
+                                                                      max_markers,
+                                                                      marker_count);
+    case HOMEWORLDS_STEP_NONE:
+    case HOMEWORLDS_STEP_PASS:
+    case HOMEWORLDS_STEP_SACRIFICE:
+    default:
+      return TRUE;
+  }
+
+  return homeworlds_view_previous_move_append_ship_marker(after_position,
+                                                          system_index,
+                                                          move_side,
+                                                          marker_pyramid,
+                                                          marker_kind,
+                                                          marker_color,
+                                                          markers,
+                                                          max_markers,
+                                                          marker_count);
+}
+
+gboolean homeworlds_view_collect_previous_move_markers(const HomeworldsPosition *before_position,
+                                                       const HomeworldsPosition *after_position,
+                                                       const HomeworldsMove *move,
+                                                       guint move_side,
+                                                       HomeworldsViewPreviousMoveMarker *markers,
+                                                       gsize max_markers,
+                                                       gsize *out_marker_count) {
+  HomeworldsPosition working = {0};
+  guint pending_sacrifice_actions = 0;
+  HomeworldsColor sacrifice_color = HOMEWORLDS_COLOR_RED;
+  gboolean primary_action_done = FALSE;
+  gsize marker_count = 0;
+
+  g_return_val_if_fail(before_position != NULL, FALSE);
+  g_return_val_if_fail(after_position != NULL, FALSE);
+  g_return_val_if_fail(move != NULL, FALSE);
+  g_return_val_if_fail(move_side < 2, FALSE);
+  g_return_val_if_fail(markers != NULL || max_markers == 0, FALSE);
+  g_return_val_if_fail(out_marker_count != NULL, FALSE);
+
+  if (max_markers > 0) {
+    memset(markers, 0, sizeof(*markers) * max_markers);
+  }
+  *out_marker_count = 0;
+
+  if (move->kind != HOMEWORLDS_MOVE_KIND_TURN) {
+    return TRUE;
+  }
+  if (move->step_count > HOMEWORLDS_MAX_MOVE_STEPS) {
+    return FALSE;
+  }
+
+  working = *before_position;
+  for (guint i = 0; i < move->step_count; ++i) {
+    const HomeworldsTurnStep *step = &move->steps[i];
+    gboolean require_access = TRUE;
+
+    if (step->kind == HOMEWORLDS_STEP_CATASTROPHE) {
+      if (!homeworlds_view_previous_move_append_step_marker(&working,
+                                                            after_position,
+                                                            step,
+                                                            move_side,
+                                                            markers,
+                                                            max_markers,
+                                                            &marker_count) ||
+          !homeworlds_position_apply_turn_step(&working, step)) {
+        return FALSE;
+      }
+      continue;
+    }
+
+    if (step->kind == HOMEWORLDS_STEP_PASS) {
+      if (pending_sacrifice_actions > 0) {
+        pending_sacrifice_actions--;
+      } else if (primary_action_done) {
+        return FALSE;
+      } else {
+        primary_action_done = TRUE;
+      }
+    } else if (step->kind == HOMEWORLDS_STEP_SACRIFICE) {
+      guint system_index = 0;
+      guint ship_slot = 0;
+
+      if (primary_action_done ||
+          pending_sacrifice_actions != 0 ||
+          !homeworlds_pyramid_is_valid(step->actor.ship) ||
+          !homeworlds_position_resolve_system_ref(&working, &step->actor.system, &system_index) ||
+          !homeworlds_view_find_ship_marker_slot(&working, system_index, move_side, step->actor.ship, &ship_slot)) {
+        return FALSE;
+      }
+      (void)ship_slot;
+      pending_sacrifice_actions = homeworlds_pyramid_size(step->actor.ship);
+      sacrifice_color = homeworlds_pyramid_color(step->actor.ship);
+      primary_action_done = TRUE;
+    } else if (pending_sacrifice_actions == 0) {
+      if (primary_action_done) {
+        return FALSE;
+      }
+      primary_action_done = TRUE;
+    } else {
+      HomeworldsColor action_color = HOMEWORLDS_COLOR_RED;
+
+      if (!homeworlds_view_previous_move_step_action_color(step, &action_color) ||
+          action_color != sacrifice_color) {
+        return FALSE;
+      }
+      pending_sacrifice_actions--;
+      require_access = FALSE;
+    }
+
+    if (!homeworlds_view_previous_move_append_step_marker(&working,
+                                                          after_position,
+                                                          step,
+                                                          move_side,
+                                                          markers,
+                                                          max_markers,
+                                                          &marker_count)) {
+      return FALSE;
+    }
+    if (require_access ? !homeworlds_position_apply_turn_step(&working, step)
+                       : !homeworlds_position_apply_forced_action_step(&working, step)) {
+      return FALSE;
+    }
+  }
+
+  if (pending_sacrifice_actions > 0) {
+    return FALSE;
+  }
+
+  *out_marker_count = marker_count;
+  return TRUE;
+}
+
+static void homeworlds_view_clear_previous_move_markers(HomeworldsView *view) {
+  g_return_if_fail(view != NULL);
+
+  if (view->previous_move_marker_count > 0) {
+    memset(view->previous_move_markers, 0, sizeof(view->previous_move_markers));
+    view->previous_move_marker_count = 0;
+    if (GTK_IS_WIDGET(view->drawing_area)) {
+      gtk_widget_queue_draw(view->drawing_area);
+    }
+  }
+}
+
+static gboolean homeworlds_view_side_from_sgf_color(const GameBackend *backend, SgfColor color, guint *out_side) {
+  g_return_val_if_fail(backend != NULL, FALSE);
+  g_return_val_if_fail(backend->sgf_color_for_side != NULL, FALSE);
+  g_return_val_if_fail(out_side != NULL, FALSE);
+
+  for (guint side = 0; side < 2; side++) {
+    if (backend->sgf_color_for_side(side) == color) {
+      *out_side = side;
+      return TRUE;
+    }
+  }
+
+  return FALSE;
 }
 
 static char *homeworlds_view_system_label(guint system_index) {
@@ -783,6 +1182,124 @@ static void homeworlds_view_draw_star(cairo_t *cr,
   cairo_set_line_width(cr, 1.8);
   cairo_stroke(cr);
   homeworlds_view_draw_base_pips(cr, x, pip_y, side * 0.56, size, pip_radius);
+}
+
+static void homeworlds_view_set_marker_source_color(cairo_t *cr, HomeworldsColor color, double alpha) {
+  g_return_if_fail(cr != NULL);
+  g_return_if_fail(color <= HOMEWORLDS_COLOR_BLUE);
+
+  const HomeworldsColorStyle *style = &homeworlds_view_color_styles[color];
+  cairo_set_source_rgba(cr, style->red, style->green, style->blue, alpha);
+}
+
+static double homeworlds_view_previous_marker_direction(guint side) {
+  g_return_val_if_fail(side < 2, 1.0);
+
+  return side == 0 ? 1.0 : -1.0;
+}
+
+static void homeworlds_view_previous_marker_piece_point(const HomeworldsViewPieceLayout *piece,
+                                                        guint side,
+                                                        double *out_x,
+                                                        double *out_y) {
+  g_return_if_fail(piece != NULL);
+  g_return_if_fail(out_x != NULL);
+  g_return_if_fail(out_y != NULL);
+
+  double direction = homeworlds_view_previous_marker_direction(side);
+  *out_x = piece->x;
+  if (piece->is_ship) {
+    double base_y = piece->points_up ? piece->y + (piece->height / 2.0) : piece->y - (piece->height / 2.0);
+    *out_y = base_y + (direction * HOMEWORLDS_VIEW_PREVIOUS_MARKER_OFFSET);
+  } else {
+    *out_y = piece->y + (direction * ((piece->height / 2.0) + HOMEWORLDS_VIEW_PREVIOUS_MARKER_OFFSET));
+  }
+}
+
+static void homeworlds_view_draw_previous_marker_plus(cairo_t *cr, double x, double y) {
+  g_return_if_fail(cr != NULL);
+
+  cairo_save(cr);
+  homeworlds_view_set_marker_source_color(cr, HOMEWORLDS_COLOR_GREEN, 0.96);
+  cairo_set_line_width(cr, HOMEWORLDS_VIEW_PREVIOUS_MARKER_LINE_WIDTH);
+  cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+  cairo_move_to(cr, x - HOMEWORLDS_VIEW_PREVIOUS_MARKER_PLUS_HALF_LENGTH, y);
+  cairo_line_to(cr, x + HOMEWORLDS_VIEW_PREVIOUS_MARKER_PLUS_HALF_LENGTH, y);
+  cairo_move_to(cr, x, y - HOMEWORLDS_VIEW_PREVIOUS_MARKER_PLUS_HALF_LENGTH);
+  cairo_line_to(cr, x, y + HOMEWORLDS_VIEW_PREVIOUS_MARKER_PLUS_HALF_LENGTH);
+  cairo_stroke(cr);
+  cairo_restore(cr);
+}
+
+static void homeworlds_view_draw_previous_marker_disc(cairo_t *cr,
+                                                      double x,
+                                                      double y,
+                                                      HomeworldsColor color) {
+  g_return_if_fail(cr != NULL);
+  g_return_if_fail(color <= HOMEWORLDS_COLOR_BLUE);
+
+  cairo_save(cr);
+  cairo_set_line_width(cr, HOMEWORLDS_VIEW_PREVIOUS_DISC_LINE_WIDTH);
+  cairo_arc(cr, x, y, HOMEWORLDS_VIEW_PREVIOUS_MARKER_DISC_RADIUS, 0.0, G_PI * 2.0);
+  homeworlds_view_set_marker_source_color(cr, color, 0.96);
+  cairo_fill_preserve(cr);
+  cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.82);
+  cairo_stroke(cr);
+  cairo_restore(cr);
+}
+
+static void homeworlds_view_draw_previous_marker_catastrophe_disc(cairo_t *cr,
+                                                                  double x,
+                                                                  double y,
+                                                                  HomeworldsColor color) {
+  const double strike = HOMEWORLDS_VIEW_PREVIOUS_MARKER_DISC_RADIUS * 0.82;
+
+  g_return_if_fail(cr != NULL);
+  g_return_if_fail(color <= HOMEWORLDS_COLOR_BLUE);
+
+  cairo_save(cr);
+  cairo_set_line_width(cr, HOMEWORLDS_VIEW_PREVIOUS_CATASTROPHE_LINE_WIDTH);
+  cairo_arc(cr, x, y, HOMEWORLDS_VIEW_PREVIOUS_MARKER_DISC_RADIUS, 0.0, G_PI * 2.0);
+  homeworlds_view_set_marker_source_color(cr, color, 0.96);
+  cairo_fill_preserve(cr);
+  cairo_set_source_rgba(cr, 0.52, 0.54, 0.56, 0.94);
+  cairo_stroke(cr);
+  cairo_move_to(cr, x - strike, y - strike);
+  cairo_line_to(cr, x + strike, y + strike);
+  cairo_stroke(cr);
+  cairo_restore(cr);
+}
+
+static void homeworlds_view_draw_previous_marker_arrow(cairo_t *cr,
+                                                       double x,
+                                                       double y,
+                                                       double direction,
+                                                       HomeworldsColor color) {
+  double start_y = y - (direction * HOMEWORLDS_VIEW_PREVIOUS_MARKER_ARROW_HALF_LENGTH);
+  double end_y = y + (direction * HOMEWORLDS_VIEW_PREVIOUS_MARKER_ARROW_HALF_LENGTH);
+
+  g_return_if_fail(cr != NULL);
+  g_return_if_fail(direction == 1.0 || direction == -1.0);
+  g_return_if_fail(color <= HOMEWORLDS_COLOR_BLUE);
+
+  cairo_save(cr);
+  homeworlds_view_set_marker_source_color(cr, color, 0.96);
+  cairo_set_line_width(cr, HOMEWORLDS_VIEW_PREVIOUS_MARKER_LINE_WIDTH);
+  cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+  cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+  cairo_move_to(cr, x, start_y);
+  cairo_line_to(cr, x, end_y);
+  cairo_stroke(cr);
+  cairo_move_to(cr, x, end_y);
+  cairo_line_to(cr,
+                x - HOMEWORLDS_VIEW_PREVIOUS_MARKER_ARROW_HEAD,
+                end_y - (direction * HOMEWORLDS_VIEW_PREVIOUS_MARKER_ARROW_HEAD));
+  cairo_line_to(cr,
+                x + HOMEWORLDS_VIEW_PREVIOUS_MARKER_ARROW_HEAD,
+                end_y - (direction * HOMEWORLDS_VIEW_PREVIOUS_MARKER_ARROW_HEAD));
+  cairo_close_path(cr);
+  cairo_fill(cr);
+  cairo_restore(cr);
 }
 
 static gboolean homeworlds_view_position_has_non_home_system(const HomeworldsPosition *position) {
@@ -1601,6 +2118,125 @@ gboolean homeworlds_view_calculate_homeworld_layout(guint system_index,
   return TRUE;
 }
 
+static const HomeworldsViewPieceLayout *homeworlds_view_system_layout_find_marker_piece(
+    const HomeworldsViewSystemLayout *layout,
+    const HomeworldsViewPreviousMoveMarker *marker) {
+  g_return_val_if_fail(layout != NULL, NULL);
+  g_return_val_if_fail(marker != NULL, NULL);
+
+  for (guint i = 0; i < layout->piece_count; ++i) {
+    const HomeworldsViewPieceLayout *piece = &layout->pieces[i];
+
+    if (piece->is_ship != marker->is_ship ||
+        piece->slot != marker->slot ||
+        piece->pyramid != marker->pyramid) {
+      continue;
+    }
+    if (marker->is_ship && piece->side != marker->side) {
+      continue;
+    }
+
+    return piece;
+  }
+
+  return NULL;
+}
+
+static gboolean homeworlds_view_system_layout_find_catastrophe_marker_point(
+    const HomeworldsViewSystemLayout *layout,
+    double *out_x,
+    double *out_y) {
+  double x_sum = 0.0;
+  double max_bottom = 0.0;
+  guint star_count = 0;
+
+  g_return_val_if_fail(layout != NULL, FALSE);
+  g_return_val_if_fail(out_x != NULL, FALSE);
+  g_return_val_if_fail(out_y != NULL, FALSE);
+
+  for (guint i = 0; i < layout->piece_count; ++i) {
+    const HomeworldsViewPieceLayout *piece = &layout->pieces[i];
+
+    if (piece->is_ship) {
+      continue;
+    }
+
+    double left = 0.0;
+    double top = 0.0;
+    double right = 0.0;
+    double bottom = 0.0;
+    if (!homeworlds_view_piece_layout_bounds(piece, &left, &top, &right, &bottom)) {
+      continue;
+    }
+
+    x_sum += piece->x;
+    max_bottom = star_count == 0 ? bottom : MAX(max_bottom, bottom);
+    star_count++;
+  }
+
+  if (star_count == 0) {
+    return FALSE;
+  }
+
+  *out_x = x_sum / star_count;
+  *out_y = max_bottom + HOMEWORLDS_VIEW_PREVIOUS_MARKER_OFFSET;
+  return TRUE;
+}
+
+static void homeworlds_view_draw_previous_move_markers(HomeworldsView *view,
+                                                       cairo_t *cr,
+                                                       guint system_index,
+                                                       const HomeworldsViewSystemLayout *layout) {
+  g_return_if_fail(view != NULL);
+  g_return_if_fail(cr != NULL);
+  g_return_if_fail(layout != NULL);
+  g_return_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT);
+
+  for (gsize i = 0; i < view->previous_move_marker_count; ++i) {
+    const HomeworldsViewPreviousMoveMarker *marker = &view->previous_move_markers[i];
+    const HomeworldsViewPieceLayout *piece = NULL;
+    double x = 0.0;
+    double y = 0.0;
+    double direction = 1.0;
+
+    if (marker->system_index != system_index) {
+      continue;
+    }
+
+    if (marker->kind == HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_CATASTROPHE) {
+      if (homeworlds_view_system_layout_find_catastrophe_marker_point(layout, &x, &y)) {
+        homeworlds_view_draw_previous_marker_catastrophe_disc(cr, x, y, marker->color);
+      }
+      continue;
+    }
+
+    piece = homeworlds_view_system_layout_find_marker_piece(layout, marker);
+    if (piece == NULL) {
+      continue;
+    }
+
+    direction = homeworlds_view_previous_marker_direction(marker->side);
+    homeworlds_view_previous_marker_piece_point(piece, marker->side, &x, &y);
+    switch (marker->kind) {
+      case HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_BUILD:
+        homeworlds_view_draw_previous_marker_plus(cr, x, y);
+        break;
+      case HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_TRADE:
+        homeworlds_view_draw_previous_marker_disc(cr, x, y, marker->color);
+        break;
+      case HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_MOVE:
+        homeworlds_view_draw_previous_marker_arrow(cr, x, y, -direction, HOMEWORLDS_COLOR_YELLOW);
+        break;
+      case HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_CAPTURE:
+        homeworlds_view_draw_previous_marker_arrow(cr, x, y, -direction, HOMEWORLDS_COLOR_RED);
+        break;
+      case HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_CATASTROPHE:
+      default:
+        break;
+    }
+  }
+}
+
 static void homeworlds_view_draw_system(HomeworldsView *view,
                                         cairo_t *cr,
                                         const HomeworldsSystem *system,
@@ -1667,6 +2303,7 @@ static void homeworlds_view_draw_system(HomeworldsView *view,
     }
   }
 
+  homeworlds_view_draw_previous_move_markers(view, cr, system_index, &layout);
   cairo_restore(cr);
 }
 
@@ -2834,6 +3471,7 @@ static void homeworlds_view_model_state_changed(GGameModel * /*model*/, gpointer
 
   g_return_if_fail(view != NULL);
 
+  homeworlds_view_clear_previous_move_markers(view);
   homeworlds_view_refresh(view);
 }
 
@@ -3214,9 +3852,14 @@ static void homeworlds_view_update_player_names_from_node(HomeworldsView *view, 
 
 void homeworlds_view_sync_board_host_node(GtkWidget *board_host, const SgfNode *node) {
   HomeworldsView *view = NULL;
+  const GameBackend *backend = NULL;
+  const HomeworldsPosition *after_position = NULL;
+  HomeworldsPosition before_position = {0};
   HomeworldsMove move = {0};
   SgfColor color = SGF_COLOR_NONE;
   gboolean has_move = FALSE;
+  guint move_side = 0;
+  gsize marker_count = 0;
   char formatted[128] = {0};
 
   g_return_if_fail(GTK_IS_WIDGET(board_host));
@@ -3229,8 +3872,30 @@ void homeworlds_view_sync_board_host_node(GtkWidget *board_host, const SgfNode *
 
   homeworlds_view_update_player_names_from_node(view, node);
 
-  if (!sgf_move_props_try_parse_node(node, &color, &move, &has_move, NULL) || !has_move) {
+  backend = ggame_model_peek_backend(view->model);
+  after_position = ggame_model_peek_position(view->model);
+  if (backend == NULL || after_position == NULL) {
+    homeworlds_view_clear_previous_move_markers(view);
     gtk_label_set_text(GTK_LABEL(view->last_move_label), "None");
+    return;
+  }
+
+  homeworlds_position_init(&before_position);
+  g_autoptr(GError) replay_error = NULL;
+  if (!ggame_sgf_controller_replay_parent_node_for_move(node,
+                                                        backend,
+                                                        &before_position,
+                                                        &move,
+                                                        &color,
+                                                        &has_move,
+                                                        &replay_error) ||
+      !has_move) {
+    if (replay_error != NULL) {
+      g_debug("Failed to reconstruct Homeworlds previous move markers: %s", replay_error->message);
+    }
+    homeworlds_view_clear_previous_move_markers(view);
+    gtk_label_set_text(GTK_LABEL(view->last_move_label), "None");
+    homeworlds_position_clear(&before_position);
     return;
   }
 
@@ -3239,6 +3904,23 @@ void homeworlds_view_sync_board_host_node(GtkWidget *board_host, const SgfNode *
   } else {
     gtk_label_set_text(GTK_LABEL(view->last_move_label), "Unknown");
   }
+
+  if (!homeworlds_view_side_from_sgf_color(backend, color, &move_side) ||
+      !homeworlds_view_collect_previous_move_markers(&before_position,
+                                                     after_position,
+                                                     &move,
+                                                     move_side,
+                                                     view->previous_move_markers,
+                                                     G_N_ELEMENTS(view->previous_move_markers),
+                                                     &marker_count)) {
+    homeworlds_view_clear_previous_move_markers(view);
+    homeworlds_position_clear(&before_position);
+    return;
+  }
+
+  view->previous_move_marker_count = marker_count;
+  gtk_widget_queue_draw(view->drawing_area);
+  homeworlds_position_clear(&before_position);
 }
 
 void homeworlds_view_set_board_host_move_report_enabled(GtkWidget *board_host, gboolean enabled) {

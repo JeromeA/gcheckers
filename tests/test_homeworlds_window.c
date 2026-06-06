@@ -631,6 +631,260 @@ static void test_homeworlds_prepare_play_position(HomeworldsPosition *position) 
   g_assert_true(homeworlds_position_apply_move(position, &player_2));
 }
 
+static HomeworldsSystemRef test_homeworlds_homeworld_ref(guint side) {
+  g_assert_cmpuint(side, <, 2);
+
+  return (HomeworldsSystemRef){
+    .kind = HOMEWORLDS_SYSTEM_REF_HOMEWORLD,
+    .homeworld_side = (guint8)side,
+  };
+}
+
+static HomeworldsSystemRef test_homeworlds_system_ref(guint system_index) {
+  g_assert_cmpuint(system_index, <, HOMEWORLDS_SYSTEM_SLOT_COUNT);
+
+  return (HomeworldsSystemRef){
+    .kind = HOMEWORLDS_SYSTEM_REF_SYSTEM,
+    .system_index = (guint8)system_index,
+  };
+}
+
+static HomeworldsShipRef test_homeworlds_ship_ref(HomeworldsSystemRef system, HomeworldsPyramid ship) {
+  g_assert_true(homeworlds_pyramid_is_valid(ship));
+
+  return (HomeworldsShipRef){
+    .system = system,
+    .ship = ship,
+  };
+}
+
+static void test_homeworlds_collect_previous_markers_for_move(
+    const HomeworldsPosition *before,
+    const HomeworldsMove *move,
+    HomeworldsPosition *out_after,
+    HomeworldsViewPreviousMoveMarker *out_markers,
+    gsize *out_marker_count) {
+  g_return_if_fail(before != NULL);
+  g_return_if_fail(move != NULL);
+  g_return_if_fail(out_after != NULL);
+  g_return_if_fail(out_markers != NULL);
+  g_return_if_fail(out_marker_count != NULL);
+
+  *out_after = *before;
+  g_assert_true(homeworlds_position_apply_move(out_after, move));
+  g_assert_true(homeworlds_view_collect_previous_move_markers(before,
+                                                             out_after,
+                                                             move,
+                                                             before->turn,
+                                                             out_markers,
+                                                             HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_CAPACITY,
+                                                             out_marker_count));
+}
+
+static void test_homeworlds_assert_previous_marker(const HomeworldsViewPreviousMoveMarker *marker,
+                                                   HomeworldsViewPreviousMoveMarkerKind kind,
+                                                   guint system_index,
+                                                   gboolean is_ship,
+                                                   guint side,
+                                                   guint slot,
+                                                   HomeworldsPyramid pyramid,
+                                                   HomeworldsColor color) {
+  g_assert_nonnull(marker);
+  g_assert_cmpuint(marker->kind, ==, kind);
+  g_assert_cmpuint(marker->system_index, ==, system_index);
+  g_assert_cmpuint(marker->is_ship, ==, is_ship);
+  g_assert_cmpuint(marker->side, ==, side);
+  g_assert_cmpuint(marker->slot, ==, slot);
+  g_assert_cmpuint(marker->pyramid, ==, pyramid);
+  g_assert_cmpuint(marker->color, ==, color);
+}
+
+static void test_homeworlds_view_previous_move_markers_describe_ship_actions(void) {
+  HomeworldsSystemRef homeworld_1 = test_homeworlds_homeworld_ref(0);
+  HomeworldsPyramid green_large = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE);
+  HomeworldsPyramid blue_small = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL);
+  HomeworldsViewPreviousMoveMarker markers[HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_CAPACITY] = {0};
+  HomeworldsPosition before = {0};
+  HomeworldsPosition after = {0};
+  gsize marker_count = 0;
+
+  test_homeworlds_prepare_play_position(&before);
+  HomeworldsPyramid built_ship = 0;
+  g_assert_true(homeworlds_system_find_smallest_bank_ship(&before, HOMEWORLDS_COLOR_GREEN, &built_ship));
+  HomeworldsMove build = {
+    .kind = HOMEWORLDS_MOVE_KIND_TURN,
+    .step_count = 1,
+    .steps =
+        {
+          {
+            .kind = HOMEWORLDS_STEP_BUILD,
+            .actor.system = homeworld_1,
+            .target_color = HOMEWORLDS_COLOR_GREEN,
+          },
+        },
+  };
+  test_homeworlds_collect_previous_markers_for_move(&before, &build, &after, markers, &marker_count);
+  g_assert_cmpuint(marker_count, ==, 1);
+  test_homeworlds_assert_previous_marker(&markers[0],
+                                         HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_BUILD,
+                                         0,
+                                         TRUE,
+                                         0,
+                                         1,
+                                         built_ship,
+                                         HOMEWORLDS_COLOR_GREEN);
+
+  test_homeworlds_prepare_play_position(&before);
+  HomeworldsMove trade = {
+    .kind = HOMEWORLDS_MOVE_KIND_TURN,
+    .step_count = 1,
+    .steps =
+        {
+          {
+            .kind = HOMEWORLDS_STEP_TRADE,
+            .actor = test_homeworlds_ship_ref(homeworld_1, green_large),
+            .target_color = HOMEWORLDS_COLOR_BLUE,
+          },
+        },
+  };
+  test_homeworlds_collect_previous_markers_for_move(&before, &trade, &after, markers, &marker_count);
+  g_assert_cmpuint(marker_count, ==, 1);
+  test_homeworlds_assert_previous_marker(&markers[0],
+                                         HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_TRADE,
+                                         0,
+                                         TRUE,
+                                         0,
+                                         0,
+                                         homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE),
+                                         HOMEWORLDS_COLOR_GREEN);
+
+  test_homeworlds_prepare_play_position(&before);
+  before.systems[0].ships[1][0] = blue_small;
+  test_homeworlds_remove_bank_piece(&before, blue_small);
+  homeworlds_position_rebuild_color_counts(&before);
+  HomeworldsMove capture = {
+    .kind = HOMEWORLDS_MOVE_KIND_TURN,
+    .step_count = 1,
+    .steps =
+        {
+          {
+            .kind = HOMEWORLDS_STEP_ATTACK,
+            .actor = test_homeworlds_ship_ref(homeworld_1, green_large),
+            .target_ship = test_homeworlds_ship_ref(homeworld_1, blue_small),
+          },
+        },
+  };
+  test_homeworlds_collect_previous_markers_for_move(&before, &capture, &after, markers, &marker_count);
+  g_assert_cmpuint(marker_count, ==, 1);
+  test_homeworlds_assert_previous_marker(&markers[0],
+                                         HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_CAPTURE,
+                                         0,
+                                         TRUE,
+                                         0,
+                                         1,
+                                         blue_small,
+                                         HOMEWORLDS_COLOR_RED);
+}
+
+static void test_homeworlds_view_previous_move_markers_describe_catastrophes(void) {
+  HomeworldsViewPreviousMoveMarker markers[HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_CAPACITY] = {0};
+  HomeworldsPosition before = {0};
+  HomeworldsPosition after = {0};
+  gsize marker_count = 0;
+  HomeworldsPyramid yellow_small = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL);
+  HomeworldsPyramid blue_large = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE);
+  HomeworldsPyramid green_small = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL);
+  HomeworldsPyramid red_small = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL);
+  HomeworldsPyramid red_medium = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_MEDIUM);
+  HomeworldsPyramid red_large = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE);
+
+  test_homeworlds_prepare_play_position(&before);
+  before.systems[2].stars[0] = yellow_small;
+  before.systems[2].stars[1] = blue_large;
+  before.systems[2].ships[0][0] = green_small;
+  before.systems[2].ships[0][1] = red_small;
+  before.systems[2].ships[0][2] = red_medium;
+  before.systems[2].ships[1][0] = red_large;
+  before.systems[2].ships[1][1] = red_small;
+  test_homeworlds_remove_bank_piece(&before, yellow_small);
+  test_homeworlds_remove_bank_piece(&before, blue_large);
+  test_homeworlds_remove_bank_piece(&before, green_small);
+  test_homeworlds_remove_bank_piece(&before, red_small);
+  test_homeworlds_remove_bank_piece(&before, red_medium);
+  test_homeworlds_remove_bank_piece(&before, red_large);
+  test_homeworlds_remove_bank_piece(&before, red_small);
+  homeworlds_position_rebuild_color_counts(&before);
+
+  HomeworldsMove catastrophe = {
+    .kind = HOMEWORLDS_MOVE_KIND_TURN,
+    .step_count = 1,
+    .steps =
+        {
+          {
+            .kind = HOMEWORLDS_STEP_CATASTROPHE,
+            .target_system = test_homeworlds_system_ref(2),
+            .target_color = HOMEWORLDS_COLOR_RED,
+          },
+        },
+  };
+  test_homeworlds_collect_previous_markers_for_move(&before, &catastrophe, &after, markers, &marker_count);
+  g_assert_cmpuint(marker_count, ==, 1);
+  test_homeworlds_assert_previous_marker(&markers[0],
+                                         HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_CATASTROPHE,
+                                         2,
+                                         FALSE,
+                                         0,
+                                         HOMEWORLDS_INVALID_INDEX,
+                                         0,
+                                         HOMEWORLDS_COLOR_RED);
+}
+
+static void test_homeworlds_view_previous_move_markers_skip_sacrifice_step(void) {
+  HomeworldsSystemRef homeworld_1 = test_homeworlds_homeworld_ref(0);
+  HomeworldsSystemRef target_system = test_homeworlds_system_ref(2);
+  HomeworldsPyramid green_large = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE);
+  HomeworldsPyramid red_large = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE);
+  HomeworldsPyramid yellow_small = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL);
+  HomeworldsViewPreviousMoveMarker markers[HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_CAPACITY] = {0};
+  HomeworldsPosition before = {0};
+  HomeworldsPosition after = {0};
+  gsize marker_count = 0;
+
+  test_homeworlds_prepare_play_position(&before);
+  before.systems[0].ships[0][1] = yellow_small;
+  before.systems[2].stars[0] = red_large;
+  test_homeworlds_remove_bank_piece(&before, yellow_small);
+  test_homeworlds_remove_bank_piece(&before, red_large);
+  homeworlds_position_rebuild_color_counts(&before);
+
+  HomeworldsMove sacrifice_move = {
+    .kind = HOMEWORLDS_MOVE_KIND_TURN,
+    .step_count = 2,
+    .steps =
+        {
+          {
+            .kind = HOMEWORLDS_STEP_SACRIFICE,
+            .actor = test_homeworlds_ship_ref(homeworld_1, yellow_small),
+          },
+          {
+            .kind = HOMEWORLDS_STEP_MOVE,
+            .actor = test_homeworlds_ship_ref(homeworld_1, green_large),
+            .target_system = target_system,
+          },
+        },
+  };
+  test_homeworlds_collect_previous_markers_for_move(&before, &sacrifice_move, &after, markers, &marker_count);
+  g_assert_cmpuint(marker_count, ==, 1);
+  test_homeworlds_assert_previous_marker(&markers[0],
+                                         HOMEWORLDS_VIEW_PREVIOUS_MOVE_MARKER_MOVE,
+                                         2,
+                                         TRUE,
+                                         0,
+                                         0,
+                                         green_large,
+                                         HOMEWORLDS_COLOR_YELLOW);
+}
+
 static void test_homeworlds_prepare_compact_row_position(HomeworldsPosition *position) {
   g_return_if_fail(position != NULL);
 
@@ -1988,6 +2242,12 @@ int main(int argc, char **argv) {
   g_test_add_func("/homeworlds/view/board-height-expands-for-tall-rows",
                   test_homeworlds_view_board_content_height_expands_for_tall_rows);
   g_test_add_func("/homeworlds/view/piece-metrics", test_homeworlds_view_piece_metrics_keep_pyramids_tall);
+  g_test_add_func("/homeworlds/view/previous-move-markers-ship-actions",
+                  test_homeworlds_view_previous_move_markers_describe_ship_actions);
+  g_test_add_func("/homeworlds/view/previous-move-markers-catastrophes",
+                  test_homeworlds_view_previous_move_markers_describe_catastrophes);
+  g_test_add_func("/homeworlds/view/previous-move-markers-skip-sacrifice",
+                  test_homeworlds_view_previous_move_markers_skip_sacrifice_step);
   if (!gtk_init_check()) {
     g_test_add_func("/homeworlds/window/replaces-skeleton", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/window/main-split-can-exceed-height", test_homeworlds_window_skip);

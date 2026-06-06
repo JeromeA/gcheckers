@@ -234,8 +234,8 @@ Collaborates with: `GCheckersModel` compatibility callers plus generic `GGameMod
 validation/application, `BoardView` to clear selection on replay/reset, and `GGameWindow` via the `manual-requested`
 signal for SGF navigation/edit flows. Starting a fresh game resets the SGF tree and emits `node-changed`, but does
 not force player controls back to user mode. Manual SGF navigation also cancels any pending automatic computer reply.
-Also exposes the current node's move so board overlays can use the same path for step-by-step and replay-based
-navigation.
+Also exposes the current node's move and a parent-node replay helper so board overlays and custom board hosts can
+describe the selected move from the same pre-move position used by SGF navigation.
 Pending move confirmations can still accept further backend builder steps before falling back to selection reset, which
 lets boop disambiguate between confirming a single-kitten graduation and continuing to select a line promotion.
 
@@ -708,8 +708,11 @@ paired depth-1 self-play against the default weights. Each seed produces one gam
 with the baseline starting, and aggregate wins are counted from the side-aware outcome. It reports one CSV-style
 summary row per tested value. It frees any generated candidate list before leaving an error path. The Homeworlds board
 host also syncs its
-last-move label from SGF current-node changes so timeline
-navigation and direct play report the same move. Human interaction
+last-move label and previous-move board markers from SGF current-node changes so timeline
+navigation and direct play report the same move. The board markers reuse the reconstructed parent position to mark
+built ships, trades, moves, captures, and one marker per surviving catastrophe system while omitting sacrifice steps
+themselves.
+Human interaction
 advances
 `homeworlds_move_builder` one visible choice at a time and sends each completed `HomeworldsMove` to the generic window
 move handler. Manual catastrophes update the builder's working position and are emitted as part of the same multi-step
@@ -905,8 +908,9 @@ Module: move overlay renderer.
 Role: draw the selected SGF node's last-move overlay via cairo on top of the shared square-grid board and, when the
 game is over, a centered backend-provided winner banner across the board. Checkers draws its move path as translucent
 green arrows. Boop circles the placed kitten/cat in the same translucent green, draws arrows for every piece that was
-booped, and marks each removed kitten/cat with a red cross, reconstructing the pre-move position from the SGF parent
-node so the overlay matches the actual boop resolution. Removed-piece crosses are painted above boop arrows so
+booped, and marks each removed kitten/cat with a red cross, reconstructing the pre-move position through the shared
+SGF parent-node helper so the overlay matches the actual boop resolution. Removed-piece crosses are painted above boop
+arrows so
 off-board returns to supply still leave a visible removal mark. Ongoing positions never draw a banner, even if a
 backend accidentally returns non-NULL text for `GAME_BACKEND_OUTCOME_ONGOING`.
 Collaborates with: `BoardView`, `GGameModel` for backend-driven board state, and `GGameSgfController` for the

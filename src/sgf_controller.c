@@ -345,6 +345,56 @@ gboolean ggame_sgf_controller_replay_node_into_position(const SgfNode *node,
   return ggame_sgf_controller_replay_node_path_into_position(node, backend, position, error);
 }
 
+gboolean ggame_sgf_controller_replay_parent_node_for_move(const SgfNode *node,
+                                                          const GameBackend *backend,
+                                                          gpointer parent_position,
+                                                          gpointer out_move,
+                                                          SgfColor *out_color,
+                                                          gboolean *out_has_move,
+                                                          GError **error) {
+  const SgfNode *parent = NULL;
+
+  g_return_val_if_fail(node != NULL, FALSE);
+  g_return_val_if_fail(backend != NULL, FALSE);
+  g_return_val_if_fail(parent_position != NULL, FALSE);
+  g_return_val_if_fail(out_move != NULL, FALSE);
+  g_return_val_if_fail(out_color != NULL, FALSE);
+  g_return_val_if_fail(out_has_move != NULL, FALSE);
+  g_return_val_if_fail(backend->move_size > 0, FALSE);
+  g_return_val_if_fail(backend->position_turn != NULL, FALSE);
+
+  memset(out_move, 0, backend->move_size);
+  *out_color = SGF_COLOR_NONE;
+  *out_has_move = FALSE;
+
+  parent = sgf_node_get_parent(node);
+  if (parent == NULL) {
+    return TRUE;
+  }
+
+  if (!sgf_move_props_try_parse_node(node, out_color, out_move, out_has_move, error)) {
+    return FALSE;
+  }
+  if (!*out_has_move) {
+    return TRUE;
+  }
+  if (!ggame_sgf_controller_replay_node_into_position(parent, backend, parent_position, error)) {
+    return FALSE;
+  }
+
+  SgfColor expected_color = ggame_sgf_controller_color_from_side(backend, backend->position_turn(parent_position));
+  if (expected_color == SGF_COLOR_NONE || *out_color != expected_color) {
+    g_set_error(error,
+                g_quark_from_static_string("gcheckers-sgf-controller-error"),
+                16,
+                "Unexpected SGF side to move for node %u",
+                sgf_node_get_move_number(node));
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
 static gboolean ggame_sgf_controller_replay_to_node_checkers(GGameSgfController *self, const SgfNode *node) {
   g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(GCHECKERS_IS_MODEL(self->checkers_model), FALSE);

@@ -28,6 +28,13 @@ gboolean ggame_sgf_controller_replay_node_into_position(const SgfNode *node,
                                                         const GameBackend *backend,
                                                         gpointer position,
                                                         GError **error);
+gboolean ggame_sgf_controller_replay_parent_node_for_move(const SgfNode *node,
+                                                          const GameBackend *backend,
+                                                          gpointer parent_position,
+                                                          gpointer out_move,
+                                                          SgfColor *out_color,
+                                                          gboolean *out_has_move,
+                                                          GError **error);
 gboolean ggame_sgf_controller_apply_move(GGameSgfController *self, gconstpointer move);
 gboolean ggame_sgf_controller_step_ai_move(GGameSgfController *self, guint depth, gpointer out_move);
 gboolean ggame_sgf_controller_rewind_to_start(GGameSgfController *self);
