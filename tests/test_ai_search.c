@@ -21,6 +21,12 @@ typedef struct {
   guint cancel_after;
 } TestAiCancelState;
 
+typedef struct {
+  gint delta;
+  gint score;
+  guint calls;
+} TestAiKnownRootScoreState;
+
 static guint test_good_move_only_list_good_moves_calls = 0;
 static guint test_good_move_only_static_evaluate_calls = 0;
 static GPtrArray *test_good_move_only_retired_move_lists = NULL;
@@ -32,6 +38,23 @@ static gboolean test_ai_cancel_after_n_calls(gpointer user_data) {
 
   state->calls++;
   return state->calls > state->cancel_after;
+}
+
+static gboolean test_ai_known_root_score(gconstpointer move, gint *out_score, gpointer user_data) {
+  const TestGoodMoveOnlyMove *good_move = move;
+  TestAiKnownRootScoreState *state = user_data;
+
+  g_return_val_if_fail(good_move != NULL, FALSE);
+  g_return_val_if_fail(out_score != NULL, FALSE);
+  g_return_val_if_fail(state != NULL, FALSE);
+
+  state->calls++;
+  if (good_move->delta != state->delta) {
+    return FALSE;
+  }
+
+  *out_score = state->score;
+  return TRUE;
 }
 
 static void test_init_game_with_ruleset(Game *game, PlayerRuleset ruleset) {
@@ -434,6 +457,42 @@ static void test_ai_search_cancellation_clears_partial_root_results(void) {
   test_good_move_only_release_retired_move_lists();
 }
 
+static void test_ai_search_known_root_scores_skip_recursive_search(void) {
+  TestGoodMoveOnlyPosition position = {0};
+  TestAiKnownRootScoreState known_score = {
+    .delta = 1,
+    .score = 4000,
+  };
+  GameAiSearchStats stats = {0};
+  GameAiScoredMoveList scored_moves = {0};
+
+  test_good_move_only_position_init(&position, NULL);
+  test_good_move_only_static_evaluate_calls = 0;
+  game_ai_search_stats_clear(&stats);
+
+  assert(game_ai_search_analyze_moves_cancellable_with_tt_and_known_scores(&test_good_move_only_backend,
+                                                                           &position,
+                                                                           0,
+                                                                           &scored_moves,
+                                                                           NULL,
+                                                                           NULL,
+                                                                           NULL,
+                                                                           NULL,
+                                                                           test_ai_known_root_score,
+                                                                           &known_score,
+                                                                           NULL,
+                                                                           &stats));
+  assert(scored_moves.count == 2);
+  assert(known_score.calls == 2);
+  assert(((TestGoodMoveOnlyMove *)scored_moves.moves[0].move)->delta == 1);
+  assert(scored_moves.moves[0].score == 4000);
+  assert(scored_moves.moves[0].nodes == 0);
+  assert(test_good_move_only_static_evaluate_calls == 0);
+
+  game_ai_scored_move_list_free(&scored_moves);
+  test_good_move_only_release_retired_move_lists();
+}
+
 static void test_ai_search_tt_stores_best_move_before_freeing_move_list(void) {
   TestGoodMoveOnlyPosition position = {0};
   TestGoodMoveOnlyPosition child_position = {
@@ -485,6 +544,7 @@ int main(int argc, char **argv) {
   test_ai_search_depth_zero_skips_child_moves_without_forced_extension();
   test_ai_search_forced_extension_is_backend_opt_in();
   test_ai_search_cancellation_clears_partial_root_results();
+  test_ai_search_known_root_scores_skip_recursive_search();
   test_ai_search_tt_stores_best_move_before_freeing_move_list();
 
   return 0;

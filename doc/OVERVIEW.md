@@ -69,7 +69,9 @@ setting. Current-position analysis iterates up to the selected depth, and full-g
 depth as a fixed search limit. Analysis menu entries are one-shot actions, so SGF navigation does not implicitly keep
 restarting current-position analysis. Full-game analysis reconstructs each node position from SGF replay semantics
 (setup properties plus moves from root to the exact node), so setup-root puzzle files and edited SGF setup nodes share
-the same position source of truth as normal controller navigation.
+the same position source of truth as normal controller navigation. Root-move analysis can reuse direct SGF child
+analyses when the child depth is at least the requested root depth minus one, so previously analyzed played lines stay
+consistent and are not searched again.
 Board orientation is runtime-only window state: live games choose `follow-player`, `follow-turn`, or `fixed`
 orientation based on the new-game player modes, and SGF review/manual navigation switches back to `fixed` so analysis
 navigation does not keep rotating the board. SGF navigation does not mutate the player-mode dropdowns; `User` and
@@ -129,8 +131,6 @@ attached to SGF nodes on the main thread, while text in the panel is formatted f
 Analysis score text always shows an explicit `+` sign for positive centipawn-style values and converts known terminal
 score bands, including Homeworlds `900..1000` and checkers `2900..3000`, into compact `W#X` / `B#X`
 mate-distance-style labels.
-Per-move analysis lines also include the root-search node count used to score that move, making TT-assisted shortcuts
-visible in the report text.
 Static material in search also values man advancement: men gain `+1/+2/+3` as they get within three rows of
 promotion, while the standalone static-material API remains pure material.
 Full-game completion gating uses processed-job counts (not only payload-attached counts), so terminal/no-move nodes do
@@ -972,11 +972,11 @@ properties, and every node including the root is rejected if it contains both co
 name when the backend has variants, and is omitted/accepted as missing for zero-variant games such as boop. Node
 analysis persists through custom properties:
 `GCAD[depth]`, `GCAS[nodes=...;tt_probes=...;tt_hits=...;tt_cutoffs=...]`, and repeated
-`GCAN[move:score:nodes]` for scored moves, while still accepting older `GCAN[move:score]` data when loading. `GCAN`
-values are formatted dynamically so long analysis move labels are not truncated, and empty analysis move labels are
-rejected on load. Analysis stat lists reject empty fields, and unsigned SGF numeric fields reject signed text and range
-errors. Empty SGF trees and empty nested variations are rejected instead of being discarded. This layer is GTK-free so
-it can be reused by both GUI actions and future CLI commands.
+`GCAN[move:score]` for scored moves, while ignoring the trailing node count in older `GCAN[move:score:nodes]` data
+when loading. `GCAN` values are formatted dynamically so long analysis move labels are not truncated, and empty
+analysis move labels are rejected on load. Analysis stat lists reject empty fields, and unsigned SGF numeric fields
+reject signed text and range errors. Empty SGF trees and empty nested variations are rejected instead of being
+discarded. This layer is GTK-free so it can be reused by both GUI actions and future CLI commands.
 Collaborates with: `GGameSgfController` load/save entry points and `tests/test_sgf_io.c`.
 
 ### SGF autosave (`src/sgf_autosave.c`, `src/sgf_autosave.h`)

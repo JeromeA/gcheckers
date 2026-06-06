@@ -376,7 +376,8 @@ static void test_sgf_io_roundtrip_node_analysis_properties(void) {
   g_assert_nonnull(serialized);
   g_assert_nonnull(strstr(serialized, "GCAD[7]"));
   g_assert_nonnull(strstr(serialized, "GCAS[nodes=1500;tt_probes=700;tt_hits=250;tt_cutoffs=90]"));
-  g_assert_nonnull(strstr(serialized, "GCAN[13-17:12:345]"));
+  g_assert_nonnull(strstr(serialized, "GCAN[13-17:12]"));
+  g_assert_null(strstr(serialized, "GCAN[13-17:12:345]"));
 
   g_autoptr(SgfTree) loaded = NULL;
   g_assert_true(sgf_io_load_data(serialized, &loaded, &error));
@@ -401,7 +402,7 @@ static void test_sgf_io_roundtrip_node_analysis_properties(void) {
   g_assert_nonnull(loaded_long_move);
   g_assert_cmpstr(loaded_long_move->move_text, ==, long_move->str);
   g_assert_cmpint(loaded_long_move->score, ==, -34);
-  g_assert_cmpuint(loaded_long_move->nodes, ==, 987654321);
+  g_assert_cmpuint(loaded_long_move->nodes, ==, 0);
 }
 
 static void test_sgf_io_roundtrip_ruleset_property(void) {
@@ -530,6 +531,34 @@ static void test_sgf_io_load_legacy_analysis_move_properties(void) {
   g_assert_nonnull(entry);
   g_assert_cmpint(entry->score, ==, 12);
   g_assert_true(entry->nodes == 0);
+}
+
+static void test_sgf_io_ignores_legacy_analysis_move_node_count(void) {
+  const char *content =
+      "(;FF[4]CA[UTF-8]AP[gcheckers]GM[40];GCAD[7]GCAS[nodes=1500;tt_probes=700;tt_hits=250;tt_cutoffs=90]"
+      "GCAN[13-17:12:345]W[13-17])";
+
+  g_autoptr(SgfTree) loaded = NULL;
+  g_autoptr(GError) error = NULL;
+  g_assert_true(sgf_io_load_data(content, &loaded, &error));
+  g_assert_no_error(error);
+  g_assert_nonnull(loaded);
+
+  const SgfNode *root = sgf_tree_get_root(loaded);
+  const GPtrArray *children = sgf_node_get_children(root);
+  g_assert_nonnull(children);
+  g_assert_cmpuint(children->len, ==, 1);
+
+  const SgfNode *node = g_ptr_array_index((GPtrArray *)children, 0);
+  g_assert_nonnull(node);
+  g_autoptr(SgfNodeAnalysis) analysis = sgf_node_get_analysis(node);
+  g_assert_nonnull(analysis);
+  g_assert_cmpuint(analysis->moves->len, ==, 1);
+
+  const SgfNodeScoredMove *entry = g_ptr_array_index(analysis->moves, 0);
+  g_assert_nonnull(entry);
+  g_assert_cmpint(entry->score, ==, 12);
+  g_assert_cmpuint(entry->nodes, ==, 0);
 }
 
 static void test_sgf_io_rejects_negative_analysis_stats(void) {
@@ -703,6 +732,8 @@ int main(int argc, char **argv) {
       g_test_add_func("/sgf-io/ruleset-missing", test_sgf_io_rejects_missing_ruleset_property);
       g_test_add_func("/sgf-io/analysis-roundtrip", test_sgf_io_roundtrip_node_analysis_properties);
       g_test_add_func("/sgf-io/load-legacy-analysis-move", test_sgf_io_load_legacy_analysis_move_properties);
+      g_test_add_func("/sgf-io/ignore-legacy-analysis-move-node-count",
+                      test_sgf_io_ignores_legacy_analysis_move_node_count);
       g_test_add_func("/sgf-io/reject-negative-analysis-stats", test_sgf_io_rejects_negative_analysis_stats);
       g_test_add_func("/sgf-io/reject-empty-analysis-stats-field",
                       test_sgf_io_rejects_empty_analysis_stats_field);

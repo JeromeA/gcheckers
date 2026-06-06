@@ -46,6 +46,13 @@ typedef struct {
   guint move_number;
 } TestGGameWindowSgfMoveWait;
 
+typedef struct {
+  const SgfNode *node;
+  guint expected_depth;
+  const char *expected_move;
+  gint expected_score;
+} TestGGameWindowAnalysisScoreWait;
+
 static void test_analysis_graph_score_compression(void) {
   g_assert_cmpfloat_with_epsilon(analysis_graph_compress_score(0.0), 0.0, 0.000001);
   g_assert_cmpfloat_with_epsilon(analysis_graph_compress_score(1800.0), 900.0, 0.000001);
@@ -684,6 +691,27 @@ static gboolean test_ggame_window_sgf_move_matches(gpointer user_data) {
 
   const SgfNode *current = sgf_tree_get_current(wait->tree);
   return current != NULL && sgf_node_get_move_number(current) == wait->move_number;
+}
+
+static gboolean test_ggame_window_analysis_score_matches(gpointer user_data) {
+  TestGGameWindowAnalysisScoreWait *wait = user_data;
+
+  g_return_val_if_fail(wait != NULL, FALSE);
+  g_return_val_if_fail(wait->node != NULL, FALSE);
+  g_return_val_if_fail(wait->expected_move != NULL, FALSE);
+
+  g_autoptr(SgfNodeAnalysis) analysis = sgf_node_get_analysis(wait->node);
+  if (analysis == NULL || analysis->depth != wait->expected_depth ||
+      analysis->moves == NULL || analysis->moves->len == 0) {
+    return FALSE;
+  }
+
+  const SgfNodeScoredMove *entry = g_ptr_array_index(analysis->moves, 0);
+  if (entry == NULL) {
+    return FALSE;
+  }
+
+  return g_strcmp0(entry->move_text, wait->expected_move) == 0 && entry->score == wait->expected_score;
 }
 
 static gboolean test_ggame_window_adjustment_has_positive_value(gpointer user_data) {
@@ -1838,6 +1866,51 @@ static void test_ggame_window_node_selection_updates_report(void) {
   g_autofree char *root_text = test_ggame_window_get_analysis_text(window);
   g_assert_nonnull(root_text);
   g_assert_cmpstr(root_text, ==, "");
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
+static void test_ggame_window_analysis_reuses_direct_child_score(void) {
+  GtkApplication *app = test_ggame_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GGameWindow *window = test_ggame_window_new(app, model);
+
+  GGameSgfController *controller = ggame_window_get_sgf_controller(window);
+  g_assert_nonnull(controller);
+  SgfTree *tree = ggame_sgf_controller_get_tree(controller);
+  g_assert_nonnull(tree);
+
+  const SgfNode *root = sgf_tree_get_root(tree);
+  g_assert_nonnull(root);
+  SgfNode *child = (SgfNode *)sgf_tree_append_move(tree, SGF_COLOR_WHITE, "22-18");
+  g_assert_nonnull(child);
+
+  g_autoptr(SgfNodeAnalysis) child_analysis = sgf_node_analysis_new();
+  g_assert_nonnull(child_analysis);
+  child_analysis->depth = 1;
+  g_assert_true(sgf_node_analysis_add_scored_move(child_analysis, "11-15", 4321, 17));
+  g_assert_true(sgf_node_set_analysis(child, child_analysis));
+
+  g_assert_true(ggame_sgf_controller_select_node(controller, root));
+  ggame_window_set_analysis_depth(window, 2);
+  test_ggame_window_wait_for_draw(window);
+
+  GAction *action = g_action_map_lookup_action(G_ACTION_MAP(window), "analysis-current-position");
+  g_assert_nonnull(action);
+  g_action_activate(action, NULL);
+
+  TestGGameWindowAnalysisScoreWait wait = {
+    .node = root,
+    .expected_depth = 2,
+    .expected_move = "22-18",
+    .expected_score = 4321,
+  };
+  g_assert_true(test_ggame_window_wait_until(window,
+                                            test_ggame_window_analysis_score_matches,
+                                            &wait,
+                                            5 * G_USEC_PER_SEC));
 
   g_clear_object(&window);
   g_clear_object(&model);
@@ -3009,6 +3082,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/gcheckers-window/sgf-actions-navigate", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/analysis-actions", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/analysis-depth-slider", test_ggame_window_skip);
+    g_test_add_func("/gcheckers-window/analysis-reuses-direct-child-score", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/node-selection-updates-report", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/settings-dialog", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/game-information-dialog", test_ggame_window_skip);
@@ -3077,6 +3151,8 @@ int main(int argc, char **argv) {
   g_test_add_func("/gcheckers-window/analysis-actions", test_ggame_window_analysis_actions_exist);
   g_test_add_func("/gcheckers-window/analysis-depth-slider",
                   test_ggame_window_analysis_depth_slider_is_independent);
+  g_test_add_func("/gcheckers-window/analysis-reuses-direct-child-score",
+                  test_ggame_window_analysis_reuses_direct_child_score);
   g_test_add_func("/gcheckers-window/node-selection-updates-report",
                   test_ggame_window_node_selection_updates_report);
   g_test_add_func("/gcheckers-window/settings-dialog",

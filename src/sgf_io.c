@@ -471,35 +471,20 @@ static gboolean sgf_io_parse_analysis_move(const char *value,
   *out_move_text = NULL;
   *out_nodes = 0;
 
-  const char *last_sep = strrchr(value, ':');
-  if (last_sep == NULL || last_sep == value || last_sep[1] == '\0') {
+  const char *score_sep = strchr(value, ':');
+  if (score_sep == NULL || score_sep == value || score_sep[1] == '\0') {
     return FALSE;
-  }
-
-  const char *score_sep = last_sep;
-  const char *nodes_sep = NULL;
-  for (const char *cursor = last_sep - 1; cursor >= value; --cursor) {
-    if (*cursor == ':') {
-      nodes_sep = last_sep;
-      score_sep = cursor;
-      break;
-    }
-    if (cursor == value) {
-      break;
-    }
   }
 
   g_autofree char *notation = g_strndup(value, (gsize)(score_sep - value));
   if (notation[0] == '\0') {
     return FALSE;
   }
+  const char *nodes_sep = strchr(score_sep + 1, ':');
   const char *score_end = nodes_sep != NULL ? nodes_sep : value + strlen(value);
   g_autofree char *score_text =
       g_strndup(score_sep + 1, (gsize)(score_end - score_sep - 1));
   if (!sgf_io_parse_int(score_text, out_score)) {
-    return FALSE;
-  }
-  if (nodes_sep != NULL && !sgf_io_parse_uint64(nodes_sep + 1, out_nodes)) {
     return FALSE;
   }
   *out_move_text = g_steal_pointer(&notation);
@@ -596,8 +581,7 @@ static gboolean sgf_io_sync_analysis_properties(SgfNode *node, GError **error) {
     g_return_val_if_fail(entry != NULL, FALSE);
     g_return_val_if_fail(entry->move_text != NULL, FALSE);
 
-    g_autofree char *encoded =
-        g_strdup_printf("%s:%d:%" G_GUINT64_FORMAT, entry->move_text, entry->score, entry->nodes);
+    g_autofree char *encoded = g_strdup_printf("%s:%d", entry->move_text, entry->score);
     if (!sgf_node_add_property(node, SGF_IO_PROP_ANALYSIS_MOVE, encoded)) {
       g_set_error_literal(error, sgf_io_error_quark(), SGF_IO_ANALYSIS_PROP_MOVE, "Unable to write GCAN");
       return FALSE;

@@ -26,6 +26,7 @@ typedef struct {
 } GameAiSearchStats;
 
 typedef void (*GameAiProgressFunc)(const GameAiSearchStats *stats, gpointer user_data);
+typedef gboolean (*GameAiKnownRootScoreFunc)(gconstpointer move, gint *out_score, gpointer user_data);
 
 typedef enum {
   GAME_AI_TT_BOUND_EXACT = 0,
@@ -84,6 +85,18 @@ gboolean game_ai_search_analyze_moves_cancellable_with_tt(const GameBackend *bac
                                                           gpointer progress_user_data,
                                                           GameAiTranspositionTable *tt,
                                                           GameAiSearchStats *out_stats);
+gboolean game_ai_search_analyze_moves_cancellable_with_tt_and_known_scores(const GameBackend *backend,
+                                                                           gconstpointer position,
+                                                                           guint max_depth,
+                                                                           GameAiScoredMoveList *out_moves,
+                                                                           GameAiCancelFunc should_cancel,
+                                                                           gpointer user_data,
+                                                                           GameAiProgressFunc on_progress,
+                                                                           gpointer progress_user_data,
+                                                                           GameAiKnownRootScoreFunc known_score,
+                                                                           gpointer known_score_user_data,
+                                                                           GameAiTranspositionTable *tt,
+                                                                           GameAiSearchStats *out_stats);
 gboolean game_ai_search_evaluate_position(const GameBackend *backend,
                                           gconstpointer position,
                                           guint max_depth,

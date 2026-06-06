@@ -111,6 +111,7 @@ typedef struct {
   guint8 *position;
   gint generation;
   GameAiTranspositionTable *tt;
+  GPtrArray *known_child_scores;
   guint current_depth;
   guint target_depth;
   gint64 last_progress_publish_us;
@@ -163,10 +164,23 @@ typedef struct {
   guint depth;
   GameAiTranspositionTable *tt;
   GPtrArray *jobs;
+  GHashTable *analysis_by_node;
   guint64 explored_nodes;
   guint current_job_index;
   gint64 last_progress_publish_us;
 } GGameWindowFullAnalysisTask;
+
+typedef struct {
+  guint8 *move;
+  guint analysis_depth;
+  gint score;
+} GGameWindowKnownChildScore;
+
+typedef struct {
+  const GameBackend *backend;
+  const GPtrArray *scores;
+  guint min_analysis_depth;
+} GGameWindowKnownChildScoreLookup;
 
 static void ggame_window_analysis_sync_ui(GGameWindow *self);
 static void ggame_window_analysis_reset_runtime_state(GGameWindow *self);
@@ -2434,6 +2448,141 @@ static gboolean ggame_window_node_first_score(const SgfNode *node, gint *out_sco
   return TRUE;
 }
 
+static void ggame_window_known_child_score_free(gpointer data) {
+  GGameWindowKnownChildScore *score = data;
+  if (score == NULL) {
+    return;
+  }
+
+  g_clear_pointer(&score->move, g_free);
+  g_free(score);
+}
+
+static const char *ggame_window_child_move_text(const SgfNode *node) {
+  g_return_val_if_fail(node != NULL, NULL);
+
+  const char *black_move = sgf_node_get_property_first(node, "B");
+  const char *white_move = sgf_node_get_property_first(node, "W");
+  if (black_move != NULL && white_move != NULL) {
+    g_debug("Skipping SGF child with both B[] and W[] while reusing analysis");
+    return NULL;
+  }
+
+  return black_move != NULL ? black_move : white_move;
+}
+
+static gboolean ggame_window_node_first_analysis_score(const SgfNode *node,
+                                                       guint min_analysis_depth,
+                                                       const GHashTable *analysis_by_node,
+                                                       gint *out_score,
+                                                       guint *out_analysis_depth) {
+  g_return_val_if_fail(node != NULL, FALSE);
+  g_return_val_if_fail(out_score != NULL, FALSE);
+  g_return_val_if_fail(out_analysis_depth != NULL, FALSE);
+
+  const SgfNodeAnalysis *analysis = NULL;
+  if (analysis_by_node != NULL) {
+    analysis = g_hash_table_lookup((GHashTable *)analysis_by_node, node);
+  }
+
+  g_autoptr(SgfNodeAnalysis) stored_analysis = NULL;
+  if (analysis == NULL) {
+    stored_analysis = sgf_node_get_analysis(node);
+    analysis = stored_analysis;
+  }
+  if (analysis == NULL || analysis->depth < min_analysis_depth ||
+      analysis->moves == NULL || analysis->moves->len == 0) {
+    return FALSE;
+  }
+
+  const SgfNodeScoredMove *entry = g_ptr_array_index(analysis->moves, 0);
+  if (entry == NULL) {
+    return FALSE;
+  }
+
+  *out_score = entry->score;
+  *out_analysis_depth = analysis->depth;
+  return TRUE;
+}
+
+static GPtrArray *ggame_window_build_known_child_scores(const GameBackend *backend,
+                                                        const SgfNode *node,
+                                                        guint min_analysis_depth,
+                                                        const GHashTable *analysis_by_node) {
+  g_return_val_if_fail(backend != NULL, NULL);
+  g_return_val_if_fail(node != NULL, NULL);
+  if (backend->parse_move == NULL || backend->moves_equal == NULL || backend->move_size == 0) {
+    return NULL;
+  }
+
+  GPtrArray *scores = g_ptr_array_new_with_free_func(ggame_window_known_child_score_free);
+  const GPtrArray *children = sgf_node_get_children(node);
+  if (children == NULL) {
+    return scores;
+  }
+
+  for (guint i = 0; i < children->len; ++i) {
+    const SgfNode *child = g_ptr_array_index((GPtrArray *)children, i);
+    if (child == NULL) {
+      continue;
+    }
+
+    gint score = 0;
+    guint analysis_depth = 0;
+    if (!ggame_window_node_first_analysis_score(child,
+                                                min_analysis_depth,
+                                                analysis_by_node,
+                                                &score,
+                                                &analysis_depth)) {
+      continue;
+    }
+
+    const char *notation = ggame_window_child_move_text(child);
+    if (notation == NULL || notation[0] == '\0') {
+      continue;
+    }
+
+    g_autofree guint8 *move = g_malloc0(backend->move_size);
+    if (!backend->parse_move(notation, move)) {
+      g_debug("Skipping unparseable SGF child move while reusing analysis: %s", notation);
+      continue;
+    }
+
+    GGameWindowKnownChildScore *known = g_new0(GGameWindowKnownChildScore, 1);
+    known->move = g_steal_pointer(&move);
+    known->analysis_depth = analysis_depth;
+    known->score = score;
+    g_ptr_array_add(scores, known);
+  }
+
+  return scores;
+}
+
+static gboolean ggame_window_known_child_score_lookup(gconstpointer move, gint *out_score, gpointer user_data) {
+  const GGameWindowKnownChildScoreLookup *lookup = user_data;
+  g_return_val_if_fail(move != NULL, FALSE);
+  g_return_val_if_fail(out_score != NULL, FALSE);
+  g_return_val_if_fail(lookup != NULL, FALSE);
+  g_return_val_if_fail(lookup->backend != NULL, FALSE);
+
+  if (lookup->scores == NULL) {
+    return FALSE;
+  }
+
+  for (guint i = 0; i < lookup->scores->len; ++i) {
+    const GGameWindowKnownChildScore *known = g_ptr_array_index((GPtrArray *)lookup->scores, i);
+    if (known == NULL || known->move == NULL || known->analysis_depth < lookup->min_analysis_depth) {
+      continue;
+    }
+    if (lookup->backend->moves_equal(move, known->move)) {
+      *out_score = known->score;
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
 static void ggame_window_analysis_event_free(gpointer data) {
   GGameWindowAnalysisEvent *event = data;
   if (event == NULL) {
@@ -2833,7 +2982,12 @@ static gpointer ggame_window_analysis_thread(gpointer user_data) {
     ggame_window_analysis_on_progress(&task->cumulative_stats, task);
 
     GameAiScoredMoveList moves = {0};
-    gboolean ok = game_ai_search_analyze_moves_cancellable_with_tt(
+    GGameWindowKnownChildScoreLookup known_scores = {
+        .backend = task->backend,
+        .scores = task->known_child_scores,
+        .min_analysis_depth = depth > 0 ? depth - 1 : 0,
+    };
+    gboolean ok = game_ai_search_analyze_moves_cancellable_with_tt_and_known_scores(
         task->backend,
         task->position,
         depth,
@@ -2842,6 +2996,8 @@ static gpointer ggame_window_analysis_thread(gpointer user_data) {
         task,
         ggame_window_analysis_on_progress,
         task,
+        ggame_window_known_child_score_lookup,
+        &known_scores,
         task->tt,
         &task->cumulative_stats);
     if (!ok) {
@@ -2891,6 +3047,7 @@ static gpointer ggame_window_analysis_thread(gpointer user_data) {
 
   g_object_unref(task->self);
   game_ai_tt_free(task->tt);
+  g_clear_pointer(&task->known_child_scores, g_ptr_array_unref);
   task->backend->position_clear(task->position);
   g_free(task->position);
   g_free(task);
@@ -3009,7 +3166,17 @@ static gpointer ggame_window_full_analysis_thread(gpointer user_data) {
       continue;
     }
 
-    ok = game_ai_search_analyze_moves_cancellable_with_tt(
+    g_autoptr(GPtrArray) known_child_scores =
+        ggame_window_build_known_child_scores(task->backend,
+                                              job->node,
+                                              task->depth > 0 ? task->depth - 1 : 0,
+                                              task->analysis_by_node);
+    GGameWindowKnownChildScoreLookup known_scores = {
+        .backend = task->backend,
+        .scores = known_child_scores,
+        .min_analysis_depth = task->depth > 0 ? task->depth - 1 : 0,
+    };
+    ok = game_ai_search_analyze_moves_cancellable_with_tt_and_known_scores(
         task->backend,
         analysis_position,
         task->depth,
@@ -3018,6 +3185,8 @@ static gpointer ggame_window_full_analysis_thread(gpointer user_data) {
         task,
         ggame_window_full_analysis_on_progress,
         task,
+        ggame_window_known_child_score_lookup,
+        &known_scores,
         task->tt,
         &stats);
     if (!task->use_checkers_replay && generic_position != NULL) {
@@ -3060,6 +3229,15 @@ static gpointer ggame_window_full_analysis_thread(gpointer user_data) {
       continue;
     }
 
+    if (task->analysis_by_node != NULL) {
+      SgfNodeAnalysis *analysis_copy = sgf_node_analysis_copy(analysis);
+      if (analysis_copy != NULL) {
+        g_hash_table_replace(task->analysis_by_node, (gpointer)job->node, analysis_copy);
+      } else {
+        g_debug("Failed to copy full-game analysis for child-score reuse");
+      }
+    }
+
     g_autofree char *text =
         ggame_window_analysis_format_full_game_status(i + 1, task->jobs->len, task->explored_nodes, NULL);
     gint first_score = 0;
@@ -3095,6 +3273,7 @@ static gpointer ggame_window_full_analysis_thread(gpointer user_data) {
                                            canceled ? "Full-game analysis canceled." : NULL);
 
   g_ptr_array_unref(task->jobs);
+  g_clear_pointer(&task->analysis_by_node, g_hash_table_unref);
   game_ai_tt_free(task->tt);
   g_object_unref(task->self);
   g_free(task);
@@ -3155,6 +3334,7 @@ static void ggame_window_start_analysis(GGameWindow *self) {
   task->generation = generation;
   task->target_node = target_node;
   task->target_depth = ggame_window_get_analysis_depth(self);
+  task->known_child_scores = ggame_window_build_known_child_scores(backend, target_node, 0, NULL);
   task->tt = game_ai_tt_new(GGAME_WINDOW_ANALYSIS_TT_SIZE_MB, backend->move_size);
   if (task->tt == NULL) {
     g_debug("Failed to allocate analysis TT, continuing without TT caching");
@@ -3225,6 +3405,8 @@ static void ggame_window_start_full_game_analysis(GGameWindow *self) {
   task->variant = variant;
   task->depth = depth;
   task->jobs = g_steal_pointer(&jobs);
+  task->analysis_by_node =
+      g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, (GDestroyNotify)sgf_node_analysis_free);
   task->tt = game_ai_tt_new(GGAME_WINDOW_ANALYSIS_TT_SIZE_MB, backend->move_size);
   if (task->tt == NULL) {
     g_debug("Failed to allocate full analysis TT, continuing without TT caching");

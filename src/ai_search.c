@@ -594,6 +594,32 @@ gboolean game_ai_search_analyze_moves_cancellable_with_tt(const GameBackend *bac
                                                           gpointer progress_user_data,
                                                           GameAiTranspositionTable *tt,
                                                           GameAiSearchStats *out_stats) {
+  return game_ai_search_analyze_moves_cancellable_with_tt_and_known_scores(backend,
+                                                                          position,
+                                                                          max_depth,
+                                                                          out_moves,
+                                                                          should_cancel,
+                                                                          user_data,
+                                                                          on_progress,
+                                                                          progress_user_data,
+                                                                          NULL,
+                                                                          NULL,
+                                                                          tt,
+                                                                          out_stats);
+}
+
+gboolean game_ai_search_analyze_moves_cancellable_with_tt_and_known_scores(const GameBackend *backend,
+                                                                           gconstpointer position,
+                                                                           guint max_depth,
+                                                                           GameAiScoredMoveList *out_moves,
+                                                                           GameAiCancelFunc should_cancel,
+                                                                           gpointer user_data,
+                                                                           GameAiProgressFunc on_progress,
+                                                                           gpointer progress_user_data,
+                                                                           GameAiKnownRootScoreFunc known_score,
+                                                                           gpointer known_score_user_data,
+                                                                           GameAiTranspositionTable *tt,
+                                                                           GameAiSearchStats *out_stats) {
   g_return_val_if_fail(backend != NULL, FALSE);
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(out_moves != NULL, FALSE);
@@ -649,8 +675,21 @@ gboolean game_ai_search_analyze_moves_cancellable_with_tt(const GameBackend *bac
     }
 
     const void *move = backend->move_list_get(&moves, i);
+    if (move == NULL) {
+      continue;
+    }
+
+    gint known_move_score = 0;
+    if (known_score != NULL && known_score(move, &known_move_score, known_score_user_data)) {
+      scored_moves[write].move = g_memdup2(move, backend->move_size);
+      scored_moves[write].score = known_move_score;
+      scored_moves[write].nodes = 0;
+      write++;
+      continue;
+    }
+
     gpointer child = g_malloc0(backend->position_size);
-    if (move == NULL || child == NULL) {
+    if (child == NULL) {
       g_free(child);
       continue;
     }
