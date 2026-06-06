@@ -1363,12 +1363,10 @@ sequences could still hit GTK critical warnings while hidden toplevel cleanup wa
 
 The fix replaces those ad hoc drains with `gtk_test_widget_wait_for_draw()` and runs window-heavy test binaries one test
 path per process from `make test`. The harness now finishes collecting a binary's test list before it starts the first
-isolated path, so the listing process cannot overlap another GTK process using the same app. When `xvfb-run` is
-available and no active `DISPLAY` is set, those isolated paths use a private display. Tests that only needed persisted
-or runtime puzzle state now start fixture puzzles directly by SGF path instead of opening the puzzle chooser; chooser
-tests still cover chooser-specific behavior. Isolated GTK paths retry once when the only failure is the reported
-`GLib-GObject-FATAL-CRITICAL: invalid (NULL) pointer instance` GTK toplevel-cleanup critical. The temporary `bug.c`
-repro target was removed after confirming the underlying GTK issue was reported.
+isolated path, so the listing process cannot overlap another GTK process using the same app. Tests that only needed
+persisted or runtime puzzle state now start fixture puzzles directly by SGF path instead of opening the puzzle chooser;
+chooser tests still cover chooser-specific behavior. The temporary `bug.c` repro target was removed after confirming
+the underlying GTK issue was reported.
 
 ## Wrong puzzle move rollback kept the window alive after cleanup
 

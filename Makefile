@@ -250,35 +250,17 @@ $(OBJ_DIR)/%.o: %.c
 
 test: $(TEST_BINS)
 	@/bin/bash -lc 'set -eu; \
-		run_gtk_test() { \
-			output_file="$$(mktemp)"; \
-			if "$$@" >"$$output_file" 2>&1; then \
-				cat "$$output_file"; \
-				rm -f "$$output_file"; \
-				return 0; \
-			fi; \
-			status="$$?"; \
-			cat "$$output_file"; \
-			if grep -q "GLib-GObject-FATAL-CRITICAL: invalid (NULL) pointer instance" "$$output_file"; then \
-				echo "Retrying isolated GTK test after known GTK NULL-instance critical: $$*" >&2; \
-				rm -f "$$output_file"; \
-				"$$@"; \
-				return "$$?"; \
-			fi; \
-			rm -f "$$output_file"; \
-			return "$$status"; \
-		}; \
 		run_isolated() { \
 			test_bin="$$1"; \
 			shift; \
-			test_paths="$$(run_gtk_test "$$test_bin" "$$@" -l)"; \
+			test_paths="$$("$$test_bin" "$$@" -l)"; \
 			while IFS= read -r test_path; do \
 				case "$$test_path" in \
 					"# /"*) test_path="$${test_path#\# }" ;; \
 					/*) ;; \
 					*) continue ;; \
 				esac; \
-				run_gtk_test "$$test_bin" "$$@" -p "$$test_path" || return "$$?"; \
+				"$$test_bin" "$$@" -p "$$test_path" || return "$$?"; \
 			done <<< "$$test_paths"; \
 		}; \
 		for test_bin in $(TEST_NO_PROFILE_BATCH_BINS); do "$$test_bin"; done; \
