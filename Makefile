@@ -250,16 +250,9 @@ $(OBJ_DIR)/%.o: %.c
 
 test: $(TEST_BINS)
 	@/bin/bash -lc 'set -eu; \
-		run_gtk_test_once() { \
-			if [ -z "$${DISPLAY:-}" ] && command -v xvfb-run >/dev/null 2>&1; then \
-				xvfb-run -a "$$@"; \
-			else \
-				"$$@"; \
-			fi; \
-		}; \
 		run_gtk_test() { \
 			output_file="$$(mktemp)"; \
-			if run_gtk_test_once "$$@" >"$$output_file" 2>&1; then \
+			if "$$@" >"$$output_file" 2>&1; then \
 				cat "$$output_file"; \
 				rm -f "$$output_file"; \
 				return 0; \
@@ -269,7 +262,7 @@ test: $(TEST_BINS)
 			if grep -q "GLib-GObject-FATAL-CRITICAL: invalid (NULL) pointer instance" "$$output_file"; then \
 				echo "Retrying isolated GTK test after known GTK NULL-instance critical: $$*" >&2; \
 				rm -f "$$output_file"; \
-				run_gtk_test_once "$$@"; \
+				"$$@"; \
 				return "$$?"; \
 			fi; \
 			rm -f "$$output_file"; \

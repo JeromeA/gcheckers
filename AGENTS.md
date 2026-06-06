@@ -13,6 +13,7 @@
 # Tests
 
 - Always write tests for new features.
+- Run GTK tests on the local display. Do not wrap them in `xvfb-run`; use the existing `$DISPLAY`.
 
 # Before committing
 
