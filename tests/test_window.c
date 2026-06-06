@@ -24,6 +24,7 @@ static void test_ggame_window_skip(void) {
 }
 
 static GtkApplication *test_app = NULL;
+static char *test_bga_import_root = NULL;
 
 typedef gboolean (*TestGGameWindowWaitPredicate)(gpointer user_data);
 
@@ -640,15 +641,12 @@ static gboolean test_ggame_window_wait_cb(gpointer user_data) {
   return G_SOURCE_CONTINUE;
 }
 
-static gboolean test_ggame_window_wait_until(GGameWindow *window,
-                                             TestGGameWindowWaitPredicate predicate,
-                                             gpointer user_data,
-                                             gint64 timeout_us) {
-  g_return_val_if_fail(GGAME_IS_WINDOW(window), FALSE);
+static gboolean test_ggame_window_wait_until_predicate(TestGGameWindowWaitPredicate predicate,
+                                                       gpointer user_data,
+                                                       gint64 timeout_us) {
   g_return_val_if_fail(predicate != NULL, FALSE);
   g_return_val_if_fail(timeout_us > 0, FALSE);
 
-  test_ggame_window_wait_for_draw(window);
   if (predicate(user_data)) {
     return TRUE;
   }
@@ -671,6 +669,60 @@ static gboolean test_ggame_window_wait_until(GGameWindow *window,
   g_main_loop_unref(loop);
 
   return wait.matched;
+}
+
+static gboolean test_ggame_window_wait_until(GGameWindow *window,
+                                             TestGGameWindowWaitPredicate predicate,
+                                             gpointer user_data,
+                                             gint64 timeout_us) {
+  g_return_val_if_fail(GGAME_IS_WINDOW(window), FALSE);
+  g_return_val_if_fail(predicate != NULL, FALSE);
+  g_return_val_if_fail(timeout_us > 0, FALSE);
+
+  test_ggame_window_wait_for_draw(window);
+  if (predicate(user_data)) {
+    return TRUE;
+  }
+
+  return test_ggame_window_wait_until_predicate(predicate, user_data, timeout_us);
+}
+
+static gboolean test_ggame_window_toplevel_title_is_present(gpointer user_data) {
+  const char *title = user_data;
+  g_return_val_if_fail(title != NULL, FALSE);
+
+  GtkWindow *window = test_ggame_window_find_toplevel_by_title(title);
+  if (window == NULL) {
+    return FALSE;
+  }
+
+  g_object_unref(window);
+  return TRUE;
+}
+
+static gboolean test_ggame_window_toplevel_title_is_absent(gpointer user_data) {
+  const char *title = user_data;
+  g_return_val_if_fail(title != NULL, FALSE);
+
+  GtkWindow *window = test_ggame_window_find_toplevel_by_title(title);
+  if (window != NULL) {
+    g_object_unref(window);
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
+static void test_ggame_window_wait_for_toplevel_present(const char *title) {
+  g_assert_true(test_ggame_window_wait_until_predicate(test_ggame_window_toplevel_title_is_present,
+                                                       (gpointer)title,
+                                                       G_TIME_SPAN_SECOND));
+}
+
+static void test_ggame_window_wait_for_toplevel_closed(const char *title) {
+  g_assert_true(test_ggame_window_wait_until_predicate(test_ggame_window_toplevel_title_is_absent,
+                                                       (gpointer)title,
+                                                       G_TIME_SPAN_SECOND));
 }
 
 static gboolean test_ggame_window_checkers_turn_matches(gpointer user_data) {
@@ -2652,11 +2704,6 @@ static void test_ggame_window_import_wizard_flow(void) {
 static void test_ggame_window_import_wizard_uses_cached_history(void) {
   ggame_import_dialog_test_clear_bga_session_cache();
   ggame_import_dialog_test_set_auto_history_refresh_enabled(FALSE);
-  g_autoptr(GError) error = NULL;
-  g_autofree char *cache_root = g_dir_make_tmp("gcheckers-window-import-cache-XXXXXX", &error);
-  g_assert_no_error(error);
-  g_assert_nonnull(cache_root);
-  g_setenv("GCHECKERS_BGA_IMPORT_DIR", cache_root, TRUE);
 
   ggame_import_dialog_test_seed_bga_history("checkers",
                                             "769024787",
@@ -2672,7 +2719,7 @@ static void test_ggame_window_import_wizard_uses_cached_history(void) {
   test_ggame_window_wait_for_draw(window);
 
   g_action_group_activate_action(G_ACTION_GROUP(app), "import", NULL);
-  test_ggame_window_wait_for_draw(window);
+  test_ggame_window_wait_for_toplevel_present("Import games");
 
   GtkWindow *dialog = test_ggame_window_find_toplevel_by_title("Import games");
   g_assert_nonnull(dialog);
@@ -2701,18 +2748,16 @@ static void test_ggame_window_import_wizard_uses_cached_history(void) {
   g_assert_nonnull(row);
   g_assert_false(gtk_widget_get_sensitive(GTK_WIDGET(import_button)));
   gtk_list_box_select_row(GTK_LIST_BOX(list), row);
-  test_ggame_window_wait_for_draw(window);
   g_assert_true(gtk_widget_get_sensitive(GTK_WIDGET(import_button)));
 
   GtkButton *cancel_button = test_ggame_window_find_button_with_label(GTK_WIDGET(dialog), "Cancel");
   g_assert_nonnull(cancel_button);
   g_signal_emit_by_name(cancel_button, "clicked");
-  test_ggame_window_wait_for_draw(window);
-  g_assert_null(test_ggame_window_find_toplevel_by_title("Import games"));
+  g_clear_object(&dialog);
+  test_ggame_window_wait_for_toplevel_closed("Import games");
 
   ggame_import_dialog_test_clear_bga_session_cache();
   ggame_import_dialog_test_set_auto_history_refresh_enabled(TRUE);
-  g_unsetenv("GCHECKERS_BGA_IMPORT_DIR");
   g_clear_object(&window);
   g_clear_object(&model);
   g_clear_object(&app);
@@ -2720,12 +2765,9 @@ static void test_ggame_window_import_wizard_uses_cached_history(void) {
 
 static void test_ggame_window_library_loads_imported_game(void) {
   g_autoptr(GError) error = NULL;
-  g_autofree char *cache_root = g_dir_make_tmp("gcheckers-window-bga-library-XXXXXX", &error);
-  g_assert_no_error(error);
-  g_assert_nonnull(cache_root);
-  g_setenv("GCHECKERS_BGA_IMPORT_DIR", cache_root, TRUE);
+  g_assert_nonnull(test_bga_import_root);
 
-  g_autofree char *profile_dir = g_build_filename(cache_root, "checkers", NULL);
+  g_autofree char *profile_dir = g_build_filename(test_bga_import_root, "checkers", NULL);
   g_assert_cmpint(g_mkdir_with_parents(profile_dir, 0755), ==, 0);
   g_autofree char *path = g_build_filename(profile_dir, "716050283.sgf", NULL);
   const char *content =
@@ -2795,7 +2837,6 @@ static void test_ggame_window_library_loads_imported_game(void) {
   g_assert_cmpuint(saved_len, >, 0);
   g_assert_nonnull(strstr(saved, "C[Saved through File/Save]"));
 
-  g_unsetenv("GCHECKERS_BGA_IMPORT_DIR");
   g_clear_object(&window);
   g_clear_object(&model);
   g_clear_object(&app);
@@ -3060,6 +3101,11 @@ int main(int argc, char **argv) {
   g_assert_no_error(autosave_error);
   g_assert_nonnull(autosave_root);
   g_setenv(SGF_AUTOSAVE_ENV, autosave_root, TRUE);
+  g_autoptr(GError) import_error = NULL;
+  test_bga_import_root = g_dir_make_tmp("gcheckers-window-import-cache-XXXXXX", &import_error);
+  g_assert_no_error(import_error);
+  g_assert_nonnull(test_bga_import_root);
+  g_setenv("GCHECKERS_BGA_IMPORT_DIR", test_bga_import_root, TRUE);
 
   g_test_add_func("/analysis-graph/score-compression", test_analysis_graph_score_compression);
   g_test_add_func("/analysis/score-formatting", test_analysis_score_formatting);

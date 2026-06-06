@@ -43,6 +43,7 @@ typedef struct {
   GtkWindow *dialog;
   GtkStack *stack;
   GtkDropDown *site_drop_down;
+  GtkButton *cancel_button;
   GtkButton *back_button;
   GtkButton *next_button;
   GtkButton *reload_button;
@@ -726,6 +727,40 @@ static void ggame_window_import_dialog_data_free(GGameWindowImportDialogData *da
   g_free(data);
 }
 
+static void ggame_window_import_dialog_disconnect_child_signals(GGameWindowImportDialogData *data) {
+  g_return_if_fail(data != NULL);
+
+  if (G_IS_OBJECT(data->site_drop_down)) {
+    g_signal_handlers_disconnect_by_data(data->site_drop_down, data);
+  }
+  if (G_IS_OBJECT(data->cancel_button)) {
+    g_signal_handlers_disconnect_by_data(data->cancel_button, data);
+  }
+  if (G_IS_OBJECT(data->back_button)) {
+    g_signal_handlers_disconnect_by_data(data->back_button, data);
+  }
+  if (G_IS_OBJECT(data->next_button)) {
+    g_signal_handlers_disconnect_by_data(data->next_button, data);
+  }
+  if (G_IS_OBJECT(data->reload_button)) {
+    g_signal_handlers_disconnect_by_data(data->reload_button, data);
+  }
+  if (G_IS_OBJECT(data->more_button)) {
+    g_signal_handlers_disconnect_by_data(data->more_button, data);
+  }
+  if (G_IS_OBJECT(data->history_list)) {
+    g_signal_handlers_disconnect_by_data(data->history_list, data);
+  }
+}
+
+static void ggame_window_import_dialog_destroy(GGameWindowImportDialogData *data) {
+  g_return_if_fail(data != NULL);
+  g_return_if_fail(GTK_IS_WINDOW(data->dialog));
+
+  ggame_window_import_dialog_disconnect_child_signals(data);
+  gtk_window_destroy(data->dialog);
+}
+
 static void ggame_window_on_import_dialog_destroy(GtkWindow * /*dialog*/, gpointer user_data) {
   GGameWindowImportDialogData *data = user_data;
   g_return_if_fail(data != NULL);
@@ -1250,7 +1285,7 @@ static void ggame_window_on_import_dialog_cancel_clicked(GtkButton * /*button*/,
   g_return_if_fail(data != NULL);
   g_return_if_fail(GTK_IS_WINDOW(data->dialog));
 
-  gtk_window_destroy(data->dialog);
+  ggame_window_import_dialog_destroy(data);
 }
 
 static void ggame_window_on_import_dialog_back_clicked(GtkButton * /*button*/, gpointer user_data) {
@@ -1396,7 +1431,7 @@ static void ggame_import_dialog_import_selected_history_game(GGameWindowImportDi
       ggame_import_dialog_show_error_and_close_wizard(data, "Unable to load cached BoardGameArena game.");
       return;
     }
-    gtk_window_destroy(data->dialog);
+    ggame_window_import_dialog_destroy(data);
     return;
   }
 
@@ -1460,7 +1495,7 @@ static void ggame_import_dialog_import_selected_history_game(GGameWindowImportDi
     return;
   }
 
-  gtk_window_destroy(data->dialog);
+  ggame_window_import_dialog_destroy(data);
 }
 
 static void ggame_window_on_import_dialog_next_clicked(GtkButton * /*button*/, gpointer user_data) {
@@ -1743,6 +1778,7 @@ void ggame_window_present_import_dialog(GGameWindow *self) {
   data->dialog = GTK_WINDOW(dialog);
   data->stack = GTK_STACK(stack);
   data->site_drop_down = site_drop_down;
+  data->cancel_button = GTK_BUTTON(cancel_button);
   data->back_button = GTK_BUTTON(back_button);
   data->next_button = GTK_BUTTON(next_button);
   data->reload_button = GTK_BUTTON(reload_button);

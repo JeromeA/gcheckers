@@ -1389,3 +1389,23 @@ also make the dialog grow instead of forcing the picker area to scroll.
 
 The fix caps the picker scroller's natural height and retries the initial scroll until the adjustment reports a real
 scroll range.
+
+## Import cached-history test repeated GTK draw waits
+
+`gtk_test_widget_wait_for_draw()` can hit a GTK critical when a test calls it repeatedly while toplevel teardown is still
+being processed.
+
+The import cached-history window test waited for a parent-window draw after opening the import dialog, after selecting a
+history row, and again after closing the dialog. The test only needed the first draw to present the main window. The fix
+waits for the import dialog to appear or disappear by running the main context against explicit toplevel predicates, and
+relies on the synchronous row-selection callback for the import button sensitivity check. The BGA import cache directory
+is also set once before GTK initialization, instead of changing `GCHECKERS_BGA_IMPORT_DIR` inside GTK tests.
+
+## Import dialog close emitted child updates during teardown
+
+Closing the import wizard from the cached-history step could emit a late `row-selected` signal while GTK was already
+destroying the dialog's child widgets.
+
+That signal re-entered the import step update path with some child widget pointers no longer valid, which could trigger
+a critical assertion on the history step buttons. The fix disconnects the import dialog's child widget handlers before
+destroying the toplevel from Cancel, cached Load, or imported Load paths.

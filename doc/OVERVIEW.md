@@ -177,6 +177,8 @@ table id in columns, and loads the selected cached SGF.
 Checkers keeps the first import-site selection
 step because its old source list still exists; Boop and Homeworlds skip directly to BoardGameArena credentials because
 their profiles only expose BoardGameArena import.
+Import dialog close/load paths disconnect child widget signal handlers before destroying the toplevel, so GTK teardown
+cannot deliver late row-selection or button updates into partially destroyed dialog state.
 Import fetch flow for BoardGameArena uses a dedicated libcurl client: GET home page, extract `requestToken`, then
 POST `loginUserWithPassword.html` with username/password/remember/request token and logs the HTTP/body result.
 Default panel widths come from the active profile, with `500/300/300` as the checkers baseline. Profiles can also set a
