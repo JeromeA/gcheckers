@@ -626,10 +626,11 @@ ASCII-position text conventions. The public parser only writes the output move a
 evaluation scores player 1's side and player 2's side separately, then subtracts player 2's score from player 1's.
 Each side score counts ship material, homeworld health, and build access: an empty homeworld is scored like a simple
 three-pip setup system with one buildable color, a single-star homeworld is penalized, the largest own ship at each
-player's homeworld is repeated, and each buildable ship color is rewarded once. Ship material uses separate static
-values for one-, two-, and three-pip ships instead of multiplying the size by one shared unit. The default weights are
-exposed through `HomeworldsEvalWeights`, and experimental callers can temporarily replace the active weights while the
-normal application path keeps the defaults. Terminal Homeworlds wins score
+player's homeworld adds a separate size-specific homeworld bonus, and each buildable ship color is rewarded once. Ship
+material and largest-homeworld-ship bonuses each use separate static values for one-, two-, and three-pip ships instead
+of multiplying the size by one shared unit. The default weights are exposed through `HomeworldsEvalWeights`, and
+experimental callers can temporarily replace the active weights while the normal application path keeps the defaults.
+Terminal Homeworlds wins score
 `1000 - ply_depth` for player 1 and the negated value for player 2. Applying a move is transactional: setup and turn
 moves are resolved against a
 working copy and only replace the original position after the full move succeeds, and malformed turn moves with
@@ -701,14 +702,19 @@ by the remaining legal moves from the core
 all-move generator, after a header that counts both groups. The report subtracts the good moves with a structural hash
 set and deduplicates canonical moves. The backend `good_moves()` collector scores complete play-position moves while
 walking the builder tree and retains only the best static-pruned set, so memory remains bounded even when millions of
-complete leaves are reached before pruning. Diagnostic all-move collectors are not capped. The `View` -> `Move report`
-action disables this report before either collector runs. The separate `build/tools/homeworlds_profile_moves`
+complete leaves are reached before pruning. If a `good_moves()` call generates more than 7,000,000 complete leaves,
+the backend prints the current position as ASCII plus the `good_moves()` generated-leaf count and a count-only total
+legal move-path count to stderr; `GCHECKERS_HOMEWORLDS_LARGE_MOVE_DUMP_THRESHOLD` can lower that threshold for
+diagnostic runs and tests. Diagnostic all-move collectors are not capped. The `View` -> `Move report` action disables
+this report before either collector runs. The separate `build/tools/homeworlds_profile_moves`
 CLI applies `--moves` random good moves from a `--seed` or replays the first moves of a Homeworlds SGF main line with
 `--file`, prints an ASCII board snapshot, and then runs the AI at `--depth` and prints the scored moves plus search
 stats. The `build/tools/homeworlds_eval_experiment` CLI varies one static-evaluation weight at a time and runs
 paired depth-1 self-play against the default weights. Each seed produces one game with the candidate starting and one
 with the baseline starting, and aggregate wins are counted from the side-aware outcome. It reports one CSV-style
-summary row per tested value. With `--trace-move-counts`, it uses the Homeworlds backend trace hook to print per-ply
+summary row per tested value. Its variable names are `ship1`, `ship2`, `ship3`, `homeworld-ship1`,
+`homeworld-ship2`, `homeworld-ship3`, `single-star`, and `buildable-color`; the old descriptive ship aliases are not
+accepted. With `--trace-move-counts`, it uses the Homeworlds backend trace hook to print per-ply
 complete-leaf, scored-move, and kept-move counts to stderr without mixing them into the CSV summary. It frees any
 generated candidate list before leaving an error path. The Homeworlds board host also syncs its
 last-move label and previous-move board markers from SGF current-node changes so timeline

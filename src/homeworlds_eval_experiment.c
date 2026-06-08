@@ -17,6 +17,9 @@ typedef enum {
   HOMEWORLDS_EXPERIMENT_VARIABLE_SHIP_1,
   HOMEWORLDS_EXPERIMENT_VARIABLE_SHIP_2,
   HOMEWORLDS_EXPERIMENT_VARIABLE_SHIP_3,
+  HOMEWORLDS_EXPERIMENT_VARIABLE_HOMEWORLD_SHIP_1,
+  HOMEWORLDS_EXPERIMENT_VARIABLE_HOMEWORLD_SHIP_2,
+  HOMEWORLDS_EXPERIMENT_VARIABLE_HOMEWORLD_SHIP_3,
   HOMEWORLDS_EXPERIMENT_VARIABLE_SINGLE_STAR,
   HOMEWORLDS_EXPERIMENT_VARIABLE_BUILDABLE_COLOR,
 } HomeworldsExperimentVariable;
@@ -83,14 +86,23 @@ static GArray *homeworlds_experiment_parse_values(const char *text) {
 static HomeworldsExperimentVariable homeworlds_experiment_parse_variable(const char *text) {
   g_return_val_if_fail(text != NULL, HOMEWORLDS_EXPERIMENT_VARIABLE_NONE);
 
-  if (g_strcmp0(text, "ship1") == 0 || g_strcmp0(text, "small-ship") == 0) {
+  if (g_strcmp0(text, "ship1") == 0) {
     return HOMEWORLDS_EXPERIMENT_VARIABLE_SHIP_1;
   }
-  if (g_strcmp0(text, "ship2") == 0 || g_strcmp0(text, "medium-ship") == 0) {
+  if (g_strcmp0(text, "ship2") == 0) {
     return HOMEWORLDS_EXPERIMENT_VARIABLE_SHIP_2;
   }
-  if (g_strcmp0(text, "ship3") == 0 || g_strcmp0(text, "large-ship") == 0) {
+  if (g_strcmp0(text, "ship3") == 0) {
     return HOMEWORLDS_EXPERIMENT_VARIABLE_SHIP_3;
+  }
+  if (g_strcmp0(text, "homeworld-ship1") == 0) {
+    return HOMEWORLDS_EXPERIMENT_VARIABLE_HOMEWORLD_SHIP_1;
+  }
+  if (g_strcmp0(text, "homeworld-ship2") == 0) {
+    return HOMEWORLDS_EXPERIMENT_VARIABLE_HOMEWORLD_SHIP_2;
+  }
+  if (g_strcmp0(text, "homeworld-ship3") == 0) {
+    return HOMEWORLDS_EXPERIMENT_VARIABLE_HOMEWORLD_SHIP_3;
   }
   if (g_strcmp0(text, "single-star") == 0) {
     return HOMEWORLDS_EXPERIMENT_VARIABLE_SINGLE_STAR;
@@ -109,6 +121,12 @@ static const char *homeworlds_experiment_variable_name(HomeworldsExperimentVaria
       return "ship2";
     case HOMEWORLDS_EXPERIMENT_VARIABLE_SHIP_3:
       return "ship3";
+    case HOMEWORLDS_EXPERIMENT_VARIABLE_HOMEWORLD_SHIP_1:
+      return "homeworld-ship1";
+    case HOMEWORLDS_EXPERIMENT_VARIABLE_HOMEWORLD_SHIP_2:
+      return "homeworld-ship2";
+    case HOMEWORLDS_EXPERIMENT_VARIABLE_HOMEWORLD_SHIP_3:
+      return "homeworld-ship3";
     case HOMEWORLDS_EXPERIMENT_VARIABLE_SINGLE_STAR:
       return "single-star";
     case HOMEWORLDS_EXPERIMENT_VARIABLE_BUILDABLE_COLOR:
@@ -133,6 +151,15 @@ static void homeworlds_experiment_apply_variable(HomeworldsEvalWeights *weights,
       break;
     case HOMEWORLDS_EXPERIMENT_VARIABLE_SHIP_3:
       weights->ship_values[HOMEWORLDS_SIZE_LARGE] = value;
+      break;
+    case HOMEWORLDS_EXPERIMENT_VARIABLE_HOMEWORLD_SHIP_1:
+      weights->homeworld_ship_values[HOMEWORLDS_SIZE_SMALL] = value;
+      break;
+    case HOMEWORLDS_EXPERIMENT_VARIABLE_HOMEWORLD_SHIP_2:
+      weights->homeworld_ship_values[HOMEWORLDS_SIZE_MEDIUM] = value;
+      break;
+    case HOMEWORLDS_EXPERIMENT_VARIABLE_HOMEWORLD_SHIP_3:
+      weights->homeworld_ship_values[HOMEWORLDS_SIZE_LARGE] = value;
       break;
     case HOMEWORLDS_EXPERIMENT_VARIABLE_SINGLE_STAR:
       weights->single_star_homeworld_penalty = value;

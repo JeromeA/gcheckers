@@ -10,6 +10,7 @@ G_BEGIN_DECLS
 
 typedef struct {
   gint ship_values[HOMEWORLDS_SIZE_LARGE + 1];
+  gint homeworld_ship_values[HOMEWORLDS_SIZE_LARGE + 1];
   gint empty_homeworld_value;
   gint single_star_homeworld_penalty;
   gint buildable_color_value;
@@ -24,6 +25,7 @@ guint homeworlds_position_turn(const HomeworldsPosition *position);
 gboolean homeworlds_moves_equal(const HomeworldsMove *left, const HomeworldsMove *right);
 guint homeworlds_move_hash(gconstpointer value);
 GameBackendMoveList homeworlds_position_list_all_moves(const HomeworldsPosition *position);
+gboolean homeworlds_position_count_all_move_paths(const HomeworldsPosition *position, gsize *out_count);
 void homeworlds_move_list_free(GameBackendMoveList *moves);
 const HomeworldsMove *homeworlds_move_list_get(const GameBackendMoveList *moves, gsize index);
 gboolean homeworlds_position_apply_move(HomeworldsPosition *position, const HomeworldsMove *move);

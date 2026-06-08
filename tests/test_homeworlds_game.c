@@ -677,6 +677,28 @@ static void test_static_evaluation_uses_split_ship_size_values(void) {
   assert(homeworlds_position_evaluate_static(&position) == 20);
 }
 
+static void test_static_evaluation_uses_split_homeworld_ship_size_values(void) {
+  HomeworldsPosition position = {0};
+  HomeworldsEvalWeights weights = *homeworlds_eval_weights_default();
+
+  homeworlds_position_init(&position);
+  position.phase = HOMEWORLDS_PHASE_PLAY;
+  weights.ship_values[HOMEWORLDS_SIZE_SMALL] = 1;
+  weights.ship_values[HOMEWORLDS_SIZE_MEDIUM] = 1;
+  weights.ship_values[HOMEWORLDS_SIZE_LARGE] = 1;
+  weights.homeworld_ship_values[HOMEWORLDS_SIZE_SMALL] = 500;
+  weights.homeworld_ship_values[HOMEWORLDS_SIZE_MEDIUM] = 100;
+  weights.homeworld_ship_values[HOMEWORLDS_SIZE_LARGE] = 50;
+
+  assert(test_system_add_ship(&position, 0, 0, homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL)));
+  assert(test_system_add_ship(&position, 0, 0, homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE)));
+  assert(test_system_add_ship(&position, 1, 1, homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW,
+                                                                       HOMEWORLDS_SIZE_MEDIUM)));
+
+  assert(homeworlds_position_evaluate_static(&position) == 30);
+  assert(homeworlds_position_evaluate_static_with_weights(&position, &weights) == -49);
+}
+
 static void test_static_evaluation_assumes_empty_homeworld_setup_value(void) {
   HomeworldsPosition position = {0};
 
@@ -924,6 +946,7 @@ int main(void) {
   test_symbolic_catastrophe_move_does_not_finish_turn();
   test_static_evaluation_counts_largest_homeworld_ship_twice();
   test_static_evaluation_uses_split_ship_size_values();
+  test_static_evaluation_uses_split_homeworld_ship_size_values();
   test_static_evaluation_assumes_empty_homeworld_setup_value();
   test_static_evaluation_penalizes_single_star_homeworld();
   test_static_evaluation_counts_buildable_colors_once_per_green_system();
