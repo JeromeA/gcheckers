@@ -1392,8 +1392,8 @@ scroll range.
 
 ## Import cached-history test repeated GTK draw waits
 
-`gtk_test_widget_wait_for_draw()` can hit a GTK critical when a test calls it repeatedly while toplevel teardown is still
-being processed.
+`gtk_test_widget_wait_for_draw()` can hit a GTK critical when a test calls it repeatedly while toplevel teardown is
+still being processed.
 
 The import cached-history window test waited for a parent-window draw after opening the import dialog, after selecting a
 history row, and again after closing the dialog. The test only needed the first draw to present the main window. The fix
@@ -1409,3 +1409,17 @@ destroying the dialog's child widgets.
 That signal re-entered the import step update path with some child widget pointers no longer valid, which could trigger
 a critical assertion on the history step buttons. The fix disconnects the import dialog's child widget handlers before
 destroying the toplevel from Cancel, cached Load, or imported Load paths.
+
+## Homeworlds good-move pruning stored every generated complete move before trimming
+
+Homeworlds good-move generation should cap the static-pruned move list without requiring memory proportional to every
+complete move produced by the recursive builder walk.
+
+The backend accumulated every unique complete move in one growable array and hash table, then allocated a second scored
+array, sorted all generated moves, and kept only the best 512 inside the static score window. Some positions generated
+millions of complete moves before pruning, so a depth-1 evaluation experiment could spike to multiple GiB of RSS and be
+killed by the kernel OOM killer.
+
+The fix scores complete moves as they are produced for play positions and keeps only a sorted top-512 scored set plus
+deduplication keys for the currently kept moves. The returned good-move list preserves the same score ordering and
+window pruning, but peak memory no longer scales with the number of generated complete leaves.

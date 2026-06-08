@@ -699,15 +699,18 @@ Bank pile matching is split into setup, trade-color, and discovery predicates so
 duplicate raw candidate-field tests. During play, the side panel also reports the backend `good_moves()` list followed
 by the remaining legal moves from the core
 all-move generator, after a header that counts both groups. The report subtracts the good moves with a structural hash
-set, deduplicates canonical moves, but does not cap the backend-good or diagnostic collectors. The `View` -> `Move
-report` action disables this report before either collector runs. The separate `build/tools/homeworlds_profile_moves`
+set and deduplicates canonical moves. The backend `good_moves()` collector scores complete play-position moves while
+walking the builder tree and retains only the best static-pruned set, so memory remains bounded even when millions of
+complete leaves are reached before pruning. Diagnostic all-move collectors are not capped. The `View` -> `Move report`
+action disables this report before either collector runs. The separate `build/tools/homeworlds_profile_moves`
 CLI applies `--moves` random good moves from a `--seed` or replays the first moves of a Homeworlds SGF main line with
 `--file`, prints an ASCII board snapshot, and then runs the AI at `--depth` and prints the scored moves plus search
 stats. The `build/tools/homeworlds_eval_experiment` CLI varies one static-evaluation weight at a time and runs
 paired depth-1 self-play against the default weights. Each seed produces one game with the candidate starting and one
 with the baseline starting, and aggregate wins are counted from the side-aware outcome. It reports one CSV-style
-summary row per tested value. It frees any generated candidate list before leaving an error path. The Homeworlds board
-host also syncs its
+summary row per tested value. With `--trace-move-counts`, it uses the Homeworlds backend trace hook to print per-ply
+complete-leaf, scored-move, and kept-move counts to stderr without mixing them into the CSV summary. It frees any
+generated candidate list before leaving an error path. The Homeworlds board host also syncs its
 last-move label and previous-move board markers from SGF current-node changes so timeline
 navigation and direct play report the same move. The board markers reuse the reconstructed parent position to mark
 built ships, trades, moves, captures, and one marker per surviving catastrophe system while omitting sacrifice steps

@@ -28,6 +28,14 @@ typedef struct {
   guint timeouts;
 } HomeworldsExperimentStats;
 
+typedef struct {
+  gint value;
+  guint game;
+  guint seed;
+  guint candidate_side;
+  guint ply;
+} HomeworldsExperimentMoveTraceContext;
+
 static gboolean homeworlds_experiment_parse_int(const char *text, gint *out_value) {
   char *end = NULL;
   gint64 value = 0;
@@ -146,10 +154,30 @@ static GameBackendOutcome homeworlds_experiment_no_move_outcome(const Homeworlds
       : GAME_BACKEND_OUTCOME_SIDE_0_WIN;
 }
 
+static void homeworlds_experiment_trace_move_generation(const HomeworldsGoodMoveTrace *trace, gpointer user_data) {
+  const HomeworldsExperimentMoveTraceContext *context = user_data;
+
+  g_return_if_fail(trace != NULL);
+  g_return_if_fail(context != NULL);
+
+  g_printerr("move-count,%d,%u,%u,%u,%u,%u,%u,%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT "\n",
+             context->value,
+             context->game,
+             context->seed,
+             context->candidate_side,
+             context->ply,
+             trace->side,
+             trace->depth_hint,
+             trace->generated_leaves,
+             trace->scored_moves,
+             trace->kept_moves);
+}
+
 static gboolean homeworlds_experiment_choose_move(const HomeworldsPosition *position,
                                                   const HomeworldsEvalWeights *weights,
                                                   GRand *random,
-                                                  HomeworldsMove *out_move) {
+                                                  HomeworldsMove *out_move,
+                                                  const HomeworldsExperimentMoveTraceContext *trace_context) {
   GameAiScoredMoveList moves = {0};
   gint best_score = 0;
   gsize best_count = 0;
@@ -160,12 +188,18 @@ static gboolean homeworlds_experiment_choose_move(const HomeworldsPosition *posi
   g_return_val_if_fail(random != NULL, FALSE);
   g_return_val_if_fail(out_move != NULL, FALSE);
 
+  if (trace_context != NULL) {
+    homeworlds_backend_set_good_move_trace(homeworlds_experiment_trace_move_generation, (gpointer)trace_context);
+  }
   homeworlds_eval_weights_set_active(weights);
   gboolean found = game_ai_search_analyze_moves(&homeworlds_game_backend,
                                                 position,
                                                 HOMEWORLDS_EXPERIMENT_DEPTH,
                                                 &moves);
   homeworlds_eval_weights_reset_active();
+  if (trace_context != NULL) {
+    homeworlds_backend_set_good_move_trace(NULL, NULL);
+  }
   if (!found) {
     return FALSE;
   }
@@ -187,9 +221,12 @@ static gboolean homeworlds_experiment_choose_move(const HomeworldsPosition *posi
 
 static GameBackendOutcome homeworlds_experiment_play_game(const HomeworldsEvalWeights *baseline,
                                                           const HomeworldsEvalWeights *candidate,
+                                                          gint value,
+                                                          guint game,
                                                           guint candidate_side,
                                                           guint max_plies,
-                                                          guint32 seed) {
+                                                          guint32 seed,
+                                                          gboolean trace_move_counts) {
   HomeworldsPosition position = {0};
   const HomeworldsEvalWeights *side_weights[2] = {0};
   GRand *random = NULL;
@@ -207,6 +244,13 @@ static GameBackendOutcome homeworlds_experiment_play_game(const HomeworldsEvalWe
 
   for (guint ply = 0; ply < max_plies; ++ply) {
     HomeworldsMove move = {0};
+    HomeworldsExperimentMoveTraceContext trace_context = {
+      .value = value,
+      .game = game,
+      .seed = seed,
+      .candidate_side = candidate_side,
+      .ply = ply,
+    };
     guint side = 0;
 
     outcome = homeworlds_position_outcome(&position);
@@ -215,7 +259,11 @@ static GameBackendOutcome homeworlds_experiment_play_game(const HomeworldsEvalWe
     }
 
     side = homeworlds_position_turn(&position);
-    if (!homeworlds_experiment_choose_move(&position, side_weights[side], random, &move)) {
+    if (!homeworlds_experiment_choose_move(&position,
+                                           side_weights[side],
+                                           random,
+                                           &move,
+                                           trace_move_counts ? &trace_context : NULL)) {
       outcome = homeworlds_experiment_no_move_outcome(&position);
       break;
     }
@@ -275,9 +323,11 @@ static guint32 homeworlds_experiment_seed_for_game(guint32 seed, guint game) {
 
 static HomeworldsExperimentStats homeworlds_experiment_run_value(const HomeworldsEvalWeights *baseline,
                                                                  const HomeworldsEvalWeights *candidate,
+                                                                 gint value,
                                                                  guint games,
                                                                  guint max_plies,
-                                                                 guint32 seed) {
+                                                                 guint32 seed,
+                                                                 gboolean trace_move_counts) {
   HomeworldsExperimentStats stats = {0};
 
   g_return_val_if_fail(baseline != NULL, stats);
@@ -289,9 +339,12 @@ static HomeworldsExperimentStats homeworlds_experiment_run_value(const Homeworld
     guint32 game_seed = homeworlds_experiment_seed_for_game(seed, game);
     GameBackendOutcome outcome = homeworlds_experiment_play_game(baseline,
                                                                  candidate,
+                                                                 value,
+                                                                 game,
                                                                  candidate_side,
                                                                  max_plies,
-                                                                 game_seed);
+                                                                 game_seed,
+                                                                 trace_move_counts);
 
     homeworlds_experiment_record_outcome(&stats, outcome, candidate_side);
   }
@@ -302,6 +355,7 @@ int main(int argc, char **argv) {
   gint games_option = HOMEWORLDS_EXPERIMENT_DEFAULT_GAMES;
   gint max_plies_option = HOMEWORLDS_EXPERIMENT_DEFAULT_MAX_PLIES;
   gint seed_option = 1;
+  gboolean trace_move_counts_option = FALSE;
   g_autofree gchar *variable_text = NULL;
   g_autofree gchar *values_text = NULL;
   GOptionEntry options[] = {
@@ -349,6 +403,15 @@ int main(int argc, char **argv) {
       .arg_data = &seed_option,
       .description = "Seed for deterministic tie-breaking",
       .arg_description = "N",
+    },
+    {
+      .long_name = "trace-move-counts",
+      .short_name = 0,
+      .flags = 0,
+      .arg = G_OPTION_ARG_NONE,
+      .arg_data = &trace_move_counts_option,
+      .description = "Print complete-leaf, scored-move, and kept-move counts for each played ply to stderr",
+      .arg_description = NULL,
     },
     {0},
   };
@@ -405,6 +468,10 @@ int main(int argc, char **argv) {
           (guint)max_plies_option,
           (guint)seed_option);
   g_print("value,candidate_wins,baseline_wins,draws,timeouts\n");
+  if (trace_move_counts_option) {
+    g_printerr("move-count,value,game,seed,candidate_side,ply,side,depth_hint,"
+               "generated_leaves,scored_moves,kept_moves\n");
+  }
 
   for (guint i = 0; i < values->len; ++i) {
     gint value = g_array_index(values, gint, i);
@@ -414,9 +481,11 @@ int main(int argc, char **argv) {
     homeworlds_experiment_apply_variable(&candidate, variable, value);
     stats = homeworlds_experiment_run_value(&baseline,
                                             &candidate,
+                                            value,
                                             (guint)games_option,
                                             (guint)max_plies_option,
-                                            (guint32)seed_option);
+                                            (guint32)seed_option,
+                                            trace_move_counts_option);
     g_print("%d,%u,%u,%u,%u\n",
             value,
             stats.candidate_wins,

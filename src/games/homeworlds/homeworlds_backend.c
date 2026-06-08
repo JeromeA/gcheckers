@@ -14,14 +14,6 @@ enum {
 };
 
 typedef struct {
-  HomeworldsMove *moves;
-  GHashTable *seen_moves;
-  gsize count;
-  gsize capacity;
-  gsize leaves_seen;
-} HomeworldsMoveBuffer;
-
-typedef struct {
   guint system_index;
   HomeworldsColor color;
   HomeworldsSystemRef system_ref;
@@ -37,6 +29,34 @@ typedef struct {
   gint score;
   gsize original_index;
 } HomeworldsScoredMove;
+
+typedef struct {
+  const HomeworldsPosition *position;
+  HomeworldsScoredMove *moves;
+  GHashTable *seen_moves;
+  gsize count;
+  gsize capacity;
+  gsize leaves_seen;
+  gsize scored_moves;
+  gsize next_original_index;
+  guint side;
+  gint best_score;
+  gboolean has_best_score;
+  gboolean prune_by_score;
+} HomeworldsMoveBuffer;
+
+static HomeworldsGoodMoveTraceFunc homeworlds_backend_good_move_trace_func = NULL;
+static gpointer homeworlds_backend_good_move_trace_user_data = NULL;
+
+static gboolean homeworlds_backend_score_after_move(const HomeworldsPosition *position,
+                                                    const HomeworldsMove *move,
+                                                    gint *out_score);
+static gboolean homeworlds_backend_score_is_inside_prune_window(guint side, gint score, gint best_score);
+
+void homeworlds_backend_set_good_move_trace(HomeworldsGoodMoveTraceFunc trace_func, gpointer user_data) {
+  homeworlds_backend_good_move_trace_func = trace_func;
+  homeworlds_backend_good_move_trace_user_data = user_data;
+}
 
 static const char *homeworlds_backend_side_label(guint side) {
   switch (side) {
@@ -459,39 +479,49 @@ static void homeworlds_backend_move_buffer_clear(HomeworldsMoveBuffer *buffer) {
 
   g_clear_pointer(&buffer->seen_moves, g_hash_table_unref);
   g_clear_pointer(&buffer->moves, g_free);
+  buffer->position = NULL;
   buffer->count = 0;
   buffer->capacity = 0;
   buffer->leaves_seen = 0;
+  buffer->scored_moves = 0;
+  buffer->next_original_index = 0;
+  buffer->side = 0;
+  buffer->best_score = 0;
+  buffer->has_best_score = FALSE;
+  buffer->prune_by_score = FALSE;
 }
 
-static void homeworlds_backend_move_buffer_clear_seen_moves(HomeworldsMoveBuffer *buffer) {
+static void homeworlds_backend_move_buffer_init(HomeworldsMoveBuffer *buffer, const HomeworldsPosition *position) {
   g_return_if_fail(buffer != NULL);
+  g_return_if_fail(position != NULL);
 
-  g_clear_pointer(&buffer->seen_moves, g_hash_table_unref);
+  memset(buffer, 0, sizeof(*buffer));
+  buffer->position = position;
+  buffer->side = position->turn;
+  buffer->prune_by_score = position->phase == HOMEWORLDS_PHASE_PLAY;
 }
 
-static gboolean homeworlds_backend_move_buffer_note_seen_move(HomeworldsMoveBuffer *buffer,
-                                                              const HomeworldsMove *move,
-                                                              gboolean *out_duplicate) {
+static gboolean homeworlds_backend_move_buffer_ensure_seen_moves(HomeworldsMoveBuffer *buffer) {
+  g_return_val_if_fail(buffer != NULL, FALSE);
+
+  if (buffer->seen_moves != NULL) {
+    return TRUE;
+  }
+
+  buffer->seen_moves = g_hash_table_new_full(homeworlds_move_hash, homeworlds_backend_moves_equal, g_free, NULL);
+  g_return_val_if_fail(buffer->seen_moves != NULL, FALSE);
+  return TRUE;
+}
+
+static gboolean homeworlds_backend_move_buffer_add_seen_move(HomeworldsMoveBuffer *buffer,
+                                                             const HomeworldsMove *move) {
   HomeworldsMove *key = NULL;
 
   g_return_val_if_fail(buffer != NULL, FALSE);
   g_return_val_if_fail(move != NULL, FALSE);
-  g_return_val_if_fail(out_duplicate != NULL, FALSE);
 
-  *out_duplicate = FALSE;
-
-  if (buffer->seen_moves == NULL) {
-    buffer->seen_moves = g_hash_table_new_full(homeworlds_move_hash,
-                                               homeworlds_backend_moves_equal,
-                                               g_free,
-                                               NULL);
-    g_return_val_if_fail(buffer->seen_moves != NULL, FALSE);
-  }
-
-  if (g_hash_table_contains(buffer->seen_moves, move)) {
-    *out_duplicate = TRUE;
-    return TRUE;
+  if (!homeworlds_backend_move_buffer_ensure_seen_moves(buffer)) {
+    return FALSE;
   }
 
   key = g_new(HomeworldsMove, 1);
@@ -500,30 +530,219 @@ static gboolean homeworlds_backend_move_buffer_note_seen_move(HomeworldsMoveBuff
   return TRUE;
 }
 
-static gboolean homeworlds_backend_move_buffer_append(HomeworldsMoveBuffer *buffer, const HomeworldsMove *move) {
-  gboolean duplicate = FALSE;
+static void homeworlds_backend_move_buffer_remove_seen_move(HomeworldsMoveBuffer *buffer,
+                                                            const HomeworldsMove *move) {
+  g_return_if_fail(buffer != NULL);
+  g_return_if_fail(move != NULL);
 
+  if (buffer->seen_moves != NULL) {
+    g_hash_table_remove(buffer->seen_moves, move);
+  }
+}
+
+static gboolean homeworlds_backend_move_buffer_has_seen_move(const HomeworldsMoveBuffer *buffer,
+                                                             const HomeworldsMove *move) {
+  g_return_val_if_fail(buffer != NULL, FALSE);
+  g_return_val_if_fail(move != NULL, FALSE);
+
+  return buffer->seen_moves != NULL && g_hash_table_contains(buffer->seen_moves, move);
+}
+
+static gboolean homeworlds_backend_score_is_better(guint side, gint score, gint other_score) {
+  g_return_val_if_fail(side < 2, FALSE);
+
+  if (side == 0) {
+    return score > other_score;
+  }
+  return score < other_score;
+}
+
+static gint homeworlds_backend_scored_move_order_compare(guint side,
+                                                         const HomeworldsScoredMove *left,
+                                                         const HomeworldsScoredMove *right) {
+  g_return_val_if_fail(side < 2, 0);
+  g_return_val_if_fail(left != NULL, 0);
+  g_return_val_if_fail(right != NULL, 0);
+
+  if (homeworlds_backend_score_is_better(side, left->score, right->score)) {
+    return -1;
+  }
+  if (homeworlds_backend_score_is_better(side, right->score, left->score)) {
+    return 1;
+  }
+  if (left->original_index < right->original_index) {
+    return -1;
+  }
+  if (left->original_index > right->original_index) {
+    return 1;
+  }
+  return 0;
+}
+
+static gboolean homeworlds_backend_move_buffer_reserve_slot(HomeworldsMoveBuffer *buffer) {
+  gsize next_capacity = 0;
+
+  g_return_val_if_fail(buffer != NULL, FALSE);
+
+  if (buffer->count < buffer->capacity) {
+    return TRUE;
+  }
+
+  next_capacity = buffer->capacity == 0 ? 16 : buffer->capacity * 2;
+  if (buffer->prune_by_score) {
+    next_capacity = MIN(next_capacity, (gsize) HOMEWORLDS_GOOD_MOVE_STATIC_PRUNE_LIMIT);
+  }
+  g_return_val_if_fail(next_capacity > buffer->capacity, FALSE);
+
+  HomeworldsScoredMove *next_moves = g_realloc_n(buffer->moves, next_capacity, sizeof(*next_moves));
+  g_return_val_if_fail(next_moves != NULL, FALSE);
+  buffer->moves = next_moves;
+  buffer->capacity = next_capacity;
+  return TRUE;
+}
+
+static void homeworlds_backend_move_buffer_remove_at(HomeworldsMoveBuffer *buffer, gsize index) {
+  g_return_if_fail(buffer != NULL);
+  g_return_if_fail(index < buffer->count);
+
+  homeworlds_backend_move_buffer_remove_seen_move(buffer, &buffer->moves[index].move);
+  if (index + 1 < buffer->count) {
+    memmove(&buffer->moves[index],
+            &buffer->moves[index + 1],
+            (buffer->count - index - 1) * sizeof(buffer->moves[0]));
+  }
+  buffer->count--;
+}
+
+static void homeworlds_backend_move_buffer_prune_score_window(HomeworldsMoveBuffer *buffer) {
+  gsize i = 0;
+
+  g_return_if_fail(buffer != NULL);
+
+  while (i < buffer->count) {
+    if (homeworlds_backend_score_is_inside_prune_window(buffer->side, buffer->moves[i].score, buffer->best_score)) {
+      i++;
+      continue;
+    }
+    homeworlds_backend_move_buffer_remove_at(buffer, i);
+  }
+}
+
+static gboolean homeworlds_backend_move_buffer_insert_scored(HomeworldsMoveBuffer *buffer,
+                                                             const HomeworldsScoredMove *scored_move) {
+  gsize index = 0;
+
+  g_return_val_if_fail(buffer != NULL, FALSE);
+  g_return_val_if_fail(scored_move != NULL, FALSE);
+
+  if (!homeworlds_backend_move_buffer_reserve_slot(buffer)) {
+    return FALSE;
+  }
+
+  while (index < buffer->count &&
+         homeworlds_backend_scored_move_order_compare(buffer->side, &buffer->moves[index], scored_move) <= 0) {
+    index++;
+  }
+  if (index < buffer->count) {
+    memmove(&buffer->moves[index + 1], &buffer->moves[index], (buffer->count - index) * sizeof(buffer->moves[0]));
+  }
+
+  buffer->moves[index] = *scored_move;
+  buffer->count++;
+  return homeworlds_backend_move_buffer_add_seen_move(buffer, &scored_move->move);
+}
+
+static gboolean homeworlds_backend_move_buffer_append_unsorted(HomeworldsMoveBuffer *buffer,
+                                                               const HomeworldsMove *move) {
+  g_return_val_if_fail(buffer != NULL, FALSE);
+  g_return_val_if_fail(move != NULL, FALSE);
+
+  if (!homeworlds_backend_move_buffer_ensure_seen_moves(buffer)) {
+    return FALSE;
+  }
+  if (g_hash_table_contains(buffer->seen_moves, move)) {
+    return TRUE;
+  }
+
+  if (!homeworlds_backend_move_buffer_reserve_slot(buffer)) {
+    return FALSE;
+  }
+
+  buffer->moves[buffer->count++] = (HomeworldsScoredMove){
+    .move = *move,
+    .score = 0,
+    .original_index = buffer->next_original_index++,
+  };
+  return homeworlds_backend_move_buffer_add_seen_move(buffer, move);
+}
+
+static gboolean homeworlds_backend_move_buffer_append_scored(HomeworldsMoveBuffer *buffer, const HomeworldsMove *move) {
+  HomeworldsScoredMove scored_move = {0};
+  gint score = 0;
+
+  g_return_val_if_fail(buffer != NULL, FALSE);
+  g_return_val_if_fail(move != NULL, FALSE);
+  g_return_val_if_fail(buffer->position != NULL, FALSE);
+
+  if (homeworlds_backend_move_buffer_has_seen_move(buffer, move)) {
+    return TRUE;
+  }
+  if (!homeworlds_backend_score_after_move(buffer->position, move, &score)) {
+    return FALSE;
+  }
+
+  buffer->scored_moves++;
+  scored_move = (HomeworldsScoredMove){
+    .move = *move,
+    .score = score,
+    .original_index = buffer->next_original_index++,
+  };
+
+  if (!buffer->has_best_score || homeworlds_backend_score_is_better(buffer->side, score, buffer->best_score)) {
+    buffer->best_score = score;
+    buffer->has_best_score = TRUE;
+    homeworlds_backend_move_buffer_prune_score_window(buffer);
+  } else if (!homeworlds_backend_score_is_inside_prune_window(buffer->side, score, buffer->best_score)) {
+    return TRUE;
+  }
+
+  if (buffer->count == HOMEWORLDS_GOOD_MOVE_STATIC_PRUNE_LIMIT) {
+    g_return_val_if_fail(buffer->count > 0, FALSE);
+    if (homeworlds_backend_scored_move_order_compare(buffer->side, &scored_move, &buffer->moves[buffer->count - 1]) >=
+        0) {
+      return TRUE;
+    }
+    homeworlds_backend_move_buffer_remove_at(buffer, buffer->count - 1);
+  }
+
+  return homeworlds_backend_move_buffer_insert_scored(buffer, &scored_move);
+}
+
+static gboolean homeworlds_backend_move_buffer_append(HomeworldsMoveBuffer *buffer, const HomeworldsMove *move) {
   g_return_val_if_fail(buffer != NULL, FALSE);
   g_return_val_if_fail(move != NULL, FALSE);
 
   buffer->leaves_seen++;
-  if (!homeworlds_backend_move_buffer_note_seen_move(buffer, move, &duplicate)) {
-    return FALSE;
+  if (buffer->prune_by_score) {
+    return homeworlds_backend_move_buffer_append_scored(buffer, move);
   }
-  if (duplicate) {
-    return TRUE;
+  return homeworlds_backend_move_buffer_append_unsorted(buffer, move);
+}
+
+static HomeworldsMove *homeworlds_backend_move_buffer_copy_moves(const HomeworldsMoveBuffer *buffer) {
+  HomeworldsMove *moves = NULL;
+
+  g_return_val_if_fail(buffer != NULL, NULL);
+
+  if (buffer->count == 0) {
+    return NULL;
   }
 
-  if (buffer->count == buffer->capacity) {
-    gsize next_capacity = buffer->capacity == 0 ? 16 : buffer->capacity * 2;
-    HomeworldsMove *next_moves = g_realloc_n(buffer->moves, next_capacity, sizeof(*next_moves));
-    g_return_val_if_fail(next_moves != NULL, FALSE);
-    buffer->moves = next_moves;
-    buffer->capacity = next_capacity;
+  moves = g_new0(HomeworldsMove, buffer->count);
+  for (gsize i = 0; i < buffer->count; ++i) {
+    moves[i] = buffer->moves[i].move;
   }
-
-  buffer->moves[buffer->count++] = *move;
-  return TRUE;
+  return moves;
 }
 
 static guint homeworlds_backend_setup_star_size_mask(const HomeworldsMove *move) {
@@ -2199,44 +2418,6 @@ static gboolean homeworlds_backend_score_after_move(const HomeworldsPosition *po
   return TRUE;
 }
 
-static int homeworlds_backend_scored_move_compare_desc(const void *left, const void *right) {
-  const HomeworldsScoredMove *a = left;
-  const HomeworldsScoredMove *b = right;
-
-  if (a->score < b->score) {
-    return 1;
-  }
-  if (a->score > b->score) {
-    return -1;
-  }
-  if (a->original_index > b->original_index) {
-    return 1;
-  }
-  if (a->original_index < b->original_index) {
-    return -1;
-  }
-  return 0;
-}
-
-static int homeworlds_backend_scored_move_compare_asc(const void *left, const void *right) {
-  const HomeworldsScoredMove *a = left;
-  const HomeworldsScoredMove *b = right;
-
-  if (a->score < b->score) {
-    return -1;
-  }
-  if (a->score > b->score) {
-    return 1;
-  }
-  if (a->original_index > b->original_index) {
-    return 1;
-  }
-  if (a->original_index < b->original_index) {
-    return -1;
-  }
-  return 0;
-}
-
 static gboolean homeworlds_backend_score_is_inside_prune_window(guint side, gint score, gint best_score) {
   g_return_val_if_fail(side < 2, FALSE);
 
@@ -2246,68 +2427,39 @@ static gboolean homeworlds_backend_score_is_inside_prune_window(guint side, gint
   return score <= best_score + HOMEWORLDS_GOOD_MOVE_STATIC_PRUNE_WINDOW;
 }
 
-static gboolean homeworlds_backend_static_prune_good_moves(const HomeworldsPosition *position,
-                                                           HomeworldsMoveBuffer *buffer) {
-  g_autofree HomeworldsScoredMove *scored_moves = NULL;
-  guint side = 0;
-  gint best_score = 0;
-  gsize write = 0;
-
-  g_return_val_if_fail(position != NULL, FALSE);
-  g_return_val_if_fail(buffer != NULL, FALSE);
-
-  if (position->phase != HOMEWORLDS_PHASE_PLAY || buffer->count <= 1) {
-    return TRUE;
+static void homeworlds_backend_trace_good_moves(guint depth_hint,
+                                                guint side,
+                                                gsize generated_leaves,
+                                                gsize scored_moves,
+                                                gsize kept_moves) {
+  if (homeworlds_backend_good_move_trace_func == NULL) {
+    return;
   }
 
-  side = position->turn;
-  g_return_val_if_fail(side < 2, FALSE);
+  HomeworldsGoodMoveTrace trace = {
+    .depth_hint = depth_hint,
+    .side = side,
+    .generated_leaves = generated_leaves,
+    .scored_moves = scored_moves,
+    .kept_moves = kept_moves,
+  };
 
-  scored_moves = g_new0(HomeworldsScoredMove, buffer->count);
-  for (gsize i = 0; i < buffer->count; ++i) {
-    gint score = 0;
-
-    if (!homeworlds_backend_score_after_move(position, &buffer->moves[i], &score)) {
-      return FALSE;
-    }
-    scored_moves[i] = (HomeworldsScoredMove){
-      .move = buffer->moves[i],
-      .score = score,
-      .original_index = i,
-    };
-  }
-
-  if (side == 0) {
-    qsort(scored_moves, buffer->count, sizeof(scored_moves[0]), homeworlds_backend_scored_move_compare_desc);
-  } else {
-    qsort(scored_moves, buffer->count, sizeof(scored_moves[0]), homeworlds_backend_scored_move_compare_asc);
-  }
-
-  best_score = scored_moves[0].score;
-  for (gsize i = 0; i < buffer->count && i < HOMEWORLDS_GOOD_MOVE_STATIC_PRUNE_LIMIT; ++i) {
-    if (!homeworlds_backend_score_is_inside_prune_window(side, scored_moves[i].score, best_score)) {
-      break;
-    }
-    buffer->moves[write++] = scored_moves[i].move;
-  }
-
-  if (write == 0) {
-    g_debug("Static pruning removed every Homeworlds good move");
-    return FALSE;
-  }
-  buffer->count = write;
-  return TRUE;
+  homeworlds_backend_good_move_trace_func(&trace, homeworlds_backend_good_move_trace_user_data);
 }
 
-static GameBackendMoveList homeworlds_backend_list_good_moves(gconstpointer position, guint /*depth_hint*/) {
+static GameBackendMoveList homeworlds_backend_list_good_moves(gconstpointer position, guint depth_hint) {
   const HomeworldsPosition *homeworlds_position = position;
   GameBackendMoveBuilder builder = {0};
   HomeworldsGoodMoveContext context = {0};
   HomeworldsMoveBuffer buffer = {0};
+  HomeworldsMove *moves = NULL;
+  gsize count = 0;
 
   g_return_val_if_fail(homeworlds_position != NULL, (GameBackendMoveList){0});
 
+  homeworlds_backend_move_buffer_init(&buffer, homeworlds_position);
   if (!homeworlds_move_builder_init(homeworlds_position, &builder)) {
+    homeworlds_backend_move_buffer_clear(&buffer);
     return (GameBackendMoveList){0};
   }
   context.root_catastrophe_count = homeworlds_backend_collect_profitable_catastrophes(
@@ -2320,17 +2472,19 @@ static GameBackendMoveList homeworlds_backend_list_good_moves(gconstpointer posi
     return (GameBackendMoveList){0};
   }
 
-  if (!homeworlds_backend_static_prune_good_moves(homeworlds_position, &buffer)) {
-    homeworlds_move_builder_clear(&builder);
-    homeworlds_backend_move_buffer_clear(&buffer);
-    return (GameBackendMoveList){0};
-  }
+  count = buffer.count;
+  moves = homeworlds_backend_move_buffer_copy_moves(&buffer);
+  homeworlds_backend_trace_good_moves(depth_hint,
+                                      homeworlds_position->turn,
+                                      buffer.leaves_seen,
+                                      buffer.scored_moves,
+                                      count);
 
   homeworlds_move_builder_clear(&builder);
-  homeworlds_backend_move_buffer_clear_seen_moves(&buffer);
+  homeworlds_backend_move_buffer_clear(&buffer);
   return (GameBackendMoveList){
-    .moves = buffer.moves,
-    .count = buffer.count,
+    .moves = moves,
+    .count = count,
   };
 }
 
