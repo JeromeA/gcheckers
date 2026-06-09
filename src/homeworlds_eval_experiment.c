@@ -4,6 +4,7 @@
 #include "games/homeworlds/homeworlds_position_text.h"
 
 #include <errno.h>
+#include <glib/gstdio.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,10 +14,13 @@ enum {
   HOMEWORLDS_EXPERIMENT_DEFAULT_GAMES = 100,
   HOMEWORLDS_EXPERIMENT_DEFAULT_MAX_PLIES = 300,
   HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_THRESHOLD = 7000000,
+  HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_MIN_TOTAL_MOVES = 90000000,
 };
 
 static const char *HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_THRESHOLD_ENV =
     "GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_THRESHOLD";
+static const char *HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_MIN_TOTAL_MOVES_ENV =
+    "GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_MIN_TOTAL_MOVES";
 
 typedef enum {
   HOMEWORLDS_EXPERIMENT_VARIABLE_NONE = 0,
@@ -103,6 +107,20 @@ static gsize homeworlds_experiment_big_move_report_threshold(void) {
     return HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_THRESHOLD;
   }
   return threshold;
+}
+
+static gsize homeworlds_experiment_big_move_report_min_total_moves(void) {
+  const char *min_total_moves_text = g_getenv(HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_MIN_TOTAL_MOVES_ENV);
+  gsize min_total_moves = HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_MIN_TOTAL_MOVES;
+
+  if (min_total_moves_text == NULL) {
+    return min_total_moves;
+  }
+  if (!homeworlds_experiment_parse_gsize(min_total_moves_text, &min_total_moves)) {
+    g_debug("Ignoring invalid %s value", HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_MIN_TOTAL_MOVES_ENV);
+    return HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_MIN_TOTAL_MOVES;
+  }
+  return min_total_moves;
 }
 
 static char *homeworlds_experiment_next_big_move_report_path(void) {
@@ -269,6 +287,7 @@ static void homeworlds_experiment_write_big_move_report(const HomeworldsGoodMove
   FILE *file = NULL;
   HomeworldsExperimentMoveDumpContext dump_context = {0};
   gboolean streamed = FALSE;
+  gsize min_total_moves = 0;
 
   g_return_if_fail(trace != NULL);
   g_return_if_fail(trace->position != NULL);
@@ -322,10 +341,17 @@ static void homeworlds_experiment_write_big_move_report(const HomeworldsGoodMove
     return;
   }
 
-  g_printerr("big-move-report,%s,%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT "\n",
-             path,
-             trace->generated_leaves,
-             dump_context.count);
+  min_total_moves = homeworlds_experiment_big_move_report_min_total_moves();
+  if (dump_context.count < min_total_moves) {
+    if (g_remove(path) != 0) {
+      g_printerr("Failed to delete %s Homeworlds big move report with only %" G_GSIZE_FORMAT " total moves.\n",
+                 path,
+                 dump_context.count);
+      return;
+    }
+
+    return;
+  }
 }
 
 static void homeworlds_experiment_trace_move_generation(const HomeworldsGoodMoveTrace *trace, gpointer user_data) {
