@@ -1,8 +1,10 @@
 #include "ai_search.h"
 #include "games/homeworlds/homeworlds_backend.h"
 #include "games/homeworlds/homeworlds_game.h"
+#include "games/homeworlds/homeworlds_position_text.h"
 
 #include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -10,7 +12,11 @@ enum {
   HOMEWORLDS_EXPERIMENT_DEPTH = 1,
   HOMEWORLDS_EXPERIMENT_DEFAULT_GAMES = 100,
   HOMEWORLDS_EXPERIMENT_DEFAULT_MAX_PLIES = 300,
+  HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_THRESHOLD = 7000000,
 };
+
+static const char *HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_THRESHOLD_ENV =
+    "GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_THRESHOLD";
 
 typedef enum {
   HOMEWORLDS_EXPERIMENT_VARIABLE_NONE = 0,
@@ -37,7 +43,15 @@ typedef struct {
   guint seed;
   guint candidate_side;
   guint ply;
+  gboolean trace_move_counts;
 } HomeworldsExperimentMoveTraceContext;
+
+typedef struct {
+  FILE *file;
+  gsize count;
+} HomeworldsExperimentMoveDumpContext;
+
+static guint homeworlds_experiment_big_move_report_counter = 1;
 
 static gboolean homeworlds_experiment_parse_int(const char *text, gint *out_value) {
   char *end = NULL;
@@ -54,6 +68,73 @@ static gboolean homeworlds_experiment_parse_int(const char *text, gint *out_valu
 
   *out_value = (gint)value;
   return TRUE;
+}
+
+static gboolean homeworlds_experiment_parse_gsize(const char *text, gsize *out_value) {
+  guint64 value = 0;
+  char *end = NULL;
+
+  g_return_val_if_fail(text != NULL, FALSE);
+  g_return_val_if_fail(out_value != NULL, FALSE);
+
+  if (*text == '\0') {
+    return FALSE;
+  }
+
+  errno = 0;
+  value = g_ascii_strtoull(text, &end, 10);
+  if (errno != 0 || end == text || *end != '\0' || value > G_MAXSIZE) {
+    return FALSE;
+  }
+
+  *out_value = (gsize)value;
+  return TRUE;
+}
+
+static gsize homeworlds_experiment_big_move_report_threshold(void) {
+  const char *threshold_text = g_getenv(HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_THRESHOLD_ENV);
+  gsize threshold = HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_THRESHOLD;
+
+  if (threshold_text == NULL) {
+    return threshold;
+  }
+  if (!homeworlds_experiment_parse_gsize(threshold_text, &threshold)) {
+    g_debug("Ignoring invalid %s value", HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_THRESHOLD_ENV);
+    return HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_THRESHOLD;
+  }
+  return threshold;
+}
+
+static char *homeworlds_experiment_next_big_move_report_path(void) {
+  while (homeworlds_experiment_big_move_report_counter < G_MAXUINT) {
+    g_autofree char *path =
+        g_strdup_printf("big_move_report_%03u.txt", homeworlds_experiment_big_move_report_counter++);
+
+    if (!g_file_test(path, G_FILE_TEST_EXISTS)) {
+      return g_steal_pointer(&path);
+    }
+  }
+
+  g_debug("Homeworlds big move report counter exhausted");
+  return NULL;
+}
+
+static gboolean homeworlds_experiment_dump_streamed_move(gconstpointer move_data, gpointer user_data) {
+  const HomeworldsMove *move = move_data;
+  HomeworldsExperimentMoveDumpContext *context = user_data;
+  char notation[128] = {0};
+
+  g_return_val_if_fail(move != NULL, FALSE);
+  g_return_val_if_fail(context != NULL, FALSE);
+  g_return_val_if_fail(context->file != NULL, FALSE);
+
+  context->count++;
+  if (!homeworlds_move_format(move, notation, sizeof(notation))) {
+    g_debug("Failed to format streamed Homeworlds move for big move report");
+    return fprintf(context->file, "%" G_GSIZE_FORMAT ". <unformattable move>\n", context->count) >= 0;
+  }
+
+  return fprintf(context->file, "%" G_GSIZE_FORMAT ". %s\n", context->count, notation) >= 0;
 }
 
 static GArray *homeworlds_experiment_parse_values(const char *text) {
@@ -181,23 +262,95 @@ static GameBackendOutcome homeworlds_experiment_no_move_outcome(const Homeworlds
       : GAME_BACKEND_OUTCOME_SIDE_0_WIN;
 }
 
+static void homeworlds_experiment_write_big_move_report(const HomeworldsGoodMoveTrace *trace,
+                                                        const HomeworldsExperimentMoveTraceContext *context) {
+  g_autofree char *path = NULL;
+  g_autofree char *ascii = NULL;
+  FILE *file = NULL;
+  HomeworldsExperimentMoveDumpContext dump_context = {0};
+  gboolean streamed = FALSE;
+
+  g_return_if_fail(trace != NULL);
+  g_return_if_fail(trace->position != NULL);
+  g_return_if_fail(context != NULL);
+
+  path = homeworlds_experiment_next_big_move_report_path();
+  if (path == NULL) {
+    return;
+  }
+
+  file = fopen(path, "w");
+  if (file == NULL) {
+    g_printerr("Failed to open %s for Homeworlds big move report.\n", path);
+    return;
+  }
+
+  ascii = homeworlds_position_format_ascii(trace->position);
+  if (ascii == NULL) {
+    g_debug("Failed to format Homeworlds position for big move report");
+    fclose(file);
+    return;
+  }
+
+  fprintf(file, "value: %d\n", context->value);
+  fprintf(file, "game: %u\n", context->game);
+  fprintf(file, "seed: %u\n", context->seed);
+  fprintf(file, "candidate_side: %u\n", context->candidate_side);
+  fprintf(file, "ply: %u\n", context->ply);
+  fprintf(file, "side: %u\n", trace->side);
+  fprintf(file, "depth_hint: %u\n", trace->depth_hint);
+  fprintf(file, "good_moves_generated: %" G_GSIZE_FORMAT "\n", trace->generated_leaves);
+  fprintf(file, "good_moves_scored: %" G_GSIZE_FORMAT "\n", trace->scored_moves);
+  fprintf(file, "good_moves_kept: %" G_GSIZE_FORMAT "\n\n", trace->kept_moves);
+  fprintf(file, "position:\n%s", ascii);
+  if (!g_str_has_suffix(ascii, "\n")) {
+    fprintf(file, "\n");
+  }
+  fprintf(file, "\nall_moves:\n");
+
+  dump_context.file = file;
+  streamed = homeworlds_game_backend.stream_moves(trace->position,
+                                                  homeworlds_experiment_dump_streamed_move,
+                                                  &dump_context);
+  fprintf(file, "\nall_moves_streamed: %" G_GSIZE_FORMAT "\n", dump_context.count);
+  if (!streamed) {
+    fprintf(file, "all_moves_stream_error: true\n");
+  }
+
+  if (fclose(file) != 0 || !streamed) {
+    g_printerr("Failed to finish %s Homeworlds big move report.\n", path);
+    return;
+  }
+
+  g_printerr("big-move-report,%s,%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT "\n",
+             path,
+             trace->generated_leaves,
+             dump_context.count);
+}
+
 static void homeworlds_experiment_trace_move_generation(const HomeworldsGoodMoveTrace *trace, gpointer user_data) {
   const HomeworldsExperimentMoveTraceContext *context = user_data;
 
   g_return_if_fail(trace != NULL);
   g_return_if_fail(context != NULL);
 
-  g_printerr("move-count,%d,%u,%u,%u,%u,%u,%u,%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT "\n",
-             context->value,
-             context->game,
-             context->seed,
-             context->candidate_side,
-             context->ply,
-             trace->side,
-             trace->depth_hint,
-             trace->generated_leaves,
-             trace->scored_moves,
-             trace->kept_moves);
+  if (context->trace_move_counts) {
+    g_printerr("move-count,%d,%u,%u,%u,%u,%u,%u,%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT "\n",
+               context->value,
+               context->game,
+               context->seed,
+               context->candidate_side,
+               context->ply,
+               trace->side,
+               trace->depth_hint,
+               trace->generated_leaves,
+               trace->scored_moves,
+               trace->kept_moves);
+  }
+
+  if (trace->generated_leaves > homeworlds_experiment_big_move_report_threshold()) {
+    homeworlds_experiment_write_big_move_report(trace, context);
+  }
 }
 
 static gboolean homeworlds_experiment_choose_move(const HomeworldsPosition *position,
@@ -209,24 +362,23 @@ static gboolean homeworlds_experiment_choose_move(const HomeworldsPosition *posi
   gint best_score = 0;
   gsize best_count = 0;
   gsize selected_index = 0;
+  gboolean found = FALSE;
 
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(weights != NULL, FALSE);
   g_return_val_if_fail(random != NULL, FALSE);
   g_return_val_if_fail(out_move != NULL, FALSE);
 
-  if (trace_context != NULL) {
-    homeworlds_backend_set_good_move_trace(homeworlds_experiment_trace_move_generation, (gpointer)trace_context);
-  }
+  g_return_val_if_fail(trace_context != NULL, FALSE);
+
+  homeworlds_backend_set_good_move_trace(homeworlds_experiment_trace_move_generation, (gpointer)trace_context);
   homeworlds_eval_weights_set_active(weights);
-  gboolean found = game_ai_search_analyze_moves(&homeworlds_game_backend,
-                                                position,
-                                                HOMEWORLDS_EXPERIMENT_DEPTH,
-                                                &moves);
+  found = game_ai_search_analyze_moves(&homeworlds_game_backend,
+                                       position,
+                                       HOMEWORLDS_EXPERIMENT_DEPTH,
+                                       &moves);
   homeworlds_eval_weights_reset_active();
-  if (trace_context != NULL) {
-    homeworlds_backend_set_good_move_trace(NULL, NULL);
-  }
+  homeworlds_backend_set_good_move_trace(NULL, NULL);
   if (!found) {
     return FALSE;
   }
@@ -277,6 +429,7 @@ static GameBackendOutcome homeworlds_experiment_play_game(const HomeworldsEvalWe
       .seed = seed,
       .candidate_side = candidate_side,
       .ply = ply,
+      .trace_move_counts = trace_move_counts,
     };
     guint side = 0;
 
@@ -290,7 +443,7 @@ static GameBackendOutcome homeworlds_experiment_play_game(const HomeworldsEvalWe
                                            side_weights[side],
                                            random,
                                            &move,
-                                           trace_move_counts ? &trace_context : NULL)) {
+                                           &trace_context)) {
       outcome = homeworlds_experiment_no_move_outcome(&position);
       break;
     }
@@ -392,7 +545,8 @@ int main(int argc, char **argv) {
       .flags = 0,
       .arg = G_OPTION_ARG_STRING,
       .arg_data = &variable_text,
-      .description = "One value to vary: ship1, ship2, ship3, single-star, buildable-color",
+      .description = "One value to vary: ship1, ship2, ship3, homeworld-ship1, homeworld-ship2, "
+                     "homeworld-ship3, single-star, buildable-color",
       .arg_description = "NAME",
     },
     {

@@ -2,21 +2,15 @@
 
 #include "homeworlds_game.h"
 #include "homeworlds_move_builder.h"
-#include "homeworlds_position_text.h"
 #include "homeworlds_sgf_position.h"
 
-#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
 enum {
   HOMEWORLDS_GOOD_MOVE_STATIC_PRUNE_LIMIT = 512,
   HOMEWORLDS_GOOD_MOVE_STATIC_PRUNE_WINDOW = 50,
-  HOMEWORLDS_LARGE_MOVE_DUMP_DEFAULT_THRESHOLD = 7000000,
 };
-
-static const char *HOMEWORLDS_LARGE_MOVE_DUMP_THRESHOLD_ENV =
-    "GCHECKERS_HOMEWORLDS_LARGE_MOVE_DUMP_THRESHOLD";
 
 typedef struct {
   guint system_index;
@@ -61,88 +55,6 @@ static gboolean homeworlds_backend_score_is_inside_prune_window(guint side, gint
 void homeworlds_backend_set_good_move_trace(HomeworldsGoodMoveTraceFunc trace_func, gpointer user_data) {
   homeworlds_backend_good_move_trace_func = trace_func;
   homeworlds_backend_good_move_trace_user_data = user_data;
-}
-
-static gboolean homeworlds_backend_parse_gsize(const char *text, gsize *out_value) {
-  guint64 value = 0;
-  char *end_ptr = NULL;
-
-  g_return_val_if_fail(text != NULL, FALSE);
-  g_return_val_if_fail(out_value != NULL, FALSE);
-
-  if (*text == '\0') {
-    return FALSE;
-  }
-
-  errno = 0;
-  value = g_ascii_strtoull(text, &end_ptr, 10);
-  if (errno != 0 || end_ptr == text || *end_ptr != '\0' || value > G_MAXSIZE) {
-    return FALSE;
-  }
-
-  *out_value = (gsize)value;
-  return TRUE;
-}
-
-static gsize homeworlds_backend_large_move_dump_threshold(void) {
-  const char *threshold_text = g_getenv(HOMEWORLDS_LARGE_MOVE_DUMP_THRESHOLD_ENV);
-  gsize threshold = HOMEWORLDS_LARGE_MOVE_DUMP_DEFAULT_THRESHOLD;
-
-  if (threshold_text == NULL) {
-    return threshold;
-  }
-  if (!homeworlds_backend_parse_gsize(threshold_text, &threshold)) {
-    g_debug("Ignoring invalid %s value", HOMEWORLDS_LARGE_MOVE_DUMP_THRESHOLD_ENV);
-    threshold = HOMEWORLDS_LARGE_MOVE_DUMP_DEFAULT_THRESHOLD;
-  }
-  return threshold;
-}
-
-static void homeworlds_backend_dump_large_move_position(const HomeworldsPosition *position,
-                                                        guint depth_hint,
-                                                        gsize good_moves_generated,
-                                                        gsize total_possible_moves) {
-  char *ascii = NULL;
-
-  g_return_if_fail(position != NULL);
-
-  ascii = homeworlds_position_format_ascii(position);
-  if (ascii == NULL) {
-    g_debug("Failed to format large Homeworlds move-generation position");
-    return;
-  }
-
-  g_printerr("large-move-count,side,depth_hint,good_moves_generated,total_possible_moves\n");
-  g_printerr("large-move-count,%u,%u,%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT "\n",
-             position->turn,
-             depth_hint,
-             good_moves_generated,
-             total_possible_moves);
-  g_printerr("large-move-position-ascii-begin\n%s", ascii);
-  if (!g_str_has_suffix(ascii, "\n")) {
-    g_printerr("\n");
-  }
-  g_printerr("large-move-position-ascii-end\n");
-  g_free(ascii);
-}
-
-static void homeworlds_backend_maybe_dump_large_move_position(const HomeworldsPosition *position,
-                                                              guint depth_hint,
-                                                              gsize good_moves_generated) {
-  gsize total_possible_moves = 0;
-  gsize threshold = homeworlds_backend_large_move_dump_threshold();
-
-  g_return_if_fail(position != NULL);
-
-  if (good_moves_generated <= threshold) {
-    return;
-  }
-  if (!homeworlds_position_count_all_move_paths(position, &total_possible_moves)) {
-    g_debug("Failed to count total Homeworlds move paths for large move-generation dump");
-    return;
-  }
-
-  homeworlds_backend_dump_large_move_position(position, depth_hint, good_moves_generated, total_possible_moves);
 }
 
 static const char *homeworlds_backend_side_label(guint side) {
@@ -2514,16 +2426,20 @@ static gboolean homeworlds_backend_score_is_inside_prune_window(guint side, gint
   return score <= best_score + HOMEWORLDS_GOOD_MOVE_STATIC_PRUNE_WINDOW;
 }
 
-static void homeworlds_backend_trace_good_moves(guint depth_hint,
+static void homeworlds_backend_trace_good_moves(const HomeworldsPosition *position,
+                                                guint depth_hint,
                                                 guint side,
                                                 gsize generated_leaves,
                                                 gsize scored_moves,
                                                 gsize kept_moves) {
+  g_return_if_fail(position != NULL);
+
   if (homeworlds_backend_good_move_trace_func == NULL) {
     return;
   }
 
   HomeworldsGoodMoveTrace trace = {
+    .position = position,
     .depth_hint = depth_hint,
     .side = side,
     .generated_leaves = generated_leaves,
@@ -2561,12 +2477,12 @@ static GameBackendMoveList homeworlds_backend_list_good_moves(gconstpointer posi
 
   count = buffer.count;
   moves = homeworlds_backend_move_buffer_copy_moves(&buffer);
-  homeworlds_backend_trace_good_moves(depth_hint,
+  homeworlds_backend_trace_good_moves(homeworlds_position,
+                                      depth_hint,
                                       homeworlds_position->turn,
                                       buffer.leaves_seen,
                                       buffer.scored_moves,
                                       count);
-  homeworlds_backend_maybe_dump_large_move_position(homeworlds_position, depth_hint, buffer.leaves_seen);
 
   homeworlds_move_builder_clear(&builder);
   homeworlds_backend_move_buffer_clear(&buffer);
@@ -2574,6 +2490,17 @@ static GameBackendMoveList homeworlds_backend_list_good_moves(gconstpointer posi
     .moves = moves,
     .count = count,
   };
+}
+
+static gboolean homeworlds_backend_stream_moves(gconstpointer position,
+                                                GameBackendMoveStreamFunc stream_func,
+                                                gpointer user_data) {
+  const HomeworldsPosition *homeworlds_position = position;
+
+  g_return_val_if_fail(homeworlds_position != NULL, FALSE);
+  g_return_val_if_fail(stream_func != NULL, FALSE);
+
+  return homeworlds_position_stream_all_moves(homeworlds_position, stream_func, user_data);
 }
 
 static gboolean homeworlds_backend_apply_move(gpointer position, gconstpointer move) {
@@ -2642,6 +2569,7 @@ const GameBackend homeworlds_game_backend = {
   .position_copy = homeworlds_backend_position_copy,
   .position_outcome = homeworlds_backend_position_outcome,
   .position_turn = homeworlds_backend_position_turn,
+  .stream_moves = homeworlds_backend_stream_moves,
   .list_good_moves = homeworlds_backend_list_good_moves,
   .move_list_free = homeworlds_backend_move_list_free,
   .move_list_get = homeworlds_backend_move_list_get,

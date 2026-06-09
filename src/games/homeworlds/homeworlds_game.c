@@ -11,7 +11,7 @@ typedef struct {
   gsize capacity;
 } HomeworldsMoveListBuilder;
 
-typedef gboolean (*HomeworldsMoveCollectorFunc)(const HomeworldsMove *move, gpointer user_data);
+typedef gboolean (*HomeworldsMoveCollectorFunc)(gconstpointer move, gpointer user_data);
 
 typedef struct {
   guint system_index;
@@ -1771,26 +1771,14 @@ static gboolean homeworlds_move_list_builder_append(HomeworldsMoveListBuilder *b
   return TRUE;
 }
 
-static gboolean homeworlds_move_list_builder_collect(const HomeworldsMove *move, gpointer user_data) {
+static gboolean homeworlds_move_list_builder_collect(gconstpointer move_data, gpointer user_data) {
   HomeworldsMoveListBuilder *builder = user_data;
+  const HomeworldsMove *move = move_data;
 
   g_return_val_if_fail(builder != NULL, FALSE);
+  g_return_val_if_fail(move != NULL, FALSE);
 
   return homeworlds_move_list_builder_append(builder, move);
-}
-
-static gboolean homeworlds_move_path_counter_collect(const HomeworldsMove * /*move*/, gpointer user_data) {
-  gsize *count = user_data;
-
-  g_return_val_if_fail(count != NULL, FALSE);
-
-  if (*count == G_MAXSIZE) {
-    g_debug("Homeworlds all-move path count overflowed");
-    return FALSE;
-  }
-
-  (*count)++;
-  return TRUE;
 }
 
 static guint homeworlds_collect_catastrophe_choices(const HomeworldsMoveBuilderState *state,
@@ -1942,26 +1930,21 @@ GameBackendMoveList homeworlds_position_list_all_moves(const HomeworldsPosition 
   };
 }
 
-gboolean homeworlds_position_count_all_move_paths(const HomeworldsPosition *position, gsize *out_count) {
+gboolean homeworlds_position_stream_all_moves(const HomeworldsPosition *position,
+                                              GameBackendMoveStreamFunc stream_func,
+                                              gpointer user_data) {
   GameBackendMoveBuilder builder = {0};
-  gsize count = 0;
+  gboolean ok = FALSE;
 
   g_return_val_if_fail(position != NULL, FALSE);
-  g_return_val_if_fail(out_count != NULL, FALSE);
+  g_return_val_if_fail(stream_func != NULL, FALSE);
 
   if (!homeworlds_move_builder_init(position, &builder)) {
     return FALSE;
   }
-  if (!homeworlds_collect_all_moves_recursive(builder.builder_state,
-                                             homeworlds_move_path_counter_collect,
-                                             &count)) {
-    homeworlds_move_builder_clear(&builder);
-    return FALSE;
-  }
-
+  ok = homeworlds_collect_all_moves_recursive(builder.builder_state, stream_func, user_data);
   homeworlds_move_builder_clear(&builder);
-  *out_count = count;
-  return TRUE;
+  return ok;
 }
 
 gboolean homeworlds_move_format(const HomeworldsMove *move, char *buffer, gsize size) {

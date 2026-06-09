@@ -38,6 +38,8 @@ typedef struct {
   gsize count;
 } GameBackendMoveList;
 
+typedef gboolean (*GameBackendMoveStreamFunc)(gconstpointer move, gpointer user_data);
+
 typedef struct {
   gpointer builder_state;
   gsize builder_state_size;
@@ -67,6 +69,7 @@ typedef struct {
   guint (*position_turn)(gconstpointer position);
 
   GameBackendMoveList (*list_moves)(gconstpointer position);
+  gboolean (*stream_moves)(gconstpointer position, GameBackendMoveStreamFunc stream_func, gpointer user_data);
   GameBackendMoveList (*list_good_moves)(gconstpointer position, guint depth_hint);
   void (*move_list_free)(GameBackendMoveList *moves);
   const void *(*move_list_get)(const GameBackendMoveList *moves, gsize index);

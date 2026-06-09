@@ -922,6 +922,29 @@ static void test_list_all_moves_deduplicates_symbolic_moves(void) {
   homeworlds_move_list_free(&moves);
 }
 
+static gboolean test_stream_all_moves_stop_after_first(gconstpointer move_data, gpointer user_data) {
+  const HomeworldsMove *move = move_data;
+  gsize *count = user_data;
+  char notation[128] = {0};
+
+  assert(move != NULL);
+  assert(count != NULL);
+  assert(homeworlds_move_format(move, notation, sizeof(notation)));
+
+  (*count)++;
+  return FALSE;
+}
+
+static void test_stream_all_moves_visits_moves_without_materializing(void) {
+  HomeworldsPosition position = {0};
+  gsize count = 0;
+
+  homeworlds_position_init(&position);
+  assert(!homeworlds_position_stream_all_moves(&position, test_stream_all_moves_stop_after_first, &count));
+  assert(count == 1);
+  homeworlds_position_clear(&position);
+}
+
 int main(void) {
   test_setup_and_loss_detection();
   test_setup_accepts_any_bank_pyramids();
@@ -957,5 +980,6 @@ int main(void) {
   test_move_parse_rejects_legacy_step_separators();
   test_move_equality_uses_structural_notation_identity();
   test_list_all_moves_deduplicates_symbolic_moves();
+  test_stream_all_moves_visits_moves_without_materializing();
   return 0;
 }

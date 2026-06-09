@@ -5,6 +5,7 @@
 #include "homeworlds_types.h"
 
 typedef struct {
+  const HomeworldsPosition *position;
   guint depth_hint;
   guint side;
   gsize generated_leaves;

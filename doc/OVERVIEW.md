@@ -702,11 +702,10 @@ by the remaining legal moves from the core
 all-move generator, after a header that counts both groups. The report subtracts the good moves with a structural hash
 set and deduplicates canonical moves. The backend `good_moves()` collector scores complete play-position moves while
 walking the builder tree and retains only the best static-pruned set, so memory remains bounded even when millions of
-complete leaves are reached before pruning. If a `good_moves()` call generates more than 7,000,000 complete leaves,
-the backend prints the current position as ASCII plus the `good_moves()` generated-leaf count and a count-only total
-legal move-path count to stderr; `GCHECKERS_HOMEWORLDS_LARGE_MOVE_DUMP_THRESHOLD` can lower that threshold for
-diagnostic runs and tests. Diagnostic all-move collectors are not capped. The `View` -> `Move report` action disables
-this report before either collector runs. The separate `build/tools/homeworlds_profile_moves`
+complete leaves are reached before pruning. `GameBackend` exposes an optional streamed all-move API for diagnostics;
+Homeworlds implements it by walking complete generated move paths without materializing a `GameBackendMoveList`. The
+`View` -> `Move report` action disables its report before either collector runs. The separate
+`build/tools/homeworlds_profile_moves`
 CLI applies `--moves` random good moves from a `--seed` or replays the first moves of a Homeworlds SGF main line with
 `--file`, prints an ASCII board snapshot, and then runs the AI at `--depth` and prints the scored moves plus search
 stats. The `build/tools/homeworlds_eval_experiment` CLI varies one static-evaluation weight at a time and runs
@@ -715,7 +714,10 @@ with the baseline starting, and aggregate wins are counted from the side-aware o
 summary row per tested value. Its variable names are `ship1`, `ship2`, `ship3`, `homeworld-ship1`,
 `homeworld-ship2`, `homeworld-ship3`, `single-star`, and `buildable-color`; the old descriptive ship aliases are not
 accepted. With `--trace-move-counts`, it uses the Homeworlds backend trace hook to print per-ply
-complete-leaf, scored-move, and kept-move counts to stderr without mixing them into the CSV summary. It frees any
+complete-leaf, scored-move, and kept-move counts to stderr without mixing them into the CSV summary. If a
+`good_moves()` call generates more than 7,000,000 complete leaves, it writes `big_move_report_###.txt` in the current
+directory with the ASCII position, `good_moves()` counts, and a streamed dump of all generated move paths;
+`GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_THRESHOLD` can lower that threshold for diagnostic runs and tests. It frees any
 generated candidate list before leaving an error path. The Homeworlds board host also syncs its
 last-move label and previous-move board markers from SGF current-node changes so timeline
 navigation and direct play report the same move. The board markers reuse the reconstructed parent position to mark
