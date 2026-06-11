@@ -713,13 +713,15 @@ CLI applies `--moves` random good moves from a `--seed` or replays the first mov
 stats. The `build/tools/homeworlds_eval_experiment` CLI varies one static-evaluation weight at a time and runs
 paired depth-1 self-play against the default weights. Each seed produces one game with the candidate starting and one
 with the baseline starting, and aggregate wins are counted from the side-aware outcome. It reports one CSV-style
-summary row per tested value. Its variable names are `ship1`, `ship2`, `ship3`, `homeworld-ship1`,
-`homeworld-ship2`, `homeworld-ship3`, `single-star`, and `buildable-color`; the old descriptive ship aliases are not
-accepted. With `--trace-move-counts`, it uses the Homeworlds backend trace hook to print per-ply
+summary row per tested value, including a `win_ratio` field computed as candidate wins divided by candidate plus
+baseline wins so draws and timeouts do not affect the ratio. Its variable names are `ship1`, `ship2`, `ship3`,
+`homeworld-ship1`, `homeworld-ship2`, `homeworld-ship3`, `single-star`, and `buildable-color`; the old descriptive
+ship aliases are not accepted. With `--trace-move-counts`, it uses the Homeworlds backend trace hook to print per-ply
 complete-leaf, scored-move, and kept-move counts to stderr without mixing them into the CSV summary. If a
 `good_moves()` call generates more than 7,000,000 complete leaves, it writes `big_move_report_###.txt` in the current
-directory with the ASCII position, `good_moves()` counts, and a streamed dump of all generated move paths. After the
-stream finishes, reports with fewer than 90,000,000 total streamed move paths are deleted. The
+directory with the `good_moves()` counts, the moves leading to the reported position, the ASCII position, and a
+streamed dump of all generated move paths. After the stream finishes, reports below the configured total-streamed-move
+cutoff are deleted. The
 `GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_THRESHOLD` and `GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_MIN_TOTAL_MOVES`
 environment variables can lower those thresholds for diagnostic runs and tests. It frees any
 generated candidate list before leaving an error path. The Homeworlds board host also syncs its

@@ -47,6 +47,7 @@ typedef struct {
   guint seed;
   guint candidate_side;
   guint ply;
+  const GArray *played_moves;
   gboolean trace_move_counts;
 } HomeworldsExperimentMoveTraceContext;
 
@@ -153,6 +154,29 @@ static gboolean homeworlds_experiment_dump_streamed_move(gconstpointer move_data
   }
 
   return fprintf(context->file, "%" G_GSIZE_FORMAT ". %s\n", context->count, notation) >= 0;
+}
+
+static void homeworlds_experiment_write_played_moves(FILE *file, const GArray *played_moves) {
+  g_return_if_fail(file != NULL);
+
+  fprintf(file, "moves:\n");
+  if (played_moves == NULL || played_moves->len == 0) {
+    fprintf(file, "<none>\n\n");
+    return;
+  }
+
+  for (guint i = 0; i < played_moves->len; ++i) {
+    const HomeworldsMove *move = &g_array_index(played_moves, HomeworldsMove, i);
+    char notation[128] = {0};
+
+    if (!homeworlds_move_format(move, notation, sizeof(notation))) {
+      fprintf(file, "%u. <unformattable move>\n", i + 1);
+      continue;
+    }
+
+    fprintf(file, "%u. %s\n", i + 1, notation);
+  }
+  fprintf(file, "\n");
 }
 
 static GArray *homeworlds_experiment_parse_values(const char *text) {
@@ -321,6 +345,7 @@ static void homeworlds_experiment_write_big_move_report(const HomeworldsGoodMove
   fprintf(file, "good_moves_generated: %" G_GSIZE_FORMAT "\n", trace->generated_leaves);
   fprintf(file, "good_moves_scored: %" G_GSIZE_FORMAT "\n", trace->scored_moves);
   fprintf(file, "good_moves_kept: %" G_GSIZE_FORMAT "\n\n", trace->kept_moves);
+  homeworlds_experiment_write_played_moves(file, context->played_moves);
   fprintf(file, "position:\n%s", ascii);
   if (!g_str_has_suffix(ascii, "\n")) {
     fprintf(file, "\n");
@@ -435,6 +460,7 @@ static GameBackendOutcome homeworlds_experiment_play_game(const HomeworldsEvalWe
   HomeworldsPosition position = {0};
   const HomeworldsEvalWeights *side_weights[2] = {0};
   GRand *random = NULL;
+  GArray *played_moves = NULL;
   GameBackendOutcome outcome = GAME_BACKEND_OUTCOME_ONGOING;
 
   g_return_val_if_fail(baseline != NULL, GAME_BACKEND_OUTCOME_ONGOING);
@@ -443,6 +469,7 @@ static GameBackendOutcome homeworlds_experiment_play_game(const HomeworldsEvalWe
   g_return_val_if_fail(max_plies > 0, GAME_BACKEND_OUTCOME_ONGOING);
 
   random = g_rand_new_with_seed(seed);
+  played_moves = g_array_new(FALSE, FALSE, sizeof(HomeworldsMove));
   homeworlds_position_init(&position);
   side_weights[candidate_side] = candidate;
   side_weights[1 - candidate_side] = baseline;
@@ -455,6 +482,7 @@ static GameBackendOutcome homeworlds_experiment_play_game(const HomeworldsEvalWe
       .seed = seed,
       .candidate_side = candidate_side,
       .ply = ply,
+      .played_moves = played_moves,
       .trace_move_counts = trace_move_counts,
     };
     guint side = 0;
@@ -477,6 +505,7 @@ static GameBackendOutcome homeworlds_experiment_play_game(const HomeworldsEvalWe
       g_debug("Homeworlds experiment generated an invalid move");
       break;
     }
+    g_array_append_val(played_moves, move);
   }
 
   if (outcome == GAME_BACKEND_OUTCOME_ONGOING) {
@@ -484,6 +513,7 @@ static GameBackendOutcome homeworlds_experiment_play_game(const HomeworldsEvalWe
   }
 
   homeworlds_position_clear(&position);
+  g_array_free(played_moves, TRUE);
   g_rand_free(random);
   return outcome;
 }
@@ -525,6 +555,21 @@ static guint homeworlds_experiment_candidate_side_for_game(guint game) {
 
 static guint32 homeworlds_experiment_seed_for_game(guint32 seed, guint game) {
   return seed + (game / 2);
+}
+
+static char *homeworlds_experiment_win_ratio(const HomeworldsExperimentStats *stats) {
+  guint decisive_games = 0;
+  char buffer[G_ASCII_DTOSTR_BUF_SIZE] = {0};
+
+  g_return_val_if_fail(stats != NULL, NULL);
+
+  decisive_games = stats->candidate_wins + stats->baseline_wins;
+  if (decisive_games == 0) {
+    return g_strdup("");
+  }
+
+  g_ascii_formatd(buffer, sizeof(buffer), "%.6f", (double)stats->candidate_wins / (double)decisive_games);
+  return g_strdup(buffer);
 }
 
 static HomeworldsExperimentStats homeworlds_experiment_run_value(const HomeworldsEvalWeights *baseline,
@@ -674,7 +719,7 @@ int main(int argc, char **argv) {
           (guint)games_option,
           (guint)max_plies_option,
           (guint)seed_option);
-  g_print("value,candidate_wins,baseline_wins,draws,timeouts\n");
+  g_print("value,candidate_wins,baseline_wins,win_ratio,draws,timeouts\n");
   if (trace_move_counts_option) {
     g_printerr("move-count,value,game,seed,candidate_side,ply,side,depth_hint,"
                "generated_leaves,scored_moves,kept_moves\n");
@@ -684,6 +729,7 @@ int main(int argc, char **argv) {
     gint value = g_array_index(values, gint, i);
     HomeworldsEvalWeights candidate = baseline;
     HomeworldsExperimentStats stats = {0};
+    g_autofree char *win_ratio = NULL;
 
     homeworlds_experiment_apply_variable(&candidate, variable, value);
     stats = homeworlds_experiment_run_value(&baseline,
@@ -693,10 +739,12 @@ int main(int argc, char **argv) {
                                             (guint)max_plies_option,
                                             (guint32)seed_option,
                                             trace_move_counts_option);
-    g_print("%d,%u,%u,%u,%u\n",
+    win_ratio = homeworlds_experiment_win_ratio(&stats);
+    g_print("%d,%u,%u,%s,%u,%u\n",
             value,
             stats.candidate_wins,
             stats.baseline_wins,
+            win_ratio,
             stats.draws,
             stats.timeouts);
   }
