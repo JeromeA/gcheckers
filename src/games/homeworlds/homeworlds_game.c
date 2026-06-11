@@ -25,13 +25,13 @@ static const HomeworldsEvalWeights homeworlds_default_eval_weights = {
     [HOMEWORLDS_SIZE_LARGE] = 30,
   },
   .homeworld_ship_values = {
-    [HOMEWORLDS_SIZE_SMALL] = 10,
-    [HOMEWORLDS_SIZE_MEDIUM] = 20,
-    [HOMEWORLDS_SIZE_LARGE] = 30,
+    [HOMEWORLDS_SIZE_SMALL] = 0,
+    [HOMEWORLDS_SIZE_MEDIUM] = 10,
+    [HOMEWORLDS_SIZE_LARGE] = 10,
   },
   .empty_homeworld_value = 80,
-  .single_star_homeworld_penalty = -30,
-  .buildable_color_value = 20,
+  .single_star_homeworld_penalty = -60,
+  .buildable_color_value = 30,
 };
 
 static HomeworldsEvalWeights homeworlds_active_eval_weights = {
@@ -41,13 +41,13 @@ static HomeworldsEvalWeights homeworlds_active_eval_weights = {
     [HOMEWORLDS_SIZE_LARGE] = 30,
   },
   .homeworld_ship_values = {
-    [HOMEWORLDS_SIZE_SMALL] = 10,
-    [HOMEWORLDS_SIZE_MEDIUM] = 20,
-    [HOMEWORLDS_SIZE_LARGE] = 30,
+    [HOMEWORLDS_SIZE_SMALL] = 0,
+    [HOMEWORLDS_SIZE_MEDIUM] = 10,
+    [HOMEWORLDS_SIZE_LARGE] = 10,
   },
   .empty_homeworld_value = 80,
-  .single_star_homeworld_penalty = -30,
-  .buildable_color_value = 20,
+  .single_star_homeworld_penalty = -60,
+  .buildable_color_value = 30,
 };
 
 static gboolean homeworlds_bank_take(HomeworldsPosition *position, HomeworldsPyramid pyramid) {

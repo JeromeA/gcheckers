@@ -1762,6 +1762,7 @@ static void test_backend_good_moves_order_commutative_blue_sacrifice_trades(void
   const GameBackend *backend = &homeworlds_game_backend;
   HomeworldsPosition position = {0};
   GameBackendMoveList good_moves = {0};
+  HomeworldsEvalWeights neutral_weights = {0};
   const char *canonical_move = "H1b2- H1r1=g H1y1=r";
   const char *redundant_move = "H1b2- H1y1=r H1r1=g";
 
@@ -1777,7 +1778,10 @@ static void test_backend_good_moves_order_commutative_blue_sacrifice_trades(void
   test_assert_move_notation_is_legal(&position, canonical_move);
   test_assert_move_notation_is_legal(&position, redundant_move);
 
+  /* Keep this canonicalization check independent of the default static prune window. */
+  homeworlds_eval_weights_set_active(&neutral_weights);
   good_moves = backend->list_good_moves(&position, 0);
+  homeworlds_eval_weights_reset_active();
   assert(good_moves.count > 0);
   assert(test_good_moves_contains_notation(backend, &good_moves, canonical_move));
   assert(!test_good_moves_contains_notation(backend, &good_moves, redundant_move));
@@ -1788,6 +1792,7 @@ static void test_backend_good_moves_keep_dependent_blue_sacrifice_trades(void) {
   const GameBackend *backend = &homeworlds_game_backend;
   HomeworldsPosition position = {0};
   GameBackendMoveList good_moves = {0};
+  HomeworldsEvalWeights neutral_weights = {0};
   HomeworldsPyramid yellow_small = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL);
   const char *dependent_move = "H1b2- H1y1=g H1r1=y";
 
@@ -1803,7 +1808,10 @@ static void test_backend_good_moves_keep_dependent_blue_sacrifice_trades(void) {
 
   test_assert_move_notation_is_legal(&position, dependent_move);
 
+  /* Keep this dependency check independent of the default static prune window. */
+  homeworlds_eval_weights_set_active(&neutral_weights);
   good_moves = backend->list_good_moves(&position, 0);
+  homeworlds_eval_weights_reset_active();
   assert(good_moves.count > 0);
   assert(test_good_moves_contains_notation(backend, &good_moves, dependent_move));
   backend->move_list_free(&good_moves);

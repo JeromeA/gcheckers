@@ -629,7 +629,9 @@ three-pip setup system with one buildable color, a single-star homeworld is pena
 player's homeworld adds a separate size-specific homeworld bonus, and each buildable ship color is rewarded once. Ship
 material and largest-homeworld-ship bonuses each use separate static values for one-, two-, and three-pip ships instead
 of multiplying the size by one shared unit. The default weights are exposed through `HomeworldsEvalWeights`, and
-experimental callers can temporarily replace the active weights while the normal application path keeps the defaults.
+experimental callers can temporarily replace the active weights while the normal application path keeps the defaults:
+ship material `10/20/30`, largest-homeworld-ship bonuses `0/10/10`, single-star homeworld penalty `-60`, empty
+homeworld value `80`, and buildable-color value `30`.
 Terminal Homeworlds wins score
 `1000 - ply_depth` for player 1 and the negated value for player 2. Applying a move is transactional: setup and turn
 moves are resolved against a
