@@ -725,13 +725,14 @@ baseline wins so draws and timeouts do not affect the ratio. Its variable names 
 `homeworld-ship1`, `homeworld-ship2`, `homeworld-ship3`, `single-star`, and `buildable-color`; the old descriptive
 ship aliases are not accepted. With `--trace-move-counts`, it uses the Homeworlds backend trace hook to print per-ply
 complete-leaf, scored-move, and kept-move counts to stderr without mixing them into the CSV summary. If a
-`good_moves()` call generates more than 7,000,000 complete leaves, it writes `big_move_report_###.txt` in the current
+`good_moves()` call generates more than 100,000 deduplicated complete leaves, it writes `big_move_report_###.txt` in
+the current
 directory with the `good_moves()` trace counts followed by the same move-report body used by
 `homeworlds_profile_moves`: the moves leading to the reported position, the ASCII position, and a streamed dump of all
-generated move paths. After the stream finishes, reports below the configured total-streamed-move cutoff are deleted.
+generated move paths. After the stream finishes, reports below the default 3,300,000 streamed-move cutoff are deleted.
 The
 `GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_THRESHOLD` and `GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_MIN_TOTAL_MOVES`
-environment variables can lower those thresholds for diagnostic runs and tests. It frees any
+environment variables can override those thresholds for diagnostic runs and tests. It frees any
 generated candidate list before leaving an error path. The Homeworlds board host also syncs its
 last-move label and previous-move board markers from SGF current-node changes so timeline
 navigation and direct play report the same move. The board markers reuse the reconstructed parent position to mark
