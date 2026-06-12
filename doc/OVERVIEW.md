@@ -616,8 +616,9 @@ resolved indexes and pyramid. Build steps are canonicalized further: they store 
 color in `target_color`, because the exact source ship size does not change the move.
 Rules covered: setup, build, trade, attack, move, discover, sacrifice, catastrophe resolution, empty-system
 cleanup, end-of-turn homeworld loss detection for either side, static evaluation, terminal scoring, hashing, compact
-move formatting/parsing, structural move equality, ordered unique all-move generation, and whole-position SGF snapshots
-in `homeworlds_sgf_position.c`. Catastrophes return remaining ships only when the affected star system has no stars
+move formatting/parsing, structural move equality, streamed all-move generation with sacrifice-scoped dedupe, and
+whole-position SGF snapshots in `homeworlds_sgf_position.c`. Catastrophes return remaining ships only when the
+affected star system has no stars
 left after removing the overpopulated color, so binary-star systems survive losing one star. Setup notation still
 names the two starting stars and ship directly, such as `Y2B1g3`; turn notation uses system slot labels for
 non-homeworld systems, such as `H1g+`, `S1g2>S2(Y2)`, `S1g2>S2`, and `pass`. Multi-step moves are formatted with
@@ -662,12 +663,13 @@ completes the move immediately instead of asking for sacrifice-fill or catastrop
 Candidate data can still use transient slot indexes for UI selection, and committed move steps are converted to stable
 notation references before they are applied or saved to SGF. Committed build steps are converted to system-plus-color
 form so two same-color source ships produce the same internal move and notation. The interactive action list still
-offers Build from every selected same-color ship; duplicate symbolic build moves are handled after complete moves are
-formed instead of hiding a legal action from the clicked ship.
-During a multi-action blue sacrifice, ships created by earlier trade steps in that system are not offered as later
-trade actors; changing a ship through multiple colors is canonicalized as one direct trade followed by passes.
-Physically interchangeable choices, such as identical bank stars for discovery or identical enemy ships for capture,
-are deduplicated before they become user-visible choices. Action candidates are appended through one helper so normal
+offers Build from every selected same-color ship instead of hiding a legal action from the clicked ship; generated
+collectors do not keep a global symbolic-move hash table just to merge those non-sacrifice duplicates.
+During a multi-action blue sacrifice, ships created by earlier trade steps remain legal later trade actors in the
+interactive builder; generated all-move and good-move traversals canonicalize equivalent sacrifice continuations
+outside the UI path. Physically interchangeable choices, such as identical bank stars for discovery or identical enemy
+ships for capture, are deduplicated before they become user-visible choices. Action candidates are appended through one
+helper so normal
 and sacrifice-forced action lists use the same candidate shape, and all candidate-list builders abort cleanly on append
 failure instead of returning truncated choices.
 Collaborates with: `homeworlds_game.c`, `homeworlds_backend.c`, `homeworlds_view.c`, and
@@ -702,10 +704,13 @@ Bank pile matching is split into setup, trade-color, and discovery predicates so
 duplicate raw candidate-field tests. During play, the side panel also reports the backend `good_moves()` list followed
 by the remaining legal moves from the core
 all-move generator, after a header that counts both groups. The report subtracts the good moves with a structural hash
-set and deduplicates canonical moves. The backend `good_moves()` collector scores complete play-position moves while
-walking the builder tree and retains only the best static-pruned set, so memory remains bounded even when millions of
-complete leaves are reached before pruning. `GameBackend` exposes an optional streamed all-move API for diagnostics;
-Homeworlds implements it by walking complete generated move paths without materializing a `GameBackendMoveList`. The
+set. Both all-move generation and `good_moves()` use a shared sacrifice-scoped state deduper: generated sacrifice
+branches keep one temporary table for the descendants of that sacrifice, prune catastrophe-before-sacrifice spellings,
+and drop equivalent continuation states without storing hashes for the whole move tree. The backend `good_moves()`
+collector scores complete play-position moves while walking the builder tree and retains only the best static-pruned
+set, so memory remains bounded even when millions of complete leaves are reached before pruning. `GameBackend` exposes
+an optional streamed all-move API for diagnostics; Homeworlds implements it by walking complete generated move paths
+without materializing a `GameBackendMoveList`. The
 `View` -> `Move report` action disables its report before either collector runs. The separate
 `build/tools/homeworlds_profile_moves`
 CLI applies `--moves` random good moves from a `--seed` or replays the first moves of a Homeworlds SGF main line with
@@ -835,10 +840,9 @@ Role: `game_backend.h` defines the generic callback table used to describe one c
 formatting APIs into that generic table. `src/games/homeworlds/homeworlds_backend.c` now adapts the slot-based
 Homeworlds engine and staged move builder, advertises `supports_move_builder = TRUE`, `supports_move_list = FALSE`,
 `supports_ai_search = TRUE`, and implements `list_good_moves` by exploring the builder in heuristic order while
-filtering nonsensical setup, pass, unsafe homeworld, and unsafe catastrophe-triggering build choices. Its good-move
-buffer tracks structural move hashes only to warn with the root position and duplicated move if generation ever
-produces a duplicate; it does not rely on the guard to suppress duplicates. The playable Homeworlds UI uses the same
-builder directly rather than asking this backend for full move enumeration.
+filtering nonsensical setup, pass, unsafe homeworld, and unsafe catastrophe-triggering build choices. The good-move
+collector shares the all-move sacrifice-scope deduper rather than keeping a global duplicate table. The playable
+Homeworlds UI uses the same builder directly rather than asking this backend for full move enumeration.
 `src/games/boop/boop_backend.c` adapts the boop engine, advertises move lists, staged
 move-building, square-grid rendering, AI search, notation formatting/parsing, hashing, and backend-owned SGF position
 snapshot hooks.

@@ -30,6 +30,14 @@ typedef struct {
   guint8 initial_homeworld_has_ships[2];
 } HomeworldsMoveBuilderState;
 
+typedef struct {
+  GHashTable *states;
+} HomeworldsGenerationDedupe;
+
+typedef struct {
+  HomeworldsGenerationDedupe *sacrifice_dedupe;
+} HomeworldsGenerationContext;
+
 gboolean homeworlds_move_builder_init(const HomeworldsPosition *position, GameBackendMoveBuilder *out_builder);
 void homeworlds_move_builder_clear(GameBackendMoveBuilder *builder);
 GameBackendMoveList homeworlds_move_builder_list_candidates(const GameBackendMoveBuilder *builder);
@@ -42,5 +50,17 @@ gboolean homeworlds_move_builder_apply_catastrophe_step(GameBackendMoveBuilder *
                                                         HomeworldsColor color);
 gboolean homeworlds_move_builder_is_complete(const GameBackendMoveBuilder *builder);
 gboolean homeworlds_move_builder_build_move(const GameBackendMoveBuilder *builder, HomeworldsMove *out_move);
+void homeworlds_generation_context_init(HomeworldsGenerationContext *context);
+void homeworlds_generation_dedupe_init(HomeworldsGenerationDedupe *dedupe);
+void homeworlds_generation_dedupe_clear(HomeworldsGenerationDedupe *dedupe);
+gboolean homeworlds_generation_visit_state(const HomeworldsGenerationContext *context,
+                                           const HomeworldsMoveBuilderState *state,
+                                           gboolean *out_duplicate);
+gboolean homeworlds_generation_prepare_child_context(const HomeworldsGenerationContext *parent_context,
+                                                     const HomeworldsMoveBuilderState *parent_state,
+                                                     const HomeworldsMoveBuilderState *child_state,
+                                                     HomeworldsGenerationContext *child_context,
+                                                     HomeworldsGenerationDedupe *child_dedupe,
+                                                     gboolean *out_prune);
 
 #endif

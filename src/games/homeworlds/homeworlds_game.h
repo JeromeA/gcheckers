@@ -24,6 +24,7 @@ guint homeworlds_position_turn(const HomeworldsPosition *position);
 
 gboolean homeworlds_moves_equal(const HomeworldsMove *left, const HomeworldsMove *right);
 guint homeworlds_move_hash(gconstpointer value);
+gboolean homeworlds_positions_equal(const HomeworldsPosition *left, const HomeworldsPosition *right);
 GameBackendMoveList homeworlds_position_list_all_moves(const HomeworldsPosition *position);
 gboolean homeworlds_position_stream_all_moves(const HomeworldsPosition *position,
                                               GameBackendMoveStreamFunc stream_func,

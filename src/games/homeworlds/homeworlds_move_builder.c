@@ -10,6 +10,15 @@ typedef struct {
   gsize capacity;
 } HomeworldsCandidateBuffer;
 
+typedef struct {
+  HomeworldsPosition position;
+  guint8 stage;
+  guint8 pending_action_kind;
+  guint8 forced_action_color;
+  guint8 pending_actions_remaining;
+  guint8 step_count;
+} HomeworldsGenerationStateKey;
+
 static gboolean homeworlds_candidate_buffer_append(HomeworldsCandidateBuffer *buffer,
                                                    const HomeworldsMoveCandidate *candidate) {
   g_return_val_if_fail(buffer != NULL, FALSE);
@@ -66,6 +75,187 @@ static const HomeworldsMoveBuilderState *homeworlds_builder_state_const(const Ga
   return builder->builder_state;
 }
 
+static void homeworlds_generation_hash_byte(guint64 *hash, guint8 byte) {
+  g_return_if_fail(hash != NULL);
+
+  *hash ^= byte;
+  *hash *= 1099511628211ULL;
+}
+
+static guint homeworlds_generation_state_key_hash(gconstpointer value) {
+  const HomeworldsGenerationStateKey *key = value;
+  guint64 hash = 0;
+
+  g_return_val_if_fail(key != NULL, 0);
+
+  hash = homeworlds_position_hash(&key->position);
+  homeworlds_generation_hash_byte(&hash, key->stage);
+  homeworlds_generation_hash_byte(&hash, key->pending_action_kind);
+  homeworlds_generation_hash_byte(&hash, key->forced_action_color);
+  homeworlds_generation_hash_byte(&hash, key->pending_actions_remaining);
+  homeworlds_generation_hash_byte(&hash, key->step_count);
+  return (guint)(hash ^ (hash >> 32));
+}
+
+static gboolean homeworlds_generation_state_keys_equal(gconstpointer left, gconstpointer right) {
+  const HomeworldsGenerationStateKey *left_key = left;
+  const HomeworldsGenerationStateKey *right_key = right;
+
+  g_return_val_if_fail(left_key != NULL, FALSE);
+  g_return_val_if_fail(right_key != NULL, FALSE);
+
+  return left_key->stage == right_key->stage &&
+         left_key->pending_action_kind == right_key->pending_action_kind &&
+         left_key->forced_action_color == right_key->forced_action_color &&
+         left_key->pending_actions_remaining == right_key->pending_actions_remaining &&
+         left_key->step_count == right_key->step_count &&
+         homeworlds_positions_equal(&left_key->position, &right_key->position);
+}
+
+static gboolean homeworlds_generation_state_is_boundary(const HomeworldsMoveBuilderState *state) {
+  g_return_val_if_fail(state != NULL, FALSE);
+
+  return state->stage == HOMEWORLDS_BUILDER_STAGE_SELECT_SHIP ||
+         state->stage == HOMEWORLDS_BUILDER_STAGE_COMPLETE;
+}
+
+static HomeworldsGenerationStateKey homeworlds_generation_state_key_from_state(
+    const HomeworldsMoveBuilderState *state) {
+  g_return_val_if_fail(state != NULL, (HomeworldsGenerationStateKey){0});
+
+  return (HomeworldsGenerationStateKey){
+    .position = state->working_position,
+    .stage = state->stage,
+    .pending_action_kind = state->pending_action_kind,
+    .forced_action_color = state->forced_action_color,
+    .pending_actions_remaining = state->pending_actions_remaining,
+    .step_count = state->move.step_count,
+  };
+}
+
+static const HomeworldsTurnStep *homeworlds_generation_appended_step(
+    const HomeworldsMoveBuilderState *parent_state,
+    const HomeworldsMoveBuilderState *child_state) {
+  g_return_val_if_fail(parent_state != NULL, NULL);
+  g_return_val_if_fail(child_state != NULL, NULL);
+
+  if (parent_state->move.kind != HOMEWORLDS_MOVE_KIND_TURN ||
+      child_state->move.kind != HOMEWORLDS_MOVE_KIND_TURN ||
+      child_state->move.step_count != parent_state->move.step_count + 1) {
+    return NULL;
+  }
+
+  return &child_state->move.steps[child_state->move.step_count - 1];
+}
+
+static gboolean homeworlds_generation_has_catastrophe_prefix(const HomeworldsMove *move) {
+  gboolean saw_catastrophe = FALSE;
+
+  g_return_val_if_fail(move != NULL, FALSE);
+
+  if (move->kind != HOMEWORLDS_MOVE_KIND_TURN) {
+    return FALSE;
+  }
+
+  for (guint i = 0; i < move->step_count; ++i) {
+    if (move->steps[i].kind != HOMEWORLDS_STEP_CATASTROPHE) {
+      return FALSE;
+    }
+    saw_catastrophe = TRUE;
+  }
+  return saw_catastrophe;
+}
+
+void homeworlds_generation_context_init(HomeworldsGenerationContext *context) {
+  g_return_if_fail(context != NULL);
+
+  memset(context, 0, sizeof(*context));
+}
+
+void homeworlds_generation_dedupe_init(HomeworldsGenerationDedupe *dedupe) {
+  g_return_if_fail(dedupe != NULL);
+
+  memset(dedupe, 0, sizeof(*dedupe));
+}
+
+void homeworlds_generation_dedupe_clear(HomeworldsGenerationDedupe *dedupe) {
+  g_return_if_fail(dedupe != NULL);
+
+  g_clear_pointer(&dedupe->states, g_hash_table_unref);
+}
+
+gboolean homeworlds_generation_visit_state(const HomeworldsGenerationContext *context,
+                                           const HomeworldsMoveBuilderState *state,
+                                           gboolean *out_duplicate) {
+  HomeworldsGenerationStateKey key = {0};
+  HomeworldsGenerationStateKey *stored_key = NULL;
+
+  g_return_val_if_fail(context != NULL, FALSE);
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(out_duplicate != NULL, FALSE);
+
+  *out_duplicate = FALSE;
+  if (context->sacrifice_dedupe == NULL || !homeworlds_generation_state_is_boundary(state)) {
+    return TRUE;
+  }
+
+  if (context->sacrifice_dedupe->states == NULL) {
+    context->sacrifice_dedupe->states =
+        g_hash_table_new_full(homeworlds_generation_state_key_hash,
+                              homeworlds_generation_state_keys_equal,
+                              g_free,
+                              NULL);
+    g_return_val_if_fail(context->sacrifice_dedupe->states != NULL, FALSE);
+  }
+
+  key = homeworlds_generation_state_key_from_state(state);
+  if (g_hash_table_contains(context->sacrifice_dedupe->states, &key)) {
+    *out_duplicate = TRUE;
+    return TRUE;
+  }
+
+  stored_key = g_new(HomeworldsGenerationStateKey, 1);
+  g_return_val_if_fail(stored_key != NULL, FALSE);
+  *stored_key = key;
+  g_hash_table_add(context->sacrifice_dedupe->states, stored_key);
+  return TRUE;
+}
+
+gboolean homeworlds_generation_prepare_child_context(const HomeworldsGenerationContext *parent_context,
+                                                     const HomeworldsMoveBuilderState *parent_state,
+                                                     const HomeworldsMoveBuilderState *child_state,
+                                                     HomeworldsGenerationContext *child_context,
+                                                     HomeworldsGenerationDedupe *child_dedupe,
+                                                     gboolean *out_prune) {
+  const HomeworldsTurnStep *step = NULL;
+
+  g_return_val_if_fail(parent_context != NULL, FALSE);
+  g_return_val_if_fail(parent_state != NULL, FALSE);
+  g_return_val_if_fail(child_state != NULL, FALSE);
+  g_return_val_if_fail(child_context != NULL, FALSE);
+  g_return_val_if_fail(child_dedupe != NULL, FALSE);
+  g_return_val_if_fail(out_prune != NULL, FALSE);
+
+  *child_context = *parent_context;
+  homeworlds_generation_dedupe_init(child_dedupe);
+  *out_prune = FALSE;
+
+  step = homeworlds_generation_appended_step(parent_state, child_state);
+  if (step == NULL || step->kind != HOMEWORLDS_STEP_SACRIFICE) {
+    return TRUE;
+  }
+
+  if (homeworlds_generation_has_catastrophe_prefix(&parent_state->move)) {
+    *out_prune = TRUE;
+    return TRUE;
+  }
+
+  if (parent_context->sacrifice_dedupe == NULL) {
+    child_context->sacrifice_dedupe = child_dedupe;
+  }
+  return TRUE;
+}
+
 static gboolean homeworlds_builder_find_selected_ship_slot(const HomeworldsMoveBuilderState *state,
                                                            guint *out_ship_slot) {
   const HomeworldsSystem *system = NULL;
@@ -89,52 +279,6 @@ static gboolean homeworlds_builder_find_selected_ship_slot(const HomeworldsMoveB
 
     *out_ship_slot = ship_slot;
     return TRUE;
-  }
-
-  return FALSE;
-}
-
-static gboolean homeworlds_builder_has_pending_blue_sacrifice(const HomeworldsMoveBuilderState *state) {
-  g_return_val_if_fail(state != NULL, FALSE);
-
-  return state->pending_actions_remaining > 0 &&
-         state->forced_action_color == HOMEWORLDS_COLOR_BLUE;
-}
-
-static gboolean homeworlds_builder_ship_was_trade_result(const HomeworldsMoveBuilderState *state,
-                                                         guint system_index,
-                                                         HomeworldsPyramid ship) {
-  g_return_val_if_fail(state != NULL, FALSE);
-  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
-  g_return_val_if_fail(homeworlds_pyramid_is_valid(ship), FALSE);
-
-  if (!homeworlds_builder_has_pending_blue_sacrifice(state)) {
-    return FALSE;
-  }
-
-  for (guint i = 0; i < state->move.step_count; ++i) {
-    const HomeworldsTurnStep *step = &state->move.steps[i];
-    guint trade_system_index = HOMEWORLDS_INVALID_INDEX;
-    HomeworldsPyramid traded_ship = 0;
-
-    if (step->kind != HOMEWORLDS_STEP_TRADE ||
-        step->target_color > HOMEWORLDS_COLOR_BLUE ||
-        !homeworlds_pyramid_is_valid(step->actor.ship)) {
-      continue;
-    }
-
-    traded_ship = homeworlds_pyramid_make((HomeworldsColor) step->target_color,
-                                          homeworlds_pyramid_size(step->actor.ship));
-    if (traded_ship != ship ||
-        !homeworlds_position_resolve_system_ref(&state->working_position,
-                                                &step->actor.system,
-                                                &trade_system_index)) {
-      continue;
-    }
-
-    if (trade_system_index == system_index) {
-      return TRUE;
-    }
   }
 
   return FALSE;
@@ -525,9 +669,6 @@ static GameBackendMoveList homeworlds_builder_list_selectable_ships(const Homewo
       if (seen_pyramids[pyramid]) {
         continue;
       }
-      if (homeworlds_builder_ship_was_trade_result(state, system_index, pyramid)) {
-        continue;
-      }
       seen_pyramids[pyramid] = TRUE;
 
       HomeworldsMoveCandidate candidate = {
@@ -910,11 +1051,6 @@ gboolean homeworlds_move_builder_step(GameBackendMoveBuilder *builder, const Hom
           candidate->data.system_index >= HOMEWORLDS_SYSTEM_SLOT_COUNT ||
           candidate->data.ship_owner != state->working_position.turn ||
           !homeworlds_pyramid_is_valid(candidate->data.pyramid)) {
-        return FALSE;
-      }
-      if (homeworlds_builder_ship_was_trade_result(state,
-                                                   candidate->data.system_index,
-                                                   candidate->data.pyramid)) {
         return FALSE;
       }
       {

@@ -32,7 +32,6 @@ typedef struct {
 typedef struct {
   const HomeworldsPosition *position;
   HomeworldsScoredMove *moves;
-  GHashTable *seen_moves;
   gsize count;
   gsize capacity;
   gsize leaves_seen;
@@ -169,234 +168,6 @@ static gboolean homeworlds_backend_system_refs_equal(const HomeworldsSystemRef *
   }
 }
 
-static gint homeworlds_backend_compare_system_refs(const HomeworldsSystemRef *left,
-                                                   const HomeworldsSystemRef *right) {
-  g_return_val_if_fail(left != NULL, 0);
-  g_return_val_if_fail(right != NULL, 0);
-
-  if (left->kind != right->kind) {
-    return left->kind < right->kind ? -1 : 1;
-  }
-
-  switch ((HomeworldsSystemRefKind) left->kind) {
-    case HOMEWORLDS_SYSTEM_REF_HOMEWORLD:
-      if (left->homeworld_side != right->homeworld_side) {
-        return left->homeworld_side < right->homeworld_side ? -1 : 1;
-      }
-      return 0;
-    case HOMEWORLDS_SYSTEM_REF_SYSTEM:
-      if (left->system_index != right->system_index) {
-        return left->system_index < right->system_index ? -1 : 1;
-      }
-      if (left->star != right->star) {
-        return left->star < right->star ? -1 : 1;
-      }
-      return 0;
-    case HOMEWORLDS_SYSTEM_REF_NONE:
-    default:
-      return 0;
-  }
-}
-
-static gint homeworlds_backend_compare_trade_steps(const HomeworldsTurnStep *left,
-                                                   const HomeworldsTurnStep *right) {
-  gint system_order = 0;
-
-  g_return_val_if_fail(left != NULL, 0);
-  g_return_val_if_fail(right != NULL, 0);
-  g_return_val_if_fail(left->kind == HOMEWORLDS_STEP_TRADE, 0);
-  g_return_val_if_fail(right->kind == HOMEWORLDS_STEP_TRADE, 0);
-
-  system_order = homeworlds_backend_compare_system_refs(&left->actor.system, &right->actor.system);
-  if (system_order != 0) {
-    return system_order;
-  }
-  if (left->actor.ship != right->actor.ship) {
-    return left->actor.ship < right->actor.ship ? -1 : 1;
-  }
-  if (left->target_color != right->target_color) {
-    return left->target_color < right->target_color ? -1 : 1;
-  }
-  return 0;
-}
-
-static gint homeworlds_backend_compare_build_steps(const HomeworldsTurnStep *left,
-                                                   const HomeworldsTurnStep *right) {
-  gint system_order = 0;
-
-  g_return_val_if_fail(left != NULL, 0);
-  g_return_val_if_fail(right != NULL, 0);
-  g_return_val_if_fail(left->kind == HOMEWORLDS_STEP_BUILD, 0);
-  g_return_val_if_fail(right->kind == HOMEWORLDS_STEP_BUILD, 0);
-
-  system_order = homeworlds_backend_compare_system_refs(&left->actor.system, &right->actor.system);
-  if (system_order != 0) {
-    return system_order;
-  }
-  if (left->target_color != right->target_color) {
-    return left->target_color < right->target_color ? -1 : 1;
-  }
-  return 0;
-}
-
-static gboolean homeworlds_backend_count_pyramid(HomeworldsPyramid pyramid, guint counts[13]) {
-  g_return_val_if_fail(counts != NULL, FALSE);
-
-  if (homeworlds_pyramid_is_unused(pyramid)) {
-    return TRUE;
-  }
-  if (!homeworlds_pyramid_is_valid(pyramid)) {
-    return FALSE;
-  }
-
-  counts[pyramid]++;
-  return TRUE;
-}
-
-static gboolean homeworlds_backend_pyramid_counts_equal(const guint left[13], const guint right[13]) {
-  g_return_val_if_fail(left != NULL, FALSE);
-  g_return_val_if_fail(right != NULL, FALSE);
-
-  for (guint i = 0; i < 13; ++i) {
-    if (left[i] != right[i]) {
-      return FALSE;
-    }
-  }
-  return TRUE;
-}
-
-static void homeworlds_backend_adjust_ship_color_count(HomeworldsSystem *system,
-                                                       guint side,
-                                                       HomeworldsPyramid pyramid,
-                                                       gint delta) {
-  g_return_if_fail(system != NULL);
-  g_return_if_fail(side < 2);
-  g_return_if_fail(homeworlds_pyramid_is_valid(pyramid));
-  g_return_if_fail(delta == 1 || delta == -1);
-
-  HomeworldsColor color = homeworlds_pyramid_color(pyramid);
-  if (delta < 0) {
-    g_return_if_fail(system->ship_color_counts[side][color] > 0);
-    system->ship_color_counts[side][color]--;
-  } else {
-    system->ship_color_counts[side][color]++;
-  }
-}
-
-static void homeworlds_backend_set_ship_slot(HomeworldsSystem *system,
-                                             guint side,
-                                             guint slot,
-                                             HomeworldsPyramid pyramid) {
-  g_return_if_fail(system != NULL);
-  g_return_if_fail(side < 2);
-  g_return_if_fail(slot < HOMEWORLDS_SHIP_SLOT_COUNT);
-  g_return_if_fail(pyramid == 0 || homeworlds_pyramid_is_valid(pyramid));
-
-  HomeworldsPyramid old_pyramid = system->ships[side][slot];
-  if (pyramid == 0) {
-    g_return_if_fail(homeworlds_pyramid_is_valid(old_pyramid));
-
-    homeworlds_backend_adjust_ship_color_count(system, side, old_pyramid, -1);
-    for (guint next_slot = slot + 1; next_slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++next_slot) {
-      HomeworldsPyramid next_pyramid = system->ships[side][next_slot];
-
-      system->ships[side][next_slot - 1] = next_pyramid;
-      if (!homeworlds_pyramid_is_valid(next_pyramid)) {
-        return;
-      }
-    }
-    system->ships[side][HOMEWORLDS_SHIP_SLOT_COUNT - 1] = 0;
-    return;
-  }
-
-  if (homeworlds_pyramid_is_valid(old_pyramid)) {
-    homeworlds_backend_adjust_ship_color_count(system, side, old_pyramid, -1);
-  }
-  system->ships[side][slot] = pyramid;
-  if (homeworlds_pyramid_is_valid(pyramid)) {
-    homeworlds_backend_adjust_ship_color_count(system, side, pyramid, 1);
-  }
-}
-
-static gboolean homeworlds_backend_bank_contents_equal(const HomeworldsPosition *left,
-                                                       const HomeworldsPosition *right) {
-  guint left_counts[13] = {0};
-  guint right_counts[13] = {0};
-
-  g_return_val_if_fail(left != NULL, FALSE);
-  g_return_val_if_fail(right != NULL, FALSE);
-
-  for (guint i = 0; i < HOMEWORLDS_BANK_SLOT_COUNT; ++i) {
-    if (!homeworlds_backend_count_pyramid(left->bank[i], left_counts) ||
-        !homeworlds_backend_count_pyramid(right->bank[i], right_counts)) {
-      return FALSE;
-    }
-  }
-  return homeworlds_backend_pyramid_counts_equal(left_counts, right_counts);
-}
-
-static gboolean homeworlds_backend_systems_equal(const HomeworldsSystem *left, const HomeworldsSystem *right) {
-  guint left_stars[13] = {0};
-  guint right_stars[13] = {0};
-
-  g_return_val_if_fail(left != NULL, FALSE);
-  g_return_val_if_fail(right != NULL, FALSE);
-
-  for (guint i = 0; i < HOMEWORLDS_STAR_SLOT_COUNT; ++i) {
-    if (!homeworlds_backend_count_pyramid(left->stars[i], left_stars) ||
-        !homeworlds_backend_count_pyramid(right->stars[i], right_stars)) {
-      return FALSE;
-    }
-  }
-  if (!homeworlds_backend_pyramid_counts_equal(left_stars, right_stars)) {
-    return FALSE;
-  }
-
-  for (guint side = 0; side < 2; ++side) {
-    guint left_ships[13] = {0};
-    guint right_ships[13] = {0};
-
-    for (guint slot = 0; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
-      HomeworldsPyramid left_ship = left->ships[side][slot];
-      HomeworldsPyramid right_ship = right->ships[side][slot];
-
-      if (!homeworlds_pyramid_is_valid(left_ship) && !homeworlds_pyramid_is_valid(right_ship)) {
-        if (left_ship != 0 || right_ship != 0) {
-          return FALSE;
-        }
-        break;
-      }
-      if (!homeworlds_backend_count_pyramid(left_ship, left_ships) ||
-          !homeworlds_backend_count_pyramid(right_ship, right_ships)) {
-        return FALSE;
-      }
-    }
-    if (!homeworlds_backend_pyramid_counts_equal(left_ships, right_ships)) {
-      return FALSE;
-    }
-  }
-  return TRUE;
-}
-
-static gboolean homeworlds_backend_positions_equal(const HomeworldsPosition *left,
-                                                   const HomeworldsPosition *right) {
-  g_return_val_if_fail(left != NULL, FALSE);
-  g_return_val_if_fail(right != NULL, FALSE);
-
-  if (left->phase != right->phase || left->turn != right->turn) {
-    return FALSE;
-  }
-  if (!homeworlds_backend_bank_contents_equal(left, right)) {
-    return FALSE;
-  }
-  for (guint i = 0; i < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++i) {
-    if (!homeworlds_backend_systems_equal(&left->systems[i], &right->systems[i])) {
-      return FALSE;
-    }
-  }
-  return TRUE;
-}
-
 static gboolean homeworlds_backend_moves_equal(gconstpointer left, gconstpointer right) {
   const HomeworldsMove *left_move = left;
   const HomeworldsMove *right_move = right;
@@ -476,7 +247,6 @@ static gboolean homeworlds_backend_catastrophe_is_root_required(
 static void homeworlds_backend_move_buffer_clear(HomeworldsMoveBuffer *buffer) {
   g_return_if_fail(buffer != NULL);
 
-  g_clear_pointer(&buffer->seen_moves, g_hash_table_unref);
   g_clear_pointer(&buffer->moves, g_free);
   buffer->position = NULL;
   buffer->count = 0;
@@ -498,53 +268,6 @@ static void homeworlds_backend_move_buffer_init(HomeworldsMoveBuffer *buffer, co
   buffer->position = position;
   buffer->side = position->turn;
   buffer->prune_by_score = position->phase == HOMEWORLDS_PHASE_PLAY;
-}
-
-static gboolean homeworlds_backend_move_buffer_ensure_seen_moves(HomeworldsMoveBuffer *buffer) {
-  g_return_val_if_fail(buffer != NULL, FALSE);
-
-  if (buffer->seen_moves != NULL) {
-    return TRUE;
-  }
-
-  buffer->seen_moves = g_hash_table_new_full(homeworlds_move_hash, homeworlds_backend_moves_equal, g_free, NULL);
-  g_return_val_if_fail(buffer->seen_moves != NULL, FALSE);
-  return TRUE;
-}
-
-static gboolean homeworlds_backend_move_buffer_add_seen_move(HomeworldsMoveBuffer *buffer,
-                                                             const HomeworldsMove *move) {
-  HomeworldsMove *key = NULL;
-
-  g_return_val_if_fail(buffer != NULL, FALSE);
-  g_return_val_if_fail(move != NULL, FALSE);
-
-  if (!homeworlds_backend_move_buffer_ensure_seen_moves(buffer)) {
-    return FALSE;
-  }
-
-  key = g_new(HomeworldsMove, 1);
-  *key = *move;
-  g_hash_table_add(buffer->seen_moves, key);
-  return TRUE;
-}
-
-static void homeworlds_backend_move_buffer_remove_seen_move(HomeworldsMoveBuffer *buffer,
-                                                            const HomeworldsMove *move) {
-  g_return_if_fail(buffer != NULL);
-  g_return_if_fail(move != NULL);
-
-  if (buffer->seen_moves != NULL) {
-    g_hash_table_remove(buffer->seen_moves, move);
-  }
-}
-
-static gboolean homeworlds_backend_move_buffer_has_seen_move(const HomeworldsMoveBuffer *buffer,
-                                                             const HomeworldsMove *move) {
-  g_return_val_if_fail(buffer != NULL, FALSE);
-  g_return_val_if_fail(move != NULL, FALSE);
-
-  return buffer->seen_moves != NULL && g_hash_table_contains(buffer->seen_moves, move);
 }
 
 static gboolean homeworlds_backend_score_is_better(guint side, gint score, gint other_score) {
@@ -604,7 +327,6 @@ static void homeworlds_backend_move_buffer_remove_at(HomeworldsMoveBuffer *buffe
   g_return_if_fail(buffer != NULL);
   g_return_if_fail(index < buffer->count);
 
-  homeworlds_backend_move_buffer_remove_seen_move(buffer, &buffer->moves[index].move);
   if (index + 1 < buffer->count) {
     memmove(&buffer->moves[index],
             &buffer->moves[index + 1],
@@ -648,20 +370,13 @@ static gboolean homeworlds_backend_move_buffer_insert_scored(HomeworldsMoveBuffe
 
   buffer->moves[index] = *scored_move;
   buffer->count++;
-  return homeworlds_backend_move_buffer_add_seen_move(buffer, &scored_move->move);
+  return TRUE;
 }
 
 static gboolean homeworlds_backend_move_buffer_append_unsorted(HomeworldsMoveBuffer *buffer,
                                                                const HomeworldsMove *move) {
   g_return_val_if_fail(buffer != NULL, FALSE);
   g_return_val_if_fail(move != NULL, FALSE);
-
-  if (!homeworlds_backend_move_buffer_ensure_seen_moves(buffer)) {
-    return FALSE;
-  }
-  if (g_hash_table_contains(buffer->seen_moves, move)) {
-    return TRUE;
-  }
 
   if (!homeworlds_backend_move_buffer_reserve_slot(buffer)) {
     return FALSE;
@@ -672,7 +387,7 @@ static gboolean homeworlds_backend_move_buffer_append_unsorted(HomeworldsMoveBuf
     .score = 0,
     .original_index = buffer->next_original_index++,
   };
-  return homeworlds_backend_move_buffer_add_seen_move(buffer, move);
+  return TRUE;
 }
 
 static gboolean homeworlds_backend_move_buffer_append_scored(HomeworldsMoveBuffer *buffer, const HomeworldsMove *move) {
@@ -683,9 +398,6 @@ static gboolean homeworlds_backend_move_buffer_append_scored(HomeworldsMoveBuffe
   g_return_val_if_fail(move != NULL, FALSE);
   g_return_val_if_fail(buffer->position != NULL, FALSE);
 
-  if (homeworlds_backend_move_buffer_has_seen_move(buffer, move)) {
-    return TRUE;
-  }
   if (!homeworlds_backend_score_after_move(buffer->position, move, &score)) {
     return FALSE;
   }
@@ -909,30 +621,6 @@ static guint homeworlds_backend_system_ship_pips_for_color(const HomeworldsSyste
   return pips;
 }
 
-static gboolean homeworlds_backend_system_has_catastrophe(const HomeworldsSystem *system) {
-  g_return_val_if_fail(system != NULL, FALSE);
-
-  for (guint color = HOMEWORLDS_COLOR_RED; color <= HOMEWORLDS_COLOR_BLUE; ++color) {
-    if (homeworlds_system_color_count(system, (HomeworldsColor) color) >= 4) {
-      return TRUE;
-    }
-  }
-
-  return FALSE;
-}
-
-static gboolean homeworlds_backend_position_has_catastrophe(const HomeworldsPosition *position) {
-  g_return_val_if_fail(position != NULL, FALSE);
-
-  for (guint system_index = 0; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
-    if (homeworlds_backend_system_has_catastrophe(&position->systems[system_index])) {
-      return TRUE;
-    }
-  }
-
-  return FALSE;
-}
-
 static gboolean homeworlds_backend_system_has_unfavorable_catastrophe(const HomeworldsSystem *system, guint side) {
   guint opponent = 0;
 
@@ -1102,991 +790,6 @@ static gboolean homeworlds_backend_step_enters_unfavorable_catastrophe(
       side);
 }
 
-static gboolean homeworlds_backend_step_is_ship_move(const HomeworldsTurnStep *step) {
-  g_return_val_if_fail(step != NULL, FALSE);
-
-  return (step->kind == HOMEWORLDS_STEP_MOVE || step->kind == HOMEWORLDS_STEP_DISCOVER) &&
-         homeworlds_pyramid_is_valid(step->actor.ship);
-}
-
-static gboolean homeworlds_backend_find_yellow_sacrifice_move_origin(const HomeworldsMoveBuilderState *state,
-                                                                     const HomeworldsTurnStep *step,
-                                                                     HomeworldsSystemRef *out_origin_ref) {
-  HomeworldsSystemRef chain_system = {0};
-  gboolean found_origin = FALSE;
-  gboolean found_sacrifice = FALSE;
-
-  g_return_val_if_fail(state != NULL, FALSE);
-  g_return_val_if_fail(step != NULL, FALSE);
-  g_return_val_if_fail(out_origin_ref != NULL, FALSE);
-
-  if (state->pending_actions_remaining == 0 ||
-      state->forced_action_color != HOMEWORLDS_COLOR_YELLOW ||
-      !homeworlds_backend_step_is_ship_move(step)) {
-    return FALSE;
-  }
-
-  chain_system = step->actor.system;
-  for (guint i = state->move.step_count; i > 0; --i) {
-    const guint step_index = i - 1;
-    const HomeworldsTurnStep *prior_step = &state->move.steps[step_index];
-
-    if (prior_step->kind == HOMEWORLDS_STEP_SACRIFICE &&
-        homeworlds_pyramid_is_valid(prior_step->actor.ship) &&
-        homeworlds_pyramid_color(prior_step->actor.ship) == HOMEWORLDS_COLOR_YELLOW) {
-      found_sacrifice = TRUE;
-      break;
-    }
-
-    if (!homeworlds_backend_step_is_ship_move(prior_step) ||
-        prior_step->actor.ship != step->actor.ship ||
-        !homeworlds_backend_system_refs_equal(&prior_step->target_system, &chain_system)) {
-      continue;
-    }
-
-    chain_system = prior_step->actor.system;
-    found_origin = TRUE;
-  }
-
-  if (!found_sacrifice || !found_origin) {
-    return FALSE;
-  }
-
-  *out_origin_ref = chain_system;
-  return TRUE;
-}
-
-static gboolean homeworlds_backend_system_contains_star(const HomeworldsSystem *system, HomeworldsPyramid star) {
-  g_return_val_if_fail(system != NULL, FALSE);
-  g_return_val_if_fail(homeworlds_pyramid_is_valid(star), FALSE);
-
-  for (guint i = 0; i < HOMEWORLDS_STAR_SLOT_COUNT; ++i) {
-    if (system->stars[i] == star) {
-      return TRUE;
-    }
-  }
-
-  return FALSE;
-}
-
-static gboolean homeworlds_backend_system_for_ref_or_discovery(const HomeworldsPosition *position,
-                                                               const HomeworldsSystemRef *ref,
-                                                               HomeworldsSystem *out_system,
-                                                               guint *out_system_index) {
-  guint system_index = HOMEWORLDS_INVALID_INDEX;
-
-  g_return_val_if_fail(position != NULL, FALSE);
-  g_return_val_if_fail(ref != NULL, FALSE);
-  g_return_val_if_fail(out_system != NULL, FALSE);
-  g_return_val_if_fail(out_system_index != NULL, FALSE);
-
-  if (homeworlds_position_resolve_system_ref(position, ref, &system_index)) {
-    *out_system = position->systems[system_index];
-    *out_system_index = system_index;
-    return TRUE;
-  }
-
-  if (ref->kind != HOMEWORLDS_SYSTEM_REF_SYSTEM ||
-      ref->system_index < 2 ||
-      ref->system_index >= HOMEWORLDS_SYSTEM_SLOT_COUNT ||
-      !homeworlds_pyramid_is_valid(ref->star)) {
-    return FALSE;
-  }
-
-  if (!homeworlds_system_is_empty(&position->systems[ref->system_index])) {
-    if (!homeworlds_backend_system_contains_star(&position->systems[ref->system_index], ref->star)) {
-      return FALSE;
-    }
-
-    *out_system = position->systems[ref->system_index];
-    *out_system_index = ref->system_index;
-    return TRUE;
-  }
-
-  memset(out_system, 0, sizeof(*out_system));
-  out_system->stars[0] = ref->star;
-  homeworlds_system_rebuild_color_counts(out_system);
-  *out_system_index = ref->system_index;
-  return TRUE;
-}
-
-static gboolean homeworlds_backend_step_is_redundant_yellow_sacrifice_hop(
-    const HomeworldsMoveBuilderState *state,
-    const HomeworldsMoveBuilderState *child_state,
-    const HomeworldsTurnStep *step) {
-  HomeworldsSystemRef origin_ref = {0};
-  HomeworldsSystem origin_system = {0};
-  HomeworldsSystem target_system = {0};
-  HomeworldsSystem child_target_system = {0};
-  guint origin_system_index = HOMEWORLDS_INVALID_INDEX;
-  guint target_system_index = HOMEWORLDS_INVALID_INDEX;
-  guint child_target_system_index = HOMEWORLDS_INVALID_INDEX;
-
-  g_return_val_if_fail(state != NULL, FALSE);
-  g_return_val_if_fail(child_state != NULL, FALSE);
-  g_return_val_if_fail(step != NULL, FALSE);
-
-  if (!homeworlds_backend_find_yellow_sacrifice_move_origin(state, step, &origin_ref)) {
-    return FALSE;
-  }
-
-  if (!homeworlds_backend_system_for_ref_or_discovery(&state->working_position,
-                                                 &step->target_system,
-                                                 &target_system,
-                                                 &target_system_index) ||
-      !homeworlds_backend_system_for_ref_or_discovery(&child_state->working_position,
-                                                 &step->target_system,
-                                                 &child_target_system,
-                                                 &child_target_system_index)) {
-    return FALSE;
-  }
-
-  if (homeworlds_backend_system_has_catastrophe(&target_system) ||
-      homeworlds_backend_system_has_catastrophe(&child_target_system)) {
-    return FALSE;
-  }
-
-  if (homeworlds_backend_system_refs_equal(&origin_ref, &step->target_system)) {
-    return TRUE;
-  }
-
-  if (!homeworlds_backend_system_for_ref_or_discovery(&state->working_position,
-                                                 &origin_ref,
-                                                 &origin_system,
-                                                 &origin_system_index)) {
-    return FALSE;
-  }
-
-  return target_system_index == origin_system_index ||
-         homeworlds_system_is_connected(&origin_system, &target_system);
-}
-
-static gboolean homeworlds_backend_bank_take(HomeworldsPosition *position, HomeworldsPyramid pyramid) {
-  g_return_val_if_fail(position != NULL, FALSE);
-  g_return_val_if_fail(homeworlds_pyramid_is_valid(pyramid), FALSE);
-
-  for (guint i = 0; i < HOMEWORLDS_BANK_SLOT_COUNT; ++i) {
-    if (position->bank[i] != pyramid) {
-      continue;
-    }
-
-    position->bank[i] = 0;
-    return TRUE;
-  }
-
-  return FALSE;
-}
-
-static gboolean homeworlds_backend_bank_put(HomeworldsPosition *position, HomeworldsPyramid pyramid) {
-  g_return_val_if_fail(position != NULL, FALSE);
-  g_return_val_if_fail(homeworlds_pyramid_is_valid(pyramid), FALSE);
-
-  for (guint i = 0; i < HOMEWORLDS_BANK_SLOT_COUNT; ++i) {
-    if (!homeworlds_pyramid_is_unused(position->bank[i])) {
-      continue;
-    }
-
-    position->bank[i] = pyramid;
-    return TRUE;
-  }
-
-  return FALSE;
-}
-
-static guint homeworlds_backend_bank_pyramid_count(const HomeworldsPosition *position, HomeworldsPyramid pyramid) {
-  guint count = 0;
-
-  g_return_val_if_fail(position != NULL, 0);
-  g_return_val_if_fail(homeworlds_pyramid_is_valid(pyramid), 0);
-
-  for (guint slot = 0; slot < HOMEWORLDS_BANK_SLOT_COUNT; ++slot) {
-    count += position->bank[slot] == pyramid;
-  }
-  return count;
-}
-
-static guint homeworlds_backend_system_ship_pyramid_count(const HomeworldsSystem *system,
-                                                          guint side,
-                                                          HomeworldsPyramid pyramid) {
-  guint count = 0;
-
-  g_return_val_if_fail(system != NULL, 0);
-  g_return_val_if_fail(side < 2, 0);
-  g_return_val_if_fail(homeworlds_pyramid_is_valid(pyramid), 0);
-
-  for (guint slot = 0; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
-    if (!homeworlds_pyramid_is_valid(system->ships[side][slot])) {
-      break;
-    }
-    count += system->ships[side][slot] == pyramid;
-  }
-  return count;
-}
-
-static HomeworldsPyramid homeworlds_backend_trade_target_pyramid(const HomeworldsTurnStep *step) {
-  g_return_val_if_fail(step != NULL, 0);
-  g_return_val_if_fail(step->kind == HOMEWORLDS_STEP_TRADE, 0);
-  g_return_val_if_fail(homeworlds_pyramid_is_valid(step->actor.ship), 0);
-  g_return_val_if_fail(step->target_color <= HOMEWORLDS_COLOR_BLUE, 0);
-
-  return homeworlds_pyramid_make((HomeworldsColor) step->target_color, homeworlds_pyramid_size(step->actor.ship));
-}
-
-static gint homeworlds_backend_count_before_reversed_trade(guint current_count,
-                                                           HomeworldsPyramid counted_pyramid,
-                                                           const HomeworldsTurnStep *reversed_step) {
-  gint count = (gint) current_count;
-  HomeworldsPyramid reversed_source = 0;
-  HomeworldsPyramid reversed_target = 0;
-
-  g_return_val_if_fail(homeworlds_pyramid_is_valid(counted_pyramid), -1);
-  g_return_val_if_fail(reversed_step != NULL, -1);
-  g_return_val_if_fail(reversed_step->kind == HOMEWORLDS_STEP_TRADE, -1);
-
-  reversed_source = reversed_step->actor.ship;
-  reversed_target = homeworlds_backend_trade_target_pyramid(reversed_step);
-  if (!homeworlds_pyramid_is_valid(reversed_source) || !homeworlds_pyramid_is_valid(reversed_target)) {
-    return -1;
-  }
-
-  if (counted_pyramid == reversed_source) {
-    count++;
-  }
-  if (counted_pyramid == reversed_target) {
-    count--;
-  }
-  return count;
-}
-
-static gint homeworlds_backend_bank_count_before_reversed_trade(const HomeworldsPosition *position,
-                                                                HomeworldsPyramid pyramid,
-                                                                const HomeworldsTurnStep *reversed_step) {
-  gint count = 0;
-  HomeworldsPyramid reversed_source = 0;
-  HomeworldsPyramid reversed_target = 0;
-
-  g_return_val_if_fail(position != NULL, -1);
-  g_return_val_if_fail(homeworlds_pyramid_is_valid(pyramid), -1);
-  g_return_val_if_fail(reversed_step != NULL, -1);
-  g_return_val_if_fail(reversed_step->kind == HOMEWORLDS_STEP_TRADE, -1);
-
-  reversed_source = reversed_step->actor.ship;
-  reversed_target = homeworlds_backend_trade_target_pyramid(reversed_step);
-  if (!homeworlds_pyramid_is_valid(reversed_source) || !homeworlds_pyramid_is_valid(reversed_target)) {
-    return -1;
-  }
-
-  count = (gint) homeworlds_backend_bank_pyramid_count(position, pyramid);
-  if (pyramid == reversed_source) {
-    count--;
-  }
-  if (pyramid == reversed_target) {
-    count++;
-  }
-  return count;
-}
-
-static gboolean homeworlds_backend_reverse_trade_step(HomeworldsPosition *position,
-                                                      const HomeworldsTurnStep *step) {
-  guint system_index = HOMEWORLDS_INVALID_INDEX;
-  HomeworldsPyramid traded = 0;
-
-  g_return_val_if_fail(position != NULL, FALSE);
-  g_return_val_if_fail(step != NULL, FALSE);
-  g_return_val_if_fail(step->kind == HOMEWORLDS_STEP_TRADE, FALSE);
-
-  if (!homeworlds_pyramid_is_valid(step->actor.ship) ||
-      step->target_color > HOMEWORLDS_COLOR_BLUE ||
-      !homeworlds_position_resolve_system_ref(position, &step->actor.system, &system_index)) {
-    return FALSE;
-  }
-
-  traded = homeworlds_pyramid_make((HomeworldsColor) step->target_color,
-                                   homeworlds_pyramid_size(step->actor.ship));
-  for (guint ship_slot = 0; ship_slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++ship_slot) {
-    HomeworldsSystem *system = &position->systems[system_index];
-    HomeworldsPyramid ship = system->ships[position->turn][ship_slot];
-
-    if (!homeworlds_pyramid_is_valid(ship)) {
-      break;
-    }
-    if (ship != traded) {
-      continue;
-    }
-    if (!homeworlds_backend_bank_take(position, step->actor.ship) ||
-        !homeworlds_backend_bank_put(position, traded)) {
-      return FALSE;
-    }
-
-    homeworlds_backend_set_ship_slot(system, position->turn, ship_slot, step->actor.ship);
-    return TRUE;
-  }
-
-  return FALSE;
-}
-
-static gboolean homeworlds_backend_reverse_build_step_at_slot(const HomeworldsPosition *position,
-                                                              const HomeworldsTurnStep *step,
-                                                              guint system_index,
-                                                              guint ship_slot,
-                                                              HomeworldsPosition *out_before) {
-  HomeworldsPosition before = {0};
-  HomeworldsPosition reapplied = {0};
-  HomeworldsSystem *system = NULL;
-  HomeworldsPyramid ship = 0;
-
-  g_return_val_if_fail(position != NULL, FALSE);
-  g_return_val_if_fail(step != NULL, FALSE);
-  g_return_val_if_fail(step->kind == HOMEWORLDS_STEP_BUILD, FALSE);
-  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
-  g_return_val_if_fail(ship_slot < HOMEWORLDS_SHIP_SLOT_COUNT, FALSE);
-  g_return_val_if_fail(out_before != NULL, FALSE);
-
-  before = *position;
-  system = &before.systems[system_index];
-  ship = system->ships[before.turn][ship_slot];
-  if (!homeworlds_pyramid_is_valid(ship) ||
-      homeworlds_pyramid_color(ship) != (HomeworldsColor) step->target_color) {
-    return FALSE;
-  }
-
-  HomeworldsPyramid built = ship;
-  homeworlds_backend_set_ship_slot(system, before.turn, ship_slot, 0);
-  if (!homeworlds_backend_bank_put(&before, built)) {
-    return FALSE;
-  }
-
-  reapplied = before;
-  if (!homeworlds_position_apply_forced_action_step(&reapplied, step) ||
-      !homeworlds_backend_positions_equal(&reapplied, position)) {
-    return FALSE;
-  }
-
-  *out_before = before;
-  return TRUE;
-}
-
-static gboolean homeworlds_backend_reverse_forced_action_step(HomeworldsPosition *position,
-                                                              const HomeworldsTurnStep *step) {
-  guint system_index = HOMEWORLDS_INVALID_INDEX;
-
-  g_return_val_if_fail(position != NULL, FALSE);
-  g_return_val_if_fail(step != NULL, FALSE);
-
-  switch ((HomeworldsStepKind) step->kind) {
-    case HOMEWORLDS_STEP_BUILD:
-      if (step->target_color > HOMEWORLDS_COLOR_BLUE ||
-          !homeworlds_position_resolve_system_ref(position, &step->actor.system, &system_index)) {
-        return FALSE;
-      }
-      for (guint ship_slot = 0; ship_slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++ship_slot) {
-        HomeworldsPosition before = {0};
-        if (!homeworlds_pyramid_is_valid(position->systems[system_index].ships[position->turn][ship_slot])) {
-          break;
-        }
-
-        if (!homeworlds_backend_reverse_build_step_at_slot(position, step, system_index, ship_slot, &before)) {
-          continue;
-        }
-
-        *position = before;
-        return TRUE;
-      }
-      return FALSE;
-    case HOMEWORLDS_STEP_TRADE:
-      return homeworlds_backend_reverse_trade_step(position, step);
-    default:
-      return FALSE;
-  }
-}
-
-static gboolean homeworlds_backend_forced_steps_commute_from_before_previous(
-    const HomeworldsMoveBuilderState *state,
-    const HomeworldsMoveBuilderState *child_state,
-    const HomeworldsTurnStep *previous_step,
-    const HomeworldsTurnStep *new_step,
-    const HomeworldsPosition *before_previous) {
-  HomeworldsPosition swapped = {0};
-
-  g_return_val_if_fail(state != NULL, FALSE);
-  g_return_val_if_fail(child_state != NULL, FALSE);
-  g_return_val_if_fail(previous_step != NULL, FALSE);
-  g_return_val_if_fail(new_step != NULL, FALSE);
-  g_return_val_if_fail(before_previous != NULL, FALSE);
-
-  if (homeworlds_backend_position_has_catastrophe(before_previous) ||
-      homeworlds_backend_position_has_catastrophe(&state->working_position) ||
-      homeworlds_backend_position_has_catastrophe(&child_state->working_position)) {
-    return FALSE;
-  }
-
-  swapped = *before_previous;
-  if (!homeworlds_position_apply_forced_action_step(&swapped, new_step) ||
-      homeworlds_backend_position_has_catastrophe(&swapped) ||
-      !homeworlds_position_apply_forced_action_step(&swapped, previous_step)) {
-    return FALSE;
-  }
-
-  return homeworlds_backend_positions_equal(&swapped, &child_state->working_position);
-}
-
-static gboolean homeworlds_backend_forced_steps_commute_without_catastrophe(
-    const HomeworldsMoveBuilderState *state,
-    const HomeworldsMoveBuilderState *child_state,
-    const HomeworldsTurnStep *previous_step,
-    const HomeworldsTurnStep *new_step) {
-  g_return_val_if_fail(state != NULL, FALSE);
-  g_return_val_if_fail(child_state != NULL, FALSE);
-  g_return_val_if_fail(previous_step != NULL, FALSE);
-  g_return_val_if_fail(new_step != NULL, FALSE);
-
-  if (previous_step->kind == HOMEWORLDS_STEP_BUILD) {
-    guint system_index = HOMEWORLDS_INVALID_INDEX;
-
-    if (previous_step->target_color > HOMEWORLDS_COLOR_BLUE ||
-        !homeworlds_position_resolve_system_ref(&state->working_position,
-                                                &previous_step->actor.system,
-                                                &system_index)) {
-      return FALSE;
-    }
-
-    for (guint ship_slot = 0; ship_slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++ship_slot) {
-      HomeworldsPosition before_previous = {0};
-      if (!homeworlds_pyramid_is_valid(state->working_position.systems[system_index]
-                                           .ships[state->working_position.turn][ship_slot])) {
-        break;
-      }
-
-      if (!homeworlds_backend_reverse_build_step_at_slot(&state->working_position,
-                                                         previous_step,
-                                                         system_index,
-                                                         ship_slot,
-                                                         &before_previous)) {
-        continue;
-      }
-      if (homeworlds_backend_forced_steps_commute_from_before_previous(state,
-                                                                       child_state,
-                                                                       previous_step,
-                                                                       new_step,
-                                                                       &before_previous)) {
-        return TRUE;
-      }
-    }
-    return FALSE;
-  }
-
-  HomeworldsPosition before_previous = state->working_position;
-  if (!homeworlds_backend_reverse_forced_action_step(&before_previous, previous_step)) {
-    return FALSE;
-  }
-
-  return homeworlds_backend_forced_steps_commute_from_before_previous(state,
-                                                                      child_state,
-                                                                      previous_step,
-                                                                      new_step,
-                                                                      &before_previous);
-}
-
-static gboolean homeworlds_backend_reverse_build_step(const HomeworldsPosition *position,
-                                                      const HomeworldsTurnStep *step,
-                                                      HomeworldsPyramid preferred_built,
-                                                      HomeworldsPosition *out_before,
-                                                      HomeworldsPyramid *out_built) {
-  guint system_index = HOMEWORLDS_INVALID_INDEX;
-  gboolean found_fallback = FALSE;
-  HomeworldsPosition fallback_before = {0};
-  HomeworldsPyramid fallback_built = 0;
-
-  g_return_val_if_fail(position != NULL, FALSE);
-  g_return_val_if_fail(step != NULL, FALSE);
-  g_return_val_if_fail(step->kind == HOMEWORLDS_STEP_BUILD, FALSE);
-  g_return_val_if_fail(preferred_built == 0 || homeworlds_pyramid_is_valid(preferred_built), FALSE);
-  g_return_val_if_fail(out_before != NULL, FALSE);
-  g_return_val_if_fail(out_built != NULL, FALSE);
-
-  if (step->target_color > HOMEWORLDS_COLOR_BLUE ||
-      !homeworlds_position_resolve_system_ref(position, &step->actor.system, &system_index)) {
-    return FALSE;
-  }
-
-  for (guint ship_slot = 0; ship_slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++ship_slot) {
-    HomeworldsPosition before = {0};
-    HomeworldsPyramid built = position->systems[system_index].ships[position->turn][ship_slot];
-
-    if (!homeworlds_pyramid_is_valid(built)) {
-      break;
-    }
-    if (!homeworlds_backend_reverse_build_step_at_slot(position, step, system_index, ship_slot, &before)) {
-      continue;
-    }
-    if (preferred_built != 0 && built == preferred_built) {
-      *out_before = before;
-      *out_built = built;
-      return TRUE;
-    }
-    if (!found_fallback) {
-      fallback_before = before;
-      fallback_built = built;
-      found_fallback = TRUE;
-    }
-  }
-
-  if (!found_fallback) {
-    return FALSE;
-  }
-
-  *out_before = fallback_before;
-  *out_built = fallback_built;
-  return TRUE;
-}
-
-static gboolean homeworlds_backend_reverse_sacrifice_step(const HomeworldsPosition *position,
-                                                          const HomeworldsTurnStep *step,
-                                                          HomeworldsPosition *out_before) {
-  guint system_index = HOMEWORLDS_INVALID_INDEX;
-  guint side = 0;
-  guint ship_count = 0;
-  HomeworldsPosition before = {0};
-  HomeworldsPosition reapplied = {0};
-
-  g_return_val_if_fail(position != NULL, FALSE);
-  g_return_val_if_fail(step != NULL, FALSE);
-  g_return_val_if_fail(step->kind == HOMEWORLDS_STEP_SACRIFICE, FALSE);
-  g_return_val_if_fail(out_before != NULL, FALSE);
-
-  if (!homeworlds_pyramid_is_valid(step->actor.ship) ||
-      !homeworlds_position_resolve_system_ref(position, &step->actor.system, &system_index)) {
-    return FALSE;
-  }
-
-  before = *position;
-  if (!homeworlds_backend_bank_take(&before, step->actor.ship)) {
-    return FALSE;
-  }
-
-  side = before.turn;
-  ship_count = homeworlds_system_ship_count_for_side(&before.systems[system_index], side);
-  if (ship_count >= HOMEWORLDS_SHIP_SLOT_COUNT ||
-      before.systems[system_index].ships[side][ship_count] != 0) {
-    return FALSE;
-  }
-  homeworlds_backend_set_ship_slot(&before.systems[system_index], side, ship_count, step->actor.ship);
-
-  reapplied = before;
-  if (!homeworlds_position_apply_turn_step(&reapplied, step) ||
-      !homeworlds_backend_positions_equal(&reapplied, position)) {
-    return FALSE;
-  }
-
-  *out_before = before;
-  return TRUE;
-}
-
-static gboolean homeworlds_backend_build_step_rebuilds_sacrificed_color_at_source(
-    const HomeworldsPosition *position_after_step,
-    const HomeworldsTurnStep *step,
-    guint sacrifice_system_index,
-    HomeworldsPyramid sacrificed_ship,
-    HomeworldsPosition *out_before) {
-  guint step_system_index = HOMEWORLDS_INVALID_INDEX;
-  HomeworldsPosition before = {0};
-  HomeworldsPyramid built = 0;
-
-  g_return_val_if_fail(position_after_step != NULL, FALSE);
-  g_return_val_if_fail(step != NULL, FALSE);
-  g_return_val_if_fail(step->kind == HOMEWORLDS_STEP_BUILD, FALSE);
-  g_return_val_if_fail(sacrifice_system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
-  g_return_val_if_fail(homeworlds_pyramid_is_valid(sacrificed_ship), FALSE);
-
-  if (step->target_color != homeworlds_pyramid_color(sacrificed_ship) ||
-      !homeworlds_position_resolve_system_ref(position_after_step, &step->actor.system, &step_system_index) ||
-      step_system_index != sacrifice_system_index ||
-      !homeworlds_backend_reverse_build_step(position_after_step, step, sacrificed_ship, &before, &built)) {
-    return FALSE;
-  }
-
-  if (out_before != NULL) {
-    *out_before = before;
-  }
-  return TRUE;
-}
-
-static gboolean homeworlds_backend_build_step_was_available_before_sacrifice(
-    const HomeworldsPosition *before_sacrifice,
-    const HomeworldsTurnStep *step) {
-  HomeworldsPosition alternative = {0};
-
-  g_return_val_if_fail(before_sacrifice != NULL, FALSE);
-  g_return_val_if_fail(step != NULL, FALSE);
-  g_return_val_if_fail(step->kind == HOMEWORLDS_STEP_BUILD, FALSE);
-
-  if (step->target_color > HOMEWORLDS_COLOR_BLUE) {
-    return FALSE;
-  }
-
-  alternative = *before_sacrifice;
-  return homeworlds_position_apply_turn_step(&alternative, step);
-}
-
-static gboolean homeworlds_backend_step_is_redundant_green_medium_sacrifice_rebuild(
-    const HomeworldsMoveBuilderState *state,
-    const HomeworldsMoveBuilderState *child_state,
-    const HomeworldsTurnStep *step) {
-  const HomeworldsMove *move = NULL;
-  const HomeworldsTurnStep *sacrifice_step = NULL;
-  const HomeworldsTurnStep *previous_build = NULL;
-  const HomeworldsTurnStep *current_build = NULL;
-  guint sacrifice_step_index = HOMEWORLDS_INVALID_INDEX;
-  guint sacrifice_system_index = HOMEWORLDS_INVALID_INDEX;
-  guint build_count = 0;
-  HomeworldsPosition after_sacrifice = {0};
-  HomeworldsPosition before_sacrifice = {0};
-  HomeworldsPyramid previous_built = 0;
-  gboolean previous_rebuild = FALSE;
-  gboolean current_rebuild = FALSE;
-
-  g_return_val_if_fail(state != NULL, FALSE);
-  g_return_val_if_fail(child_state != NULL, FALSE);
-  g_return_val_if_fail(step != NULL, FALSE);
-
-  if (step->kind != HOMEWORLDS_STEP_BUILD ||
-      state->pending_actions_remaining != 1 ||
-      child_state->pending_actions_remaining != 0 ||
-      state->forced_action_color != HOMEWORLDS_COLOR_GREEN ||
-      child_state->move.step_count < 3) {
-    return FALSE;
-  }
-
-  move = &child_state->move;
-  for (guint i = 0; i < move->step_count; ++i) {
-    const HomeworldsTurnStep *candidate = &move->steps[i];
-
-    if (candidate->kind == HOMEWORLDS_STEP_SACRIFICE &&
-        homeworlds_pyramid_is_valid(candidate->actor.ship) &&
-        homeworlds_pyramid_color(candidate->actor.ship) == HOMEWORLDS_COLOR_GREEN &&
-        homeworlds_pyramid_size(candidate->actor.ship) == HOMEWORLDS_SIZE_MEDIUM) {
-      sacrifice_step_index = i;
-      sacrifice_step = candidate;
-    }
-  }
-  if (sacrifice_step == NULL) {
-    return FALSE;
-  }
-
-  for (guint i = sacrifice_step_index + 1; i < move->step_count; ++i) {
-    if (move->steps[i].kind != HOMEWORLDS_STEP_BUILD || build_count >= 2) {
-      return FALSE;
-    }
-    if (build_count == 0) {
-      previous_build = &move->steps[i];
-    } else {
-      current_build = &move->steps[i];
-    }
-    build_count++;
-  }
-  if (build_count != 2 || current_build != step || previous_build == NULL) {
-    return FALSE;
-  }
-
-  if (!homeworlds_position_resolve_system_ref(&state->working_position,
-                                              &sacrifice_step->actor.system,
-                                              &sacrifice_system_index)) {
-    return FALSE;
-  }
-
-  previous_rebuild =
-      homeworlds_backend_build_step_rebuilds_sacrificed_color_at_source(&state->working_position,
-                                                                        previous_build,
-                                                                        sacrifice_system_index,
-                                                                        sacrifice_step->actor.ship,
-                                                                        &after_sacrifice);
-  if (!previous_rebuild &&
-      !homeworlds_backend_reverse_build_step(&state->working_position,
-                                             previous_build,
-                                             0,
-                                             &after_sacrifice,
-                                             &previous_built)) {
-    return FALSE;
-  }
-  if (!homeworlds_backend_reverse_sacrifice_step(&after_sacrifice, sacrifice_step, &before_sacrifice)) {
-    return FALSE;
-  }
-
-  current_rebuild =
-      homeworlds_backend_build_step_rebuilds_sacrificed_color_at_source(&child_state->working_position,
-                                                                        current_build,
-                                                                        sacrifice_system_index,
-                                                                        sacrifice_step->actor.ship,
-                                                                        NULL);
-
-  return (previous_rebuild &&
-          homeworlds_backend_build_step_was_available_before_sacrifice(&before_sacrifice, current_build)) ||
-         (current_rebuild &&
-          homeworlds_backend_build_step_was_available_before_sacrifice(&before_sacrifice, previous_build));
-}
-
-static gint homeworlds_backend_system_color_count_before_trade(const HomeworldsPosition *position,
-                                                               guint system_index,
-                                                               HomeworldsColor color,
-                                                               guint reversed_system_index,
-                                                               const HomeworldsTurnStep *reversed_step) {
-  gint count = 0;
-
-  g_return_val_if_fail(position != NULL, -1);
-  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, -1);
-  g_return_val_if_fail(color <= HOMEWORLDS_COLOR_BLUE, -1);
-  g_return_val_if_fail(reversed_system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, -1);
-  g_return_val_if_fail(reversed_step != NULL, -1);
-  g_return_val_if_fail(reversed_step->kind == HOMEWORLDS_STEP_TRADE, -1);
-
-  count = (gint) homeworlds_system_color_count(&position->systems[system_index], color);
-  if (system_index != reversed_system_index) {
-    return count;
-  }
-
-  if (homeworlds_pyramid_color(reversed_step->actor.ship) == color) {
-    count++;
-  }
-  if ((HomeworldsColor) reversed_step->target_color == color) {
-    count--;
-  }
-  return count;
-}
-
-static gint homeworlds_backend_system_ship_count_before_trade(const HomeworldsPosition *position,
-                                                              guint system_index,
-                                                              guint side,
-                                                              HomeworldsPyramid pyramid,
-                                                              guint reversed_system_index,
-                                                              const HomeworldsTurnStep *reversed_step) {
-  gint count = 0;
-
-  g_return_val_if_fail(position != NULL, -1);
-  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, -1);
-  g_return_val_if_fail(side < 2, -1);
-  g_return_val_if_fail(homeworlds_pyramid_is_valid(pyramid), -1);
-  g_return_val_if_fail(reversed_system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, -1);
-  g_return_val_if_fail(reversed_step != NULL, -1);
-  g_return_val_if_fail(reversed_step->kind == HOMEWORLDS_STEP_TRADE, -1);
-
-  count = (gint) homeworlds_backend_system_ship_pyramid_count(&position->systems[system_index], side, pyramid);
-  if (system_index != reversed_system_index) {
-    return count;
-  }
-
-  return homeworlds_backend_count_before_reversed_trade((guint) count, pyramid, reversed_step);
-}
-
-static gboolean homeworlds_backend_trade_step_is_well_formed(const HomeworldsTurnStep *step) {
-  g_return_val_if_fail(step != NULL, FALSE);
-
-  return step->kind == HOMEWORLDS_STEP_TRADE &&
-         homeworlds_pyramid_is_valid(step->actor.ship) &&
-         step->target_color <= HOMEWORLDS_COLOR_BLUE &&
-         homeworlds_pyramid_color(step->actor.ship) != (HomeworldsColor) step->target_color;
-}
-
-static gboolean homeworlds_backend_trade_pair_has_no_fast_catastrophe(
-    const HomeworldsMoveBuilderState *state,
-    const HomeworldsMoveBuilderState *child_state,
-    const HomeworldsTurnStep *previous_step,
-    const HomeworldsTurnStep *new_step,
-    guint previous_system_index,
-    guint new_system_index) {
-  g_return_val_if_fail(state != NULL, FALSE);
-  g_return_val_if_fail(child_state != NULL, FALSE);
-  g_return_val_if_fail(previous_step != NULL, FALSE);
-  g_return_val_if_fail(new_step != NULL, FALSE);
-  g_return_val_if_fail(previous_system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
-  g_return_val_if_fail(new_system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
-
-  if (homeworlds_backend_position_has_catastrophe(&state->working_position) ||
-      homeworlds_backend_position_has_catastrophe(&child_state->working_position)) {
-    return FALSE;
-  }
-
-  for (guint color = HOMEWORLDS_COLOR_RED; color <= HOMEWORLDS_COLOR_BLUE; ++color) {
-    gint before_count = homeworlds_backend_system_color_count_before_trade(&state->working_position,
-                                                                           previous_system_index,
-                                                                           (HomeworldsColor) color,
-                                                                           previous_system_index,
-                                                                           previous_step);
-    if (before_count < 0 || before_count >= 4) {
-      return FALSE;
-    }
-  }
-
-  for (guint color = HOMEWORLDS_COLOR_RED; color <= HOMEWORLDS_COLOR_BLUE; ++color) {
-    gint swapped_count = homeworlds_backend_system_color_count_before_trade(&state->working_position,
-                                                                            new_system_index,
-                                                                            (HomeworldsColor) color,
-                                                                            previous_system_index,
-                                                                            previous_step);
-
-    if (homeworlds_pyramid_color(new_step->actor.ship) == (HomeworldsColor) color) {
-      swapped_count--;
-    }
-    if ((HomeworldsColor) new_step->target_color == (HomeworldsColor) color) {
-      swapped_count++;
-    }
-    if (swapped_count < 0 || swapped_count >= 4) {
-      return FALSE;
-    }
-  }
-
-  return TRUE;
-}
-
-static gboolean homeworlds_backend_trade_steps_commute_locally(
-    const HomeworldsMoveBuilderState *state,
-    const HomeworldsMoveBuilderState *child_state,
-    const HomeworldsTurnStep *previous_step,
-    const HomeworldsTurnStep *new_step) {
-  guint side = 0;
-  guint previous_system_index = HOMEWORLDS_INVALID_INDEX;
-  guint new_system_index = HOMEWORLDS_INVALID_INDEX;
-  HomeworldsPyramid previous_source = 0;
-  HomeworldsPyramid previous_target = 0;
-  HomeworldsPyramid new_source = 0;
-  HomeworldsPyramid new_target = 0;
-  gint new_source_count_before_previous = 0;
-  gint new_target_bank_count_before_previous = 0;
-  gint previous_source_count_after_new_first = 0;
-  gint previous_target_bank_count_after_new_first = 0;
-
-  g_return_val_if_fail(state != NULL, FALSE);
-  g_return_val_if_fail(child_state != NULL, FALSE);
-  g_return_val_if_fail(previous_step != NULL, FALSE);
-  g_return_val_if_fail(new_step != NULL, FALSE);
-
-  if (!homeworlds_backend_trade_step_is_well_formed(previous_step) ||
-      !homeworlds_backend_trade_step_is_well_formed(new_step) ||
-      !homeworlds_position_resolve_system_ref(&state->working_position,
-                                              &previous_step->actor.system,
-                                              &previous_system_index) ||
-      !homeworlds_position_resolve_system_ref(&state->working_position,
-                                              &new_step->actor.system,
-                                              &new_system_index)) {
-    return FALSE;
-  }
-
-  side = state->working_position.turn;
-  previous_source = previous_step->actor.ship;
-  previous_target = homeworlds_backend_trade_target_pyramid(previous_step);
-  new_source = new_step->actor.ship;
-  new_target = homeworlds_backend_trade_target_pyramid(new_step);
-  if (!homeworlds_pyramid_is_valid(previous_target) || !homeworlds_pyramid_is_valid(new_target)) {
-    return FALSE;
-  }
-
-  if (!homeworlds_backend_trade_pair_has_no_fast_catastrophe(state,
-                                                             child_state,
-                                                             previous_step,
-                                                             new_step,
-                                                             previous_system_index,
-                                                             new_system_index)) {
-    return FALSE;
-  }
-
-  new_source_count_before_previous =
-      homeworlds_backend_system_ship_count_before_trade(&state->working_position,
-                                                        new_system_index,
-                                                        side,
-                                                        new_source,
-                                                        previous_system_index,
-                                                        previous_step);
-  if (new_source_count_before_previous < 1) {
-    return FALSE;
-  }
-
-  new_target_bank_count_before_previous =
-      homeworlds_backend_bank_count_before_reversed_trade(&state->working_position, new_target, previous_step);
-  if (new_target_bank_count_before_previous < 1) {
-    return FALSE;
-  }
-
-  previous_source_count_after_new_first =
-      homeworlds_backend_system_ship_count_before_trade(&state->working_position,
-                                                        previous_system_index,
-                                                        side,
-                                                        previous_source,
-                                                        previous_system_index,
-                                                        previous_step);
-  if (new_system_index == previous_system_index) {
-    if (new_source == previous_source) {
-      previous_source_count_after_new_first--;
-    }
-    if (new_target == previous_source) {
-      previous_source_count_after_new_first++;
-    }
-  }
-  if (previous_source_count_after_new_first < 1) {
-    return FALSE;
-  }
-
-  previous_target_bank_count_after_new_first =
-      homeworlds_backend_bank_count_before_reversed_trade(&state->working_position, previous_target, previous_step);
-  if (new_target == previous_target) {
-    previous_target_bank_count_after_new_first--;
-  }
-  if (new_source == previous_target) {
-    previous_target_bank_count_after_new_first++;
-  }
-  return previous_target_bank_count_after_new_first >= 1;
-}
-
-static gboolean homeworlds_backend_step_is_redundant_commutative_blue_trade(
-    const HomeworldsMoveBuilderState *state,
-    const HomeworldsMoveBuilderState *child_state,
-    const HomeworldsTurnStep *step) {
-  const HomeworldsTurnStep *previous_step = NULL;
-
-  g_return_val_if_fail(state != NULL, FALSE);
-  g_return_val_if_fail(child_state != NULL, FALSE);
-  g_return_val_if_fail(step != NULL, FALSE);
-
-  if (step->kind != HOMEWORLDS_STEP_TRADE ||
-      state->pending_actions_remaining == 0 ||
-      state->forced_action_color != HOMEWORLDS_COLOR_BLUE ||
-      state->move.step_count == 0) {
-    return FALSE;
-  }
-
-  previous_step = &state->move.steps[state->move.step_count - 1];
-  if (previous_step->kind != HOMEWORLDS_STEP_TRADE ||
-      homeworlds_backend_compare_trade_steps(previous_step, step) <= 0) {
-    return FALSE;
-  }
-
-  return homeworlds_backend_trade_steps_commute_locally(state, child_state, previous_step, step);
-}
-
-static gboolean homeworlds_backend_step_is_redundant_commutative_green_build(
-    const HomeworldsMoveBuilderState *state,
-    const HomeworldsMoveBuilderState *child_state,
-    const HomeworldsTurnStep *step) {
-  const HomeworldsTurnStep *previous_step = NULL;
-
-  g_return_val_if_fail(state != NULL, FALSE);
-  g_return_val_if_fail(child_state != NULL, FALSE);
-  g_return_val_if_fail(step != NULL, FALSE);
-
-  if (step->kind != HOMEWORLDS_STEP_BUILD ||
-      state->pending_actions_remaining == 0 ||
-      state->forced_action_color != HOMEWORLDS_COLOR_GREEN ||
-      state->move.step_count == 0) {
-    return FALSE;
-  }
-
-  previous_step = &state->move.steps[state->move.step_count - 1];
-  if (previous_step->kind != HOMEWORLDS_STEP_BUILD ||
-      homeworlds_backend_compare_build_steps(previous_step, step) <= 0) {
-    return FALSE;
-  }
-
-  return homeworlds_backend_forced_steps_commute_without_catastrophe(state, child_state, previous_step, step);
-}
-
 static gboolean homeworlds_backend_child_state_is_good_after_step(
     const HomeworldsMoveBuilderState *state,
     const HomeworldsMoveBuilderState *child_state) {
@@ -2104,11 +807,7 @@ static gboolean homeworlds_backend_child_state_is_good_after_step(
          !homeworlds_backend_step_is_redundant_small_sacrifice(state, step) &&
          !homeworlds_backend_step_creates_unfavorable_build_catastrophe(state, child_state, step) &&
          !homeworlds_backend_step_creates_unfavorable_trade_catastrophe(state, child_state, step) &&
-         !homeworlds_backend_step_enters_unfavorable_catastrophe(state, child_state, step) &&
-         !homeworlds_backend_step_is_redundant_yellow_sacrifice_hop(state, child_state, step) &&
-         !homeworlds_backend_step_is_redundant_commutative_blue_trade(state, child_state, step) &&
-         !homeworlds_backend_step_is_redundant_commutative_green_build(state, child_state, step) &&
-         !homeworlds_backend_step_is_redundant_green_medium_sacrifice_rebuild(state, child_state, step);
+         !homeworlds_backend_step_enters_unfavorable_catastrophe(state, child_state, step);
 }
 
 static gboolean homeworlds_backend_move_has_pass(const HomeworldsMove *move) {
@@ -2272,21 +971,37 @@ static gboolean homeworlds_backend_apply_profitable_catastrophe(HomeworldsMoveBu
   return TRUE;
 }
 
-static gboolean homeworlds_backend_collect_good_moves_recursive(const HomeworldsMoveBuilderState *state,
-                                                                const HomeworldsGoodMoveContext *context,
-                                                                HomeworldsMoveBuffer *buffer,
-                                                                gboolean allow_pass_move) {
+static gboolean homeworlds_backend_collect_good_moves_recursive(
+    const HomeworldsMoveBuilderState *state,
+    const HomeworldsGenerationContext *generation_context,
+    const HomeworldsGoodMoveContext *context,
+    HomeworldsMoveBuffer *buffer,
+    gboolean allow_pass_move,
+    gboolean *out_covered) {
   GameBackendMoveBuilder builder = {0};
   GameBackendMoveList candidates = {0};
   HomeworldsProfitableCatastrophe catastrophes[HOMEWORLDS_SYSTEM_SLOT_COUNT * 4] = {0};
   guint catastrophe_count = 0;
   gboolean forced_catastrophe_seen = FALSE;
   const HomeworldsMoveCandidate *pass_candidate = NULL;
-  gsize good_leaves_before_candidates = 0;
+  gboolean duplicate = FALSE;
+  gboolean covered = FALSE;
+  gboolean candidate_covered = FALSE;
 
   g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(generation_context != NULL, FALSE);
   g_return_val_if_fail(context != NULL, FALSE);
   g_return_val_if_fail(buffer != NULL, FALSE);
+  g_return_val_if_fail(out_covered != NULL, FALSE);
+
+  *out_covered = FALSE;
+  if (!homeworlds_generation_visit_state(generation_context, state, &duplicate)) {
+    return FALSE;
+  }
+  if (duplicate) {
+    *out_covered = TRUE;
+    return TRUE;
+  }
 
   builder.builder_state = (gpointer) state;
   builder.builder_state_size = sizeof(*state);
@@ -2298,6 +1013,10 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(const Homeworlds
   if (catastrophe_count > 0) {
     for (guint i = 0; i < catastrophe_count; ++i) {
       HomeworldsMoveBuilderState child_state = *state;
+      HomeworldsGenerationContext child_context = {0};
+      HomeworldsGenerationDedupe child_dedupe = {0};
+      gboolean prune_child = FALSE;
+      gboolean child_covered = FALSE;
 
       if (homeworlds_backend_catastrophe_is_root_required(context, &catastrophes[i])) {
         continue;
@@ -2306,27 +1025,74 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(const Homeworlds
       if (!homeworlds_backend_apply_profitable_catastrophe(&child_state, &catastrophes[i])) {
         continue;
       }
-      if (!homeworlds_backend_collect_good_moves_recursive(&child_state, context, buffer, allow_pass_move)) {
+      if (!homeworlds_generation_prepare_child_context(generation_context,
+                                                       state,
+                                                       &child_state,
+                                                       &child_context,
+                                                       &child_dedupe,
+                                                       &prune_child)) {
         return FALSE;
       }
+      if (prune_child) {
+        covered = TRUE;
+        homeworlds_generation_dedupe_clear(&child_dedupe);
+        continue;
+      }
+      if (!homeworlds_backend_collect_good_moves_recursive(&child_state,
+                                                           &child_context,
+                                                           context,
+                                                           buffer,
+                                                           allow_pass_move,
+                                                           &child_covered)) {
+        homeworlds_generation_dedupe_clear(&child_dedupe);
+        return FALSE;
+      }
+      covered = covered || child_covered;
+      homeworlds_generation_dedupe_clear(&child_dedupe);
     }
 
     if (forced_catastrophe_seen) {
+      *out_covered = covered;
       return TRUE;
     }
   }
 
   for (guint i = 0; i < catastrophe_count; ++i) {
     HomeworldsMoveBuilderState child_state = *state;
+    HomeworldsGenerationContext child_context = {0};
+    HomeworldsGenerationDedupe child_dedupe = {0};
+    gboolean prune_child = FALSE;
+    gboolean child_covered = FALSE;
 
     if (!homeworlds_backend_catastrophe_is_root_required(context, &catastrophes[i]) ||
         homeworlds_backend_move_has_profitable_catastrophe(&state->move, &catastrophes[i]) ||
         !homeworlds_backend_apply_profitable_catastrophe(&child_state, &catastrophes[i])) {
       continue;
     }
-    if (!homeworlds_backend_collect_good_moves_recursive(&child_state, context, buffer, allow_pass_move)) {
+    if (!homeworlds_generation_prepare_child_context(generation_context,
+                                                     state,
+                                                     &child_state,
+                                                     &child_context,
+                                                     &child_dedupe,
+                                                     &prune_child)) {
       return FALSE;
     }
+    if (prune_child) {
+      covered = TRUE;
+      homeworlds_generation_dedupe_clear(&child_dedupe);
+      continue;
+    }
+    if (!homeworlds_backend_collect_good_moves_recursive(&child_state,
+                                                         &child_context,
+                                                         context,
+                                                         buffer,
+                                                         allow_pass_move,
+                                                         &child_covered)) {
+      homeworlds_generation_dedupe_clear(&child_dedupe);
+      return FALSE;
+    }
+    covered = covered || child_covered;
+    homeworlds_generation_dedupe_clear(&child_dedupe);
   }
 
   if (homeworlds_move_builder_is_complete(&builder)) {
@@ -2342,18 +1108,25 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(const Homeworlds
       return TRUE;
     }
 
-    return homeworlds_backend_move_buffer_append(buffer, &move);
+    if (!homeworlds_backend_move_buffer_append(buffer, &move)) {
+      return FALSE;
+    }
+    *out_covered = TRUE;
+    return TRUE;
   }
 
   candidates = homeworlds_move_builder_list_candidates(&builder);
-  good_leaves_before_candidates = buffer->leaves_seen;
   for (gsize i = 0; i < candidates.count; ++i) {
     const HomeworldsMoveCandidate *candidate = &((const HomeworldsMoveCandidate *) candidates.moves)[i];
     HomeworldsMoveBuilderState child_state = *state;
+    HomeworldsGenerationContext child_context = {0};
+    HomeworldsGenerationDedupe child_dedupe = {0};
     GameBackendMoveBuilder child = {
       .builder_state = &child_state,
       .builder_state_size = sizeof(child_state),
     };
+    gboolean prune_child = FALSE;
+    gboolean child_covered = FALSE;
 
     if (candidate != NULL && homeworlds_backend_candidate_is_pass(candidate)) {
       pass_candidate = candidate;
@@ -2361,34 +1134,87 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(const Homeworlds
     }
 
     if (candidate == NULL ||
-        !homeworlds_move_builder_step(&child, candidate) ||
-        !homeworlds_backend_child_state_is_good_after_step(state, &child_state)) {
+        !homeworlds_move_builder_step(&child, candidate)) {
       continue;
     }
-    if (!homeworlds_backend_collect_good_moves_recursive(&child_state, context, buffer, allow_pass_move)) {
+    if (!homeworlds_generation_prepare_child_context(generation_context,
+                                                     state,
+                                                     &child_state,
+                                                     &child_context,
+                                                     &child_dedupe,
+                                                     &prune_child)) {
       homeworlds_backend_move_list_free(&candidates);
       return FALSE;
     }
+    if (prune_child) {
+      covered = TRUE;
+      candidate_covered = TRUE;
+      homeworlds_generation_dedupe_clear(&child_dedupe);
+      continue;
+    }
+    if (!homeworlds_backend_child_state_is_good_after_step(state, &child_state)) {
+      homeworlds_generation_dedupe_clear(&child_dedupe);
+      continue;
+    }
+    if (!homeworlds_backend_collect_good_moves_recursive(&child_state,
+                                                         &child_context,
+                                                         context,
+                                                         buffer,
+                                                         allow_pass_move,
+                                                         &child_covered)) {
+      homeworlds_generation_dedupe_clear(&child_dedupe);
+      homeworlds_backend_move_list_free(&candidates);
+      return FALSE;
+    }
+    covered = covered || child_covered;
+    candidate_covered = candidate_covered || child_covered;
+    homeworlds_generation_dedupe_clear(&child_dedupe);
   }
 
   if (pass_candidate != NULL &&
-      buffer->leaves_seen == good_leaves_before_candidates &&
+      !candidate_covered &&
       homeworlds_backend_state_can_use_pass_fallback(state)) {
     HomeworldsMoveBuilderState child_state = *state;
+    HomeworldsGenerationContext child_context = {0};
+    HomeworldsGenerationDedupe child_dedupe = {0};
     GameBackendMoveBuilder child = {
       .builder_state = &child_state,
       .builder_state_size = sizeof(child_state),
     };
+    gboolean prune_child = FALSE;
+    gboolean child_covered = FALSE;
 
-    if (homeworlds_move_builder_step(&child, pass_candidate) &&
-        homeworlds_backend_child_state_is_good_after_step(state, &child_state) &&
-        !homeworlds_backend_collect_good_moves_recursive(&child_state, context, buffer, TRUE)) {
-      homeworlds_backend_move_list_free(&candidates);
-      return FALSE;
+    if (homeworlds_move_builder_step(&child, pass_candidate)) {
+      if (!homeworlds_generation_prepare_child_context(generation_context,
+                                                       state,
+                                                       &child_state,
+                                                       &child_context,
+                                                       &child_dedupe,
+                                                       &prune_child)) {
+        homeworlds_backend_move_list_free(&candidates);
+        return FALSE;
+      }
+      if (prune_child) {
+        covered = TRUE;
+      } else if (homeworlds_backend_child_state_is_good_after_step(state, &child_state)) {
+        if (!homeworlds_backend_collect_good_moves_recursive(&child_state,
+                                                             &child_context,
+                                                             context,
+                                                             buffer,
+                                                             TRUE,
+                                                             &child_covered)) {
+          homeworlds_generation_dedupe_clear(&child_dedupe);
+          homeworlds_backend_move_list_free(&candidates);
+          return FALSE;
+        }
+        covered = covered || child_covered;
+      }
     }
+    homeworlds_generation_dedupe_clear(&child_dedupe);
   }
 
   homeworlds_backend_move_list_free(&candidates);
+  *out_covered = covered;
   return TRUE;
 }
 
@@ -2453,10 +1279,12 @@ static void homeworlds_backend_trace_good_moves(const HomeworldsPosition *positi
 static GameBackendMoveList homeworlds_backend_list_good_moves(gconstpointer position, guint depth_hint) {
   const HomeworldsPosition *homeworlds_position = position;
   GameBackendMoveBuilder builder = {0};
+  HomeworldsGenerationContext generation_context = {0};
   HomeworldsGoodMoveContext context = {0};
   HomeworldsMoveBuffer buffer = {0};
   HomeworldsMove *moves = NULL;
   gsize count = 0;
+  gboolean covered = FALSE;
 
   g_return_val_if_fail(homeworlds_position != NULL, (GameBackendMoveList){0});
 
@@ -2469,7 +1297,13 @@ static GameBackendMoveList homeworlds_backend_list_good_moves(gconstpointer posi
       builder.builder_state,
       context.root_catastrophes,
       G_N_ELEMENTS(context.root_catastrophes));
-  if (!homeworlds_backend_collect_good_moves_recursive(builder.builder_state, &context, &buffer, FALSE)) {
+  homeworlds_generation_context_init(&generation_context);
+  if (!homeworlds_backend_collect_good_moves_recursive(builder.builder_state,
+                                                       &generation_context,
+                                                       &context,
+                                                       &buffer,
+                                                       FALSE,
+                                                       &covered)) {
     homeworlds_move_builder_clear(&builder);
     homeworlds_backend_move_buffer_clear(&buffer);
     return (GameBackendMoveList){0};

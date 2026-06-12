@@ -49,30 +49,29 @@ should not be absent merely because `good_moves()` dislikes it.
 
 ## Duplicate Control
 
-Move generation avoids duplicates in two places.
+Move generation avoids duplicates without keeping a global result-position table.
 
 The preferred place is the representation or builder candidate itself. Setup choices list each available pyramid kind
 once rather than once per physical bank copy. Discovery choices list each reachable new star pyramid once. Ship
 selection deduplicates identical same-side ships within a system, because selecting either identical ship has the same
 symbolic move. Build steps store only the source system and build color, not the size of the source ship, because
 `H1g1+` and `H1g3+` are the same build when both are green ships in `H1`.
-The staged builder therefore offers build only from the first selectable source ship of each color in a system; other
-same-color ships can still be selected for actions where size matters.
-During a blue sacrifice, ship selection also skips any pyramid that was created by an earlier trade in that same
-system, so `H1r2=g H1g2=y` is represented canonically as `H1r2=y pass`.
-The `good_moves()` policy also canonicalizes adjacent blue-sacrifice trades when they are provably commutative: the
-later trade is pruned if swapping it with the previous trade is legal, reaches the same position, and no catastrophe is
-available before, between, or after the two trades. Green-sacrifice builds use the same proof: adjacent builds are kept
-in canonical system/color order only when the swapped order consumes the same bank pieces and reaches the same
-position. Reversing a green build may have several plausible predecessors when the target system already contains
-same-color ships, so the proof tries every reversible built-ship candidate. Bank-dependent trade and build chains are
-left alone.
+The staged builder remains a legal-entry tool rather than a generated-list canonicalizer. It still lets the UI select
+a catastrophe before a sacrifice, and during a blue sacrifice it still lets a player trade a ship that was created by
+an earlier trade when the rules allow it.
 
-The AI collector still guards against duplicates when it finishes a move, but only as a diagnostic safety net.
-`homeworlds_backend_move_buffer_append()` records structural move hashes in a `GHashTable`; if the same symbolic move
-appears again, the duplicate is still appended and a warning logs both the duplicated move and the root position that
-generated it. The normal goal is to make duplicates impossible by construction, so this guard should explain a
-generation bug rather than silently hiding it.
+The generated `all_moves()` and `good_moves()` traversals share a sacrifice-scoped dedupe helper. When generation
+chooses a sacrifice, it creates one temporary table for the descendants of that exact sacrifice and destroys the table
+when that recursive branch returns. The table stores clean builder-boundary states, not every completed move from the
+root. A clean boundary is either source-ship selection or complete-move state, where transient selected target fields
+do not affect future choices. Each key contains the semantic working position, builder stage, pending sacrifice action
+state, and current step count. This keeps memory bounded by one sacrifice subtree while pruning equivalent
+continuations such as commutative green builds, blue trade permutations, or catastrophe placement under that sacrifice.
+
+Generated lists also use sacrifice-first canonicalization. If a generated branch has only prefix catastrophes and then
+tries to choose a sacrifice, that child is pruned; the canonical branch is to sacrifice first and then trigger those
+catastrophes inside the sacrifice scope. Legal move application and the interactive builder still accept the
+catastrophe-first order.
 
 ## Current Good-Move Policy
 
@@ -88,12 +87,8 @@ every non-pass branch has been filtered away before a primary action is staged. 
 build unless pass is the only remaining fallback. After a choice appends an action step, the same policy is applied to
 ordinary actions and sacrifice-granted actions. The AI does not move or sacrifice the last ship at its own homeworld,
 rejects builds that create an unfavorable catastrophe, and rejects a small sacrifice when the sacrificed color's action
-was already available at that system. During yellow sacrifices, it also rejects repeated hops by the same ship when the
-ship returns to its original source or reaches a destination the original source could already have reached directly,
-provided the hop does not cross a catastrophe boundary.
-During blue and green sacrifices, independent adjacent trades or builds are kept in canonical order so equivalent
-permutations are not searched more than once. The check is conservative: steps are considered reorderable only if the
-swapped order is legal, position-equivalent, and catastrophe-free at every boundary.
+was already available at that system. Equivalent continuations inside a sacrifice are pruned by the shared
+sacrifice-scoped builder-state deduper instead of by color-specific adjacent-step rules.
 
 The catastrophe policy distinguishes profitable and unfavorable catastrophes from the moving side's perspective. A
 profitable catastrophe destroys more opponent ship pips than own ship pips. If such a catastrophe exists at the start
