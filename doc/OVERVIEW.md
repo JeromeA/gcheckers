@@ -725,7 +725,7 @@ baseline wins so draws and timeouts do not affect the ratio. Its variable names 
 `homeworld-ship1`, `homeworld-ship2`, `homeworld-ship3`, `single-star`, and `buildable-color`; the old descriptive
 ship aliases are not accepted. With `--trace-move-counts`, it uses the Homeworlds backend trace hook to print per-ply
 complete-leaf, scored-move, and kept-move counts to stderr without mixing them into the CSV summary. If a
-`good_moves()` call generates more than 100,000 deduplicated complete leaves, it writes `big_move_report_###.txt` in
+`good_moves()` call generates more than 200,000 deduplicated complete leaves, it writes `big_move_report_###.txt` in
 the current
 directory with the `good_moves()` trace counts followed by the same move-report body used by
 `homeworlds_profile_moves`: the moves leading to the reported position, the ASCII position, and a streamed dump of all
