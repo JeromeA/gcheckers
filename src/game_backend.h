@@ -55,6 +55,9 @@ typedef struct {
   gboolean supports_move_builder;
   gboolean supports_ai_search;
   gboolean extends_forced_moves;
+  gboolean supports_ascii_game_io;
+  const char *ascii_game_file_description;
+  const char *ascii_game_file_extension;
 
   const GameBackendVariant *(*variant_at)(guint index);
   const GameBackendVariant *(*variant_by_short_name)(const char *short_name);

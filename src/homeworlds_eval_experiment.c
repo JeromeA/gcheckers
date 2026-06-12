@@ -1,7 +1,7 @@
 #include "ai_search.h"
 #include "games/homeworlds/homeworlds_backend.h"
 #include "games/homeworlds/homeworlds_game.h"
-#include "games/homeworlds/homeworlds_position_text.h"
+#include "games/homeworlds/homeworlds_move_report.h"
 
 #include <errno.h>
 #include <glib/gstdio.h>
@@ -14,7 +14,7 @@ enum {
   HOMEWORLDS_EXPERIMENT_DEFAULT_GAMES = 100,
   HOMEWORLDS_EXPERIMENT_DEFAULT_MAX_PLIES = 300,
   HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_THRESHOLD = 7000000,
-  HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_MIN_TOTAL_MOVES = 90000000,
+  HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_MIN_TOTAL_MOVES = 150000000,
 };
 
 static const char *HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_THRESHOLD_ENV =
@@ -50,11 +50,6 @@ typedef struct {
   const GArray *played_moves;
   gboolean trace_move_counts;
 } HomeworldsExperimentMoveTraceContext;
-
-typedef struct {
-  FILE *file;
-  gsize count;
-} HomeworldsExperimentMoveDumpContext;
 
 static guint homeworlds_experiment_big_move_report_counter = 1;
 
@@ -136,47 +131,6 @@ static char *homeworlds_experiment_next_big_move_report_path(void) {
 
   g_debug("Homeworlds big move report counter exhausted");
   return NULL;
-}
-
-static gboolean homeworlds_experiment_dump_streamed_move(gconstpointer move_data, gpointer user_data) {
-  const HomeworldsMove *move = move_data;
-  HomeworldsExperimentMoveDumpContext *context = user_data;
-  char notation[128] = {0};
-
-  g_return_val_if_fail(move != NULL, FALSE);
-  g_return_val_if_fail(context != NULL, FALSE);
-  g_return_val_if_fail(context->file != NULL, FALSE);
-
-  context->count++;
-  if (!homeworlds_move_format(move, notation, sizeof(notation))) {
-    g_debug("Failed to format streamed Homeworlds move for big move report");
-    return fprintf(context->file, "%" G_GSIZE_FORMAT ". <unformattable move>\n", context->count) >= 0;
-  }
-
-  return fprintf(context->file, "%" G_GSIZE_FORMAT ". %s\n", context->count, notation) >= 0;
-}
-
-static void homeworlds_experiment_write_played_moves(FILE *file, const GArray *played_moves) {
-  g_return_if_fail(file != NULL);
-
-  fprintf(file, "moves:\n");
-  if (played_moves == NULL || played_moves->len == 0) {
-    fprintf(file, "<none>\n\n");
-    return;
-  }
-
-  for (guint i = 0; i < played_moves->len; ++i) {
-    const HomeworldsMove *move = &g_array_index(played_moves, HomeworldsMove, i);
-    char notation[128] = {0};
-
-    if (!homeworlds_move_format(move, notation, sizeof(notation))) {
-      fprintf(file, "%u. <unformattable move>\n", i + 1);
-      continue;
-    }
-
-    fprintf(file, "%u. %s\n", i + 1, notation);
-  }
-  fprintf(file, "\n");
 }
 
 static GArray *homeworlds_experiment_parse_values(const char *text) {
@@ -307,10 +261,9 @@ static GameBackendOutcome homeworlds_experiment_no_move_outcome(const Homeworlds
 static void homeworlds_experiment_write_big_move_report(const HomeworldsGoodMoveTrace *trace,
                                                         const HomeworldsExperimentMoveTraceContext *context) {
   g_autofree char *path = NULL;
-  g_autofree char *ascii = NULL;
   FILE *file = NULL;
-  HomeworldsExperimentMoveDumpContext dump_context = {0};
-  gboolean streamed = FALSE;
+  gboolean report_written = FALSE;
+  gsize all_move_count = 0;
   gsize min_total_moves = 0;
 
   g_return_if_fail(trace != NULL);
@@ -328,13 +281,6 @@ static void homeworlds_experiment_write_big_move_report(const HomeworldsGoodMove
     return;
   }
 
-  ascii = homeworlds_position_format_ascii(trace->position);
-  if (ascii == NULL) {
-    g_debug("Failed to format Homeworlds position for big move report");
-    fclose(file);
-    return;
-  }
-
   fprintf(file, "value: %d\n", context->value);
   fprintf(file, "game: %u\n", context->game);
   fprintf(file, "seed: %u\n", context->seed);
@@ -345,33 +291,19 @@ static void homeworlds_experiment_write_big_move_report(const HomeworldsGoodMove
   fprintf(file, "good_moves_generated: %" G_GSIZE_FORMAT "\n", trace->generated_leaves);
   fprintf(file, "good_moves_scored: %" G_GSIZE_FORMAT "\n", trace->scored_moves);
   fprintf(file, "good_moves_kept: %" G_GSIZE_FORMAT "\n\n", trace->kept_moves);
-  homeworlds_experiment_write_played_moves(file, context->played_moves);
-  fprintf(file, "position:\n%s", ascii);
-  if (!g_str_has_suffix(ascii, "\n")) {
-    fprintf(file, "\n");
-  }
-  fprintf(file, "\nall_moves:\n");
+  report_written = homeworlds_move_report_write(file, trace->position, context->played_moves, &all_move_count);
 
-  dump_context.file = file;
-  streamed = homeworlds_game_backend.stream_moves(trace->position,
-                                                  homeworlds_experiment_dump_streamed_move,
-                                                  &dump_context);
-  fprintf(file, "\nall_moves_streamed: %" G_GSIZE_FORMAT "\n", dump_context.count);
-  if (!streamed) {
-    fprintf(file, "all_moves_stream_error: true\n");
-  }
-
-  if (fclose(file) != 0 || !streamed) {
+  if (fclose(file) != 0 || !report_written) {
     g_printerr("Failed to finish %s Homeworlds big move report.\n", path);
     return;
   }
 
   min_total_moves = homeworlds_experiment_big_move_report_min_total_moves();
-  if (dump_context.count < min_total_moves) {
+  if (all_move_count < min_total_moves) {
     if (g_remove(path) != 0) {
       g_printerr("Failed to delete %s Homeworlds big move report with only %" G_GSIZE_FORMAT " total moves.\n",
                  path,
-                 dump_context.count);
+                 all_move_count);
       return;
     }
 

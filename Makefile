@@ -80,7 +80,7 @@ CHECKERS_SRCS := $(CHECKERS_DIR)/board.c $(CHECKERS_DIR)/board_geometry.c $(CHEC
 	$(CHECKERS_DIR)/checkers_model.c
 SRCS := $(CHECKERS_SRCS) $(CHECKERS_BACKEND_SRCS) \
 	$(HOMEWORLDS_GAME_SRCS) $(HOMEWORLDS_BACKEND_SRCS) $(HOMEWORLDS_UI_STUB_SRCS) \
-	$(BOOP_RULES_SRCS) src/ai_search.c src/game_model.c src/game_app_profile.c
+	$(BOOP_RULES_SRCS) src/ai_search.c src/game_model.c src/game_app_profile.c src/game_text_io.c
 BUG_EMBEDDED_SRCS := src/game_app_profile.c src/game_model.c $(HOMEWORLDS_DIR)/homeworlds_backend.c src/window.c
 BUG_HOMEWORLDS_ALL_SRCS := $(filter-out $(HOMEWORLDS_DIR)/homeworlds_backend.c,$(HOMEWORLDS_ALL_SRCS))
 BUG_SRCS := $(filter-out $(BUG_EMBEDDED_SRCS),$(SRCS))
@@ -176,9 +176,10 @@ TEST_PUZZLE_PROGRESS_BIN := $(TESTS_DIR)/test_puzzle_progress
 TEST_PUZZLE_PROGRESS_REPORT_SERVER_BIN := $(TESTS_DIR)/test_puzzle_progress_report_server
 CALLGRIND_OUT := $(CALLGRIND_DIR)/callgrind.out
 CALLGRIND_ANNOTATION := $(CALLGRIND_DIR)/callgrind.annotated
-PROFILE_BIN ?= $(HOMEWORLDS_PROFILE_MOVES_BIN)
-PROFILE_CMD = $(PROFILE_BIN) --moves 10 --seed 1
-# PROFILE_CMD = $(PROFILE_BIN) --file game-homeworlds.sgf --moves 19 --depth 2
+#PROFILE_BIN ?= $(HOMEWORLDS_PROFILE_MOVES_BIN)
+PROFILE_BIN ?= $(HOMEWORLDS_EVAL_EXPERIMENT_BIN)
+# PROFILE_CMD = $(PROFILE_BIN) --moves 10 --seed 1
+PROFILE_CMD = $(PROFILE_BIN) --variable large-ship --values 40 --games 1 --max-plies 300 --seed 4
 TEST_BINS := $(TEST_GAME_BIN) $(TEST_GAME_PRINT_BIN) $(TEST_GAME_BACKEND_BIN) $(TEST_GAME_MODEL_BIN) \
 	$(TEST_HOMEWORLDS_GAME_BIN) $(TEST_HOMEWORLDS_BACKEND_BIN) $(TEST_HOMEWORLDS_PROFILE_MOVES_BIN) \
 	$(TEST_HOMEWORLDS_EVAL_EXPERIMENT_BIN) $(TEST_HOMEWORLDS_WINDOW_BIN) \
@@ -417,7 +418,7 @@ $(HOMEWORLDS_PROFILE_MOVES_BIN): src/homeworlds_profile_moves.c $(SRCS) $(SGF_TR
 
 $(HOMEWORLDS_EVAL_EXPERIMENT_BIN): src/homeworlds_eval_experiment.c src/ai_search.c src/ai_search.h \
 	$(HOMEWORLDS_ALL_SRCS) $(SGF_TREE_SRCS) $(HOMEWORLDS_DIR)/homeworlds_backend.h \
-	$(HOMEWORLDS_DIR)/homeworlds_game.h
+	$(HOMEWORLDS_DIR)/homeworlds_game.h $(HOMEWORLDS_DIR)/homeworlds_move_report.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ src/homeworlds_eval_experiment.c src/ai_search.c $(HOMEWORLDS_ALL_SRCS) \
 		$(SGF_TREE_SRCS) $(LDLIBS)

@@ -1,7 +1,9 @@
 #include "sgf_file_actions.h"
 
+#include "active_game_backend.h"
 #include "common_settings.h"
 #include "file_dialog_history.h"
+#include "game_text_io.h"
 #include "sgf_io.h"
 
 static void ggame_window_show_file_error_dialog(GGameWindow *self, const char *title, const char *message) {
@@ -38,15 +40,31 @@ static void ggame_window_show_file_error_dialog(GGameWindow *self, const char *t
 static void ggame_window_configure_sgf_filters(GtkFileDialog *dialog) {
   g_return_if_fail(GTK_IS_FILE_DIALOG(dialog));
 
+  GListStore *filters = g_list_store_new(GTK_TYPE_FILE_FILTER);
+
   GtkFileFilter *filter = gtk_file_filter_new();
   gtk_file_filter_set_name(filter, "SGF files");
   gtk_file_filter_add_pattern(filter, "*.sgf");
   gtk_file_filter_add_pattern(filter, "*.gsgf");
-
-  GListStore *filters = g_list_store_new(GTK_TYPE_FILE_FILTER);
   g_list_store_append(filters, filter);
-  gtk_file_dialog_set_filters(dialog, G_LIST_MODEL(filters));
   gtk_file_dialog_set_default_filter(dialog, filter);
+
+  const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
+  if (backend != NULL &&
+      backend->supports_ascii_game_io &&
+      backend->ascii_game_file_extension != NULL &&
+      backend->ascii_game_file_extension[0] != '\0') {
+    GtkFileFilter *text_filter = gtk_file_filter_new();
+    g_autofree char *pattern = g_strdup_printf("*.%s", backend->ascii_game_file_extension);
+    gtk_file_filter_set_name(text_filter,
+                             backend->ascii_game_file_description != NULL ?
+                                 backend->ascii_game_file_description :
+                                 "Text game files");
+    gtk_file_filter_add_pattern(text_filter, pattern);
+    g_list_store_append(filters, text_filter);
+  }
+
+  gtk_file_dialog_set_filters(dialog, G_LIST_MODEL(filters));
   g_object_unref(filters);
 }
 

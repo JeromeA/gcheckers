@@ -3,6 +3,7 @@
 #include "active_game_backend.h"
 #include "games/checkers/checkers_backend.h"
 #include "games/checkers/rulesets.h"
+#include "game_text_io.h"
 #include "sgf_autosave.h"
 #include "sgf_io.h"
 #include "sgf_move_props.h"
@@ -29,6 +30,29 @@ static GGameModel *ggame_sgf_controller_peek_active_game_model(GGameSgfControlle
   g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), NULL);
 
   return self->game_model;
+}
+
+static gboolean ggame_sgf_controller_get_file_backend(GGameSgfController *self,
+                                                      const GameBackend **out_backend,
+                                                      const GameBackendVariant **out_variant) {
+  GGameModel *game_model = NULL;
+
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
+  g_return_val_if_fail(out_backend != NULL, FALSE);
+  g_return_val_if_fail(out_variant != NULL, FALSE);
+
+  *out_backend = NULL;
+  *out_variant = NULL;
+
+  game_model = ggame_sgf_controller_peek_active_game_model(self);
+  if (GGAME_IS_MODEL(game_model)) {
+    *out_backend = ggame_model_peek_backend(game_model);
+    *out_variant = ggame_model_peek_variant(game_model);
+    return *out_backend != NULL;
+  }
+
+  *out_backend = GGAME_ACTIVE_GAME_BACKEND;
+  return *out_backend != NULL;
 }
 
 static gboolean ggame_sgf_controller_sync_tree_ruleset_from_model(GGameSgfController *self) {
@@ -1118,14 +1142,37 @@ gboolean ggame_sgf_controller_step_forward_to_end(GGameSgfController *self) {
 }
 
 gboolean ggame_sgf_controller_load_file(GGameSgfController *self, const char *path, GError **error) {
+  const GameBackend *file_backend = NULL;
+  const GameBackendVariant *file_variant = NULL;
   const SgfNode *selected = NULL;
   const GameBackendVariant *loaded_variant = NULL;
+  gboolean loaded_text_game = FALSE;
 
   g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(path != NULL, FALSE);
 
+  if (!ggame_sgf_controller_get_file_backend(self, &file_backend, &file_variant)) {
+    g_set_error_literal(error,
+                        g_quark_from_static_string("gcheckers-sgf-controller-error"),
+                        19,
+                        "Unable to determine backend for game file load");
+    return FALSE;
+  }
+
   g_autoptr(SgfTree) loaded = NULL;
-  if (!sgf_io_load_file(path, &loaded, error)) {
+  loaded_text_game = ggame_text_game_io_backend_supports_path(file_backend, path);
+  if (loaded_text_game) {
+    if (!ggame_text_game_io_load_file(file_backend, file_variant, path, &loaded, error)) {
+      return FALSE;
+    }
+    if (file_variant != NULL && !sgf_io_tree_set_variant(loaded, file_variant)) {
+      g_set_error_literal(error,
+                          g_quark_from_static_string("gcheckers-sgf-controller-error"),
+                          20,
+                          "Unable to stamp loaded ASCII game with the active variant");
+      return FALSE;
+    }
+  } else if (!sgf_io_load_file(path, &loaded, error)) {
     return FALSE;
   }
 
@@ -1304,9 +1351,23 @@ gboolean ggame_sgf_controller_get_current_node_move(GGameSgfController *self, gp
 }
 
 gboolean ggame_sgf_controller_save_file(GGameSgfController *self, const char *path, GError **error) {
+  const GameBackend *file_backend = NULL;
+  const GameBackendVariant *file_variant = NULL;
+
   g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
   g_return_val_if_fail(path != NULL, FALSE);
   g_return_val_if_fail(SGF_IS_TREE(self->sgf_tree), FALSE);
+
+  if (!ggame_sgf_controller_get_file_backend(self, &file_backend, &file_variant)) {
+    g_set_error_literal(error,
+                        g_quark_from_static_string("gcheckers-sgf-controller-error"),
+                        19,
+                        "Unable to determine backend for game file save");
+    return FALSE;
+  }
+  if (ggame_text_game_io_backend_supports_path(file_backend, path)) {
+    return ggame_text_game_io_save_file(file_backend, file_variant, path, self->sgf_tree, error);
+  }
 
   if (!ggame_sgf_controller_sync_tree_ruleset_from_model(self)) {
     g_set_error_literal(error,

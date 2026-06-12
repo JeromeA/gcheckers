@@ -1,111 +1,222 @@
 #include "homeworlds_move_report.h"
 
-#include "homeworlds_backend.h"
 #include "homeworlds_game.h"
+#include "homeworlds_position_text.h"
 
-static gboolean homeworlds_move_report_moves_equal(gconstpointer left, gconstpointer right) {
-  g_return_val_if_fail(left != NULL, FALSE);
-  g_return_val_if_fail(right != NULL, FALSE);
+#include <stdarg.h>
 
-  return homeworlds_moves_equal(left, right);
+typedef gboolean (*HomeworldsMoveReportWriteTextFunc)(const char *text, gpointer user_data);
+
+typedef struct {
+  HomeworldsMoveReportWriteTextFunc write_text;
+  gpointer user_data;
+  gsize all_move_count;
+} HomeworldsMoveReportWriter;
+
+static gboolean homeworlds_move_report_count_word(gsize count, const char **out_word) {
+  g_return_val_if_fail(out_word != NULL, FALSE);
+
+  *out_word = count == 1 ? "move" : "moves";
+  return TRUE;
 }
 
-static GHashTable *homeworlds_move_report_build_move_set(const GameBackendMoveList *moves) {
-  GHashTable *move_set = NULL;
+static gboolean homeworlds_move_report_write_text(HomeworldsMoveReportWriter *writer, const char *text) {
+  g_return_val_if_fail(writer != NULL, FALSE);
+  g_return_val_if_fail(writer->write_text != NULL, FALSE);
+  g_return_val_if_fail(text != NULL, FALSE);
 
-  g_return_val_if_fail(moves != NULL, NULL);
+  return writer->write_text(text, writer->user_data);
+}
 
-  move_set = g_hash_table_new(homeworlds_move_hash, homeworlds_move_report_moves_equal);
-  g_return_val_if_fail(move_set != NULL, NULL);
+static gboolean homeworlds_move_report_write_printf(HomeworldsMoveReportWriter *writer, const char *format, ...) {
+  va_list args;
+  g_autofree char *text = NULL;
 
-  for (gsize i = 0; i < moves->count; ++i) {
-    const HomeworldsMove *candidate = homeworlds_game_backend.move_list_get(moves, i);
+  g_return_val_if_fail(writer != NULL, FALSE);
+  g_return_val_if_fail(format != NULL, FALSE);
 
-    if (candidate != NULL) {
-      g_hash_table_add(move_set, (gpointer)candidate);
-    }
+  va_start(args, format);
+  text = g_strdup_vprintf(format, args);
+  va_end(args);
+  g_return_val_if_fail(text != NULL, FALSE);
+
+  return homeworlds_move_report_write_text(writer, text);
+}
+
+static gboolean homeworlds_move_report_write_string_text(const char *text, gpointer user_data) {
+  GString *string = user_data;
+
+  g_return_val_if_fail(text != NULL, FALSE);
+  g_return_val_if_fail(string != NULL, FALSE);
+
+  g_string_append(string, text);
+  return TRUE;
+}
+
+static gboolean homeworlds_move_report_write_file_text(const char *text, gpointer user_data) {
+  FILE *file = user_data;
+
+  g_return_val_if_fail(text != NULL, FALSE);
+  g_return_val_if_fail(file != NULL, FALSE);
+
+  return fputs(text, file) >= 0;
+}
+
+static gboolean homeworlds_move_report_write_played_moves(HomeworldsMoveReportWriter *writer,
+                                                          const GArray *played_moves) {
+  g_return_val_if_fail(writer != NULL, FALSE);
+
+  if (!homeworlds_move_report_write_text(writer, "moves:\n")) {
+    return FALSE;
+  }
+  if (played_moves == NULL || played_moves->len == 0) {
+    return homeworlds_move_report_write_text(writer, "<none>\n\n");
   }
 
-  return move_set;
-}
-
-static const char *homeworlds_move_report_count_word(gsize count) {
-  return count == 1 ? "move" : "moves";
-}
-
-static void homeworlds_move_report_append_count_header(GString *text, gsize good_move_count, gsize all_move_count) {
-  g_return_if_fail(text != NULL);
-
-  g_string_append(text, "Move counts:\n");
-  g_string_append_printf(text, "good_moves(): %zu %s\n",
-                         good_move_count,
-                         homeworlds_move_report_count_word(good_move_count));
-  g_string_append_printf(text, "all moves: %zu %s\n\n",
-                         all_move_count,
-                         homeworlds_move_report_count_word(all_move_count));
-}
-
-static void homeworlds_move_report_append_move_list_text(GString *text,
-                                                         const GameBackendMoveList *moves,
-                                                         const char *title,
-                                                         GHashTable *excluded_moves) {
-  guint displayed = 0;
-
-  g_return_if_fail(text != NULL);
-  g_return_if_fail(moves != NULL);
-  g_return_if_fail(title != NULL);
-
-  g_string_append_printf(text, "%s:\n", title);
-  for (gsize i = 0; i < moves->count; ++i) {
-    const HomeworldsMove *move = homeworlds_game_backend.move_list_get(moves, i);
+  for (guint i = 0; i < played_moves->len; ++i) {
+    const HomeworldsMove *move = &g_array_index(played_moves, HomeworldsMove, i);
     char notation[128] = {0};
 
-    if (move == NULL || (excluded_moves != NULL && g_hash_table_contains(excluded_moves, move))) {
-      continue;
-    }
     if (!homeworlds_move_format(move, notation, sizeof(notation))) {
+      if (!homeworlds_move_report_write_printf(writer, "%u. <unformattable move>\n", i + 1)) {
+        return FALSE;
+      }
       continue;
     }
-
-    displayed++;
-    g_string_append_printf(text, "%u. %s\n", displayed, notation);
+    if (!homeworlds_move_report_write_printf(writer, "%u. %s\n", i + 1, notation)) {
+      return FALSE;
+    }
   }
 
-  if (displayed == 0) {
-    g_string_append(text, "None\n");
+  return homeworlds_move_report_write_text(writer, "\n");
+}
+
+static gboolean homeworlds_move_report_write_position(HomeworldsMoveReportWriter *writer,
+                                                      const HomeworldsPosition *position) {
+  g_autofree char *ascii = NULL;
+
+  g_return_val_if_fail(writer != NULL, FALSE);
+  g_return_val_if_fail(position != NULL, FALSE);
+
+  ascii = homeworlds_position_format_ascii(position);
+  if (ascii == NULL) {
+    g_debug("Failed to format Homeworlds position for move report");
+    return FALSE;
   }
+
+  if (!homeworlds_move_report_write_printf(writer, "position:\n%s", ascii)) {
+    return FALSE;
+  }
+  if (!g_str_has_suffix(ascii, "\n") && !homeworlds_move_report_write_text(writer, "\n")) {
+    return FALSE;
+  }
+  return homeworlds_move_report_write_text(writer, "\n");
+}
+
+static gboolean homeworlds_move_report_write_streamed_move(gconstpointer move_data, gpointer user_data) {
+  const HomeworldsMove *move = move_data;
+  HomeworldsMoveReportWriter *writer = user_data;
+  char notation[128] = {0};
+
+  g_return_val_if_fail(move != NULL, FALSE);
+  g_return_val_if_fail(writer != NULL, FALSE);
+
+  writer->all_move_count++;
+  if (!homeworlds_move_format(move, notation, sizeof(notation))) {
+    g_debug("Failed to format streamed Homeworlds move for move report");
+    return homeworlds_move_report_write_printf(writer,
+                                               "%" G_GSIZE_FORMAT ". <unformattable move>\n",
+                                               writer->all_move_count);
+  }
+
+  return homeworlds_move_report_write_printf(writer,
+                                             "%" G_GSIZE_FORMAT ". %s\n",
+                                             writer->all_move_count,
+                                             notation);
+}
+
+static gboolean homeworlds_move_report_write_all_moves(HomeworldsMoveReportWriter *writer,
+                                                       const HomeworldsPosition *position,
+                                                       gboolean include_count) {
+  gboolean streamed = FALSE;
+
+  g_return_val_if_fail(writer != NULL, FALSE);
+  g_return_val_if_fail(position != NULL, FALSE);
+
+  writer->all_move_count = 0;
+  if (!homeworlds_move_report_write_text(writer, "all_moves:\n")) {
+    return FALSE;
+  }
+
+  streamed = homeworlds_position_stream_all_moves(position, homeworlds_move_report_write_streamed_move, writer);
+  if (writer->all_move_count == 0 && !homeworlds_move_report_write_text(writer, "<none>\n")) {
+    return FALSE;
+  }
+  if (!homeworlds_move_report_write_printf(writer,
+                                           "\nall_moves_streamed: %" G_GSIZE_FORMAT "\n",
+                                           writer->all_move_count)) {
+    return FALSE;
+  }
+  if (!streamed && !homeworlds_move_report_write_text(writer, "all_moves_stream_error: true\n")) {
+    return FALSE;
+  }
+  if (include_count) {
+    const char *word = NULL;
+
+    if (!homeworlds_move_report_count_word(writer->all_move_count, &word)) {
+      return FALSE;
+    }
+    if (!homeworlds_move_report_write_printf(writer,
+                                             "all_moves_count: %" G_GSIZE_FORMAT " %s\n",
+                                             writer->all_move_count,
+                                             word)) {
+      return FALSE;
+    }
+  }
+
+  return streamed;
 }
 
 char *homeworlds_move_report_format(const HomeworldsPosition *position) {
-  GameBackendMoveList good_moves = {0};
-  GameBackendMoveList all_moves = {0};
   GString *text = NULL;
-  g_autoptr(GHashTable) good_move_set = NULL;
+  HomeworldsMoveReportWriter writer = {0};
 
   g_return_val_if_fail(position != NULL, NULL);
 
   if (position->phase == HOMEWORLDS_PHASE_FINISHED) {
     return g_strdup("No moves.");
   }
-  if (position->phase != HOMEWORLDS_PHASE_PLAY) {
-    return g_strdup("Move report is available during play.");
-  }
 
-  good_moves = homeworlds_game_backend.list_good_moves(position, 0);
-  all_moves = homeworlds_position_list_all_moves(position);
-  good_move_set = homeworlds_move_report_build_move_set(&good_moves);
   text = g_string_new(NULL);
   g_return_val_if_fail(text != NULL, NULL);
+  writer.write_text = homeworlds_move_report_write_string_text;
+  writer.user_data = text;
+  if (!homeworlds_move_report_write_all_moves(&writer, position, TRUE)) {
+    g_debug("Failed to write Homeworlds move report");
+  }
 
-  homeworlds_move_report_append_count_header(text, good_moves.count, all_moves.count);
-  homeworlds_move_report_append_move_list_text(text, &good_moves, "good_moves()", NULL);
-  g_string_append_c(text, '\n');
-  homeworlds_move_report_append_move_list_text(text,
-                                               &all_moves,
-                                               "all possible moves minus good_moves()",
-                                               good_move_set);
-
-  homeworlds_game_backend.move_list_free(&good_moves);
-  homeworlds_move_list_free(&all_moves);
   return g_string_free(text, FALSE);
+}
+
+gboolean homeworlds_move_report_write(FILE *file,
+                                      const HomeworldsPosition *position,
+                                      const GArray *played_moves,
+                                      gsize *out_all_move_count) {
+  HomeworldsMoveReportWriter writer = {0};
+  gboolean ok = FALSE;
+
+  g_return_val_if_fail(file != NULL, FALSE);
+  g_return_val_if_fail(position != NULL, FALSE);
+
+  writer.write_text = homeworlds_move_report_write_file_text;
+  writer.user_data = file;
+
+  ok = homeworlds_move_report_write_played_moves(&writer, played_moves) &&
+       homeworlds_move_report_write_position(&writer, position) &&
+       homeworlds_move_report_write_all_moves(&writer, position, FALSE);
+
+  if (out_all_move_count != NULL) {
+    *out_all_move_count = writer.all_move_count;
+  }
+  return ok;
 }

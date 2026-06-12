@@ -708,6 +708,9 @@ static void test_backend_metadata(void) {
   assert(!backend->supports_move_list);
   assert(backend->supports_move_builder);
   assert(backend->supports_ai_search);
+  assert(backend->supports_ascii_game_io);
+  assert(strcmp(backend->ascii_game_file_description, "Homeworlds text game files") == 0);
+  assert(strcmp(backend->ascii_game_file_extension, "txt") == 0);
   assert(backend->list_good_moves != NULL);
   assert(backend->parse_move != NULL);
   assert(backend->sgf_color_for_side != NULL);

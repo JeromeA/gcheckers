@@ -1,7 +1,7 @@
 # Project overview
 
 This repository contains the `ggame` application framework plus three branded GTK targets, `gcheckers`, `gboop`, and
-`ghomeworlds`. The shared code in top-level `src/` owns the application shell, GTK UI, SGF workflows,
+`ghomeworlds`. The shared code in top-level `src/` owns the application shell, GTK UI, SGF and text-game workflows,
 puzzle/import/reporting flows, and the generic AI/model/backend interfaces.
 Game-specific code lives under `src/games/<game>/` and provides the rules, position and move types, search
 evaluation, notation helpers, optional puzzle tooling, and any board-specific callbacks needed by the selected
@@ -198,6 +198,8 @@ otherwise reset+replay from root).
 After a move has been accepted and projected, the controller saves the current SGF tree through the SGF autosave
 helper. The autosave session timestamp is reset when the controller starts a new game or successfully loads an SGF
 file, so each play session gets its own filename prefix.
+File load/save dispatch stays in the controller: SGF paths use `sgf_io`, while paths matching an opted-in backend's
+ASCII game extension use `game_text_io` to convert a numbered move list to or from the same `SgfTree` model.
 Replay now delegates node-setup handling to optional backend SGF hooks before replaying any `B[...]`/`W[...]` move on
 that node. Checkers uses that hook for `AE`/`AB`/`AW` plus `ABK`/`AWK` king markers and `PL`, while boop uses it for
 custom root snapshot properties that restore on-board kittens/cats, per-side supplies, total ply count, and `PL`. Root
@@ -701,32 +703,33 @@ word-wrapped labels, width-constrained buttons, a read-only wrapped `GtkTextView
 non-board choices such as pass or follow-up actions, with a `Cancel` button whenever those choices belong to an
 in-progress move.
 Bank pile matching is split into setup, trade-color, and discovery predicates so the board button layer does not
-duplicate raw candidate-field tests. During play, the side panel also reports the backend `good_moves()` list followed
-by the remaining legal moves from the core
-all-move generator, after a header that counts both groups. The report subtracts the good moves with a structural hash
-set. Both all-move generation and `good_moves()` use a shared sacrifice-scoped state deduper: generated sacrifice
-branches keep one temporary table for the descendants of that sacrifice, prune catastrophe-before-sacrifice spellings,
-and drop equivalent continuation states without storing hashes for the whole move tree. The backend `good_moves()`
-collector scores complete play-position moves while walking the builder tree and retains only the best static-pruned
-set, so memory remains bounded even when millions of complete leaves are reached before pruning. `GameBackend` exposes
-an optional streamed all-move API for diagnostics; Homeworlds implements it by walking complete generated move paths
-without materializing a `GameBackendMoveList`. The
-`View` -> `Move report` action disables its report before either collector runs. The separate
+duplicate raw candidate-field tests. During play, the side panel also reports the legal move list from the streamed
+all-move generator without calling the AI-oriented `good_moves()` path. Both all-move generation and `good_moves()` use
+a shared sacrifice-scoped state deduper: generated sacrifice branches keep one temporary table for the descendants of
+that sacrifice, prune catastrophe-before-sacrifice spellings, and drop equivalent continuation states without storing
+hashes for the whole move tree. The backend `good_moves()` collector scores complete play-position moves while walking
+the builder tree and retains only the best static-pruned set, so memory remains bounded even when millions of complete
+leaves are reached before pruning. `GameBackend` exposes an optional streamed all-move API for diagnostics; Homeworlds
+implements it by walking complete generated move paths without materializing a `GameBackendMoveList`. The
+`View` -> `Move report` action disables its report before the collector runs. The separate
 `build/tools/homeworlds_profile_moves`
-CLI applies `--moves` random good moves from a `--seed` or replays the first moves of a Homeworlds SGF main line with
-`--file`, prints an ASCII board snapshot, and then runs the AI at `--depth` and prints the scored moves plus search
-stats. The `build/tools/homeworlds_eval_experiment` CLI varies one static-evaluation weight at a time and runs
-paired depth-1 self-play against the default weights. Each seed produces one game with the candidate starting and one
-with the baseline starting, and aggregate wins are counted from the side-aware outcome. It reports one CSV-style
+CLI applies `--moves` random good moves from a `--seed` or replays a Homeworlds SGF or ASCII text main line with
+`--file`; omitting `--moves` during file replay reaches the end of the provided move list. It prints an ASCII board
+snapshot, can print the shared Homeworlds move report with `--move-report`, and runs the AI at `--depth` only when
+`--ai-report` is provided. The `build/tools/homeworlds_eval_experiment` CLI varies one static-evaluation weight at a
+time and runs paired depth-1 self-play against the default weights. Each seed produces one game with the candidate
+starting and one with the baseline starting, and aggregate wins are counted from the side-aware outcome. It reports one
+CSV-style
 summary row per tested value, including a `win_ratio` field computed as candidate wins divided by candidate plus
 baseline wins so draws and timeouts do not affect the ratio. Its variable names are `ship1`, `ship2`, `ship3`,
 `homeworld-ship1`, `homeworld-ship2`, `homeworld-ship3`, `single-star`, and `buildable-color`; the old descriptive
 ship aliases are not accepted. With `--trace-move-counts`, it uses the Homeworlds backend trace hook to print per-ply
 complete-leaf, scored-move, and kept-move counts to stderr without mixing them into the CSV summary. If a
 `good_moves()` call generates more than 7,000,000 complete leaves, it writes `big_move_report_###.txt` in the current
-directory with the `good_moves()` counts, the moves leading to the reported position, the ASCII position, and a
-streamed dump of all generated move paths. After the stream finishes, reports below the configured total-streamed-move
-cutoff are deleted. The
+directory with the `good_moves()` trace counts followed by the same move-report body used by
+`homeworlds_profile_moves`: the moves leading to the reported position, the ASCII position, and a streamed dump of all
+generated move paths. After the stream finishes, reports below the configured total-streamed-move cutoff are deleted.
+The
 `GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_THRESHOLD` and `GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_MIN_TOTAL_MOVES`
 environment variables can lower those thresholds for diagnostic runs and tests. It frees any
 generated candidate list before leaving an error path. The Homeworlds board host also syncs its
@@ -839,23 +842,24 @@ Role: `game_backend.h` defines the generic callback table used to describe one c
 `src/games/checkers/checkers_backend.c` adapts the moved checkers engine, ruleset catalog, move list, AI, and move
 formatting APIs into that generic table. `src/games/homeworlds/homeworlds_backend.c` now adapts the slot-based
 Homeworlds engine and staged move builder, advertises `supports_move_builder = TRUE`, `supports_move_list = FALSE`,
-`supports_ai_search = TRUE`, and implements `list_good_moves` by exploring the builder in heuristic order while
-filtering nonsensical setup, pass, unsafe homeworld, and unsafe catastrophe-triggering build choices. The good-move
-collector shares the all-move sacrifice-scope deduper rather than keeping a global duplicate table. The playable
-Homeworlds UI uses the same builder directly rather than asking this backend for full move enumeration.
+`supports_ai_search = TRUE`, opts into numbered ASCII game files with the `.txt` extension, and implements
+`list_good_moves` by exploring the builder in heuristic order while filtering nonsensical setup, pass, unsafe
+homeworld, and unsafe catastrophe-triggering build choices. The good-move collector shares the all-move
+sacrifice-scope deduper rather than keeping a global duplicate table. The playable Homeworlds UI uses the same builder
+directly rather than asking this backend for full move enumeration.
 `src/games/boop/boop_backend.c` adapts the boop engine, advertises move lists, staged
 move-building, square-grid rendering, AI search, notation formatting/parsing, hashing, and backend-owned SGF position
 snapshot hooks.
 Scope: shared application code still has some checkers-native compatibility layers, but the physical checkers source
 ownership boundary is now explicit under `src/games/checkers/`.
 Backends now advertise whether they support full move-list enumeration, incremental move-building, AI search, forced
-move extension, and backend-owned move parsing/formatting for SGF. Each SGF-capable backend also maps its own side
-numbers to SGF `B`/`W` colors, which keeps shared controller code from assuming that side 0 means the same color in
-every game. Move-builder backends can also expose preview positions, builder-owned selection paths, and selection reset
-behavior for multi-stage interactions such as boop promotion choices. Backend outcome banner text is reserved for
-terminal outcomes; ongoing positions should return no banner text. They can also optionally expose SGF setup-node and
-root-position snapshot hooks so the shared controller can replay setup-root SGFs and save position-only SGFs without
-game-specific branches.
+move extension, opt-in ASCII game files, and backend-owned move parsing/formatting for SGF or text-game IO. Each
+SGF-capable backend also maps its own side numbers to SGF `B`/`W` colors, which keeps shared controller code from
+assuming that side 0 means the same color in every game. Move-builder backends can also expose preview positions,
+builder-owned selection paths, and selection reset behavior for multi-stage interactions such as boop promotion
+choices. Backend outcome banner text is reserved for terminal outcomes; ongoing positions should return no banner
+text. They can also optionally expose SGF setup-node and root-position snapshot hooks so the shared controller can
+replay setup-root SGFs and save position-only SGFs without game-specific branches.
 Collaborates with: `Makefile` backend selection, `tests/test_game_backend.c`, and future generic model/search work.
 
 ## Generic game model (`src/game_model.c`, `src/game_model.h`)
@@ -1006,6 +1010,18 @@ reject signed text and range errors. Empty SGF trees and empty nested variations
 discarded. This layer is GTK-free so it can be reused by both GUI actions and future CLI commands.
 Collaborates with: `GGameSgfController` load/save entry points and `tests/test_sgf_io.c`.
 
+### Text game IO (`src/game_text_io.c`, `src/game_text_io.h`)
+Module: generic numbered ASCII game load/save core.
+Role: convert plain text move lists into `SgfTree` and export linear SGF branches back to text. Backends opt in through
+`GameBackend.supports_ascii_game_io`, `ascii_game_file_description`, and `ascii_game_file_extension`. The format is
+one non-empty line per move, with a one-based move number, a period, optional spaces, and the backend's normal move
+notation, for example `17. H1y3- H1g1>S0(Y3)`. Loading starts from the backend's initial position, infers the SGF
+`B`/`W` color from `position_turn()` and `sgf_color_for_side()`, parses and canonicalizes each move with the backend,
+and applies every move so illegal text is rejected at the line where it appears. Saving walks the current SGF branch,
+validates side-to-move and legality the same way, and writes only numbered canonical move notation because the text
+format has no representation for SGF comments, metadata, setup snapshots, or variations.
+Collaborates with: `GGameSgfController`, `sgf_tree.c`, backend parse/format/apply callbacks, and `tests/test_sgf_io.c`.
+
 ### SGF autosave (`src/sgf_autosave.c`, `src/sgf_autosave.h`)
 Module: SGF autosave path and write helper.
 Role: save SGF trees into a writable per-game autosave repository under
@@ -1067,9 +1083,11 @@ Role: track SGF selection, update CSS classes, and navigate siblings and parents
 Collaborates with: `SgfView`, the SGF tree, and the scroller.
 
 ### SGF file actions (`src/sgf_file_actions.c`, `src/sgf_file_actions.h`)
-Module: GTK SGF file action integration.
+Module: GTK game file action integration.
 Role: register `win.sgf-load`, `win.sgf-save`, and `win.sgf-save-as` actions, present `GtkFileDialog` file pickers,
-reopen them in the last remembered SGF folder, call SGF controller load/save APIs, and show errors as modal dialogs.
+reopen them in the last remembered file folder, call SGF controller load/save APIs, and show errors as modal dialogs.
+The filters always include SGF files and also include an opted-in backend's ASCII game extension, such as Homeworlds
+`.txt` files.
 The shared window keeps the current SGF source path when a game is loaded from a file/library source or successfully
 saved as a file; `win.sgf-save` is enabled only while that path is known and overwrites it directly.
 Collaborates with: `GGameWindow` action map, `GGameSgfController`, and `file_dialog_history.c`.

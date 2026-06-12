@@ -224,6 +224,7 @@ static void test_homeworlds_eval_experiment_writes_big_move_report(void) {
   g_assert_nonnull(strstr(report_text, "position:\nNo systems.\n"));
   g_assert_nonnull(strstr(report_text, "\nall_moves:\n"));
   g_assert_nonnull(strstr(report_text, "all_moves_streamed: "));
+  g_assert_null(strstr(report_text, "good_moves():"));
   g_assert_cmpint(g_remove(report_path), ==, 0);
   g_assert_cmpint(g_rmdir(tmp_dir), ==, 0);
 }

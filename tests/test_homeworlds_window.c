@@ -1981,18 +1981,15 @@ static void test_homeworlds_view_advances_setup(void) {
   g_object_unref(model);
 }
 
-static void test_homeworlds_view_move_report_lists_good_and_other_moves(void) {
+static void test_homeworlds_view_move_report_lists_all_moves(void) {
   GGameModel *model = ggame_model_new(&homeworlds_game_backend);
   HomeworldsView *view = homeworlds_view_new(model);
   GtkWidget *root = homeworlds_view_get_widget(view);
   GtkWidget *move_report = NULL;
   HomeworldsPosition position = {0};
   g_autofree char *text = NULL;
-  const char *count_header = NULL;
-  const char *good_count = NULL;
+  const char *all_list = NULL;
   const char *all_count = NULL;
-  const char *good_list = NULL;
-  const char *other_list = NULL;
 
   test_homeworlds_prepare_play_position(&position);
   g_assert_true(ggame_model_set_position(model, &position));
@@ -2004,20 +2001,12 @@ static void test_homeworlds_view_move_report_lists_good_and_other_moves(void) {
   g_assert_cmpint(gtk_text_view_get_wrap_mode(GTK_TEXT_VIEW(move_report)), ==, GTK_WRAP_WORD_CHAR);
 
   text = test_homeworlds_get_text_view_text(move_report);
-  count_header = strstr(text, "Move counts:\n");
-  good_count = strstr(text, "good_moves(): ");
-  all_count = strstr(text, "all moves: ");
-  good_list = strstr(text, "\ngood_moves():\n");
-  other_list = strstr(text, "\nall possible moves minus good_moves():\n");
-  g_assert_nonnull(count_header);
-  g_assert_nonnull(good_count);
+  all_list = strstr(text, "all_moves:\n");
+  all_count = strstr(text, "all_moves_streamed: ");
+  g_assert_nonnull(all_list);
   g_assert_nonnull(all_count);
-  g_assert_nonnull(good_list);
-  g_assert_nonnull(other_list);
-  g_assert_true(count_header < good_list);
-  g_assert_true(good_count < good_list);
-  g_assert_true(all_count < good_list);
-  g_assert_true(good_list < other_list);
+  g_assert_true(all_list < all_count);
+  g_assert_null(strstr(text, "good_moves()"));
   g_assert_nonnull(strstr(text, "pass"));
   g_assert_nonnull(strstr(text, "H1g3-"));
 
@@ -2051,7 +2040,8 @@ static void test_homeworlds_view_move_report_can_be_disabled(void) {
   g_assert_true(homeworlds_view_get_move_report_enabled(view));
   g_clear_pointer(&text, g_free);
   text = test_homeworlds_get_text_view_text(move_report);
-  g_assert_nonnull(strstr(text, "good_moves()"));
+  g_assert_nonnull(strstr(text, "all_moves:"));
+  g_assert_null(strstr(text, "good_moves()"));
   g_assert_nonnull(strstr(text, "H1g3-"));
 
   homeworlds_view_free(view);
@@ -2119,7 +2109,8 @@ static void test_homeworlds_window_move_report_action_toggles_view(void) {
   g_assert_true(g_action_get_enabled(action));
   g_assert_true(homeworlds_view_get_move_report_enabled(view));
   text = test_homeworlds_get_text_view_text(move_report);
-  g_assert_nonnull(strstr(text, "good_moves()"));
+  g_assert_nonnull(strstr(text, "all_moves:"));
+  g_assert_null(strstr(text, "good_moves()"));
 
   g_action_group_change_action_state(G_ACTION_GROUP(window),
                                      "view-show-move-report",
@@ -2141,7 +2132,8 @@ static void test_homeworlds_window_move_report_action_toggles_view(void) {
   g_assert_true(homeworlds_view_get_move_report_enabled(view));
   g_clear_pointer(&text, g_free);
   text = test_homeworlds_get_text_view_text(move_report);
-  g_assert_nonnull(strstr(text, "good_moves()"));
+  g_assert_nonnull(strstr(text, "all_moves:"));
+  g_assert_null(strstr(text, "good_moves()"));
   g_assert_nonnull(strstr(text, "H1g3-"));
 
   gtk_window_destroy(GTK_WINDOW(window));
@@ -2304,7 +2296,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/view/move-board-bank-buttons",
                     test_homeworlds_view_move_targets_use_board_and_bank_buttons);
     g_test_add_func("/homeworlds/view/advances-setup", test_homeworlds_view_advances_setup);
-    g_test_add_func("/homeworlds/view/move-report", test_homeworlds_view_move_report_lists_good_and_other_moves);
+    g_test_add_func("/homeworlds/view/move-report", test_homeworlds_view_move_report_lists_all_moves);
     g_test_add_func("/homeworlds/view/move-report-toggle", test_homeworlds_view_move_report_can_be_disabled);
     g_test_add_func("/homeworlds/view/move-report-initial-state",
                     test_homeworlds_board_host_initial_move_report_state_is_applied);

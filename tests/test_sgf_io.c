@@ -1,6 +1,7 @@
 #include <glib.h>
 
 #include "../src/active_game_backend.h"
+#include "../src/game_text_io.h"
 #include "../src/games/boop/boop_game.h"
 #include "../src/games/checkers/game.h"
 #include "../src/games/checkers/rulesets.h"
@@ -704,6 +705,70 @@ static void test_sgf_io_boop_rejects_ruleset_property(void) {
   g_assert_error(error, g_quark_from_static_string("sgf-io-error"), 22);
 }
 
+static void test_sgf_io_homeworlds_text_game_roundtrip(void) {
+  const char *text =
+      "1. G1R2b3\n"
+      "2. Y3G2b3\n"
+      "3. H1b+\n"
+      "4. H2b+\n";
+
+  g_assert_true(ggame_text_game_io_backend_supports_path(GGAME_ACTIVE_GAME_BACKEND, "game.txt"));
+  g_assert_false(ggame_text_game_io_backend_supports_path(GGAME_ACTIVE_GAME_BACKEND, "game.sgf"));
+
+  g_autoptr(SgfTree) tree = NULL;
+  g_autoptr(GError) error = NULL;
+  g_assert_true(ggame_text_game_io_load_data(GGAME_ACTIVE_GAME_BACKEND, NULL, text, &tree, &error));
+  g_assert_no_error(error);
+  g_assert_nonnull(tree);
+
+  const SgfNode *root = sgf_tree_get_root(tree);
+  g_assert_nonnull(root);
+  g_assert_true(sgf_tree_get_current(tree) == root);
+
+  const GPtrArray *root_children = sgf_node_get_children(root);
+  g_assert_nonnull(root_children);
+  g_assert_cmpuint(root_children->len, ==, 1);
+  const SgfNode *first = g_ptr_array_index((GPtrArray *)root_children, 0);
+  g_assert_nonnull(first);
+  g_assert_cmpstr(sgf_node_get_property_first(first, "B"), ==, "G1R2b3");
+
+  const GPtrArray *first_children = sgf_node_get_children(first);
+  g_assert_nonnull(first_children);
+  g_assert_cmpuint(first_children->len, ==, 1);
+  const SgfNode *second = g_ptr_array_index((GPtrArray *)first_children, 0);
+  g_assert_nonnull(second);
+  g_assert_cmpstr(sgf_node_get_property_first(second, "W"), ==, "Y3G2b3");
+
+  g_autofree char *saved = ggame_text_game_io_save_data(GGAME_ACTIVE_GAME_BACKEND, NULL, tree, &error);
+  g_assert_no_error(error);
+  g_assert_nonnull(saved);
+  g_assert_cmpstr(saved, ==, text);
+}
+
+static void test_sgf_io_homeworlds_text_game_rejects_bad_number(void) {
+  const char *text =
+      "1. G1R2b3\n"
+      "3. Y3G2b3\n";
+
+  g_autoptr(SgfTree) tree = NULL;
+  g_autoptr(GError) error = NULL;
+  gboolean ok = ggame_text_game_io_load_data(GGAME_ACTIVE_GAME_BACKEND, NULL, text, &tree, &error);
+  g_assert_false(ok);
+  g_assert_error(error, g_quark_from_static_string("game-text-io-error"), 4);
+}
+
+static void test_sgf_io_homeworlds_text_game_rejects_illegal_move(void) {
+  const char *text =
+      "1. G1R2b3\n"
+      "2. pass\n";
+
+  g_autoptr(SgfTree) tree = NULL;
+  g_autoptr(GError) error = NULL;
+  gboolean ok = ggame_text_game_io_load_data(GGAME_ACTIVE_GAME_BACKEND, NULL, text, &tree, &error);
+  g_assert_false(ok);
+  g_assert_error(error, g_quark_from_static_string("game-text-io-error"), 11);
+}
+
 int main(int argc, char **argv) {
   ggame_test_init_profile(&argc, &argv, "checkers");
   g_test_init(&argc, &argv, NULL);
@@ -756,6 +821,11 @@ int main(int argc, char **argv) {
       g_test_add_func("/sgf-io/load-invalid-header", test_sgf_io_load_rejects_invalid_header);
       g_test_add_func("/sgf-io/load-trailing-content", test_sgf_io_load_rejects_trailing_content);
       g_test_add_func("/sgf-io/load-empty-variation", test_sgf_io_load_rejects_empty_variation);
+      g_test_add_func("/sgf-io/homeworlds-text-game-roundtrip", test_sgf_io_homeworlds_text_game_roundtrip);
+      g_test_add_func("/sgf-io/homeworlds-text-game-bad-number",
+                      test_sgf_io_homeworlds_text_game_rejects_bad_number);
+      g_test_add_func("/sgf-io/homeworlds-text-game-illegal-move",
+                      test_sgf_io_homeworlds_text_game_rejects_illegal_move);
       break;
     default:
       g_assert_not_reached();

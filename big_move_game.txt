@@ -1,0 +1,256 @@
+1. G1R2b3
+2. Y3G2b3
+3. H1b+
+4. H2b+
+5. H1b3=y
+6. H2b3=y
+7. H1y+
+8. H2y+
+9. H1y1=g
+10. H2y3=r
+11. H1y+
+12. H2b+
+13. H1y1=r
+14. H2b1=g
+15. H1g+
+16. H2g+
+17. H1y3- H1g1>S0(Y3) S0g1>S1(R1) S1g1>H2 H2g!
+18. H2y1=g
+19. H1g+
+20. H2g1>H1 H1g!
+21. H1r1=g
+22. H2b1=g
+23. H1b+
+24. H2g+
+25. H1g+
+26. H2g+
+27. H1b1=y
+28. H2r+
+29. H1g1>H2 H2g!
+30. H2r1>S0(G1)
+31. H1y+
+32. S0r+
+33. H1y1=r
+34. S0r+
+35. H1r1>S0 S0r!
+36. pass
+37. H1g+
+38. pass
+39. H1g2=r
+40. pass
+41. H1g+
+42. pass
+43. H1r+
+44. pass
+45. H1b+
+46. pass
+47. H1b+
+48. pass
+49. H1y+
+50. pass
+51. H1g+
+52. pass
+53. H1y+
+54. pass
+55. H1g1>S0(B3)
+56. pass
+57. H1g+
+58. pass
+59. H1g2- S0g+ S0g+
+60. pass
+61. H1g+
+62. pass
+63. H1y1>S1(B3)
+64. pass
+65. S0g2- H1y+ S1y+
+66. pass
+67. S0g2- S0g+ S1y+
+68. pass
+69. S0g+
+70. pass
+71. H1b1>H2
+72. H2r3xb1
+73. H1b+
+74. H2b1>H1 H1b!
+75. S0g1=b
+76. pass
+77. S0b+
+78. pass
+79. S0g+
+80. pass
+81. H1y1>S2(R3)
+82. pass
+83. S0g2- S2y+ S2y+
+84. pass
+85. S0g+
+86. pass
+87. H1g1>S3(R1)
+88. pass
+89. S0g2- S3g+ S3g+
+90. pass
+91. S3g3- H1g+ S0g+ S3g+
+92. pass
+93. H1y1>S4(R3)
+94. pass
+95. S1y1>S5(R1)
+96. pass
+97. S5y1>S1
+98. pass
+99. H1g1>S5(B1)
+100. pass
+101. H1r2>S4
+102. pass
+103. S3g3- H1r+ H1g+ S4r+
+104. pass
+105. S2y1>S5
+106. pass
+107. H1y2>S0
+108. pass
+109. S2y3>S6(B2)
+110. pass
+111. S0y2>S5
+112. pass
+113. S1y2>H1
+114. pass
+115. S6y3>S5
+116. pass
+117. H1y2>S2
+118. pass
+119. S4y1>S3
+120. pass
+121. S5y3>S4
+122. pass
+123. S1y1>S5
+124. pass
+125. S3y1>H2
+126. H2r3xy1
+127. S2y3>S3
+128. H2y1>S5 S5y!
+129. H1g3- H1g+ S2y+ S3y+
+130. pass
+131. S0g3- S3y+ S4y+ S5g+
+132. pass
+133. S1y2>S6(B2)
+134. pass
+135. S4y3>S6
+136. pass
+137. S3y3>S1(B3)
+138. pass
+139. S3y1>H1
+140. pass
+141. S3y1>S0
+142. pass
+143. S0y1>S6
+144. pass
+145. H1y1>S5
+146. pass
+147. S6y2>S3
+148. pass
+149. S1y3>S5
+150. pass
+151. S3g1>H2
+152. H2r3xg1
+153. S5y3=b
+154. H2g1>H1 H1g!
+155. S5g3- S5y+ S5g+ S0g+
+156. pass
+157. S3g+
+158. pass
+159. S3g3- S3g+ S3g+ S5g+
+160. pass
+161. S5g3>H1
+162. pass
+163. S3g2- H1g+ S5b+
+164. pass
+165. S6y3>S5
+166. pass
+167. S4y2>S6
+168. pass
+169. S5g1>S4
+170. pass
+171. S3y2>S4
+172. pass
+173. S4y2>S1(B2)
+174. pass
+175. S5y1>H1
+176. pass
+177. H1g2>S7(B3)
+178. pass
+179. H1y1>S0
+180. pass
+181. S1y2>S4
+182. pass
+183. S6y1>S2
+184. pass
+185. S4y2>S6
+186. pass
+187. S2y1>H1
+188. pass
+189. S0y1>S3
+190. pass
+191. S2y1>S1(B2)
+192. pass
+193. S5g1>S2
+194. pass
+195. S6y2>S5
+196. pass
+197. S5b2>H2
+198. H2r3xb2
+199. S7g2- H1g+ S5b+
+200. H2b2>S5 S5b!
+201. H1g3- S1y+ S2y+ S6y+
+202. pass
+203. S0g2- S2g+ H1g+
+204. pass
+205. S6y2=b
+206. pass
+207. S3g3- S0g+ S3y+ S6b+
+208. pass
+209. S2g2>S1
+210. pass
+211. S1y2>S5(B3)
+212. pass
+213. S6y3>S3
+214. pass
+215. S1y1>S7(B3)
+216. pass
+217. S3y3>S4
+218. pass
+219. S3g3>S6
+220. pass
+221. S2y2>S3
+222. pass
+223. H1r1>S3
+224. pass
+225. H1r1>S2
+226. pass
+227. S3y1>S5
+228. pass
+229. S5y1>S3
+230. pass
+231. S7y1>S6
+232. pass
+233. S3y2>S6
+234. pass
+235. H1g2>S4
+236. pass
+237. S2r1>H1
+238. pass
+239. S6b1>S4
+240. pass
+241. S4g2- S1g+ S6b+
+242. pass
+243. H1y1>S3
+244. pass
+245. S6g3>S5
+246. pass
+247. S6b2>S3
+248. pass
+249. S5y2>S1
+250. pass
+251. S3b2>H2
+252. H2r3xb2
+253. S4r2>S3
+254. H2r3>S3
+255. S4y3>H1
+256. S3r3xr2

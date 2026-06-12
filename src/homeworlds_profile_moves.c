@@ -1,9 +1,11 @@
 #include "ai_search.h"
 #include "games/homeworlds/homeworlds_backend.h"
 #include "games/homeworlds/homeworlds_game.h"
+#include "games/homeworlds/homeworlds_move_report.h"
 #include "games/homeworlds/homeworlds_position_text.h"
 #include "games/homeworlds/homeworlds_sgf_position.h"
 #include "game_app_profile.h"
+#include "game_text_io.h"
 #include "sgf_io.h"
 #include "sgf_move_props.h"
 
@@ -14,9 +16,43 @@ enum {
   HOMEWORLDS_PROFILE_TT_SIZE_MB = 256,
 };
 
+static gint homeworlds_profile_requested_moves = 2;
+static gboolean homeworlds_profile_requested_moves_set = FALSE;
+
+static gboolean homeworlds_profile_parse_moves_option(const gchar * /*option_name*/,
+                                                      const gchar *value,
+                                                      gpointer /*data*/,
+                                                      GError **error) {
+  guint64 parsed_value = 0;
+  char *end_ptr = NULL;
+
+  if (value == NULL || *value == '\0') {
+    g_set_error_literal(error, G_OPTION_ERROR, G_OPTION_ERROR_BAD_VALUE, "--moves must be non-negative.");
+    return FALSE;
+  }
+  for (const char *cursor = value; *cursor != '\0'; ++cursor) {
+    if (!g_ascii_isdigit(*cursor)) {
+      g_set_error_literal(error, G_OPTION_ERROR, G_OPTION_ERROR_BAD_VALUE, "--moves must be non-negative.");
+      return FALSE;
+    }
+  }
+
+  parsed_value = g_ascii_strtoull(value, &end_ptr, 10);
+  if (end_ptr == value || end_ptr == NULL || *end_ptr != '\0' || parsed_value > G_MAXINT) {
+    g_set_error_literal(error, G_OPTION_ERROR, G_OPTION_ERROR_BAD_VALUE, "--moves must be non-negative.");
+    return FALSE;
+  }
+
+  homeworlds_profile_requested_moves = (gint)parsed_value;
+  homeworlds_profile_requested_moves_set = TRUE;
+  return TRUE;
+}
+
 static gboolean homeworlds_profile_apply_random_good_move(HomeworldsPosition *position,
                                                           GRand *random,
-                                                          guint move_number) {
+                                                          guint move_number,
+                                                          gboolean print_move,
+                                                          GArray *played_moves) {
   GameBackendMoveList moves = {0};
   const HomeworldsMove *move = NULL;
   HomeworldsMove selected = {0};
@@ -62,7 +98,12 @@ static gboolean homeworlds_profile_apply_random_good_move(HomeworldsPosition *po
     return FALSE;
   }
 
-  g_print("%u. %s\n", move_number + 1, notation);
+  if (played_moves != NULL) {
+    g_array_append_val(played_moves, selected);
+  }
+  if (print_move) {
+    g_print("%u. %s\n", move_number + 1, notation);
+  }
   return TRUE;
 }
 
@@ -70,6 +111,8 @@ static gboolean homeworlds_profile_apply_replayed_move(HomeworldsPosition *posit
                                                        const SgfNode *node,
                                                        const char *path,
                                                        guint move_number,
+                                                       gboolean print_move,
+                                                       GArray *played_moves,
                                                        gboolean *out_had_move) {
   SgfColor color = SGF_COLOR_NONE;
   SgfColor expected_color = SGF_COLOR_NONE;
@@ -113,13 +156,21 @@ static gboolean homeworlds_profile_apply_replayed_move(HomeworldsPosition *posit
     return FALSE;
   }
 
-  g_print("%u. %s\n", move_number + 1, notation);
+  if (played_moves != NULL) {
+    g_array_append_val(played_moves, move);
+  }
+  if (print_move) {
+    g_print("%u. %s\n", move_number + 1, notation);
+  }
   return TRUE;
 }
 
 static gboolean homeworlds_profile_replay_file_moves(HomeworldsPosition *position,
                                                      const char *path,
+                                                     gboolean replay_all_moves,
                                                      guint requested_moves,
+                                                     gboolean print_moves,
+                                                     GArray *played_moves,
                                                      guint *out_applied_moves) {
   g_autoptr(SgfTree) tree = NULL;
   g_autoptr(GPtrArray) nodes = NULL;
@@ -133,7 +184,12 @@ static gboolean homeworlds_profile_replay_file_moves(HomeworldsPosition *positio
   g_return_val_if_fail(out_applied_moves != NULL, FALSE);
 
   *out_applied_moves = 0;
-  if (!sgf_io_load_file(path, &tree, &error)) {
+  if (ggame_text_game_io_backend_supports_path(&homeworlds_game_backend, path)) {
+    if (!ggame_text_game_io_load_file(&homeworlds_game_backend, NULL, path, &tree, &error)) {
+      g_printerr("Failed to load %s: %s\n", path, error != NULL ? error->message : "unknown error");
+      return FALSE;
+    }
+  } else if (!sgf_io_load_file(path, &tree, &error)) {
     g_printerr("Failed to load %s: %s\n", path, error != NULL ? error->message : "unknown error");
     return FALSE;
   }
@@ -160,13 +216,25 @@ static gboolean homeworlds_profile_replay_file_moves(HomeworldsPosition *positio
     return FALSE;
   }
 
-  g_print("Replayed moves from %s (%u requested):\n", path, requested_moves);
-  for (guint i = 1; i < nodes->len && applied_moves < requested_moves; ++i) {
+  if (print_moves) {
+    if (replay_all_moves) {
+      g_print("Replayed moves from %s (all moves requested):\n", path);
+    } else {
+      g_print("Replayed moves from %s (%u requested):\n", path, requested_moves);
+    }
+  }
+  for (guint i = 1; i < nodes->len && (replay_all_moves || applied_moves < requested_moves); ++i) {
     const SgfNode *node = g_ptr_array_index(nodes, i);
     g_return_val_if_fail(node != NULL, FALSE);
 
     gboolean had_move = FALSE;
-    if (!homeworlds_profile_apply_replayed_move(position, node, path, applied_moves, &had_move)) {
+    if (!homeworlds_profile_apply_replayed_move(position,
+                                                node,
+                                                path,
+                                                applied_moves,
+                                                print_moves,
+                                                played_moves,
+                                                &had_move)) {
       return FALSE;
     }
     if (had_move) {
@@ -175,6 +243,24 @@ static gboolean homeworlds_profile_replay_file_moves(HomeworldsPosition *positio
   }
 
   *out_applied_moves = applied_moves;
+  return TRUE;
+}
+
+static gboolean homeworlds_profile_print_move_report(const HomeworldsPosition *position,
+                                                     const GArray *played_moves,
+                                                     guint applied_moves,
+                                                     gboolean replayed) {
+  gsize all_move_count = 0;
+
+  g_return_val_if_fail(position != NULL, FALSE);
+
+  g_print("Move report after %u %s moves:\n",
+          applied_moves,
+          replayed ? "replayed" : "generated");
+  if (!homeworlds_move_report_write(stdout, position, played_moves, &all_move_count)) {
+    g_printerr("Failed to write move report.\n");
+    return FALSE;
+  }
   return TRUE;
 }
 
@@ -245,18 +331,19 @@ static gboolean homeworlds_profile_print_ai_analysis(const HomeworldsPosition *p
 }
 
 int main(int argc, char **argv) {
-  gint requested_moves = 2;
   gint analysis_depth = HOMEWORLDS_PROFILE_DEFAULT_DEPTH;
   gint seed = 1;
+  gboolean show_ai_report = FALSE;
+  gboolean show_move_report = FALSE;
   g_autofree gchar *file_path = NULL;
   GOptionEntry options[] = {
     {
       .long_name = "moves",
       .short_name = 'n',
       .flags = 0,
-      .arg = G_OPTION_ARG_INT,
-      .arg_data = &requested_moves,
-      .description = "Number of moves to apply before running AI analysis",
+      .arg = G_OPTION_ARG_CALLBACK,
+      .arg_data = homeworlds_profile_parse_moves_option,
+      .description = "Number of moves to apply before reporting; omit with --file to replay the full main line",
       .arg_description = "N",
     },
     {
@@ -265,7 +352,7 @@ int main(int argc, char **argv) {
       .flags = 0,
       .arg = G_OPTION_ARG_INT,
       .arg_data = &analysis_depth,
-      .description = "AI search depth to run after reaching the requested move",
+      .description = "AI search depth to run when --ai-report is set",
       .arg_description = "DEPTH",
     },
     {
@@ -283,8 +370,26 @@ int main(int argc, char **argv) {
       .flags = 0,
       .arg = G_OPTION_ARG_FILENAME,
       .arg_data = &file_path,
-      .description = "Replay the first moves from an existing Homeworlds SGF file",
+      .description = "Replay moves from an existing Homeworlds SGF or text file",
       .arg_description = "PATH",
+    },
+    {
+      .long_name = "ai-report",
+      .short_name = 0,
+      .flags = 0,
+      .arg = G_OPTION_ARG_NONE,
+      .arg_data = &show_ai_report,
+      .description = "Print AI analysis after reaching the requested position",
+      .arg_description = NULL,
+    },
+    {
+      .long_name = "move-report",
+      .short_name = 0,
+      .flags = 0,
+      .arg = G_OPTION_ARG_NONE,
+      .arg_data = &show_move_report,
+      .description = "Print the Homeworlds move report after reaching the requested position",
+      .arg_description = NULL,
     },
     {0},
   };
@@ -292,19 +397,18 @@ int main(int argc, char **argv) {
   g_autoptr(GError) error = NULL;
   GRand *random = NULL;
   g_autofree char *board = NULL;
+  g_autoptr(GArray) played_moves = NULL;
   HomeworldsPosition position = {0};
   guint applied_moves = 0;
+  gint requested_moves = homeworlds_profile_requested_moves;
 
-  context = g_option_context_new("- generate or replay a Homeworlds position and run AI analysis");
+  context = g_option_context_new("- generate or replay a Homeworlds position and print reports");
   g_option_context_add_main_entries(context, options, NULL);
   if (!g_option_context_parse(context, &argc, &argv, &error)) {
     g_printerr("%s\n", error->message);
     return 2;
   }
-  if (requested_moves < 0) {
-    g_printerr("--moves must be non-negative.\n");
-    return 2;
-  }
+  requested_moves = homeworlds_profile_requested_moves;
   if (analysis_depth < 0) {
     g_printerr("--depth must be non-negative.\n");
     return 2;
@@ -322,50 +426,76 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  played_moves = g_array_new(FALSE, FALSE, sizeof(HomeworldsMove));
+  if (played_moves == NULL) {
+    g_printerr("Failed to allocate played move list.\n");
+    return 1;
+  }
+
   homeworlds_position_init(&position);
   if (file_path != NULL) {
     if (!homeworlds_profile_replay_file_moves(&position,
                                               file_path,
+                                              !homeworlds_profile_requested_moves_set,
                                               (guint)requested_moves,
+                                              !show_move_report,
+                                              played_moves,
                                               &applied_moves)) {
       return 1;
     }
   } else {
     random = g_rand_new_with_seed((guint32) seed);
-    g_print("Generated moves (%d requested):\n", requested_moves);
+    if (!show_move_report) {
+      g_print("Generated moves (%d requested):\n", requested_moves);
+    }
     for (gint i = 0; i < requested_moves; ++i) {
-      if (!homeworlds_profile_apply_random_good_move(&position, random, applied_moves)) {
+      if (!homeworlds_profile_apply_random_good_move(&position,
+                                                     random,
+                                                     applied_moves,
+                                                     !show_move_report,
+                                                     played_moves)) {
         break;
       }
       applied_moves++;
     }
   }
 
-  board = homeworlds_position_format_ascii(&position);
-  if (board == NULL) {
-    g_printerr("Failed to format current position.\n");
-    if (random != NULL) {
-      g_rand_free(random);
+  if (show_move_report) {
+    if (!homeworlds_profile_print_move_report(&position, played_moves, applied_moves, file_path != NULL)) {
+      if (random != NULL) {
+        g_rand_free(random);
+      }
+      return 1;
     }
-    return 1;
+  } else {
+    board = homeworlds_position_format_ascii(&position);
+    if (board == NULL) {
+      g_printerr("Failed to format current position.\n");
+      if (random != NULL) {
+        g_rand_free(random);
+      }
+      return 1;
+    }
+
+    g_print("\nCurrent position after %u %s moves:\n%s",
+            applied_moves,
+            file_path != NULL ? "replayed" : "generated",
+            board);
+    if (!g_str_has_suffix(board, "\n")) {
+      g_print("\n");
+    }
   }
 
-  g_print("\nCurrent position after %u %s moves:\n%s",
-          applied_moves,
-          file_path != NULL ? "replayed" : "generated",
-          board);
-  if (!g_str_has_suffix(board, "\n")) {
-    g_print("\n");
-  }
-
-  if (!homeworlds_profile_print_ai_analysis(&position,
-                                            applied_moves,
-                                            file_path != NULL,
-                                            (guint)analysis_depth)) {
-    if (random != NULL) {
-      g_rand_free(random);
+  if (show_ai_report) {
+    if (!homeworlds_profile_print_ai_analysis(&position,
+                                              applied_moves,
+                                              file_path != NULL,
+                                              (guint)analysis_depth)) {
+      if (random != NULL) {
+        g_rand_free(random);
+      }
+      return 1;
     }
-    return 1;
   }
   if (random != NULL) {
     g_rand_free(random);
