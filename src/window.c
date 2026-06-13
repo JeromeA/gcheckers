@@ -53,6 +53,8 @@ struct _GGameWindow {
   PlayerRuleset applied_ruleset;
   gulong state_handler_id;
   guint auto_move_source_id;
+  GCancellable *computer_move_cancellable;
+  gboolean computer_move_active;
   guint paned_tick_id;
   gint analysis_mode;
   gint analysis_generation;
@@ -118,6 +120,20 @@ typedef struct {
   GameAiSearchStats cumulative_stats;
   const SgfNode *target_node;
 } GGameWindowAnalysisTask;
+
+typedef struct {
+  GWeakRef window_ref;
+  const GameBackend *backend;
+  guint8 *position;
+  guint8 *move;
+  GCancellable *cancellable;
+  const SgfNode *target_node;
+  guint side;
+  guint depth;
+  PlayerControlMode side0_mode;
+  PlayerControlMode side1_mode;
+  gboolean ok;
+} GGameWindowComputerMoveTask;
 
 typedef enum {
   GGAME_WINDOW_ANALYSIS_MODE_NONE = 0,
@@ -206,6 +222,7 @@ static void ggame_window_sync_puzzle_ui(GGameWindow *self);
 static void ggame_window_leave_puzzle_mode(GGameWindow *self, gboolean restore_drawers);
 static void ggame_window_sync_drawer_ui_with_capture(GGameWindow *self, gboolean capture_current_layout);
 static void ggame_window_stop_analysis(GGameWindow *self);
+static void ggame_window_cancel_computer_move(GGameWindow *self);
 static void ggame_window_sync_title(GGameWindow *self);
 static void ggame_window_set_analysis_status(GGameWindow *self, const char *text);
 static void ggame_window_show_analysis_for_current_node(GGameWindow *self);
@@ -1298,7 +1315,7 @@ static void ggame_window_sync_mode_ui(GGameWindow *self) {
   gboolean allow_view_actions = !self->puzzle_mode;
   gboolean allow_edit_mode_selection = supports_edit_mode && !self->puzzle_mode;
 
-  ggame_window_set_action_enabled(G_ACTION_MAP(self), "game-force-move", allow_navigation);
+  ggame_window_set_action_enabled(G_ACTION_MAP(self), "game-force-move", allow_navigation && !self->computer_move_active);
   ggame_window_set_action_enabled(G_ACTION_MAP(self), "puzzle-play", supports_puzzles && !self->puzzle_mode);
   ggame_window_set_action_enabled(G_ACTION_MAP(self), "navigation-rewind", allow_navigation);
   ggame_window_set_action_enabled(G_ACTION_MAP(self), "navigation-step-backward", allow_navigation);
@@ -1567,6 +1584,7 @@ static void ggame_window_start_new_game(GGameWindow *self) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
   g_return_if_fail(GGAME_IS_MODEL(self->game_model));
 
+  ggame_window_cancel_computer_move(self);
   ggame_window_leave_puzzle_mode(self, TRUE);
   variant = ggame_window_get_variant(self);
   ggame_model_reset(self->game_model, variant);
@@ -1632,6 +1650,7 @@ static gboolean ggame_window_play_next_puzzle_step_if_needed(GGameWindow *self) 
 static void ggame_window_leave_puzzle_mode(GGameWindow *self, gboolean restore_drawers) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
 
+  ggame_window_cancel_computer_move(self);
   if (!self->puzzle_mode) {
     return;
   }
@@ -1676,6 +1695,7 @@ static gboolean ggame_window_enter_puzzle_mode_with_path(GGameWindow *self, cons
   g_return_val_if_fail(GGAME_IS_WINDOW(self), FALSE);
   g_return_val_if_fail(path != NULL, FALSE);
 
+  ggame_window_cancel_computer_move(self);
   ggame_window_stop_analysis(self);
 
   g_autoptr(GError) error = NULL;
@@ -2201,6 +2221,7 @@ static gboolean ggame_window_apply_player_move(gconstpointer move, gpointer user
   g_return_val_if_fail(move != NULL, FALSE);
   g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self->sgf_controller), FALSE);
 
+  ggame_window_cancel_computer_move(self);
   if (self->puzzle_mode) {
     if (self->puzzle_feedback_locked || self->puzzle_finished || self->puzzle_steps == NULL) {
       return FALSE;
@@ -2390,6 +2411,153 @@ static gboolean ggame_window_should_cancel_full_analysis(gpointer user_data) {
   g_return_val_if_fail(GGAME_IS_WINDOW(task->self), TRUE);
 
   return g_atomic_int_get(&task->self->analysis_generation) != task->generation;
+}
+
+static gboolean ggame_window_should_cancel_computer_move(gpointer user_data) {
+  GGameWindowComputerMoveTask *task = user_data;
+  g_return_val_if_fail(task != NULL, TRUE);
+  g_return_val_if_fail(G_IS_CANCELLABLE(task->cancellable), TRUE);
+
+  return g_cancellable_is_cancelled(task->cancellable);
+}
+
+static void ggame_window_sync_computer_move_ui(GGameWindow *self) {
+  g_return_if_fail(GGAME_IS_WINDOW(self));
+
+  if (self->controls_panel != NULL) {
+    player_controls_panel_set_computer_thinking(self->controls_panel, self->computer_move_active);
+  }
+  gboolean allow_force_move = !ggame_window_is_edit_mode(self) && !self->puzzle_mode && !self->computer_move_active;
+  ggame_window_set_action_enabled(G_ACTION_MAP(self), "game-force-move", allow_force_move);
+}
+
+static void ggame_window_set_computer_move_active(GGameWindow *self, gboolean active) {
+  g_return_if_fail(GGAME_IS_WINDOW(self));
+
+  if (self->computer_move_active == active) {
+    return;
+  }
+
+  self->computer_move_active = active;
+  ggame_window_sync_computer_move_ui(self);
+}
+
+static void ggame_window_computer_move_task_free(GGameWindowComputerMoveTask *task) {
+  if (task == NULL) {
+    return;
+  }
+
+  if (task->position != NULL && task->backend != NULL && task->backend->position_clear != NULL) {
+    task->backend->position_clear(task->position);
+    g_clear_pointer(&task->position, g_free);
+  } else {
+    g_clear_pointer(&task->position, g_free);
+  }
+  g_clear_pointer(&task->move, g_free);
+  g_clear_object(&task->cancellable);
+  g_weak_ref_clear(&task->window_ref);
+  g_free(task);
+}
+
+static gboolean ggame_window_computer_move_matches_current_state(GGameWindow *self,
+                                                                 const GGameWindowComputerMoveTask *task) {
+  g_return_val_if_fail(GGAME_IS_WINDOW(self), FALSE);
+  g_return_val_if_fail(task != NULL, FALSE);
+
+  if (self->puzzle_mode || ggame_window_is_edit_mode(self)) {
+    return FALSE;
+  }
+  if (!GGAME_IS_SGF_CONTROLLER(self->sgf_controller) || ggame_sgf_controller_is_replaying(self->sgf_controller)) {
+    return FALSE;
+  }
+  if (self->controls_panel == NULL) {
+    return FALSE;
+  }
+  if (player_controls_panel_get_mode(self->controls_panel, 0) != task->side0_mode ||
+      player_controls_panel_get_mode(self->controls_panel, 1) != task->side1_mode ||
+      player_controls_panel_get_computer_depth(self->controls_panel) != task->depth) {
+    return FALSE;
+  }
+
+  SgfTree *tree = ggame_sgf_controller_get_tree(self->sgf_controller);
+  if (tree == NULL || sgf_tree_get_current(tree) != task->target_node) {
+    return FALSE;
+  }
+
+  const GameBackend *backend = ggame_window_get_game_backend(self);
+  gconstpointer position = ggame_window_get_game_position(self);
+  if (backend != task->backend || position == NULL) {
+    return FALSE;
+  }
+  g_return_val_if_fail(backend->position_outcome != NULL, FALSE);
+  g_return_val_if_fail(backend->position_turn != NULL, FALSE);
+
+  return backend->position_outcome(position) == GAME_BACKEND_OUTCOME_ONGOING &&
+         backend->position_turn(position) == task->side;
+}
+
+static gboolean ggame_window_computer_move_complete_cb(gpointer user_data) {
+  GGameWindowComputerMoveTask *task = user_data;
+  g_return_val_if_fail(task != NULL, G_SOURCE_REMOVE);
+
+  GGameWindow *self = g_weak_ref_get(&task->window_ref);
+  if (self == NULL) {
+    ggame_window_computer_move_task_free(task);
+    return G_SOURCE_REMOVE;
+  }
+
+  if (self->computer_move_cancellable != task->cancellable || g_cancellable_is_cancelled(task->cancellable)) {
+    g_object_unref(self);
+    ggame_window_computer_move_task_free(task);
+    return G_SOURCE_REMOVE;
+  }
+
+  ggame_window_set_computer_move_active(self, FALSE);
+  g_clear_object(&self->computer_move_cancellable);
+  if (!task->ok) {
+    g_debug("Computer move search did not choose a move");
+    g_object_unref(self);
+    ggame_window_computer_move_task_free(task);
+    return G_SOURCE_REMOVE;
+  }
+  if (!ggame_window_computer_move_matches_current_state(self, task)) {
+    g_debug("Ignoring stale computer move result");
+    g_object_unref(self);
+    ggame_window_computer_move_task_free(task);
+    return G_SOURCE_REMOVE;
+  }
+  if (!ggame_sgf_controller_apply_move(self->sgf_controller, task->move)) {
+    g_debug("Failed to apply computer move result");
+  }
+
+  g_object_unref(self);
+  ggame_window_computer_move_task_free(task);
+  return G_SOURCE_REMOVE;
+}
+
+static gpointer ggame_window_computer_move_thread(gpointer user_data) {
+  GGameWindowComputerMoveTask *task = user_data;
+  g_return_val_if_fail(task != NULL, NULL);
+
+  task->ok = game_ai_search_choose_move_cancellable(task->backend,
+                                                    task->position,
+                                                    task->depth,
+                                                    task->move,
+                                                    ggame_window_should_cancel_computer_move,
+                                                    task);
+  g_main_context_invoke(NULL, ggame_window_computer_move_complete_cb, task);
+  return NULL;
+}
+
+static void ggame_window_cancel_computer_move(GGameWindow *self) {
+  g_return_if_fail(GGAME_IS_WINDOW(self));
+
+  if (self->computer_move_cancellable != NULL) {
+    g_cancellable_cancel(self->computer_move_cancellable);
+    g_clear_object(&self->computer_move_cancellable);
+  }
+  g_clear_handle_id(&self->auto_move_source_id, g_source_remove);
+  ggame_window_set_computer_move_active(self, FALSE);
 }
 
 static SgfNodeAnalysis *ggame_window_analysis_from_scored_moves(const GameBackend *backend,
@@ -3446,13 +3614,112 @@ static void ggame_window_update_status(GGameWindow *self) {
   }
 }
 
+static void ggame_window_start_computer_move(GGameWindow *self, gboolean require_computer_control) {
+  const GameBackend *backend = NULL;
+  guint8 *position = NULL;
+  guint8 *move = NULL;
+
+  g_return_if_fail(GGAME_IS_WINDOW(self));
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self->sgf_controller));
+
+  if (self->computer_move_active) {
+    return;
+  }
+  if (self->puzzle_mode) {
+    g_debug("Ignoring computer move in puzzle mode");
+    return;
+  }
+  if (ggame_window_is_edit_mode(self)) {
+    return;
+  }
+  if (ggame_sgf_controller_is_replaying(self->sgf_controller)) {
+    g_debug("Ignoring computer move while replaying SGF");
+    return;
+  }
+  if (self->controls_panel == NULL) {
+    g_debug("Missing controls panel for computer move");
+    return;
+  }
+
+  if (!ggame_window_copy_analysis_position(self, &backend, NULL, &position)) {
+    g_debug("Failed to snapshot backend position for computer move");
+    return;
+  }
+  if (backend == NULL || backend->move_size == 0 ||
+      backend->position_outcome == NULL || backend->position_turn == NULL) {
+    g_debug("Computer move backend is missing required operations");
+    goto out;
+  }
+  if (!backend->supports_ai_search) {
+    g_debug("Ignoring computer move for backend without AI search support");
+    goto out;
+  }
+  if (backend->position_outcome(position) != GAME_BACKEND_OUTCOME_ONGOING) {
+    g_debug("Ignoring computer move after game end");
+    goto out;
+  }
+
+  guint side = backend->position_turn(position);
+  if (require_computer_control && !ggame_window_is_computer_control(self, side)) {
+    goto out;
+  }
+
+  SgfTree *tree = ggame_sgf_controller_get_tree(self->sgf_controller);
+  if (tree == NULL) {
+    g_debug("Missing SGF tree for computer move");
+    goto out;
+  }
+  const SgfNode *target_node = sgf_tree_get_current(tree);
+  if (target_node == NULL) {
+    g_debug("Missing SGF current node for computer move");
+    goto out;
+  }
+
+  move = g_malloc0(backend->move_size);
+  if (move == NULL) {
+    g_debug("Failed to allocate computer move buffer");
+    goto out;
+  }
+
+  g_clear_handle_id(&self->auto_move_source_id, g_source_remove);
+  g_clear_object(&self->computer_move_cancellable);
+  self->computer_move_cancellable = g_cancellable_new();
+  ggame_window_set_computer_move_active(self, TRUE);
+
+  GGameWindowComputerMoveTask *task = g_new0(GGameWindowComputerMoveTask, 1);
+  g_weak_ref_init(&task->window_ref, G_OBJECT(self));
+  task->backend = backend;
+  task->position = position;
+  task->move = move;
+  position = NULL;
+  move = NULL;
+  task->cancellable = g_object_ref(self->computer_move_cancellable);
+  task->target_node = target_node;
+  task->side = side;
+  task->depth = player_controls_panel_get_computer_depth(self->controls_panel);
+  task->side0_mode = player_controls_panel_get_mode(self->controls_panel, 0);
+  task->side1_mode = player_controls_panel_get_mode(self->controls_panel, 1);
+
+  GThread *thread = g_thread_new("computer-move-thread", ggame_window_computer_move_thread, task);
+  g_thread_unref(thread);
+
+out:
+  if (position != NULL && backend != NULL && backend->position_clear != NULL) {
+    backend->position_clear(position);
+    g_free(position);
+  } else {
+    g_free(position);
+  }
+  g_free(move);
+}
+
 static gboolean ggame_window_auto_force_move_cb(gpointer user_data) {
   GGameWindow *self = GGAME_WINDOW(user_data);
 
   g_return_val_if_fail(GGAME_IS_WINDOW(self), G_SOURCE_REMOVE);
 
   self->auto_move_source_id = 0;
-  ggame_window_force_move(self);
+  ggame_window_start_computer_move(self, TRUE);
   return G_SOURCE_REMOVE;
 }
 
@@ -3479,6 +3746,9 @@ static void ggame_window_maybe_trigger_auto_move(GGameWindow *self) {
     return;
   }
   if (self->puzzle_mode) {
+    return;
+  }
+  if (self->computer_move_active) {
     return;
   }
 
@@ -3528,8 +3798,17 @@ static void ggame_window_on_control_changed(PlayerControlsPanel * /*panel*/, gpo
 
   g_return_if_fail(GGAME_IS_WINDOW(self));
 
+  ggame_window_cancel_computer_move(self);
   ggame_window_sync_board_orientation(self);
   ggame_window_update_control_state(self);
+}
+
+static void ggame_window_on_stop_computer(PlayerControlsPanel * /*panel*/, gpointer user_data) {
+  GGameWindow *self = GGAME_WINDOW(user_data);
+
+  g_return_if_fail(GGAME_IS_WINDOW(self));
+
+  ggame_window_cancel_computer_move(self);
 }
 
 static void ggame_window_on_mode_selected_notify(GObject * /*object*/,
@@ -3544,6 +3823,7 @@ static void ggame_window_on_mode_selected_notify(GObject * /*object*/,
     return;
   }
 
+  ggame_window_cancel_computer_move(self);
   self->edit_mode_enabled = gtk_drop_down_get_selected(self->sgf_mode_control) == 1;
   ggame_window_clear_board_selection(self);
   ggame_window_sync_mode_ui(self);
@@ -3696,7 +3976,7 @@ static void ggame_window_on_manual_requested(GGameSgfController * /*controller*/
   g_return_if_fail(GGAME_IS_WINDOW(self));
   g_return_if_fail(self->controls_panel != NULL);
 
-  g_clear_handle_id(&self->auto_move_source_id, g_source_remove);
+  ggame_window_cancel_computer_move(self);
   ggame_window_set_board_orientation_mode(self, GGAME_WINDOW_BOARD_ORIENTATION_FIXED);
   ggame_window_update_control_state(self);
   ggame_window_show_analysis_for_current_node(self);
@@ -3840,6 +4120,7 @@ static void ggame_window_on_sgf_rewind(GSimpleAction * /*action*/,
     return;
   }
 
+  ggame_window_cancel_computer_move(self);
   if (!ggame_sgf_controller_rewind_to_start(self->sgf_controller)) {
     g_debug("SGF rewind ignored");
   }
@@ -3856,6 +4137,7 @@ static void ggame_window_on_sgf_step_backward(GSimpleAction * /*action*/,
     return;
   }
 
+  ggame_window_cancel_computer_move(self);
   if (!ggame_sgf_controller_step_backward(self->sgf_controller)) {
     g_debug("SGF step backward ignored");
   }
@@ -3872,6 +4154,7 @@ static void ggame_window_on_sgf_step_forward(GSimpleAction * /*action*/,
     return;
   }
 
+  ggame_window_cancel_computer_move(self);
   if (!ggame_sgf_controller_step_forward(self->sgf_controller)) {
     g_debug("SGF step forward ignored");
   }
@@ -3888,6 +4171,7 @@ static void ggame_window_on_sgf_step_forward_to_branch(GSimpleAction * /*action*
     return;
   }
 
+  ggame_window_cancel_computer_move(self);
   if (!ggame_sgf_controller_step_forward_to_branch(self->sgf_controller)) {
     g_debug("SGF step forward to branch ignored");
   }
@@ -3904,6 +4188,7 @@ static void ggame_window_on_sgf_step_forward_to_end(GSimpleAction * /*action*/,
     return;
   }
 
+  ggame_window_cancel_computer_move(self);
   if (!ggame_sgf_controller_step_forward_to_end(self->sgf_controller)) {
     g_debug("SGF step forward to end ignored");
   }
@@ -3920,6 +4205,7 @@ static void ggame_window_on_sgf_delete_node(GSimpleAction * /*action*/,
     return;
   }
 
+  ggame_window_cancel_computer_move(self);
   if (!ggame_sgf_controller_delete_current_node(self->sgf_controller)) {
     g_debug("SGF delete node ignored");
   }
@@ -3939,45 +4225,9 @@ static GtkWidget *ggame_window_new_toolbar_action_button(const char *icon_name,
 }
 
 void ggame_window_force_move(GGameWindow *self) {
-  const GameBackend *backend = NULL;
-  gconstpointer position = NULL;
-  guint configured_depth = 0;
-  g_autofree guint8 *move = NULL;
-
   g_return_if_fail(GGAME_IS_WINDOW(self));
 
-  if (self->puzzle_mode) {
-    g_debug("Ignoring forced move in puzzle mode");
-    return;
-  }
-
-  if (ggame_window_is_edit_mode(self)) {
-    return;
-  }
-
-  backend = ggame_window_get_game_backend(self);
-  position = ggame_window_get_game_position(self);
-  if (backend == NULL || position == NULL) {
-    return;
-  }
-  g_return_if_fail(backend->position_outcome != NULL);
-
-  if (backend->position_outcome(position) != GAME_BACKEND_OUTCOME_ONGOING) {
-    g_debug("Ignoring forced move after game end\n");
-    return;
-  }
-  if (ggame_sgf_controller_is_replaying(self->sgf_controller)) {
-    g_debug("Ignoring forced move while replaying SGF\n");
-    return;
-  }
-
-  g_return_if_fail(self->controls_panel != NULL);
-  configured_depth = player_controls_panel_get_computer_depth(self->controls_panel);
-  move = g_malloc0(backend->move_size);
-  g_return_if_fail(move != NULL);
-  if (!ggame_sgf_controller_step_ai_move(self->sgf_controller, configured_depth, move)) {
-    g_debug("Failed to choose a forced move for the active backend");
-  }
+  ggame_window_start_computer_move(self, FALSE);
 }
 
 const GameBackendVariant *ggame_window_get_variant(GGameWindow *self) {
@@ -4069,7 +4319,7 @@ static void ggame_window_set_model(GGameWindow *self, GGameModel *model) {
   g_return_if_fail(GGAME_IS_WINDOW(self));
   g_return_if_fail(GGAME_IS_MODEL(model));
 
-  g_clear_handle_id(&self->auto_move_source_id, g_source_remove);
+  ggame_window_cancel_computer_move(self);
 
   if (self->game_model != NULL && self->state_handler_id != 0) {
     g_signal_handler_disconnect(self->game_model, self->state_handler_id);
@@ -4161,6 +4411,7 @@ static gboolean ggame_window_unparent_controls_panel(GGameWindow *self) {
 static void ggame_window_dispose(GObject *object) {
   GGameWindow *self = GGAME_WINDOW(object);
 
+  ggame_window_cancel_computer_move(self);
   self->edit_mode_enabled = FALSE;
   ggame_window_sync_mode_ui(self);
 
@@ -4262,6 +4513,8 @@ static void ggame_window_init(GGameWindow *self) {
   self->profile = ggame_active_app_profile();
   layout = self->profile != NULL ? &self->profile->layout : NULL;
   self->auto_move_source_id = 0;
+  self->computer_move_cancellable = NULL;
+  self->computer_move_active = FALSE;
   self->paned_tick_id = 0;
   self->analysis_mode = GGAME_WINDOW_ANALYSIS_MODE_NONE;
   self->analysis_generation = 1;
@@ -4509,6 +4762,10 @@ static void ggame_window_init(GGameWindow *self) {
   g_signal_connect(self->controls_panel,
                    "control-changed",
                    G_CALLBACK(ggame_window_on_control_changed),
+                   self);
+  g_signal_connect(self->controls_panel,
+                   "stop-computer",
+                   G_CALLBACK(ggame_window_on_stop_computer),
                    self);
 
   GtkWidget *puzzle_panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);

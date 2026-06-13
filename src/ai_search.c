@@ -796,13 +796,27 @@ gboolean game_ai_search_choose_move(const GameBackend *backend,
                                     gconstpointer position,
                                     guint max_depth,
                                     gpointer out_move) {
+  return game_ai_search_choose_move_cancellable(backend, position, max_depth, out_move, NULL, NULL);
+}
+
+gboolean game_ai_search_choose_move_cancellable(const GameBackend *backend,
+                                                gconstpointer position,
+                                                guint max_depth,
+                                                gpointer out_move,
+                                                GameAiCancelFunc should_cancel,
+                                                gpointer user_data) {
   GameAiScoredMoveList scored_moves = {0};
 
   g_return_val_if_fail(backend != NULL, FALSE);
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(out_move != NULL, FALSE);
 
-  if (!game_ai_search_analyze_moves(backend, position, max_depth, &scored_moves)) {
+  if (!game_ai_search_analyze_moves_cancellable(backend,
+                                                position,
+                                                max_depth,
+                                                &scored_moves,
+                                                should_cancel,
+                                                user_data)) {
     return FALSE;
   }
 

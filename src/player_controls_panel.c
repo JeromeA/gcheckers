@@ -2,6 +2,7 @@
 
 enum {
   PLAYER_CONTROLS_PANEL_SIGNAL_CONTROL_CHANGED,
+  PLAYER_CONTROLS_PANEL_SIGNAL_STOP_COMPUTER,
   PLAYER_CONTROLS_PANEL_SIGNAL_COUNT
 };
 
@@ -12,8 +13,10 @@ struct _PlayerControlsPanel {
   GtkDropDown *side0_control;
   GtkDropDown *side1_control;
   GtkScale *computer_depth_scale;
+  GtkButton *stop_computer_button;
   GtkLabel *side0_label;
   GtkLabel *side1_label;
+  gboolean computer_thinking;
 };
 
 G_DEFINE_TYPE(PlayerControlsPanel, player_controls_panel, GTK_TYPE_BOX)
@@ -57,12 +60,21 @@ static void player_controls_panel_on_computer_depth_value_changed(GtkRange * /*r
   g_signal_emit(self, player_controls_panel_signals[PLAYER_CONTROLS_PANEL_SIGNAL_CONTROL_CHANGED], 0);
 }
 
+static void player_controls_panel_on_stop_computer_clicked(GtkButton * /*button*/, gpointer user_data) {
+  PlayerControlsPanel *self = PLAYER_CONTROLS_PANEL(user_data);
+
+  g_return_if_fail(PLAYER_IS_CONTROLS_PANEL(self));
+
+  g_signal_emit(self, player_controls_panel_signals[PLAYER_CONTROLS_PANEL_SIGNAL_STOP_COMPUTER], 0);
+}
+
 static void player_controls_panel_dispose(GObject *object) {
   PlayerControlsPanel *self = PLAYER_CONTROLS_PANEL(object);
 
   self->side0_control = NULL;
   self->side1_control = NULL;
   self->computer_depth_scale = NULL;
+  self->stop_computer_button = NULL;
   self->side0_label = NULL;
   self->side1_label = NULL;
 
@@ -84,6 +96,16 @@ static void player_controls_panel_class_init(PlayerControlsPanelClass *klass) {
       NULL,
       G_TYPE_NONE,
       0);
+  player_controls_panel_signals[PLAYER_CONTROLS_PANEL_SIGNAL_STOP_COMPUTER] = g_signal_new(
+      "stop-computer",
+      G_TYPE_FROM_CLASS(klass),
+      G_SIGNAL_RUN_LAST,
+      0,
+      NULL,
+      NULL,
+      NULL,
+      G_TYPE_NONE,
+      0);
 }
 
 static void player_controls_panel_init(PlayerControlsPanel *self) {
@@ -96,6 +118,7 @@ static void player_controls_panel_init(PlayerControlsPanel *self) {
   GtkWidget *side0_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
   GtkWidget *side1_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
   GtkWidget *computer_depth_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+  GtkWidget *computer_depth_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
   gtk_box_append(GTK_BOX(controls_row), side0_box);
   gtk_box_append(GTK_BOX(controls_row), side1_box);
   gtk_box_append(GTK_BOX(controls_row), computer_depth_box);
@@ -115,6 +138,9 @@ static void player_controls_panel_init(PlayerControlsPanel *self) {
   self->side1_control = GTK_DROP_DOWN(gtk_drop_down_new_from_strings(control_options));
   self->computer_depth_scale = GTK_SCALE(
       gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL, PLAYER_COMPUTER_DEPTH_MIN, PLAYER_COMPUTER_DEPTH_MAX, 1));
+  self->stop_computer_button = GTK_BUTTON(gtk_button_new_from_icon_name("process-stop-symbolic"));
+  gtk_widget_set_tooltip_text(GTK_WIDGET(self->stop_computer_button), "Stop computer move");
+  gtk_widget_set_sensitive(GTK_WIDGET(self->stop_computer_button), FALSE);
   gtk_scale_set_digits(self->computer_depth_scale, 0);
   gtk_scale_set_draw_value(self->computer_depth_scale, TRUE);
   gtk_widget_set_hexpand(GTK_WIDGET(self->computer_depth_scale), TRUE);
@@ -126,7 +152,9 @@ static void player_controls_panel_init(PlayerControlsPanel *self) {
   player_controls_panel_set_computer_depth(self, PLAYER_COMPUTER_DEPTH_DEFAULT);
   gtk_box_append(GTK_BOX(side0_box), GTK_WIDGET(self->side0_control));
   gtk_box_append(GTK_BOX(side1_box), GTK_WIDGET(self->side1_control));
-  gtk_box_append(GTK_BOX(computer_depth_box), GTK_WIDGET(self->computer_depth_scale));
+  gtk_box_append(GTK_BOX(computer_depth_row), GTK_WIDGET(self->computer_depth_scale));
+  gtk_box_append(GTK_BOX(computer_depth_row), GTK_WIDGET(self->stop_computer_button));
+  gtk_box_append(GTK_BOX(computer_depth_box), computer_depth_row);
 
   g_signal_connect(self->side0_control,
                    "notify::selected",
@@ -139,6 +167,10 @@ static void player_controls_panel_init(PlayerControlsPanel *self) {
   g_signal_connect(self->computer_depth_scale,
                    "value-changed",
                    G_CALLBACK(player_controls_panel_on_computer_depth_value_changed),
+                   self);
+  g_signal_connect(self->stop_computer_button,
+                   "clicked",
+                   G_CALLBACK(player_controls_panel_on_stop_computer_clicked),
                    self);
 }
 
@@ -212,4 +244,24 @@ guint player_controls_panel_get_computer_depth(PlayerControlsPanel *self) {
   }
 
   return depth;
+}
+
+void player_controls_panel_set_computer_thinking(PlayerControlsPanel *self, gboolean thinking) {
+  g_return_if_fail(PLAYER_IS_CONTROLS_PANEL(self));
+  g_return_if_fail(self->side0_control != NULL);
+  g_return_if_fail(self->side1_control != NULL);
+  g_return_if_fail(self->computer_depth_scale != NULL);
+  g_return_if_fail(self->stop_computer_button != NULL);
+
+  self->computer_thinking = thinking;
+  gtk_widget_set_sensitive(GTK_WIDGET(self->side0_control), !thinking);
+  gtk_widget_set_sensitive(GTK_WIDGET(self->side1_control), !thinking);
+  gtk_widget_set_sensitive(GTK_WIDGET(self->computer_depth_scale), !thinking);
+  gtk_widget_set_sensitive(GTK_WIDGET(self->stop_computer_button), thinking);
+}
+
+gboolean player_controls_panel_get_computer_thinking(PlayerControlsPanel *self) {
+  g_return_val_if_fail(PLAYER_IS_CONTROLS_PANEL(self), FALSE);
+
+  return self->computer_thinking;
 }

@@ -105,6 +105,12 @@ gboolean game_ai_search_choose_move(const GameBackend *backend,
                                     gconstpointer position,
                                     guint max_depth,
                                     gpointer out_move);
+gboolean game_ai_search_choose_move_cancellable(const GameBackend *backend,
+                                                gconstpointer position,
+                                                guint max_depth,
+                                                gpointer out_move,
+                                                GameAiCancelFunc should_cancel,
+                                                gpointer user_data);
 gboolean game_ai_evaluate_static(const GameBackend *backend, gconstpointer position, gint *out_score);
 
 #endif

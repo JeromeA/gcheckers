@@ -1531,11 +1531,48 @@ static void test_ggame_window_force_move_works_on_user_turn(void) {
   g_assert_true(player_controls_panel_is_user_control(panel, 1));
 
   ggame_window_force_move(window);
-  test_ggame_window_wait_for_draw(window);
+  g_assert_true(player_controls_panel_get_computer_thinking(panel));
+  g_assert_false(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "game-force-move"));
+
+  TestGGameWindowCheckersTurnWait wait = {
+    .model = model,
+    .turn = CHECKERS_COLOR_BLACK,
+  };
+  g_assert_true(test_ggame_window_wait_until(window,
+                                             test_ggame_window_checkers_turn_matches,
+                                             &wait,
+                                             5 * G_USEC_PER_SEC));
+  g_assert_false(player_controls_panel_get_computer_thinking(panel));
+  g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "game-force-move"));
 
   const GameState *state = gcheckers_model_peek_state(model);
   g_assert_nonnull(state);
   g_assert_cmpuint(state->turn, ==, CHECKERS_COLOR_BLACK);
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
+static void test_ggame_window_stop_computer_move_cancels_pending_result(void) {
+  GtkApplication *app = test_ggame_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GGameWindow *window = test_ggame_window_new(app, model);
+
+  PlayerControlsPanel *panel = ggame_window_get_controls_panel(window);
+  g_assert_nonnull(panel);
+  player_controls_panel_set_mode(panel, 1, PLAYER_CONTROL_MODE_USER);
+
+  ggame_window_force_move(window);
+  g_assert_true(player_controls_panel_get_computer_thinking(panel));
+
+  g_signal_emit_by_name(panel, "stop-computer");
+  g_assert_false(player_controls_panel_get_computer_thinking(panel));
+  g_assert_true(g_action_group_get_action_enabled(G_ACTION_GROUP(window), "game-force-move"));
+
+  const GameState *state = gcheckers_model_peek_state(model);
+  g_assert_nonnull(state);
+  g_assert_cmpuint(state->turn, ==, CHECKERS_COLOR_WHITE);
 
   g_clear_object(&window);
   g_clear_object(&model);
@@ -3124,6 +3161,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/gcheckers-window/sgf-navigation-preserves-controls", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/defaults-second-player-computer", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/force-move-user-turn", test_ggame_window_skip);
+    g_test_add_func("/gcheckers-window/stop-computer-move", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/toolbar-actions", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/sgf-actions-navigate", test_ggame_window_skip);
     g_test_add_func("/gcheckers-window/analysis-actions", test_ggame_window_skip);
@@ -3191,6 +3229,8 @@ int main(int argc, char **argv) {
                   test_ggame_window_defaults_second_player_to_computer);
   g_test_add_func("/gcheckers-window/force-move-user-turn",
                   test_ggame_window_force_move_works_on_user_turn);
+  g_test_add_func("/gcheckers-window/stop-computer-move",
+                  test_ggame_window_stop_computer_move_cancels_pending_result);
   g_test_add_func("/gcheckers-window/toolbar-actions", test_ggame_window_toolbar_actions_exist);
   g_test_add_func("/gcheckers-window/sgf-actions-navigate",
                   test_ggame_window_sgf_actions_navigate_timeline);

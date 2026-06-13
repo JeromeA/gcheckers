@@ -214,6 +214,7 @@ static void test_ai_search_rejects_backend_without_ai(void) {
   assert(!game_ai_search_analyze_moves(&no_ai_backend, &position, 1, &scored_moves));
   assert(!game_ai_search_evaluate_position(&no_ai_backend, &position, 1, &score));
   assert(!game_ai_search_choose_move(&no_ai_backend, &position, 1, &move));
+  assert(!game_ai_search_choose_move_cancellable(&no_ai_backend, &position, 1, &move, NULL, NULL));
   assert(!game_ai_evaluate_static(&no_ai_backend, &position, &score));
 }
 
@@ -397,6 +398,14 @@ static void test_ai_search_accepts_good_move_only_backend(void) {
 
   assert(game_ai_search_choose_move(&test_good_move_only_backend, &position, 2, &selected));
   assert(selected.delta == 2);
+  selected.delta = 0;
+  assert(game_ai_search_choose_move_cancellable(&test_good_move_only_backend,
+                                                &position,
+                                                2,
+                                                &selected,
+                                                NULL,
+                                                NULL));
+  assert(selected.delta == 2);
   test_good_move_only_release_retired_move_lists();
 }
 
@@ -454,6 +463,26 @@ static void test_ai_search_cancellation_clears_partial_root_results(void) {
   assert(cancel_state.calls == 2);
   assert(scored_moves.moves == NULL);
   assert(scored_moves.count == 0);
+  test_good_move_only_release_retired_move_lists();
+}
+
+static void test_ai_search_choose_move_cancellable_stops_before_selection(void) {
+  TestGoodMoveOnlyPosition position = {0};
+  TestAiCancelState cancel_state = {
+    .cancel_after = 1,
+  };
+  TestGoodMoveOnlyMove selected = {0};
+
+  test_good_move_only_position_init(&position, NULL);
+
+  assert(!game_ai_search_choose_move_cancellable(&test_good_move_only_backend,
+                                                 &position,
+                                                 0,
+                                                 &selected,
+                                                 test_ai_cancel_after_n_calls,
+                                                 &cancel_state));
+  assert(cancel_state.calls == 2);
+  assert(selected.delta == 0);
   test_good_move_only_release_retired_move_lists();
 }
 
@@ -544,6 +573,7 @@ int main(int argc, char **argv) {
   test_ai_search_depth_zero_skips_child_moves_without_forced_extension();
   test_ai_search_forced_extension_is_backend_opt_in();
   test_ai_search_cancellation_clears_partial_root_results();
+  test_ai_search_choose_move_cancellable_stops_before_selection();
   test_ai_search_known_root_scores_skip_recursive_search();
   test_ai_search_tt_stores_best_move_before_freeing_move_list();
 

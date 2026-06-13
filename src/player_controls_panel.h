@@ -32,6 +32,8 @@ gboolean player_controls_panel_is_user_control(PlayerControlsPanel *self, guint 
 void player_controls_panel_set_side_labels(PlayerControlsPanel *self, const char *side0_label, const char *side1_label);
 void player_controls_panel_set_computer_depth(PlayerControlsPanel *self, guint depth);
 guint player_controls_panel_get_computer_depth(PlayerControlsPanel *self);
+void player_controls_panel_set_computer_thinking(PlayerControlsPanel *self, gboolean thinking);
+gboolean player_controls_panel_get_computer_thinking(PlayerControlsPanel *self);
 
 G_END_DECLS
 

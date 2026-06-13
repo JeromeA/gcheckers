@@ -44,8 +44,11 @@ and catastrophe controls while still routing completed moves through the shared 
 During Homeworlds multi-step actions, the source ship remains highlighted while the user chooses a trade color,
 capture target, or move destination; build completes immediately and has no second selection step.
 Collaborates with: `ggame_style_init()` for CSS, model signals for refresh, profile feature flags to enable/disable
-actions, and SGF navigation signals to synchronize analysis and board-host state. Computer turns are routed by control
-mode with alpha-beta depth configured from the shared `Computer depth` slider (`1..16`). Uses a three-pane layout: board
+actions, and SGF navigation signals to synchronize analysis and board-host state. Computer turns and the manual
+`Force move` action snapshot the current backend position, run move choice on a worker thread, and apply the chosen
+move on the GTK thread only if the current SGF node, side, depth, and player controls still match. The shared
+`Computer depth` slider (`1..16`) configures that search. While a computer move is pending, player AI settings are
+disabled and the player controls expose a Stop button that cancels the pending result. Uses a three-pane layout: board
 and player controls (left), SGF mode selector and SGF view (middle), and analysis (right). Analysis is launched from
 shared window actions exposed in the `Analysis` menubar submenu: current-position analysis iterates on the selected
 node, and full-game analysis always processes nodes in reverse order so TT state is reused from later positions
@@ -184,8 +187,8 @@ POST `loginUserWithPassword.html` with username/password/remember/request token 
 Default panel widths come from the active profile, with `500/300/300` as the checkers baseline. Profiles can also set a
 smaller minimum board-panel width when the startup/default board width should not become the paned handle's hard limit.
 Lifecycle: sinks and retains an owned `PlayerControlsPanel` reference, removes it from its current `GtkBox` parent
-during dispose via `ggame_widget_remove_from_parent()`, and then clears its references.
-during dispose, cancels any pending auto-move idle source, and then clears its references.
+during dispose via `ggame_widget_remove_from_parent()`, cancels any pending auto-move idle source or background
+computer-move result, and then clears its references.
 At construction time it also pushes the active backend's side labels into `PlayerControlsPanel`, so the shared board
 UI keeps generic two-side semantics while the active backend decides how those sides are named.
 
@@ -267,8 +270,11 @@ Modes: side 0 / side 1 each select `User` or `Computer`, plus a shared `Computer
 Defaults: side 0 starts as `User`, side 1 starts as `Computer`, and the active profile supplies the initial computer
 depth. New-game SGF roots mark any computer-controlled side as `Computer` in the side's player-name property. Labels
 are backend-supplied by the window (`White`/`Black` for the current checkers backend).
-Signals: `control-changed` for window-level coordination.
-Collaborates with: `GGameWindow` signal handlers and GTK widgets (`GtkDropDown`, `GtkScale`).
+The panel also owns the Stop button and thinking state used by background computer moves: while thinking, the side
+dropdowns and depth scale are disabled and Stop is enabled.
+Signals: `control-changed` for window-level coordination and `stop-computer` when the user cancels a pending computer
+move.
+Collaborates with: `GGameWindow` signal handlers and GTK widgets (`GtkDropDown`, `GtkScale`, `GtkButton`).
 
 ## `Puzzle Catalog` (`src/puzzle_catalog.c`, `src/puzzle_catalog.h`)
 Module: backend-variant puzzle discovery helpers.
@@ -436,7 +442,9 @@ Module: backend-driven alpha-beta search.
 Role: choose a move and analyze all legal moves via depth-limited alpha-beta using only `GameBackend` callbacks for
 move generation, position copying, applying moves, static evaluation, terminal scoring, side-to-move inspection, and
 hashing. Root move choice randomizes among all equal best-scoring moves, so repeated games can vary without lowering
-evaluation quality. Analysis APIs can report searched node counts and TT stats (probes/hits/cutoffs), and TT stats
+evaluation quality. The move chooser has a cancellable variant used by the GTK window's background computer-move
+worker, while the old synchronous chooser remains as a wrapper for command-line and puzzle-generation callers.
+Analysis APIs can report searched node counts and TT stats (probes/hits/cutoffs), and TT stats
 accumulate when callers reuse the same `GameAiSearchStats` across calls. Cancellable analysis owns any copied partial
 root results until the call succeeds and frees them on cancellation.
 This is now an optional backend capability: backends that opt into `supports_ai_search` must provide backend-sized move
