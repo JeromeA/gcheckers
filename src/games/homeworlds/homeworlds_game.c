@@ -25,7 +25,7 @@ static const HomeworldsEvalWeights homeworlds_default_eval_weights = {
   },
   .homeworld_ship_values = {
     [HOMEWORLDS_SIZE_SMALL] = 0,
-    [HOMEWORLDS_SIZE_MEDIUM] = 10,
+    [HOMEWORLDS_SIZE_MEDIUM] = 0,
     [HOMEWORLDS_SIZE_LARGE] = 10,
   },
   .empty_homeworld_value = 80,
@@ -41,7 +41,7 @@ static HomeworldsEvalWeights homeworlds_active_eval_weights = {
   },
   .homeworld_ship_values = {
     [HOMEWORLDS_SIZE_SMALL] = 0,
-    [HOMEWORLDS_SIZE_MEDIUM] = 10,
+    [HOMEWORLDS_SIZE_MEDIUM] = 0,
     [HOMEWORLDS_SIZE_LARGE] = 10,
   },
   .empty_homeworld_value = 80,
