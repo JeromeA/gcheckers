@@ -74,6 +74,7 @@ static void test_app_profile_metadata(void) {
 static void test_backend_metadata(void) {
   const GameBackend *backend = GGAME_ACTIVE_GAME_BACKEND;
   assert(backend != NULL);
+  assert(backend->moves_equivalent != NULL);
 
   switch (ggame_active_app_profile()->kind) {
     case GGAME_APP_KIND_CHECKERS: {
@@ -488,6 +489,12 @@ static gboolean test_backend_long_path_moves_equal(gconstpointer left, gconstpoi
   return left == right;
 }
 
+static gboolean test_backend_long_path_moves_equivalent(gconstpointer /*position*/,
+                                                        gconstpointer left,
+                                                        gconstpointer right) {
+  return test_backend_long_path_moves_equal(left, right);
+}
+
 static gboolean test_backend_long_path_builder_init(gconstpointer position, GameBackendMoveBuilder *out_builder) {
   assert(position != NULL);
   assert(out_builder != NULL);
@@ -602,6 +609,7 @@ static const GameBackend test_backend_long_path_backend = {
   .move_list_free = test_backend_long_path_move_list_free,
   .move_list_get = test_backend_long_path_move_list_get,
   .moves_equal = test_backend_long_path_moves_equal,
+  .moves_equivalent = test_backend_long_path_moves_equivalent,
   .move_builder_init = test_backend_long_path_builder_init,
   .move_builder_clear = test_backend_long_path_builder_clear,
   .move_builder_list_candidates = test_backend_long_path_builder_list_candidates,

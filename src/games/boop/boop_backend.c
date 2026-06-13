@@ -119,6 +119,12 @@ static gboolean boop_backend_moves_equal(gconstpointer left, gconstpointer right
   return boop_moves_equal(left_move, right_move);
 }
 
+static gboolean boop_backend_moves_equivalent(gconstpointer /*position*/,
+                                              gconstpointer left,
+                                              gconstpointer right) {
+  return boop_backend_moves_equal(left, right);
+}
+
 static gconstpointer boop_backend_move_builder_preview_position(const GameBackendMoveBuilder *builder) {
   g_return_val_if_fail(builder != NULL, NULL);
   g_return_val_if_fail(builder->builder_state != NULL, NULL);
@@ -398,6 +404,7 @@ const GameBackend boop_game_backend = {
   .move_list_free = boop_backend_move_list_free,
   .move_list_get = boop_backend_move_list_get,
   .moves_equal = boop_backend_moves_equal,
+  .moves_equivalent = boop_backend_moves_equivalent,
   .move_builder_init = (gboolean (*)(gconstpointer, GameBackendMoveBuilder *))boop_move_builder_init,
   .move_builder_clear = boop_move_builder_clear,
   .move_builder_list_candidates =

@@ -713,6 +713,7 @@ static void test_backend_metadata(void) {
   assert(strcmp(backend->ascii_game_file_extension, "txt") == 0);
   assert(backend->list_good_moves != NULL);
   assert(backend->parse_move != NULL);
+  assert(backend->moves_equivalent != NULL);
   assert(backend->sgf_color_for_side != NULL);
   assert(backend->sgf_apply_setup_node != NULL);
   assert(backend->sgf_write_position_node != NULL);
@@ -762,6 +763,29 @@ static void test_backend_move_equality_uses_symbolic_build_identity(void) {
 
   assert(backend->moves_equal(&build, &same_build));
   assert(!backend->moves_equal(&build, &different_build));
+}
+
+static void test_backend_move_equivalence_uses_resulting_position(void) {
+  const GameBackend *backend = &homeworlds_game_backend;
+  HomeworldsPosition position = {0};
+  HomeworldsMove canonical = {0};
+  HomeworldsMove redundant = {0};
+  const char *canonical_move = "H1b2- H1r1=g H1y1=r";
+  const char *redundant_move = "H1b2- H1y1=r H1r1=g";
+
+  test_prepare_position(&position);
+  position.systems[0].ships[0][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_MEDIUM);
+  position.systems[0].ships[0][1] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL);
+  position.systems[0].ships[0][2] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL);
+  for (guint slot = 3; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
+    position.systems[0].ships[0][slot] = 0;
+  }
+  homeworlds_system_rebuild_color_counts(&position.systems[0]);
+
+  assert(homeworlds_move_parse(canonical_move, &canonical));
+  assert(homeworlds_move_parse(redundant_move, &redundant));
+  assert(!backend->moves_equal(&canonical, &redundant));
+  assert(backend->moves_equivalent(&position, &canonical, &redundant));
 }
 
 static void test_backend_move_codec_roundtrips_setup_and_turn(void) {
@@ -2494,6 +2518,7 @@ static void test_backend_destroying_opponent_homeworld_wins_immediately(void) {
 int main(void) {
   test_backend_metadata();
   test_backend_move_equality_uses_symbolic_build_identity();
+  test_backend_move_equivalence_uses_resulting_position();
   test_backend_move_codec_roundtrips_setup_and_turn();
   test_backend_sgf_snapshot_roundtrips_position();
   test_backend_sgf_snapshot_rejects_duplicate_systems();

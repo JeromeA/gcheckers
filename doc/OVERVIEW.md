@@ -73,8 +73,8 @@ depth as a fixed search limit. Analysis menu entries are one-shot actions, so SG
 restarting current-position analysis. Full-game analysis reconstructs each node position from SGF replay semantics
 (setup properties plus moves from root to the exact node), so setup-root puzzle files and edited SGF setup nodes share
 the same position source of truth as normal controller navigation. Root-move analysis can reuse direct SGF child
-analyses when the child depth is at least the requested root depth minus one, so previously analyzed played lines stay
-consistent and are not searched again.
+analyses when the child depth is at least the requested root depth minus one, matching child moves by backend-defined
+move equivalence so deduped Homeworlds representatives can reuse analysis stored on an equivalent SGF child.
 Board orientation is runtime-only window state: live games choose `follow-player`, `follow-turn`, or `fixed`
 orientation based on the new-game player modes, and SGF review/manual navigation switches back to `fixed` so analysis
 navigation does not keep rotating the board. SGF navigation does not mutate the player-mode dropdowns; `User` and
@@ -866,8 +866,10 @@ move extension, opt-in ASCII game files, and backend-owned move parsing/formatti
 SGF-capable backend also maps its own side numbers to SGF `B`/`W` colors, which keeps shared controller code from
 assuming that side 0 means the same color in every game. Move-builder backends can also expose preview positions,
 builder-owned selection paths, and selection reset behavior for multi-stage interactions such as boop promotion
-choices. Backend outcome banner text is reserved for terminal outcomes; ongoing positions should return no banner
-text. They can also optionally expose SGF setup-node and root-position snapshot hooks so the shared controller can
+choices. Backend move equality remains strict identity, while required move equivalence lets analysis/search reuse
+results across different concrete moves that reach the same child position. Backend outcome banner text is reserved
+for terminal outcomes; ongoing positions should return no banner text. They can also optionally expose SGF setup-node
+and root-position snapshot hooks so the shared controller can
 replay setup-root SGFs and save position-only SGFs without game-specific branches.
 Collaborates with: `Makefile` backend selection, `tests/test_game_backend.c`, and future generic model/search work.
 

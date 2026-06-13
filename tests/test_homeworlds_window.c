@@ -22,6 +22,24 @@ static void test_homeworlds_window_skip(void) {
 
 static GtkApplication *test_homeworlds_app = NULL;
 
+typedef gboolean (*TestHomeworldsWindowWaitPredicate)(gpointer user_data);
+
+typedef struct {
+  TestHomeworldsWindowWaitPredicate predicate;
+  gpointer user_data;
+  GMainLoop *loop;
+  gint64 deadline_us;
+  guint source_id;
+  gboolean matched;
+} TestHomeworldsWindowWait;
+
+typedef struct {
+  const SgfNode *node;
+  guint expected_depth;
+  const char *expected_move;
+  gint expected_score;
+} TestHomeworldsWindowAnalysisScoreWait;
+
 static void test_homeworlds_window_reset_layout_settings(void) {
   g_autoptr(GSettings) settings = ggame_common_settings_create();
 
@@ -40,6 +58,83 @@ static void test_homeworlds_window_wait_for_draw(gpointer window) {
     gtk_window_present(GTK_WINDOW(window));
   }
   gtk_test_widget_wait_for_draw(GTK_WIDGET(window));
+}
+
+static gboolean test_homeworlds_window_wait_cb(gpointer user_data) {
+  TestHomeworldsWindowWait *wait = user_data;
+
+  g_return_val_if_fail(wait != NULL, G_SOURCE_REMOVE);
+  g_return_val_if_fail(wait->predicate != NULL, G_SOURCE_REMOVE);
+  g_return_val_if_fail(wait->loop != NULL, G_SOURCE_REMOVE);
+
+  if (wait->predicate(wait->user_data)) {
+    wait->matched = TRUE;
+    wait->source_id = 0;
+    g_main_loop_quit(wait->loop);
+    return G_SOURCE_REMOVE;
+  }
+
+  if (g_get_monotonic_time() >= wait->deadline_us) {
+    wait->source_id = 0;
+    g_main_loop_quit(wait->loop);
+    return G_SOURCE_REMOVE;
+  }
+
+  return G_SOURCE_CONTINUE;
+}
+
+static gboolean test_homeworlds_window_wait_until(GGameWindow *window,
+                                                  TestHomeworldsWindowWaitPredicate predicate,
+                                                  gpointer user_data,
+                                                  gint64 timeout_us) {
+  g_return_val_if_fail(GGAME_IS_WINDOW(window), FALSE);
+  g_return_val_if_fail(predicate != NULL, FALSE);
+  g_return_val_if_fail(timeout_us > 0, FALSE);
+
+  test_homeworlds_window_wait_for_draw(window);
+  if (predicate(user_data)) {
+    return TRUE;
+  }
+
+  GMainLoop *loop = g_main_loop_new(NULL, FALSE);
+  TestHomeworldsWindowWait wait = {
+    .predicate = predicate,
+    .user_data = user_data,
+    .loop = loop,
+    .deadline_us = g_get_monotonic_time() + timeout_us,
+    .source_id = 0,
+    .matched = FALSE,
+  };
+  wait.source_id = g_timeout_add(1, test_homeworlds_window_wait_cb, &wait);
+  g_main_loop_run(loop);
+
+  if (wait.source_id != 0) {
+    g_source_remove(wait.source_id);
+  }
+  g_main_loop_unref(loop);
+
+  return wait.matched;
+}
+
+static gboolean test_homeworlds_window_analysis_score_matches(gpointer user_data) {
+  TestHomeworldsWindowAnalysisScoreWait *wait = user_data;
+
+  g_return_val_if_fail(wait != NULL, FALSE);
+  g_return_val_if_fail(wait->node != NULL, FALSE);
+  g_return_val_if_fail(wait->expected_move != NULL, FALSE);
+
+  g_autoptr(SgfNodeAnalysis) analysis = sgf_node_get_analysis(wait->node);
+  if (analysis == NULL || analysis->depth != wait->expected_depth ||
+      analysis->moves == NULL || analysis->moves->len == 0) {
+    return FALSE;
+  }
+
+  const SgfNodeScoredMove *entry = g_ptr_array_index(analysis->moves, 0);
+  if (entry == NULL) {
+    return FALSE;
+  }
+
+  return g_strcmp0(entry->move_text, wait->expected_move) == 0 && entry->score == wait->expected_score;
 }
 
 static GtkWidget *test_homeworlds_find_widget_named(GtkWidget *root, const char *name) {
@@ -1459,6 +1554,79 @@ static void test_homeworlds_window_setup_moves_are_recorded_in_sgf(void) {
   g_object_unref(app);
 }
 
+static void test_homeworlds_window_analysis_reuses_equivalent_child_score(void) {
+  const GameBackend *backend = &homeworlds_game_backend;
+  const char *canonical_move = "H1b2- H1r1=g H1y1=r";
+  const char *redundant_move = "H1b2- H1y1=r H1r1=g";
+  GtkApplication *app = NULL;
+  GGameModel *model = NULL;
+  GGameWindow *window = test_homeworlds_create_window(&app, &model);
+  GGameSgfController *controller = ggame_window_get_sgf_controller(window);
+  SgfTree *tree = ggame_sgf_controller_get_tree(controller);
+  SgfNode *root = (SgfNode *)sgf_tree_get_root(tree);
+  SgfNode *child = NULL;
+  HomeworldsPosition position = {0};
+  HomeworldsMove canonical = {0};
+  HomeworldsMove redundant = {0};
+  HomeworldsEvalWeights neutral_weights = {0};
+  GError *error = NULL;
+
+  g_assert_nonnull(controller);
+  g_assert_nonnull(tree);
+  g_assert_nonnull(root);
+
+  test_homeworlds_prepare_play_position(&position);
+  position.systems[0].ships[0][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_MEDIUM);
+  position.systems[0].ships[0][1] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL);
+  position.systems[0].ships[0][2] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL);
+  for (guint slot = 3; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
+    position.systems[0].ships[0][slot] = 0;
+  }
+  homeworlds_system_rebuild_color_counts(&position.systems[0]);
+
+  g_assert_true(homeworlds_move_parse(canonical_move, &canonical));
+  g_assert_true(homeworlds_move_parse(redundant_move, &redundant));
+  g_assert_false(backend->moves_equal(&canonical, &redundant));
+  g_assert_true(backend->moves_equivalent(&position, &canonical, &redundant));
+  g_assert_true(ggame_model_set_position(model, &position));
+  g_assert_true(backend->sgf_write_position_node(&position, root, &error));
+  g_assert_no_error(error);
+
+  child = (SgfNode *)sgf_tree_append_move(tree, SGF_COLOR_BLACK, redundant_move);
+  g_assert_nonnull(child);
+
+  g_autoptr(SgfNodeAnalysis) child_analysis = sgf_node_analysis_new();
+  g_assert_nonnull(child_analysis);
+  child_analysis->depth = 0;
+  g_assert_true(sgf_node_analysis_add_scored_move(child_analysis, "pass", 4321, 17));
+  g_assert_true(sgf_node_set_analysis(child, child_analysis));
+
+  g_assert_true(ggame_sgf_controller_select_node(controller, root));
+  ggame_window_set_analysis_depth(window, 1);
+  test_homeworlds_window_wait_for_draw(window);
+
+  homeworlds_eval_weights_set_active(&neutral_weights);
+  GAction *action = g_action_map_lookup_action(G_ACTION_MAP(window), "analysis-current-position");
+  g_assert_nonnull(action);
+  g_action_activate(action, NULL);
+
+  TestHomeworldsWindowAnalysisScoreWait wait = {
+    .node = root,
+    .expected_depth = 1,
+    .expected_move = canonical_move,
+    .expected_score = 4321,
+  };
+  g_assert_true(test_homeworlds_window_wait_until(window,
+                                                 test_homeworlds_window_analysis_score_matches,
+                                                 &wait,
+                                                 5 * G_USEC_PER_SEC));
+  homeworlds_eval_weights_reset_active();
+
+  gtk_window_destroy(GTK_WINDOW(window));
+  g_object_unref(model);
+  g_object_unref(app);
+}
+
 static void test_homeworlds_window_catastrophe_prefix_records_single_sgf_move(void) {
   GtkApplication *app = NULL;
   GGameModel *model = NULL;
@@ -2245,6 +2413,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/homeworlds/window/main-split-can-exceed-height", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/window/defaults-to-minimum-computer-depth", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/window/setup-recorded-in-sgf", test_homeworlds_window_skip);
+    g_test_add_func("/homeworlds/window/analysis-reuses-equivalent-child-score", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/setup-bank-buttons", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/bank-layout", test_homeworlds_window_skip);
     g_test_add_func("/homeworlds/view/bank-layout-stays-compact-after-setup", test_homeworlds_window_skip);
@@ -2279,6 +2448,8 @@ int main(int argc, char **argv) {
                     test_homeworlds_window_defaults_to_minimum_computer_depth);
     g_test_add_func("/homeworlds/window/setup-recorded-in-sgf",
                     test_homeworlds_window_setup_moves_are_recorded_in_sgf);
+    g_test_add_func("/homeworlds/window/analysis-reuses-equivalent-child-score",
+                    test_homeworlds_window_analysis_reuses_equivalent_child_score);
     g_test_add_func("/homeworlds/view/setup-bank-buttons", test_homeworlds_view_setup_uses_board_bank_buttons);
     g_test_add_func("/homeworlds/view/bank-layout", test_homeworlds_view_bank_layout_is_compact_and_centered);
     g_test_add_func("/homeworlds/view/bank-layout-stays-compact-after-setup",

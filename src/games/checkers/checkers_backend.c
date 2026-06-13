@@ -206,6 +206,12 @@ static gboolean checkers_backend_moves_equal(gconstpointer left, gconstpointer r
   return memcmp(left_move->path, right_move->path, left_move->length * sizeof(left_move->path[0])) == 0;
 }
 
+static gboolean checkers_backend_moves_equivalent(gconstpointer /*position*/,
+                                                  gconstpointer left,
+                                                  gconstpointer right) {
+  return checkers_backend_moves_equal(left, right);
+}
+
 typedef struct {
   GameBackendMoveList legal_moves;
   guint8 path[CHECKERS_MAX_MOVE_LENGTH];
@@ -811,6 +817,7 @@ const GameBackend checkers_game_backend = {
   .move_list_free = checkers_backend_move_list_free,
   .move_list_get = checkers_backend_move_list_get,
   .moves_equal = checkers_backend_moves_equal,
+  .moves_equivalent = checkers_backend_moves_equivalent,
   .move_builder_init = checkers_backend_move_builder_init,
   .move_builder_clear = checkers_backend_move_builder_clear,
   .move_builder_list_candidates = checkers_backend_move_builder_list_candidates,

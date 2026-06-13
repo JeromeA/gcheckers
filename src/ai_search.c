@@ -636,6 +636,7 @@ gboolean game_ai_search_analyze_moves_cancellable_with_tt_and_known_scores(const
   g_return_val_if_fail(backend->move_list_free != NULL, FALSE);
   g_return_val_if_fail(backend->move_list_get != NULL, FALSE);
   g_return_val_if_fail(backend->moves_equal != NULL, FALSE);
+  g_return_val_if_fail(backend->moves_equivalent != NULL, FALSE);
   g_return_val_if_fail(backend->apply_move != NULL, FALSE);
   g_return_val_if_fail(backend->evaluate_static != NULL, FALSE);
   g_return_val_if_fail(backend->terminal_score != NULL, FALSE);
@@ -767,6 +768,7 @@ gboolean game_ai_search_evaluate_position(const GameBackend *backend,
   g_return_val_if_fail(backend->move_list_free != NULL, FALSE);
   g_return_val_if_fail(backend->move_list_get != NULL, FALSE);
   g_return_val_if_fail(backend->moves_equal != NULL, FALSE);
+  g_return_val_if_fail(backend->moves_equivalent != NULL, FALSE);
   g_return_val_if_fail(backend->apply_move != NULL, FALSE);
   g_return_val_if_fail(backend->evaluate_static != NULL, FALSE);
   g_return_val_if_fail(backend->terminal_score != NULL, FALSE);

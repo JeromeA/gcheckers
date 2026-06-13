@@ -1423,3 +1423,16 @@ killed by the kernel OOM killer.
 The fix scores complete moves as they are produced for play positions and keeps only a sorted top-512 scored set plus
 deduplication keys for the currently kept moves. The returned good-move list preserves the same score ordering and
 window pruning, but peak memory no longer scales with the number of generated complete leaves.
+
+## Homeworlds SGF child analysis reuse missed deduped equivalent moves
+
+Root analysis should reuse a direct SGF child's stored analysis when the generated root move reaches the same child
+position as that SGF move.
+
+The reuse lookup compared the generated candidate with the SGF child using strict backend move equality. Homeworlds
+`good_moves()` deduplicates by generated state and may return only a canonical representative, so an SGF child with a
+different but equivalent step ordering was ignored and searched again.
+
+The fix adds a required backend move-equivalence callback and uses it for child-score reuse. Most backends define
+equivalence as strict equality, while Homeworlds compares the positions reached after applying both moves from the same
+parent position.

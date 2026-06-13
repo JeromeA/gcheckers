@@ -178,6 +178,41 @@ static gboolean homeworlds_backend_moves_equal(gconstpointer left, gconstpointer
   return homeworlds_moves_equal(left_move, right_move);
 }
 
+static gboolean homeworlds_backend_moves_equivalent(gconstpointer position,
+                                                    gconstpointer left,
+                                                    gconstpointer right) {
+  const HomeworldsPosition *homeworlds_position = position;
+  const HomeworldsMove *left_move = left;
+  const HomeworldsMove *right_move = right;
+  HomeworldsPosition left_child = {0};
+  HomeworldsPosition right_child = {0};
+  gboolean equivalent = FALSE;
+
+  g_return_val_if_fail(homeworlds_position != NULL, FALSE);
+  g_return_val_if_fail(left_move != NULL, FALSE);
+  g_return_val_if_fail(right_move != NULL, FALSE);
+
+  homeworlds_position_copy(&left_child, homeworlds_position);
+  if (!homeworlds_position_apply_move(&left_child, left_move)) {
+    g_debug("Skipping invalid left Homeworlds move while comparing move equivalence");
+    homeworlds_position_clear(&left_child);
+    return FALSE;
+  }
+
+  homeworlds_position_copy(&right_child, homeworlds_position);
+  if (!homeworlds_position_apply_move(&right_child, right_move)) {
+    g_debug("Skipping invalid right Homeworlds move while comparing move equivalence");
+    homeworlds_position_clear(&left_child);
+    homeworlds_position_clear(&right_child);
+    return FALSE;
+  }
+
+  equivalent = homeworlds_positions_equal(&left_child, &right_child);
+  homeworlds_position_clear(&left_child);
+  homeworlds_position_clear(&right_child);
+  return equivalent;
+}
+
 static gboolean homeworlds_backend_profitable_catastrophes_equal(const HomeworldsProfitableCatastrophe *left,
                                                                  const HomeworldsProfitableCatastrophe *right) {
   g_return_val_if_fail(left != NULL, FALSE);
@@ -1411,6 +1446,7 @@ const GameBackend homeworlds_game_backend = {
   .move_list_free = homeworlds_backend_move_list_free,
   .move_list_get = homeworlds_backend_move_list_get,
   .moves_equal = homeworlds_backend_moves_equal,
+  .moves_equivalent = homeworlds_backend_moves_equivalent,
   .move_builder_init = (gboolean (*)(gconstpointer, GameBackendMoveBuilder *)) homeworlds_move_builder_init,
   .move_builder_clear = homeworlds_move_builder_clear,
   .move_builder_list_candidates = (GameBackendMoveList (*)(const GameBackendMoveBuilder *))

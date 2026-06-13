@@ -72,11 +72,13 @@ static void ggame_model_constructed(GObject *object) {
                       self->backend->list_moves != NULL &&
                       self->backend->move_list_free != NULL &&
                       self->backend->move_list_get != NULL &&
-                      self->backend->moves_equal != NULL;
+                      self->backend->moves_equal != NULL &&
+                      self->backend->moves_equivalent != NULL;
   has_move_builder_api = self->backend->supports_move_builder &&
                          self->backend->move_list_free != NULL &&
                          self->backend->move_list_get != NULL &&
                          self->backend->moves_equal != NULL &&
+                         self->backend->moves_equivalent != NULL &&
                          self->backend->move_builder_init != NULL &&
                          self->backend->move_builder_clear != NULL &&
                          self->backend->move_builder_list_candidates != NULL &&
@@ -86,7 +88,8 @@ static void ggame_model_constructed(GObject *object) {
   has_good_move_api = self->backend->list_good_moves != NULL &&
                       self->backend->move_list_free != NULL &&
                       self->backend->move_list_get != NULL &&
-                      self->backend->moves_equal != NULL;
+                      self->backend->moves_equal != NULL &&
+                      self->backend->moves_equivalent != NULL;
   g_return_if_fail(has_move_list_api || has_move_builder_api);
   if (self->backend->supports_ai_search) {
     g_return_if_fail(has_good_move_api);

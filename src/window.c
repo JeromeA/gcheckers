@@ -194,6 +194,7 @@ typedef struct {
 
 typedef struct {
   const GameBackend *backend;
+  gconstpointer position;
   const GPtrArray *scores;
   guint min_analysis_depth;
 } GGameWindowKnownChildScoreLookup;
@@ -2679,7 +2680,7 @@ static GPtrArray *ggame_window_build_known_child_scores(const GameBackend *backe
                                                         const GHashTable *analysis_by_node) {
   g_return_val_if_fail(backend != NULL, NULL);
   g_return_val_if_fail(node != NULL, NULL);
-  if (backend->parse_move == NULL || backend->moves_equal == NULL || backend->move_size == 0) {
+  if (backend->parse_move == NULL || backend->moves_equivalent == NULL || backend->move_size == 0) {
     return NULL;
   }
 
@@ -2732,6 +2733,7 @@ static gboolean ggame_window_known_child_score_lookup(gconstpointer move, gint *
   g_return_val_if_fail(out_score != NULL, FALSE);
   g_return_val_if_fail(lookup != NULL, FALSE);
   g_return_val_if_fail(lookup->backend != NULL, FALSE);
+  g_return_val_if_fail(lookup->position != NULL, FALSE);
 
   if (lookup->scores == NULL) {
     return FALSE;
@@ -2742,7 +2744,7 @@ static gboolean ggame_window_known_child_score_lookup(gconstpointer move, gint *
     if (known == NULL || known->move == NULL || known->analysis_depth < lookup->min_analysis_depth) {
       continue;
     }
-    if (lookup->backend->moves_equal(move, known->move)) {
+    if (lookup->backend->moves_equivalent(lookup->position, move, known->move)) {
       *out_score = known->score;
       return TRUE;
     }
@@ -3152,6 +3154,7 @@ static gpointer ggame_window_analysis_thread(gpointer user_data) {
     GameAiScoredMoveList moves = {0};
     GGameWindowKnownChildScoreLookup known_scores = {
         .backend = task->backend,
+        .position = task->position,
         .scores = task->known_child_scores,
         .min_analysis_depth = depth > 0 ? depth - 1 : 0,
     };
@@ -3341,6 +3344,7 @@ static gpointer ggame_window_full_analysis_thread(gpointer user_data) {
                                               task->analysis_by_node);
     GGameWindowKnownChildScoreLookup known_scores = {
         .backend = task->backend,
+        .position = analysis_position,
         .scores = known_child_scores,
         .min_analysis_depth = task->depth > 0 ? task->depth - 1 : 0,
     };

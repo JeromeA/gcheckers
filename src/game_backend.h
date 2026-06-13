@@ -77,6 +77,7 @@ typedef struct {
   void (*move_list_free)(GameBackendMoveList *moves);
   const void *(*move_list_get)(const GameBackendMoveList *moves, gsize index);
   gboolean (*moves_equal)(gconstpointer left, gconstpointer right);
+  gboolean (*moves_equivalent)(gconstpointer position, gconstpointer left, gconstpointer right);
   gboolean (*move_builder_init)(gconstpointer position, GameBackendMoveBuilder *out_builder);
   void (*move_builder_clear)(GameBackendMoveBuilder *builder);
   GameBackendMoveList (*move_builder_list_candidates)(const GameBackendMoveBuilder *builder);

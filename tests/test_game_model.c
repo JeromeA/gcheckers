@@ -94,6 +94,12 @@ static gboolean test_game_model_builder_moves_equal(gconstpointer left, gconstpo
   return *left_value == *right_value;
 }
 
+static gboolean test_game_model_builder_moves_equivalent(gconstpointer /*position*/,
+                                                         gconstpointer left,
+                                                         gconstpointer right) {
+  return test_game_model_builder_moves_equal(left, right);
+}
+
 static gboolean test_game_model_builder_init(gconstpointer position, GameBackendMoveBuilder *out_builder) {
   const TestBuilderOnlyPosition *builder_position = position;
   TestBuilderOnlyState *state = NULL;
@@ -225,6 +231,7 @@ static const GameBackend test_game_model_builder_backend = {
   .move_list_free = test_game_model_builder_move_list_free,
   .move_list_get = test_game_model_builder_move_list_get,
   .moves_equal = test_game_model_builder_moves_equal,
+  .moves_equivalent = test_game_model_builder_moves_equivalent,
   .move_builder_init = test_game_model_builder_init,
   .move_builder_clear = test_game_model_builder_clear,
   .move_builder_list_candidates = test_game_model_builder_list_candidates,

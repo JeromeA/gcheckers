@@ -326,6 +326,12 @@ static gboolean test_good_move_only_moves_equal(gconstpointer left, gconstpointe
   return left_move->delta == right_move->delta;
 }
 
+static gboolean test_good_move_only_moves_equivalent(gconstpointer /*position*/,
+                                                     gconstpointer left,
+                                                     gconstpointer right) {
+  return test_good_move_only_moves_equal(left, right);
+}
+
 static gboolean test_good_move_only_apply_move(gpointer position, gconstpointer move) {
   TestGoodMoveOnlyPosition *good_position = position;
   const TestGoodMoveOnlyMove *good_move = move;
@@ -379,6 +385,7 @@ static const GameBackend test_good_move_only_backend = {
   .move_list_free = test_good_move_only_move_list_free,
   .move_list_get = test_good_move_only_move_list_get,
   .moves_equal = test_good_move_only_moves_equal,
+  .moves_equivalent = test_good_move_only_moves_equivalent,
   .apply_move = test_good_move_only_apply_move,
   .evaluate_static = test_good_move_only_evaluate_static,
   .terminal_score = test_good_move_only_terminal_score,
