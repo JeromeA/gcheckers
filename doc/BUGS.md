@@ -1436,3 +1436,24 @@ different but equivalent step ordering was ignored and searched again.
 The fix adds a required backend move-equivalence callback and uses it for child-score reuse. Most backends define
 equivalence as strict equality, while Homeworlds compares the positions reached after applying both moves from the same
 parent position.
+
+## Homeworlds equivalent-analysis window test used an invalid SGF snapshot
+
+The Homeworlds window regression for reusing equivalent SGF child analysis should replay its hand-built root snapshot
+through the same SGF path as a real loaded game.
+
+The test replaced the prepared homeworld ship list to create a blue-sacrifice position, but it did not return the
+removed ship to the bank or remove the newly added ships from the bank. When GTK tests ran on the local display, the
+controller replayed the root snapshot and rejected it because the serialized pyramid supply was impossible.
+
+The fix updates the test fixture's bank whenever it rewrites those ships, so the saved SGF snapshot remains a legal
+Homeworlds position.
+
+## Library load test waited for a parent draw during dialog teardown
+
+Loading an imported game from the Library dialog closes the Library toplevel before the test inspects the loaded SGF.
+
+The window test waited for a parent-window draw immediately after clicking Load. When GTK tests ran on the local
+display, that draw wait could run while the child toplevel was being torn down and hit a NULL-instance GTK critical.
+
+The fix waits for the Library toplevel to disappear instead and releases the test's dialog reference after the close.

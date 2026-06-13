@@ -307,6 +307,22 @@ static void test_homeworlds_remove_bank_piece(HomeworldsPosition *position, Home
   g_assert_not_reached();
 }
 
+static void test_homeworlds_add_bank_piece(HomeworldsPosition *position, HomeworldsPyramid pyramid) {
+  g_return_if_fail(position != NULL);
+  g_return_if_fail(homeworlds_pyramid_is_valid(pyramid));
+
+  for (guint slot = 0; slot < HOMEWORLDS_BANK_SLOT_COUNT; ++slot) {
+    if (position->bank[slot] != 0) {
+      continue;
+    }
+
+    position->bank[slot] = pyramid;
+    return;
+  }
+
+  g_assert_not_reached();
+}
+
 static guint test_homeworlds_count_widgets_with_data(GtkWidget *root, const char *key) {
   guint count = 0;
 
@@ -1576,6 +1592,13 @@ static void test_homeworlds_window_analysis_reuses_equivalent_child_score(void) 
   g_assert_nonnull(root);
 
   test_homeworlds_prepare_play_position(&position);
+  test_homeworlds_add_bank_piece(&position, position.systems[0].ships[0][0]);
+  test_homeworlds_remove_bank_piece(&position,
+                                    homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_MEDIUM));
+  test_homeworlds_remove_bank_piece(&position,
+                                    homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL));
+  test_homeworlds_remove_bank_piece(&position,
+                                    homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL));
   position.systems[0].ships[0][0] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_MEDIUM);
   position.systems[0].ships[0][1] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL);
   position.systems[0].ships[0][2] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL);

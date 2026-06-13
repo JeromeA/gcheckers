@@ -2847,8 +2847,8 @@ static void test_ggame_window_library_loads_imported_game(void) {
   g_assert_true(gtk_widget_get_sensitive(GTK_WIDGET(load_button)));
 
   g_signal_emit_by_name(load_button, "clicked");
-  test_ggame_window_wait_for_draw(window);
-  g_assert_null(test_ggame_window_find_toplevel_by_title("Library"));
+  test_ggame_window_wait_for_toplevel_closed("Library");
+  g_clear_object(&dialog);
 
   GGameSgfController *controller = ggame_window_get_sgf_controller(window);
   SgfTree *tree = ggame_sgf_controller_get_tree(controller);

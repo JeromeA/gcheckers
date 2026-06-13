@@ -210,7 +210,7 @@ TEST_CHECKERS_PROFILE_BATCH_BINS := $(filter-out $(TEST_WINDOW_ISOLATED_BINS),$(
 TEST_BOOP_PROFILE_BATCH_BINS := $(filter-out $(TEST_WINDOW_ISOLATED_BINS),$(TEST_BOOP_PROFILE_BINS))
 TEST_HOMEWORLDS_PROFILE_BATCH_BINS := $(filter-out $(TEST_WINDOW_ISOLATED_BINS),$(TEST_HOMEWORLDS_PROFILE_BINS))
 
-.PHONY: all clean test coverage install install-checkers install-boop install-homeworlds install-schemas \
+.PHONY: all clean test test-local coverage install install-checkers install-boop install-homeworlds install-schemas \
 	validate-desktop-metadata \
 	gcheckers gboop ghomeworlds all-checkers all-boop all-homeworlds create_puzzles homeworlds_profile_moves \
 	homeworlds_eval_experiment \
@@ -272,6 +272,9 @@ test: $(TEST_BINS)
 		run_isolated "$(TEST_SGF_VIEW_BIN)"; \
 		run_isolated "$(TEST_WINDOW_BIN)" --profile=checkers; \
 		run_isolated "$(TEST_WINDOW_BOOP_BIN)" --profile=boop'
+
+test-local:
+	GSETTINGS_BACKEND=memory $(MAKE) test
 
 test_game: $(TEST_GAME_BIN)
 $(TEST_GAME_BIN): tests/test_game.c $(BACKEND_CODEC_SRCS) $(CHECKERS_DIR)/game.h
