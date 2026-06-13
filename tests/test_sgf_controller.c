@@ -672,6 +672,56 @@ static void test_ggame_sgf_controller_delete_current_node(void) {
   g_clear_object(&board_view);
 }
 
+static void test_ggame_sgf_controller_edits_arbitrary_node_branches(void) {
+  GGameSgfController *controller = ggame_sgf_controller_new(NULL);
+  SgfTree *tree = ggame_sgf_controller_get_tree(controller);
+  const SgfNode *root = sgf_tree_get_root(tree);
+  g_assert_nonnull(root);
+
+  const SgfNode *first = sgf_tree_append_node(tree);
+  g_assert_nonnull(first);
+  g_assert_true(sgf_tree_set_current(tree, root));
+  const SgfNode *second = sgf_tree_append_node(tree);
+  g_assert_nonnull(second);
+  g_assert_true(sgf_tree_set_current(tree, root));
+  const SgfNode *third = sgf_tree_append_node(tree);
+  g_assert_nonnull(third);
+  const SgfNode *third_child = sgf_tree_append_node(tree);
+  g_assert_nonnull(third_child);
+  g_assert_true(sgf_tree_set_current(tree, first));
+  sgf_view_refresh(ggame_sgf_controller_get_view(controller));
+
+  g_assert_false(ggame_sgf_controller_delete_node(controller, root));
+  g_assert_false(ggame_sgf_controller_make_node_main(controller, first));
+  g_assert_true(ggame_sgf_controller_make_node_main(controller, third));
+  g_assert_true(sgf_tree_get_current(tree) == first);
+
+  const GPtrArray *root_children = sgf_node_get_children(root);
+  g_assert_nonnull(root_children);
+  g_assert_cmpuint(root_children->len, ==, 3);
+  g_assert_true(g_ptr_array_index((GPtrArray *)root_children, 0) == third);
+  g_assert_true(g_ptr_array_index((GPtrArray *)root_children, 1) == first);
+  g_assert_true(g_ptr_array_index((GPtrArray *)root_children, 2) == second);
+
+  g_assert_true(ggame_sgf_controller_delete_node(controller, second));
+  g_assert_true(sgf_tree_get_current(tree) == first);
+  root_children = sgf_node_get_children(root);
+  g_assert_nonnull(root_children);
+  g_assert_cmpuint(root_children->len, ==, 2);
+  g_assert_true(g_ptr_array_index((GPtrArray *)root_children, 0) == third);
+  g_assert_true(g_ptr_array_index((GPtrArray *)root_children, 1) == first);
+
+  g_assert_true(sgf_tree_set_current(tree, third_child));
+  g_assert_true(ggame_sgf_controller_delete_node(controller, third));
+  g_assert_true(sgf_tree_get_current(tree) == root);
+  root_children = sgf_node_get_children(root);
+  g_assert_nonnull(root_children);
+  g_assert_cmpuint(root_children->len, ==, 1);
+  g_assert_true(g_ptr_array_index((GPtrArray *)root_children, 0) == first);
+
+  g_clear_object(&controller);
+}
+
 static void test_ggame_sgf_controller_load_applies_setup_properties(void) {
   BoardView *board_view = board_view_new();
   GCheckersModel *model = gcheckers_model_new();
@@ -1464,6 +1514,7 @@ int main(int argc, char **argv) {
     g_test_add_func("/sgf-controller/navigation-forward-to-branch-and-end", test_ggame_sgf_controller_skip);
     g_test_add_func("/sgf-controller/select-node-emits-node-changed", test_ggame_sgf_controller_skip);
     g_test_add_func("/sgf-controller/delete-current-node", test_ggame_sgf_controller_skip);
+    g_test_add_func("/sgf-controller/edit-arbitrary-node-branches", test_ggame_sgf_controller_skip);
     g_test_add_func("/sgf-controller/load-applies-setup-properties", test_ggame_sgf_controller_skip);
     g_test_add_func("/sgf-controller/load-file-requires-ru", test_ggame_sgf_controller_skip);
     g_test_add_func("/sgf-controller/replay-node-into-game-applies-setup-root", test_ggame_sgf_controller_skip);
@@ -1474,6 +1525,8 @@ int main(int argc, char **argv) {
 
   g_test_add_func("/sgf-controller/comment-area",
                   test_ggame_sgf_controller_comment_area_reads_and_writes_current_node);
+  g_test_add_func("/sgf-controller/edit-arbitrary-node-branches",
+                  test_ggame_sgf_controller_edits_arbitrary_node_branches);
 
   switch (profile->kind) {
     case GGAME_APP_KIND_BOOP:

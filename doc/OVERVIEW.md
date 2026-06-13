@@ -222,9 +222,10 @@ actual snapshot encoding backend-owned.
 backward, step forward on main line, step to next branch point, and step to main-line end. Navigation-driven model
 synchronization runs under the replay guard so the shared window does not treat stepping through the tree as a newly
 played move.
-Deleting the current non-root SGF node removes that node and all descendants, selects the parent node, replays the
-model back to that parent, refreshes the SGF view, and saves the edited SGF through the same autosave path as move
-application.
+Deleting an SGF branch removes the targeted non-root node and all descendants. If the current node is inside that
+branch, the controller selects the deleted node's parent, replays the model back to that parent, refreshes the SGF
+view, and saves the edited SGF through the same autosave path as move application. Context-menu promotion can also move
+a later sibling to the front of its siblings so it becomes the main-line continuation.
 Selection-only navigation updates SGF view selection in place (`sgf_view_set_selected`) instead of rebuilding the
 entire SGF layout.
 The controller widget is a vertical split: the top pane contains the SGF move tree, and the bottom pane contains an
@@ -994,7 +995,7 @@ used as the source of truth for move chronology/navigation. Nodes also carry opt
 Traversal helpers include root-to-node path construction, main-line collection from arbitrary nodes, current-branch
 construction for graphing, and deterministic preorder collection for full-tree analysis jobs.
 The tree also supports deleting a non-root node and its whole descendant subtree while keeping current selection on
-the deleted node's parent when needed.
+the deleted node's parent when needed, and promoting a later sibling to first-child/main-line status.
 Collaborates with: SGF view and controller modules.
 
 ### SGF move properties (`src/sgf_move_props.c`, `src/sgf_move_props.h`)
@@ -1050,7 +1051,8 @@ Collaborates with: `window.c`, `puzzle_dialog.c`, `settings_dialog.c`, and `test
 
 ### SGF view (`src/sgf_view.c`, `src/sgf_view.h`)
 Class: `SgfView` (`GtkWidget`).
-Role: game-agnostic move tree UI that wires together layout, rendering, selection helpers, and selection resync calls.
+Role: game-agnostic move tree UI that wires together layout, rendering, selection helpers, context-menu forwarding, and
+selection resync calls.
 The SGF disc grid (`tree_box`) is measured directly by the overlay (via `gtk_overlay_set_measure_overlay`) so no manual
 size requests are applied to the overlay stack. It syncs selection after layout updates with debug logging when widgets
 are not ready, and annotates notify-driven resync attempts with the emitting object/property pair. Full node-widget
@@ -1059,9 +1061,9 @@ Collaborates with: SGF layout (layout-updated signal), selection, scroller, and 
 
 ### SGF disc factory (`src/sgf_view_disc_factory.c`, `src/sgf_view_disc_factory.h`)
 Module: disc widget creation.
-Role: build SGF move buttons (including the virtual move zero dot) and wire the `node-clicked` signal. Each button
-keeps the factory alive through its click-signal closure so deferred GTK widget cleanup cannot leave dangling factory
-user data behind.
+Role: build SGF move buttons (including the virtual move zero dot) and wire the `node-clicked` and
+`node-context-menu` signals. Each button keeps the factory alive through its signal closures so deferred GTK widget
+cleanup cannot leave dangling factory user data behind.
 Collaborates with: `SgfView` and the SGF tree.
 
 ### SGF layout (`src/sgf_view_layout.c`, `src/sgf_view_layout.h`)

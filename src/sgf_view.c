@@ -27,7 +27,11 @@ struct _SgfView {
 
 G_DEFINE_TYPE(SgfView, sgf_view, G_TYPE_OBJECT)
 
-enum { SIGNAL_NODE_SELECTED, SIGNAL_LAST };
+enum {
+  SIGNAL_NODE_SELECTED,
+  SIGNAL_NODE_CONTEXT_MENU,
+  SIGNAL_LAST
+};
 
 static guint sgf_view_signals[SIGNAL_LAST] = {0};
 
@@ -215,6 +219,22 @@ static void sgf_view_on_disc_node_clicked(SgfViewDiscFactory *factory,
   sgf_view_select_node(self, node, TRUE);
 }
 
+static void sgf_view_on_disc_node_context_menu(SgfViewDiscFactory *factory,
+                                               const SgfNode *node,
+                                               GtkWidget *widget,
+                                               double x,
+                                               double y,
+                                               gpointer user_data) {
+  SgfView *self = SGF_VIEW(user_data);
+
+  g_return_if_fail(SGF_IS_VIEW(self));
+  g_return_if_fail(SGF_IS_VIEW_DISC_FACTORY(factory));
+  g_return_if_fail(node != NULL);
+  g_return_if_fail(GTK_IS_WIDGET(widget));
+
+  g_signal_emit(self, sgf_view_signals[SIGNAL_NODE_CONTEXT_MENU], 0, node, widget, x, y);
+}
+
 static gboolean sgf_view_on_key_pressed(GtkEventControllerKey * /*controller*/,
                                         guint keyval,
                                         guint /*keycode*/,
@@ -318,6 +338,19 @@ static void sgf_view_class_init(SgfViewClass *klass) {
                                                        G_TYPE_NONE,
                                                        1,
                                                        G_TYPE_POINTER);
+  sgf_view_signals[SIGNAL_NODE_CONTEXT_MENU] = g_signal_new("node-context-menu",
+                                                            G_TYPE_FROM_CLASS(klass),
+                                                            G_SIGNAL_RUN_LAST,
+                                                            0,
+                                                            NULL,
+                                                            NULL,
+                                                            NULL,
+                                                            G_TYPE_NONE,
+                                                            4,
+                                                            G_TYPE_POINTER,
+                                                            GTK_TYPE_WIDGET,
+                                                            G_TYPE_DOUBLE,
+                                                            G_TYPE_DOUBLE);
 }
 
 static void sgf_view_init(SgfView *self) {
@@ -366,6 +399,11 @@ static void sgf_view_init(SgfView *self) {
   g_signal_connect_object(self->disc_factory,
                           "node-clicked",
                           G_CALLBACK(sgf_view_on_disc_node_clicked),
+                          self,
+                          0);
+  g_signal_connect_object(self->disc_factory,
+                          "node-context-menu",
+                          G_CALLBACK(sgf_view_on_disc_node_context_menu),
                           self,
                           0);
 

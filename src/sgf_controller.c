@@ -116,6 +116,18 @@ enum {
 
 static guint controller_signals[SIGNAL_LAST] = {0};
 
+typedef enum {
+  GGAME_SGF_NODE_MENU_DELETE_BRANCH,
+  GGAME_SGF_NODE_MENU_MAKE_MAIN_LINE
+} GGameSgfNodeMenuActionKind;
+
+typedef struct {
+  GGameSgfController *self;
+  const SgfNode *node;
+  GtkWidget *popover;
+  GGameSgfNodeMenuActionKind kind;
+} GGameSgfNodeMenuAction;
+
 static void ggame_sgf_controller_sync_comment_from_node(GGameSgfController *self, const SgfNode *node);
 
 static void ggame_sgf_controller_emit_node_changed(GGameSgfController *self, const SgfNode *node) {
@@ -144,6 +156,65 @@ static void ggame_sgf_controller_autosave_comment_change(GGameSgfController *sel
   }
 
   ggame_sgf_controller_autosave_current_sgf(self, backend);
+}
+
+static void ggame_sgf_controller_autosave_after_tree_edit(GGameSgfController *self) {
+  GGameModel *game_model = NULL;
+  const GameBackend *backend = NULL;
+
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self));
+
+  game_model = ggame_sgf_controller_peek_active_game_model(self);
+  if (!GGAME_IS_MODEL(game_model)) {
+    return;
+  }
+
+  backend = ggame_model_peek_backend(game_model);
+  if (backend == NULL) {
+    g_debug("Failed to autosave SGF tree edit: active model has no backend");
+    return;
+  }
+
+  ggame_sgf_controller_autosave_current_sgf(self, backend);
+}
+
+static gboolean ggame_sgf_controller_node_is_descendant_of(const SgfNode *node, const SgfNode *root) {
+  g_return_val_if_fail(node != NULL, FALSE);
+  g_return_val_if_fail(root != NULL, FALSE);
+
+  for (const SgfNode *cursor = node; cursor != NULL; cursor = sgf_node_get_parent(cursor)) {
+    if (cursor == root) {
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
+static gboolean ggame_sgf_controller_node_can_delete(const SgfNode *node) {
+  return node != NULL && sgf_node_get_parent(node) != NULL;
+}
+
+static gboolean ggame_sgf_controller_node_has_previous_sibling(const SgfNode *node) {
+  g_return_val_if_fail(node != NULL, FALSE);
+
+  const SgfNode *parent = sgf_node_get_parent(node);
+  if (parent == NULL) {
+    return FALSE;
+  }
+
+  const GPtrArray *children = sgf_node_get_children(parent);
+  if (children == NULL) {
+    return FALSE;
+  }
+
+  for (guint i = 0; i < children->len; ++i) {
+    if (g_ptr_array_index((GPtrArray *)children, i) == node) {
+      return i > 0;
+    }
+  }
+
+  return FALSE;
 }
 
 static gboolean ggame_sgf_controller_replace_node_comment(SgfNode *node, const char *text) {
@@ -665,6 +736,143 @@ static void ggame_sgf_controller_on_node_selected(SgfView * /*view*/,
   sgf_view_set_selected(self->sgf_view, node);
 }
 
+static GGameSgfNodeMenuAction *ggame_sgf_controller_node_menu_action_new(GGameSgfController *self,
+                                                                         const SgfNode *node,
+                                                                         GtkWidget *popover,
+                                                                         GGameSgfNodeMenuActionKind kind) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), NULL);
+  g_return_val_if_fail(node != NULL, NULL);
+  g_return_val_if_fail(GTK_IS_POPOVER(popover), NULL);
+
+  GGameSgfNodeMenuAction *action = g_new0(GGameSgfNodeMenuAction, 1);
+  action->self = g_object_ref(self);
+  action->node = node;
+  action->popover = popover;
+  action->kind = kind;
+  return action;
+}
+
+static void ggame_sgf_controller_node_menu_action_free(gpointer data, GClosure * /*closure*/) {
+  GGameSgfNodeMenuAction *action = data;
+
+  if (action == NULL) {
+    return;
+  }
+
+  g_clear_object(&action->self);
+  g_free(action);
+}
+
+static void ggame_sgf_controller_on_node_menu_action_clicked(GtkButton *button, gpointer user_data) {
+  GGameSgfNodeMenuAction *action = user_data;
+
+  g_return_if_fail(GTK_IS_BUTTON(button));
+  g_return_if_fail(action != NULL);
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(action->self));
+
+  gboolean edited = FALSE;
+  if (action->kind == GGAME_SGF_NODE_MENU_DELETE_BRANCH) {
+    edited = ggame_sgf_controller_delete_node(action->self, action->node);
+  } else if (action->kind == GGAME_SGF_NODE_MENU_MAKE_MAIN_LINE) {
+    edited = ggame_sgf_controller_make_node_main(action->self, action->node);
+  } else {
+    g_debug("Unknown SGF node context menu action");
+  }
+
+  if (!edited) {
+    g_debug("SGF node context menu action had no effect");
+  }
+  if (GTK_IS_POPOVER(action->popover)) {
+    gtk_popover_popdown(GTK_POPOVER(action->popover));
+  }
+}
+
+static void ggame_sgf_controller_on_node_menu_closed(GtkPopover *popover, gpointer /*user_data*/) {
+  g_return_if_fail(GTK_IS_POPOVER(popover));
+
+  if (gtk_widget_get_parent(GTK_WIDGET(popover)) != NULL) {
+    gtk_widget_unparent(GTK_WIDGET(popover));
+  }
+}
+
+static GtkWidget *ggame_sgf_controller_create_node_menu_button(GGameSgfController *self,
+                                                               const SgfNode *node,
+                                                               GtkWidget *popover,
+                                                               const char *label,
+                                                               gboolean sensitive,
+                                                               GGameSgfNodeMenuActionKind kind) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), NULL);
+  g_return_val_if_fail(node != NULL, NULL);
+  g_return_val_if_fail(GTK_IS_POPOVER(popover), NULL);
+  g_return_val_if_fail(label != NULL, NULL);
+
+  GtkWidget *button = gtk_button_new_with_label(label);
+  gtk_widget_set_halign(button, GTK_ALIGN_FILL);
+  gtk_widget_set_hexpand(button, TRUE);
+  gtk_widget_set_sensitive(button, sensitive);
+  gtk_widget_add_css_class(button, "flat");
+
+  GGameSgfNodeMenuAction *action =
+      ggame_sgf_controller_node_menu_action_new(self, node, popover, kind);
+  g_signal_connect_data(button,
+                        "clicked",
+                        G_CALLBACK(ggame_sgf_controller_on_node_menu_action_clicked),
+                        action,
+                        ggame_sgf_controller_node_menu_action_free,
+                        0);
+
+  return button;
+}
+
+static void ggame_sgf_controller_on_node_context_menu(SgfView *view,
+                                                      const SgfNode *node,
+                                                      GtkWidget *widget,
+                                                      double x,
+                                                      double y,
+                                                      gpointer user_data) {
+  GGameSgfController *self = GGAME_SGF_CONTROLLER(user_data);
+
+  g_return_if_fail(SGF_IS_VIEW(view));
+  g_return_if_fail(GGAME_IS_SGF_CONTROLLER(self));
+  g_return_if_fail(node != NULL);
+  g_return_if_fail(GTK_IS_WIDGET(widget));
+
+  GtkWidget *popover = gtk_popover_new();
+  gtk_widget_set_parent(popover, widget);
+  gtk_popover_set_has_arrow(GTK_POPOVER(popover), TRUE);
+  g_signal_connect(popover, "closed", G_CALLBACK(ggame_sgf_controller_on_node_menu_closed), NULL);
+
+  GdkRectangle rectangle = {(int)x, (int)y, 1, 1};
+  gtk_popover_set_pointing_to(GTK_POPOVER(popover), &rectangle);
+
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  gtk_widget_set_margin_top(box, 4);
+  gtk_widget_set_margin_bottom(box, 4);
+  gtk_widget_set_margin_start(box, 4);
+  gtk_widget_set_margin_end(box, 4);
+  gtk_popover_set_child(GTK_POPOVER(popover), box);
+
+  GtkWidget *delete_button =
+      ggame_sgf_controller_create_node_menu_button(self,
+                                                   node,
+                                                   popover,
+                                                   "Delete branch",
+                                                   ggame_sgf_controller_node_can_delete(node),
+                                                   GGAME_SGF_NODE_MENU_DELETE_BRANCH);
+  gtk_box_append(GTK_BOX(box), delete_button);
+
+  GtkWidget *make_main_button =
+      ggame_sgf_controller_create_node_menu_button(self,
+                                                   node,
+                                                   popover,
+                                                   "Make main line",
+                                                   ggame_sgf_controller_node_has_previous_sibling(node),
+                                                   GGAME_SGF_NODE_MENU_MAKE_MAIN_LINE);
+  gtk_box_append(GTK_BOX(box), make_main_button);
+
+  gtk_popover_popup(GTK_POPOVER(popover));
+}
+
 static GtkWidget *ggame_sgf_controller_create_comment_panel(GGameSgfController *self) {
   g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), NULL);
 
@@ -806,6 +1014,10 @@ static void ggame_sgf_controller_init(GGameSgfController *self) {
   g_signal_connect(self->sgf_view,
                    "node-selected",
                    G_CALLBACK(ggame_sgf_controller_on_node_selected),
+                   self);
+  g_signal_connect(self->sgf_view,
+                   "node-context-menu",
+                   G_CALLBACK(ggame_sgf_controller_on_node_context_menu),
                    self);
 
   self->is_replaying = FALSE;
@@ -1256,44 +1468,88 @@ gboolean ggame_sgf_controller_delete_current_node(GGameSgfController *self) {
     return FALSE;
   }
 
-  const SgfNode *parent = sgf_node_get_parent(current);
+  return ggame_sgf_controller_delete_node(self, current);
+}
+
+gboolean ggame_sgf_controller_delete_node(GGameSgfController *self, const SgfNode *node) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
+  g_return_val_if_fail(SGF_IS_TREE(self->sgf_tree), FALSE);
+  g_return_val_if_fail(node != NULL, FALSE);
+
+  const SgfNode *parent = sgf_node_get_parent(node);
   if (parent == NULL) {
     return FALSE;
   }
 
-  gboolean was_replaying = self->is_replaying;
-  self->is_replaying = TRUE;
-  if (!sgf_tree_set_current(self->sgf_tree, parent)) {
+  const SgfNode *current = sgf_tree_get_current(self->sgf_tree);
+  gboolean current_removed = current != NULL && ggame_sgf_controller_node_is_descendant_of(current, node);
+
+  if (current_removed) {
+    gboolean was_replaying = self->is_replaying;
+    self->is_replaying = TRUE;
+    if (!sgf_tree_set_current(self->sgf_tree, parent)) {
+      self->is_replaying = was_replaying;
+      return FALSE;
+    }
+
+    gboolean synced = TRUE;
+    if (GCHECKERS_IS_MODEL(self->checkers_model) || GGAME_IS_MODEL(self->game_model)) {
+      synced = ggame_sgf_controller_sync_model_for_transition(self, current, parent);
+    }
     self->is_replaying = was_replaying;
-    return FALSE;
-  }
-
-  gboolean synced = TRUE;
-  if (GCHECKERS_IS_MODEL(self->checkers_model) || GGAME_IS_MODEL(self->game_model)) {
-    synced = ggame_sgf_controller_sync_model_for_transition(self, current, parent);
-  }
-  self->is_replaying = was_replaying;
-  if (!synced) {
-    (void)sgf_tree_set_current(self->sgf_tree, current);
-    return FALSE;
-  }
-
-  if (!sgf_tree_delete_subtree(self->sgf_tree, current)) {
-    return FALSE;
-  }
-
-  ggame_sgf_controller_emit_node_changed(self, parent);
-  g_signal_emit(self, controller_signals[SIGNAL_MANUAL_REQUESTED], 0, parent);
-  sgf_view_set_selected(self->sgf_view, parent);
-  sgf_view_refresh(self->sgf_view);
-
-  GGameModel *game_model = ggame_sgf_controller_peek_active_game_model(self);
-  if (GGAME_IS_MODEL(game_model)) {
-    const GameBackend *backend = ggame_model_peek_backend(game_model);
-    if (backend != NULL) {
-      ggame_sgf_controller_autosave_current_sgf(self, backend);
+    if (!synced) {
+      (void)sgf_tree_set_current(self->sgf_tree, current);
+      return FALSE;
     }
   }
+
+  if (!sgf_tree_delete_subtree(self->sgf_tree, node)) {
+    return FALSE;
+  }
+
+  const SgfNode *selected = sgf_tree_get_current(self->sgf_tree);
+  if (selected == NULL) {
+    g_debug("Missing SGF current node after branch delete");
+    sgf_view_refresh(self->sgf_view);
+    ggame_sgf_controller_autosave_after_tree_edit(self);
+    return TRUE;
+  }
+
+  ggame_sgf_controller_emit_node_changed(self, selected);
+  if (current_removed) {
+    g_signal_emit(self, controller_signals[SIGNAL_MANUAL_REQUESTED], 0, selected);
+  }
+  sgf_view_set_selected(self->sgf_view, selected);
+  sgf_view_refresh(self->sgf_view);
+  ggame_sgf_controller_autosave_after_tree_edit(self);
+  return TRUE;
+}
+
+gboolean ggame_sgf_controller_make_node_main(GGameSgfController *self, const SgfNode *node) {
+  g_return_val_if_fail(GGAME_IS_SGF_CONTROLLER(self), FALSE);
+  g_return_val_if_fail(SGF_IS_TREE(self->sgf_tree), FALSE);
+  g_return_val_if_fail(node != NULL, FALSE);
+
+  if (!ggame_sgf_controller_node_has_previous_sibling(node)) {
+    return FALSE;
+  }
+
+  if (!sgf_tree_make_main(self->sgf_tree, node)) {
+    return FALSE;
+  }
+
+  const SgfNode *selected = sgf_tree_get_current(self->sgf_tree);
+  if (selected == NULL) {
+    g_debug("Missing SGF current node after main-line promotion");
+    sgf_view_refresh(self->sgf_view);
+    ggame_sgf_controller_autosave_after_tree_edit(self);
+    return TRUE;
+  }
+
+  ggame_sgf_controller_emit_node_changed(self, selected);
+  sgf_view_set_selected(self->sgf_view, selected);
+  sgf_view_refresh(self->sgf_view);
+  ggame_sgf_controller_autosave_after_tree_edit(self);
   return TRUE;
 }
 
