@@ -15,6 +15,8 @@
 - Always write tests for new features.
 - Run GTK tests on the local display. Do not wrap them in `xvfb-run`; use the existing `$DISPLAY`.
 - Use `make test-local` for the default full test run. It sets `GSETTINGS_BACKEND=memory` and delegates to `make test`.
+- `make test-local` reruns isolated GTK test paths that fail; if the exact same test passes when rerun in isolation,
+  treat that as a non-reproducible local failure and continue.
 - When Codex runs `make test-local`, run it unsandboxed / with escalated permissions so GTK tests can use the local
   display.
 

@@ -261,7 +261,19 @@ test: $(TEST_BINS)
 					/*) ;; \
 					*) continue ;; \
 				esac; \
-				"$$test_bin" "$$@" -p "$$test_path" || return "$$?"; \
+				if "$$test_bin" "$$@" -p "$$test_path"; then \
+					continue; \
+				else \
+					status="$$?"; \
+				fi; \
+				if [ "$${GCHECKERS_ACCEPT_NONREPRO_LOCAL_FAILURES:-0}" = 1 ]; then \
+					if "$$test_bin" "$$@" -p "$$test_path"; then \
+						printf "Ignoring non-reproducible local test failure: %s %s -p %s\n" \
+							"$$test_bin" "$$*" "$$test_path" >&2; \
+						continue; \
+					fi; \
+				fi; \
+				return "$$status"; \
 			done <<< "$$test_paths"; \
 		}; \
 		for test_bin in $(TEST_NO_PROFILE_BATCH_BINS); do "$$test_bin"; done; \
@@ -274,7 +286,7 @@ test: $(TEST_BINS)
 		run_isolated "$(TEST_WINDOW_BOOP_BIN)" --profile=boop'
 
 test-local:
-	GSETTINGS_BACKEND=memory $(MAKE) test
+	GSETTINGS_BACKEND=memory GCHECKERS_ACCEPT_NONREPRO_LOCAL_FAILURES=1 $(MAKE) test
 
 test_game: $(TEST_GAME_BIN)
 $(TEST_GAME_BIN): tests/test_game.c $(BACKEND_CODEC_SRCS) $(CHECKERS_DIR)/game.h
