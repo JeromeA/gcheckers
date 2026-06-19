@@ -101,7 +101,7 @@ static void test_homeworlds_eval_experiment_rejects_unknown_variable(void) {
   g_assert_nonnull(strstr(stderr_text, "Unknown --variable 'empty-homeworld'."));
 }
 
-static void test_homeworlds_eval_experiment_runs_homeworld_ship_variable(void) {
+static void test_homeworlds_eval_experiment_rejects_removed_homeworld_ship_variables(void) {
   gchar *argv[] = {
     (gchar *)HOMEWORLDS_EVAL_EXPERIMENT_PATH,
     (gchar *)"--variable",
@@ -126,11 +126,9 @@ static void test_homeworlds_eval_experiment_runs_homeworld_ship_variable(void) {
                              &stdout_text, &stderr_text, &wait_status, &error));
   g_strfreev(envp);
   g_assert_no_error(error);
-  g_assert_true(g_spawn_check_wait_status(wait_status, &error));
-  g_assert_no_error(error);
-  g_assert_cmpstr(stderr_text, ==, "");
-  g_assert_nonnull(strstr(stdout_text, "variable=homeworld-ship3 depth=1 games=1 max-plies=1 seed=1\n"));
-  g_assert_nonnull(strstr(stdout_text, "25,"));
+  g_assert_false(g_spawn_check_wait_status(wait_status, NULL));
+  g_assert_cmpstr(stdout_text, ==, "");
+  g_assert_nonnull(strstr(stderr_text, "Unknown --variable 'homeworld-ship3'."));
 }
 
 static void test_homeworlds_eval_experiment_rejects_removed_ship_aliases(void) {
@@ -382,8 +380,8 @@ int main(int argc, char **argv) {
                   test_homeworlds_eval_experiment_reports_win_ratio);
   g_test_add_func("/homeworlds-eval-experiment/rejects-unknown-variable",
                   test_homeworlds_eval_experiment_rejects_unknown_variable);
-  g_test_add_func("/homeworlds-eval-experiment/runs-homeworld-ship-variable",
-                  test_homeworlds_eval_experiment_runs_homeworld_ship_variable);
+  g_test_add_func("/homeworlds-eval-experiment/rejects-removed-homeworld-ship-variables",
+                  test_homeworlds_eval_experiment_rejects_removed_homeworld_ship_variables);
   g_test_add_func("/homeworlds-eval-experiment/rejects-removed-ship-aliases",
                   test_homeworlds_eval_experiment_rejects_removed_ship_aliases);
   g_test_add_func("/homeworlds-eval-experiment/traces-move-counts",

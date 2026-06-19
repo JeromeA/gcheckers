@@ -637,13 +637,12 @@ spaces between complete steps. `src/games/homeworlds/TEXT_CONVENTIONS.md` is the
 ASCII-position text conventions. The public parser only writes the output move after the whole notation succeeds. Static
 evaluation scores player 1's side and player 2's side separately, then subtracts player 2's score from player 1's.
 Each side score counts ship material, homeworld health, and build access: an empty homeworld is scored like a simple
-three-pip setup system with one buildable color, a single-star homeworld is penalized, the largest own ship at each
-player's homeworld adds a separate size-specific homeworld bonus, and each buildable ship color is rewarded once. Ship
-material and largest-homeworld-ship bonuses each use separate static values for one-, two-, and three-pip ships instead
-of multiplying the size by one shared unit. The default weights are exposed through `HomeworldsEvalWeights`, and
+three-pip setup system with one buildable color, a single-star homeworld is penalized, and each buildable ship color is
+rewarded once. Ship material uses separate static values for one-, two-, and three-pip ships instead of multiplying the
+size by one shared unit. The default weights are exposed through `HomeworldsEvalWeights`, and
 experimental callers can temporarily replace the active weights while the normal application path keeps the defaults:
-ship material `10/20/30`, largest-homeworld-ship bonuses `0/10/10`, single-star homeworld penalty `-60`, empty
-homeworld value `80`, and buildable-color value `30`.
+ship material `10/20/30`, single-star homeworld penalty `-60`, empty homeworld value `80`, and buildable-color value
+`30`.
 Terminal Homeworlds wins score
 `1000 - ply_depth` for player 1 and the negated value for player 2. Applying a move is transactional: setup and turn
 moves are resolved against a
@@ -731,8 +730,8 @@ starting and one with the baseline starting, and aggregate wins are counted from
 CSV-style
 summary row per tested value, including a `win_ratio` field computed as candidate wins divided by candidate plus
 baseline wins so draws and timeouts do not affect the ratio. Its variable names are `ship1`, `ship2`, `ship3`,
-`homeworld-ship1`, `homeworld-ship2`, `homeworld-ship3`, `single-star`, and `buildable-color`; the old descriptive
-ship aliases are not accepted. With `--trace-move-counts`, it uses the Homeworlds backend trace hook to print per-ply
+`single-star`, and `buildable-color`; the old descriptive ship aliases and removed `homeworld-shipN` variables are not
+accepted. With `--trace-move-counts`, it uses the Homeworlds backend trace hook to print per-ply
 complete-leaf, scored-move, and kept-move counts to stderr without mixing them into the CSV summary. During
 interactive runs, it also renders one stderr progress line for the current value/game/ply using carriage return plus
 ANSI clear-line control and clears that line before each result row is shown. `GCHECKERS_HOMEWORLDS_EVAL_PROGRESS`

@@ -23,11 +23,6 @@ static const HomeworldsEvalWeights homeworlds_default_eval_weights = {
     [HOMEWORLDS_SIZE_MEDIUM] = 20,
     [HOMEWORLDS_SIZE_LARGE] = 30,
   },
-  .homeworld_ship_values = {
-    [HOMEWORLDS_SIZE_SMALL] = 0,
-    [HOMEWORLDS_SIZE_MEDIUM] = 0,
-    [HOMEWORLDS_SIZE_LARGE] = 10,
-  },
   .empty_homeworld_value = 80,
   .single_star_homeworld_penalty = -60,
   .buildable_color_value = 30,
@@ -38,11 +33,6 @@ static HomeworldsEvalWeights homeworlds_active_eval_weights = {
     [HOMEWORLDS_SIZE_SMALL] = 10,
     [HOMEWORLDS_SIZE_MEDIUM] = 20,
     [HOMEWORLDS_SIZE_LARGE] = 30,
-  },
-  .homeworld_ship_values = {
-    [HOMEWORLDS_SIZE_SMALL] = 0,
-    [HOMEWORLDS_SIZE_MEDIUM] = 0,
-    [HOMEWORLDS_SIZE_LARGE] = 10,
   },
   .empty_homeworld_value = 80,
   .single_star_homeworld_penalty = -60,
@@ -1135,30 +1125,6 @@ static gint homeworlds_eval_ship_value(const HomeworldsEvalWeights *weights, Hom
   return weights->ship_values[size];
 }
 
-static gint homeworlds_system_largest_ship_value_for_side(const HomeworldsSystem *system,
-                                                          guint side,
-                                                          const HomeworldsEvalWeights *weights) {
-  HomeworldsSize largest_size = 0;
-
-  g_return_val_if_fail(system != NULL, 0);
-  g_return_val_if_fail(side < 2, 0);
-  g_return_val_if_fail(weights != NULL, 0);
-
-  for (guint slot = 0; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
-    HomeworldsPyramid ship = system->ships[side][slot];
-    if (!homeworlds_pyramid_is_valid(ship)) {
-      break;
-    }
-
-    largest_size = MAX(largest_size, homeworlds_pyramid_size(ship));
-  }
-
-  if (largest_size == 0) {
-    return 0;
-  }
-  return weights->homeworld_ship_values[largest_size];
-}
-
 static guint homeworlds_system_star_count(const HomeworldsSystem *system) {
   g_return_val_if_fail(system != NULL, 0);
 
@@ -1181,7 +1147,7 @@ static gint homeworlds_homeworld_static_value_for_side(const HomeworldsSystem *h
     return weights->empty_homeworld_value;
   }
 
-  gint value = homeworlds_system_largest_ship_value_for_side(homeworld, side, weights);
+  gint value = 0;
   if (star_count == 1) {
     value += weights->single_star_homeworld_penalty;
   }

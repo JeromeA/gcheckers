@@ -10,7 +10,6 @@ G_BEGIN_DECLS
 
 typedef struct {
   gint ship_values[HOMEWORLDS_SIZE_LARGE + 1];
-  gint homeworld_ship_values[HOMEWORLDS_SIZE_LARGE + 1];
   gint empty_homeworld_value;
   gint single_star_homeworld_penalty;
   gint buildable_color_value;
