@@ -453,23 +453,15 @@ static void board_move_overlay_draw(GtkDrawingArea * /*area*/,
 
 static void board_move_overlay_dispose(GObject *object) {
   BoardMoveOverlay *self = BOARD_MOVE_OVERLAY(object);
-  gboolean drawing_area_removed = TRUE;
 
   if (self->drawing_area != NULL) {
-    drawing_area_removed = ggame_widget_remove_from_parent(self->drawing_area);
-    if (!drawing_area_removed && gtk_widget_get_parent(self->drawing_area) != NULL) {
-      g_debug("Failed to remove board overlay drawing area from parent during dispose");
-    }
+    ggame_widget_remove_from_parent(self->drawing_area);
   }
 
   g_clear_object(&self->model);
   g_clear_object(&self->sgf_controller);
   g_clear_pointer(&self->banner_text, g_free);
-  if (drawing_area_removed) {
-    g_clear_object(&self->drawing_area);
-  } else {
-    self->drawing_area = NULL;
-  }
+  g_clear_object(&self->drawing_area);
 
   G_OBJECT_CLASS(board_move_overlay_parent_class)->dispose(object);
 }

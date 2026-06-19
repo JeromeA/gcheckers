@@ -475,14 +475,10 @@ void board_view_set_bottom_side_changed_handler(BoardView *self,
 
 static void board_view_dispose(GObject *object) {
   BoardView *self = BOARD_VIEW(object);
-  gboolean root_removed = TRUE;
 
   board_view_disconnect_model(self);
   if (self->root != NULL) {
-    root_removed = ggame_widget_remove_from_parent(self->root);
-    if (!root_removed && gtk_widget_get_parent(self->root) != NULL) {
-      g_debug("Failed to remove board view root from parent during dispose");
-    }
+    ggame_widget_remove_from_parent(self->root);
   }
 
   g_clear_object(&self->model);
@@ -490,11 +486,7 @@ static void board_view_dispose(GObject *object) {
   g_clear_object(&self->selection_controller);
   g_clear_object(&self->board_overlay);
   g_clear_object(&self->board_grid);
-  if (root_removed) {
-    g_clear_object(&self->root);
-  } else {
-    self->root = NULL;
-  }
+  g_clear_object(&self->root);
 
   G_OBJECT_CLASS(board_view_parent_class)->dispose(object);
 }

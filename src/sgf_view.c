@@ -299,20 +299,12 @@ static void sgf_view_dispose(GObject *object) {
     g_signal_handlers_disconnect_by_data(self->disc_factory, self);
   }
 
-  gboolean root_removed = TRUE;
   if (self->root) {
-    root_removed = ggame_widget_remove_from_parent(self->root);
-    if (!root_removed && gtk_widget_get_parent(self->root)) {
-      g_debug("Failed to remove SGF view root from parent during dispose\n");
-    }
+    ggame_widget_remove_from_parent(self->root);
   }
 
   g_clear_object(&self->tree);
-  if (root_removed) {
-    g_clear_object(&self->root);
-  } else {
-    self->root = NULL;
-  }
+  g_clear_object(&self->root);
   g_clear_pointer(&self->node_widgets, g_hash_table_unref);
   g_clear_object(&self->disc_factory);
   g_clear_object(&self->layout);

@@ -1316,7 +1316,9 @@ static void ggame_window_sync_mode_ui(GGameWindow *self) {
   gboolean allow_view_actions = !self->puzzle_mode;
   gboolean allow_edit_mode_selection = supports_edit_mode && !self->puzzle_mode;
 
-  ggame_window_set_action_enabled(G_ACTION_MAP(self), "game-force-move", allow_navigation && !self->computer_move_active);
+  ggame_window_set_action_enabled(G_ACTION_MAP(self),
+                                  "game-force-move",
+                                  allow_navigation && !self->computer_move_active);
   ggame_window_set_action_enabled(G_ACTION_MAP(self), "puzzle-play", supports_puzzles && !self->puzzle_mode);
   ggame_window_set_action_enabled(G_ACTION_MAP(self), "navigation-rewind", allow_navigation);
   ggame_window_set_action_enabled(G_ACTION_MAP(self), "navigation-step-backward", allow_navigation);
@@ -4395,21 +4397,14 @@ static void ggame_window_rebuild_board_host(GGameWindow *self) {
   ggame_window_sync_move_report_ui(self);
 }
 
-static gboolean ggame_window_unparent_controls_panel(GGameWindow *self) {
-  g_return_val_if_fail(GGAME_IS_WINDOW(self), FALSE);
+static void ggame_window_unparent_controls_panel(GGameWindow *self) {
+  g_return_if_fail(GGAME_IS_WINDOW(self));
 
   if (!self->controls_panel) {
-    return TRUE;
+    return;
   }
 
-  GtkWidget *panel_widget = GTK_WIDGET(self->controls_panel);
-  gboolean removed = ggame_widget_remove_from_parent(panel_widget);
-  if (!removed && gtk_widget_get_parent(panel_widget)) {
-    g_debug("Failed to remove controls panel from parent during dispose\n");
-    return FALSE;
-  }
-
-  return TRUE;
+  ggame_widget_remove_from_parent(GTK_WIDGET(self->controls_panel));
 }
 
 static void ggame_window_dispose(GObject *object) {
@@ -4424,14 +4419,13 @@ static void ggame_window_dispose(GObject *object) {
     self->state_handler_id = 0;
   }
 
-  gboolean panel_removed = ggame_window_unparent_controls_panel(self);
+  ggame_window_unparent_controls_panel(self);
   g_clear_handle_id(&self->auto_move_source_id, g_source_remove);
   g_clear_handle_id(&self->puzzle_wrong_move_source_id, g_source_remove);
   if (self->puzzle_attempt_started && !ggame_window_puzzle_attempt_is_terminal(self)) {
     (void)ggame_window_puzzle_attempt_finish_failure(self, FALSE, NULL);
   }
 
-  ggame_window_unparent_controls_panel(self);
   self->analysis_status_label = NULL;
   self->analysis_buffer = NULL;
 
@@ -4442,11 +4436,7 @@ static void ggame_window_dispose(GObject *object) {
   }
   g_clear_object(&self->sgf_controller);
   g_clear_object(&self->analysis_graph);
-  if (panel_removed) {
-    g_clear_object(&self->controls_panel);
-  } else {
-    self->controls_panel = NULL;
-  }
+  g_clear_object(&self->controls_panel);
   if (self->navigation_panel != NULL) {
     ggame_widget_remove_from_parent(self->navigation_panel);
     g_clear_object(&self->navigation_panel);

@@ -954,21 +954,13 @@ static void ggame_sgf_controller_dispose(GObject *object) {
   }
   ggame_sgf_controller_clear_comment_focus(self);
 
-  gboolean root_removed = TRUE;
   if (self->root != NULL) {
-    root_removed = ggame_widget_remove_from_parent(self->root);
-    if (!root_removed && gtk_widget_get_parent(self->root) != NULL) {
-      g_debug("Failed to remove SGF controller root from parent during dispose");
-    }
+    ggame_widget_remove_from_parent(self->root);
   }
 
   ggame_sgf_controller_disconnect_model(self);
   g_clear_object(&self->board_view);
-  if (root_removed) {
-    g_clear_object(&self->root);
-  } else {
-    self->root = NULL;
-  }
+  g_clear_object(&self->root);
   g_clear_object(&self->sgf_view);
   g_clear_object(&self->sgf_tree);
   self->comment_buffer = NULL;

@@ -186,9 +186,9 @@ Import fetch flow for BoardGameArena uses a dedicated libcurl client: GET home p
 POST `loginUserWithPassword.html` with username/password/remember/request token and logs the HTTP/body result.
 Default panel widths come from the active profile, with `500/300/300` as the checkers baseline. Profiles can also set a
 smaller minimum board-panel width when the startup/default board width should not become the paned handle's hard limit.
-Lifecycle: sinks and retains an owned `PlayerControlsPanel` reference, removes it from its current `GtkBox` parent
-during dispose via `ggame_widget_remove_from_parent()`, cancels any pending auto-move idle source or background
-computer-move result, and then clears its references.
+Lifecycle: sinks and retains owned widget references, detaches retained widgets from their GTK parents during dispose
+via `ggame_widget_remove_from_parent()`, cancels any pending auto-move idle source or background computer-move result,
+and then clears its references.
 At construction time it also pushes the active backend's side labels into `PlayerControlsPanel`, so the shared board
 UI keeps generic two-side semantics while the active backend decides how those sides are named.
 

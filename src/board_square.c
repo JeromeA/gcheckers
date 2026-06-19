@@ -89,19 +89,10 @@ static void board_square_build(BoardSquare *self) {
 static void board_square_dispose(GObject *object) {
   BoardSquare *self = BOARD_SQUARE(object);
 
-  gboolean button_removed = TRUE;
   if (self->button) {
-    button_removed = ggame_widget_remove_from_parent(self->button);
-    if (!button_removed && gtk_widget_get_parent(self->button)) {
-      g_debug("Failed to remove board square button from parent during dispose\n");
-    }
+    ggame_widget_remove_from_parent(self->button);
   }
-
-  if (button_removed) {
-    g_clear_object(&self->button);
-  } else {
-    self->button = NULL;
-  }
+  g_clear_object(&self->button);
   self->piece_stack = NULL;
   self->piece_area = NULL;
   self->piece_label = NULL;
