@@ -733,9 +733,12 @@ summary row per tested value, including a `win_ratio` field computed as candidat
 baseline wins so draws and timeouts do not affect the ratio. Its variable names are `ship1`, `ship2`, `ship3`,
 `homeworld-ship1`, `homeworld-ship2`, `homeworld-ship3`, `single-star`, and `buildable-color`; the old descriptive
 ship aliases are not accepted. With `--trace-move-counts`, it uses the Homeworlds backend trace hook to print per-ply
-complete-leaf, scored-move, and kept-move counts to stderr without mixing them into the CSV summary. If a
-`good_moves()` call generates more than 500,000 deduplicated complete leaves, it writes `big_move_report_###.txt` in
-the current
+complete-leaf, scored-move, and kept-move counts to stderr without mixing them into the CSV summary. During
+interactive runs, it also renders one stderr progress line for the current value/game/ply using carriage return plus
+ANSI clear-line control and clears that line before each result row is shown. `GCHECKERS_HOMEWORLDS_EVAL_PROGRESS`
+can force that progress display with `always`, disable it with `never`, or leave the default terminal-only `auto`
+behavior. If a `good_moves()` call generates more than 500,000 deduplicated complete leaves, it writes
+`big_move_report_###.txt` in the current
 directory with the `good_moves()` trace counts followed by the same move-report body used by
 `homeworlds_profile_moves`: the moves leading to the reported position, the ASCII position, and a streamed dump of all
 generated move paths. After the stream finishes, reports below the default 3,300,000 streamed-move cutoff are deleted.

@@ -8,6 +8,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef G_OS_UNIX
+#include <unistd.h>
+#endif
 
 enum {
   HOMEWORLDS_EXPERIMENT_DEPTH = 1,
@@ -21,6 +24,7 @@ static const char *HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_THRESHOLD_ENV =
     "GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_THRESHOLD";
 static const char *HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_MIN_TOTAL_MOVES_ENV =
     "GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_MIN_TOTAL_MOVES";
+static const char *HOMEWORLDS_EXPERIMENT_PROGRESS_ENV = "GCHECKERS_HOMEWORLDS_EVAL_PROGRESS";
 
 typedef enum {
   HOMEWORLDS_EXPERIMENT_VARIABLE_NONE = 0,
@@ -42,12 +46,18 @@ typedef struct {
 } HomeworldsExperimentStats;
 
 typedef struct {
+  gboolean enabled;
+  gboolean visible;
+} HomeworldsExperimentProgress;
+
+typedef struct {
   gint value;
   guint game;
   guint seed;
   guint candidate_side;
   guint ply;
   const GArray *played_moves;
+  HomeworldsExperimentProgress *progress;
   gboolean trace_move_counts;
 } HomeworldsExperimentMoveTraceContext;
 
@@ -89,6 +99,95 @@ static gboolean homeworlds_experiment_parse_gsize(const char *text, gsize *out_v
 
   *out_value = (gsize)value;
   return TRUE;
+}
+
+static gboolean homeworlds_experiment_stderr_is_terminal(void) {
+#ifdef G_OS_UNIX
+  return isatty(fileno(stderr));
+#else
+  return FALSE;
+#endif
+}
+
+static gboolean homeworlds_experiment_progress_setting_is_true(const char *text) {
+  g_return_val_if_fail(text != NULL, FALSE);
+
+  return g_ascii_strcasecmp(text, "1") == 0 ||
+      g_ascii_strcasecmp(text, "true") == 0 ||
+      g_ascii_strcasecmp(text, "yes") == 0 ||
+      g_ascii_strcasecmp(text, "always") == 0;
+}
+
+static gboolean homeworlds_experiment_progress_setting_is_false(const char *text) {
+  g_return_val_if_fail(text != NULL, FALSE);
+
+  return g_ascii_strcasecmp(text, "0") == 0 ||
+      g_ascii_strcasecmp(text, "false") == 0 ||
+      g_ascii_strcasecmp(text, "no") == 0 ||
+      g_ascii_strcasecmp(text, "never") == 0;
+}
+
+static gboolean homeworlds_experiment_progress_is_enabled(void) {
+  const char *progress_text = g_getenv(HOMEWORLDS_EXPERIMENT_PROGRESS_ENV);
+
+  if (progress_text == NULL || progress_text[0] == '\0' ||
+      g_ascii_strcasecmp(progress_text, "auto") == 0) {
+    return homeworlds_experiment_stderr_is_terminal();
+  }
+  if (homeworlds_experiment_progress_setting_is_true(progress_text)) {
+    return TRUE;
+  }
+  if (homeworlds_experiment_progress_setting_is_false(progress_text)) {
+    return FALSE;
+  }
+
+  g_debug("Ignoring invalid %s value", HOMEWORLDS_EXPERIMENT_PROGRESS_ENV);
+  return homeworlds_experiment_stderr_is_terminal();
+}
+
+static HomeworldsExperimentProgress homeworlds_experiment_progress_new(void) {
+  HomeworldsExperimentProgress progress = {
+    .enabled = homeworlds_experiment_progress_is_enabled(),
+    .visible = FALSE,
+  };
+
+  return progress;
+}
+
+static void homeworlds_experiment_progress_update(HomeworldsExperimentProgress *progress,
+                                                  gint value,
+                                                  guint game,
+                                                  guint games,
+                                                  guint ply,
+                                                  guint max_plies) {
+  g_return_if_fail(progress != NULL);
+  g_return_if_fail(games > 0);
+  g_return_if_fail(max_plies > 0);
+
+  if (!progress->enabled) {
+    return;
+  }
+
+  g_printerr("\r\033[2Khomeworlds_eval_experiment: value=%d game=%u/%u ply=%u/%u",
+             value,
+             game + 1,
+             games,
+             ply + 1,
+             max_plies);
+  fflush(stderr);
+  progress->visible = TRUE;
+}
+
+static void homeworlds_experiment_progress_clear(HomeworldsExperimentProgress *progress) {
+  g_return_if_fail(progress != NULL);
+
+  if (!progress->enabled || !progress->visible) {
+    return;
+  }
+
+  g_printerr("\r\033[2K");
+  fflush(stderr);
+  progress->visible = FALSE;
 }
 
 static gsize homeworlds_experiment_big_move_report_threshold(void) {
@@ -277,6 +376,7 @@ static void homeworlds_experiment_write_big_move_report(const HomeworldsGoodMove
 
   file = fopen(path, "w");
   if (file == NULL) {
+    homeworlds_experiment_progress_clear(context->progress);
     g_printerr("Failed to open %s for Homeworlds big move report.\n", path);
     return;
   }
@@ -294,6 +394,7 @@ static void homeworlds_experiment_write_big_move_report(const HomeworldsGoodMove
   report_written = homeworlds_move_report_write(file, trace->position, context->played_moves, &all_move_count);
 
   if (fclose(file) != 0 || !report_written) {
+    homeworlds_experiment_progress_clear(context->progress);
     g_printerr("Failed to finish %s Homeworlds big move report.\n", path);
     return;
   }
@@ -301,6 +402,7 @@ static void homeworlds_experiment_write_big_move_report(const HomeworldsGoodMove
   min_total_moves = homeworlds_experiment_big_move_report_min_total_moves();
   if (all_move_count < min_total_moves) {
     if (g_remove(path) != 0) {
+      homeworlds_experiment_progress_clear(context->progress);
       g_printerr("Failed to delete %s Homeworlds big move report with only %" G_GSIZE_FORMAT " total moves.\n",
                  path,
                  all_move_count);
@@ -318,6 +420,7 @@ static void homeworlds_experiment_trace_move_generation(const HomeworldsGoodMove
   g_return_if_fail(context != NULL);
 
   if (context->trace_move_counts) {
+    homeworlds_experiment_progress_clear(context->progress);
     g_printerr("move-count,%d,%u,%u,%u,%u,%u,%u,%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT "\n",
                context->value,
                context->game,
@@ -385,10 +488,12 @@ static GameBackendOutcome homeworlds_experiment_play_game(const HomeworldsEvalWe
                                                           const HomeworldsEvalWeights *candidate,
                                                           gint value,
                                                           guint game,
+                                                          guint games,
                                                           guint candidate_side,
                                                           guint max_plies,
                                                           guint32 seed,
-                                                          gboolean trace_move_counts) {
+                                                          gboolean trace_move_counts,
+                                                          HomeworldsExperimentProgress *progress) {
   HomeworldsPosition position = {0};
   const HomeworldsEvalWeights *side_weights[2] = {0};
   GRand *random = NULL;
@@ -397,8 +502,10 @@ static GameBackendOutcome homeworlds_experiment_play_game(const HomeworldsEvalWe
 
   g_return_val_if_fail(baseline != NULL, GAME_BACKEND_OUTCOME_ONGOING);
   g_return_val_if_fail(candidate != NULL, GAME_BACKEND_OUTCOME_ONGOING);
+  g_return_val_if_fail(games > 0, GAME_BACKEND_OUTCOME_ONGOING);
   g_return_val_if_fail(candidate_side < 2, GAME_BACKEND_OUTCOME_ONGOING);
   g_return_val_if_fail(max_plies > 0, GAME_BACKEND_OUTCOME_ONGOING);
+  g_return_val_if_fail(progress != NULL, GAME_BACKEND_OUTCOME_ONGOING);
 
   random = g_rand_new_with_seed(seed);
   played_moves = g_array_new(FALSE, FALSE, sizeof(HomeworldsMove));
@@ -415,6 +522,7 @@ static GameBackendOutcome homeworlds_experiment_play_game(const HomeworldsEvalWe
       .candidate_side = candidate_side,
       .ply = ply,
       .played_moves = played_moves,
+      .progress = progress,
       .trace_move_counts = trace_move_counts,
     };
     guint side = 0;
@@ -424,6 +532,7 @@ static GameBackendOutcome homeworlds_experiment_play_game(const HomeworldsEvalWe
       break;
     }
 
+    homeworlds_experiment_progress_update(progress, value, game, games, ply, max_plies);
     side = homeworlds_position_turn(&position);
     if (!homeworlds_experiment_choose_move(&position,
                                            side_weights[side],
@@ -510,12 +619,14 @@ static HomeworldsExperimentStats homeworlds_experiment_run_value(const Homeworld
                                                                  guint games,
                                                                  guint max_plies,
                                                                  guint32 seed,
-                                                                 gboolean trace_move_counts) {
+                                                                 gboolean trace_move_counts,
+                                                                 HomeworldsExperimentProgress *progress) {
   HomeworldsExperimentStats stats = {0};
 
   g_return_val_if_fail(baseline != NULL, stats);
   g_return_val_if_fail(candidate != NULL, stats);
   g_return_val_if_fail(games > 0, stats);
+  g_return_val_if_fail(progress != NULL, stats);
 
   for (guint game = 0; game < games; ++game) {
     guint candidate_side = homeworlds_experiment_candidate_side_for_game(game);
@@ -524,10 +635,12 @@ static HomeworldsExperimentStats homeworlds_experiment_run_value(const Homeworld
                                                                  candidate,
                                                                  value,
                                                                  game,
+                                                                 games,
                                                                  candidate_side,
                                                                  max_plies,
                                                                  game_seed,
-                                                                 trace_move_counts);
+                                                                 trace_move_counts,
+                                                                 progress);
 
     homeworlds_experiment_record_outcome(&stats, outcome, candidate_side);
   }
@@ -604,6 +717,7 @@ int main(int argc, char **argv) {
   GArray *values = NULL;
   HomeworldsExperimentVariable variable = HOMEWORLDS_EXPERIMENT_VARIABLE_NONE;
   HomeworldsEvalWeights baseline = *homeworlds_eval_weights_default();
+  HomeworldsExperimentProgress progress = homeworlds_experiment_progress_new();
 
   context = g_option_context_new("- run depth-1 Homeworlds static-evaluation self-play experiments");
   g_option_context_add_main_entries(context, options, NULL);
@@ -670,7 +784,9 @@ int main(int argc, char **argv) {
                                             (guint)games_option,
                                             (guint)max_plies_option,
                                             (guint32)seed_option,
-                                            trace_move_counts_option);
+                                            trace_move_counts_option,
+                                            &progress);
+    homeworlds_experiment_progress_clear(&progress);
     win_ratio = homeworlds_experiment_win_ratio(&stats);
     g_print("%d,%u,%u,%s,%u,%u\n",
             value,
