@@ -746,7 +746,7 @@ behavior. If a `good_moves()` call generates more than 500,000 deduplicated comp
 `big_move_report_###.txt` in the current
 directory with the `good_moves()` trace, pruning counts, and ordering counts followed by the same move-report body used
 by `homeworlds_profile_moves`: the moves leading to the reported position, the ASCII position, and a streamed dump of
-all generated move paths. After the stream finishes, reports below the default 3,300,000 streamed-move cutoff are
+all generated move paths. After the stream finishes, reports below the default 5,000,000 streamed-move cutoff are
 deleted.
 The `build/tools/homeworlds_proof_probe` CLI reads one of those move reports, recomputes the current `good_moves()`
 cutoff, and prints the large-yellow-sacrifice proof status after each step of requested `all_moves` row numbers or
