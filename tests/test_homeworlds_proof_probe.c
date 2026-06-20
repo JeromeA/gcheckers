@@ -54,6 +54,7 @@ static void test_homeworlds_proof_probe_reads_report_row(void) {
   g_assert_no_error(error);
   g_assert_cmpstr(stderr_text, ==, "");
   g_assert_nonnull(strstr(stdout_text, "cutoff="));
+  g_assert_nonnull(strstr(stdout_text, "trace: generated="));
   g_assert_nonnull(strstr(stdout_text, "\n1. H1b+\n"));
   g_assert_nonnull(strstr(stdout_text, "after H1b+"));
   g_assert_nonnull(strstr(stdout_text, "proof=not-active"));

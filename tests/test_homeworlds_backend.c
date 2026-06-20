@@ -1597,7 +1597,39 @@ static void test_backend_good_moves_static_prunes_player_two_candidates(void) {
 }
 
 static void test_backend_good_move_trace_pruning_mode_defaults_off(void) {
-  static const char *env_name = "GCHECKERS_HOMEWORLDS_GOOD_MOVE_PRUNING";
+  static const char *pruning_env_name = "GCHECKERS_HOMEWORLDS_GOOD_MOVE_PRUNING";
+  static const char *ordering_env_name = "GCHECKERS_HOMEWORLDS_GOOD_MOVE_ORDERING";
+  const GameBackend *backend = &homeworlds_game_backend;
+  HomeworldsPosition position = {0};
+  GameBackendMoveList good_moves = {0};
+  TestGoodMoveTraceCapture capture = {0};
+  TestSavedEnv saved_pruning_env = test_save_env(pruning_env_name);
+  TestSavedEnv saved_ordering_env = test_save_env(ordering_env_name);
+
+  test_prepare_static_prune_position(&position, 20);
+  g_unsetenv(pruning_env_name);
+  g_unsetenv(ordering_env_name);
+  homeworlds_backend_set_good_move_trace(test_capture_good_move_trace, &capture);
+
+  good_moves = backend->list_good_moves(&position, 0);
+  assert(capture.called);
+  assert(capture.trace.pruning_mode == HOMEWORLDS_GOOD_MOVE_PRUNING_OFF);
+  assert(capture.trace.ordering_enabled);
+  assert(capture.trace.pruning_checked_branches == 0);
+  assert(capture.trace.pruning_window_cutoff_branches == 0);
+  assert(capture.trace.pruning_would_prune_branches == 0);
+  assert(capture.trace.pruning_pruned_branches == 0);
+  assert(capture.trace.pruning_verified_leaves == 0);
+  assert(capture.trace.pruning_verification_failures == 0);
+
+  backend->move_list_free(&good_moves);
+  homeworlds_backend_set_good_move_trace(NULL, NULL);
+  test_restore_env(ordering_env_name, &saved_ordering_env);
+  test_restore_env(pruning_env_name, &saved_pruning_env);
+}
+
+static void test_backend_good_move_ordering_can_be_disabled(void) {
+  static const char *env_name = "GCHECKERS_HOMEWORLDS_GOOD_MOVE_ORDERING";
   const GameBackend *backend = &homeworlds_game_backend;
   HomeworldsPosition position = {0};
   GameBackendMoveList good_moves = {0};
@@ -1605,17 +1637,15 @@ static void test_backend_good_move_trace_pruning_mode_defaults_off(void) {
   TestSavedEnv saved_env = test_save_env(env_name);
 
   test_prepare_static_prune_position(&position, 20);
-  g_unsetenv(env_name);
+  g_setenv(env_name, "off", TRUE);
   homeworlds_backend_set_good_move_trace(test_capture_good_move_trace, &capture);
 
   good_moves = backend->list_good_moves(&position, 0);
   assert(capture.called);
-  assert(capture.trace.pruning_mode == HOMEWORLDS_GOOD_MOVE_PRUNING_OFF);
-  assert(capture.trace.pruning_checked_branches == 0);
-  assert(capture.trace.pruning_would_prune_branches == 0);
-  assert(capture.trace.pruning_pruned_branches == 0);
-  assert(capture.trace.pruning_verified_leaves == 0);
-  assert(capture.trace.pruning_verification_failures == 0);
+  assert(!capture.trace.ordering_enabled);
+  assert(capture.trace.ordering_candidate_lists == 0);
+  assert(capture.trace.ordering_reordered_candidate_lists == 0);
+  assert(capture.trace.ordering_reordered_candidates == 0);
 
   backend->move_list_free(&good_moves);
   homeworlds_backend_set_good_move_trace(NULL, NULL);
@@ -2658,6 +2688,7 @@ int main(void) {
   test_backend_good_moves_static_prunes_candidates();
   test_backend_good_moves_static_prunes_player_two_candidates();
   test_backend_good_move_trace_pruning_mode_defaults_off();
+  test_backend_good_move_ordering_can_be_disabled();
   test_backend_good_move_pruning_verify_keeps_results();
   test_backend_good_moves_follow_setup_policy_without_truncation();
   test_backend_good_moves_first_turn_always_builds();

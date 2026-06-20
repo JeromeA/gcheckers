@@ -719,8 +719,10 @@ hashes for the whole move tree. The backend `good_moves()` collector scores comp
 the builder tree and retains only the best static-pruned set, so memory remains bounded even when millions of complete
 leaves are reached before pruning. `GCHECKERS_HOMEWORLDS_GOOD_MOVE_PRUNING` can enable optional branch-bound pruning
 for conservative large yellow sacrifice proofs with `on`, or run the same proof in non-pruning `verify` mode; the
-default `off` mode leaves normal move selection unchanged. `GameBackend` exposes an optional streamed all-move API for
-diagnostics; Homeworlds
+default `off` mode leaves normal move selection unchanged. During active large yellow sacrifices, `good_moves()` also
+orders local builder candidates by the same optimistic bound so likely high-scoring continuations are explored first;
+set `GCHECKERS_HOMEWORLDS_GOOD_MOVE_ORDERING=off` to restore the old candidate order for diagnostics. `GameBackend`
+exposes an optional streamed all-move API for diagnostics; Homeworlds
 implements it by walking complete generated move paths without materializing a `GameBackendMoveList`. The
 `View` -> `Move report` action disables its report before the collector runs. The separate
 `build/tools/homeworlds_profile_moves`
@@ -735,16 +737,17 @@ summary row per tested value, including a `win_ratio` field computed as candidat
 baseline wins so draws and timeouts do not affect the ratio. Its variable names are `ship1`, `ship2`, `ship3`,
 `single-star`, and `buildable-color`; the old descriptive ship aliases and removed `homeworld-shipN` variables are not
 accepted. With `--trace-move-counts`, it uses the Homeworlds backend trace hook to print per-ply
-complete-leaf, scored-move, kept-move, pruning-mode, and pruning-counter values to stderr without mixing them into the
-CSV summary. During
+complete-leaf, scored-move, kept-move, pruning-mode, ordering, pruning-counter, and ordering-counter values to stderr
+without mixing them into the CSV summary. During
 interactive runs, it also renders one stderr progress line for the current value/game/ply using carriage return plus
 ANSI clear-line control and clears that line before each result row is shown. `GCHECKERS_HOMEWORLDS_EVAL_PROGRESS`
 can force that progress display with `always`, disable it with `never`, or leave the default terminal-only `auto`
 behavior. If a `good_moves()` call generates more than 500,000 deduplicated complete leaves, it writes
 `big_move_report_###.txt` in the current
-directory with the `good_moves()` trace and pruning counts followed by the same move-report body used by
-`homeworlds_profile_moves`: the moves leading to the reported position, the ASCII position, and a streamed dump of all
-generated move paths. After the stream finishes, reports below the default 3,300,000 streamed-move cutoff are deleted.
+directory with the `good_moves()` trace, pruning counts, and ordering counts followed by the same move-report body used
+by `homeworlds_profile_moves`: the moves leading to the reported position, the ASCII position, and a streamed dump of
+all generated move paths. After the stream finishes, reports below the default 3,300,000 streamed-move cutoff are
+deleted.
 The `build/tools/homeworlds_proof_probe` CLI reads one of those move reports, recomputes the current `good_moves()`
 cutoff, and prints the large-yellow-sacrifice proof status after each step of requested `all_moves` row numbers or
 quoted move notations. The
@@ -786,13 +789,14 @@ kept in canonical order only when a swapped order is legal, position-equivalent,
 commutation is proven from local ship, bank, and color counts, while green build reversal tries every reversible
 built-ship candidate because bank supply can make the built size ambiguous.
 During play, `good_moves()` scores each candidate by the one-ply static or terminal value, orders it from the current
-player's perspective, and keeps only the first 512 moves that are within 50 points of the best one.
-When optional pruning is enabled, active large yellow sacrifice branches are skipped only after the collector has a
-full 512-move cutoff and a conservative bound proves that no remaining yellow continuation can beat the current worst
-kept score. The bound adds possible buildable-color gains, immediate catastrophe gains, and only the own catastrophe
+player's perspective, and keeps only the first 512 moves that are within 50 points of the best one. A very good
+completed move therefore raises an early score-window cutoff even before the buffer contains 512 moves.
+When optional pruning is enabled, active large yellow sacrifice branches are skipped when either that score-window
+cutoff or the full 512-move cutoff is available and a conservative bound proves that no remaining yellow continuation
+can reach it. The bound adds possible buildable-color gains, immediate catastrophe gains, and only the own catastrophe
 losses that remaining yellow actions could still avoid by moving doomed ships away first. Future positive
 catastrophes count only when enough same-color own ships can reach the target system without spending the whole gain.
-In `verify` mode those branches are still explored and scored, and any completed move that beats the decision-time
+In `verify` mode those branches are still explored and scored, and any completed move that reaches the decision-time
 cutoff is counted as a verification failure.
 Profitable catastrophes available at the start of a turn are required somewhere in the final move, while profitable
 catastrophes created by an earlier step are forced immediately in the staged walk.

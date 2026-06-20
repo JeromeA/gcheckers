@@ -31,6 +31,15 @@ the optimization can be tuned on real reports before it becomes a default behavi
   charges future yellow actions for saving doomed own ships.
 - [x] (2026-06-20 10:53Z) Added `build/tools/homeworlds_proof_probe` for repeatable per-prefix proof inspection from
   big move reports.
+- [x] (2026-06-20 11:55Z) Decided to add local candidate ordering for active large yellow sacrifices and to judge the
+  result by the final buffer's score quality rather than by exact move-list identity.
+- [x] (2026-06-20 12:20Z) Implemented early branch cutoffs from the existing best-score window before the 512-move
+  buffer is full.
+- [x] (2026-06-20 12:20Z) Implemented stable local ordering for active large yellow sacrifice candidate lists, limited
+  to the pre-512 phase where it can raise the bar.
+- [x] (2026-06-20 12:20Z) Added trace/report counters for ordering and score-window pruning, updated the proof probe,
+  tests, and overview documentation.
+- [x] (2026-06-20 12:20Z) Measured the 3.3M report with the proof probe in pruning `off`, `on`, and `verify` modes.
 - [ ] `make test-local` reached the known GTK window failure path and failed because the isolated retry also failed.
 
 ## Surprises & Discoveries
@@ -54,6 +63,21 @@ the optimization can be tuned on real reports before it becomes a default behavi
   would prune 26,399, verified 1,509,215 leaves, and found zero failures. In `on`, it scored 809,701 leaves, pruned
   34,238 branches, returned the same 512 moves, and kept the same SHA-256 digest
   `83be6e770f1afbedc40ffd459cfc0d90cd20c3f44f80b31bd44523079d15b7f7`.
+
+- Observation: `good_moves()` already has a score bar before the 512th kept move exists.
+  Evidence: `HomeworldsMoveBuffer` updates `best_score` whenever a completed move improves the best score, then drops
+  completed moves outside the 50-point static-prune window. The branch-bound proof previously ignored that bar because
+  it only requested a cutoff after the buffer held 512 moves.
+
+- Observation: Always-on ordering through the entire large-yellow tree made the 3.3M pruning run slightly worse.
+  Evidence: With pruning `on`, ordering through every active large-yellow candidate list scored 814,178 leaves, while
+  old ordering scored 809,701 leaves. Limiting ordering to the pre-512 phase restored the 809,701 scored-leaf count.
+
+- Observation: On the 3.3M report, pre-512 ordering is safe but not yet a major improvement.
+  Evidence: With pruning `on`, cutoff stayed 490, scored leaves stayed 809,701, window-cutoff branch checks were 47,
+  and ordering touched 47 candidate lists, reordered 3 of them, and moved 35 candidates. With pruning `verify`, the
+  same report had 296,381 checked branches, 26,399 would-pruned branches, 1,509,215 verified leaves, and zero
+  verification failures.
 
 ## Decision Log
 
@@ -90,6 +114,18 @@ the optimization can be tuned on real reports before it becomes a default behavi
   state and the branch can then prune.
   Date/Author: 2026-06-20 / Codex.
 
+- Decision: Candidate ordering may change which equivalent move representative survives deduplication.
+  Rationale: The user explicitly only cares about the score quality of the final buffer, not byte-for-byte identity of
+  the retained moves. Stable local ordering is therefore acceptable if it keeps the score window behavior sound and is
+  traceable. Exact old ordering remains available for comparison with `GCHECKERS_HOMEWORLDS_GOOD_MOVE_ORDERING=off`.
+  Date/Author: 2026-06-20 / Codex.
+
+- Decision: Limit local candidate ordering to the period before the retained buffer reaches 512 moves.
+  Rationale: That is the phase where ordering can raise the early score-window bar or fill the full cutoff sooner. In
+  the 3.3M report, continuing to reorder after the full cutoff existed changed dedupe representatives enough to reduce
+  pruning effectiveness. Stopping at 512 keeps the useful part and avoids that regression.
+  Date/Author: 2026-06-20 / Codex.
+
 ## Outcomes & Retrospective
 
 The implementation is nearly complete. Normal runs are unchanged by default, while setting
@@ -98,6 +134,9 @@ good-move traces. The eval experiment trace rows and big-move reports include th
 large-yellow proof now uses a numeric catastrophe-gain ceiling; on the 3.3M report it cuts scored leaves by about 64%
 in `on` mode with the same returned move digest and zero verification failures. The `homeworlds_proof_probe` tool can
 now replay a big move report and show the same proof status after each step of selected `all_moves` rows.
+The current revision also uses the best-score window as an early branch cutoff and orders active large-yellow
+candidates before the 512-move buffer is full. The 3.3M report shows this is sound, with zero verify failures, but the
+pre-512 ordering is not a large performance win for that specific report.
 Focused validation and the full build pass; the full local test target is blocked by a reproducing GTK window failure
 outside this backend change.
 
@@ -112,7 +151,9 @@ initializes a staged move builder, recursively walks candidate choices in
 sorted list of at most `HOMEWORLDS_GOOD_MOVE_STATIC_PRUNE_LIMIT` moves, currently 512. For Player 1, higher static
 scores are better; for Player 2, lower static scores are better. Once the buffer has 512 entries, the last entry is the
 current worst kept score. A branch can only be pruned if a conservative proof says that every continuation is worse
-than this current worst kept score.
+than this current worst kept score. Before the buffer is full, the collector still has a weaker but valid cutoff from
+the current best score and the 50-point static-prune window: for Player 1 a completed move below `best_score - 50`
+would be discarded, and for Player 2 a completed move above `best_score + 50` would be discarded.
 
 The trace type `HomeworldsGoodMoveTrace` is declared in `src/games/homeworlds/homeworlds_backend.h`. The eval
 experiment tool in `src/homeworlds_eval_experiment.c` installs a trace callback and writes move-count rows plus
@@ -146,6 +187,13 @@ warning. In mode `on`, skip the branch and increment actually-pruned counters.
 Fifth, update tooling and docs. The eval experiment trace header and report body should include the new counters.
 `doc/OVERVIEW.md` should explain that bound pruning is optional, off by default, and traceable/verifyable.
 
+Sixth, order active large yellow sacrifice candidates locally. A candidate list is local to one staged builder state.
+When the state is inside a large yellow sacrifice, compute an optimistic priority for each candidate by applying the
+candidate to a temporary child state and looking ahead only until the next real turn step is appended. The priority is
+the same proof bound used for pruning: better bounds are explored first. Ties keep the original candidate order, so the
+change is deterministic. The ordering has an escape hatch, `GCHECKERS_HOMEWORLDS_GOOD_MOVE_ORDERING=off`, to compare
+old and new exploration on reports.
+
 ## Concrete Steps
 
 Work from `/home/jerome/Data/gcheckers`.
@@ -173,6 +221,12 @@ With the env var unset, Homeworlds `good_moves()` should return the same move li
 `GCHECKERS_HOMEWORLDS_GOOD_MOVE_PRUNING=verify`, tests should show the same returned moves as `off`, no actually
 pruned branches, and zero verification failures. When the proof applies, traces should also record checked,
 would-pruned, verified-leaf, and actually-pruned counts according to the selected mode.
+
+After local ordering is enabled, exact move-list identity is no longer required to match the old traversal because the
+deduper may keep a different equivalent representative. Acceptance should instead compare score quality: the returned
+buffer must stay sorted from the current player's perspective, each returned move must remain within the 50-point
+static-prune window, and the best and worst retained scores should be no worse than the old traversal for diagnostic
+reports where both modes are compared.
 
 The eval experiment trace header should include the new pruning counter columns, and big-move reports should contain
 the same values in a human-readable form.
@@ -224,3 +278,11 @@ failures and the same returned digest, with `on` mode scoring 809,701 leaves ins
 Revision note, 2026-06-20 10:53Z: Added `homeworlds_proof_probe` as a maintained build tool. It accepts a move report
 plus `all_moves` row numbers or quoted move notations, recomputes the current cutoff, and prints the large-yellow proof
 state after each prefix step.
+
+Revision note, 2026-06-20 11:55Z: Expanded the plan to cover score-window branch cutoffs before 512 kept moves and
+local ordering for active large yellow sacrifice candidates. The validation standard now allows different retained
+move identities as long as the retained scores remain at least as good.
+
+Revision note, 2026-06-20 12:20Z: Implemented early score-window cutoffs, pre-512 candidate ordering, ordering trace
+counters, and proof-probe trace output. The initial full-tree ordering attempt was measured and narrowed to pre-512
+ordering because it otherwise scored slightly more leaves on the 3.3M report.

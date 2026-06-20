@@ -29,11 +29,16 @@ typedef struct {
   gsize scored_moves;
   gsize kept_moves;
   HomeworldsGoodMovePruningMode pruning_mode;
+  gboolean ordering_enabled;
   gsize pruning_checked_branches;
+  gsize pruning_window_cutoff_branches;
   gsize pruning_would_prune_branches;
   gsize pruning_pruned_branches;
   gsize pruning_verified_leaves;
   gsize pruning_verification_failures;
+  gsize ordering_candidate_lists;
+  gsize ordering_reordered_candidate_lists;
+  gsize ordering_reordered_candidates;
 } HomeworldsGoodMoveTrace;
 
 typedef struct {
