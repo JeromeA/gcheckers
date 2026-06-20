@@ -6,6 +6,16 @@
 #include "../src/games/homeworlds/homeworlds_move_builder.h"
 #include "../src/sgf_tree.h"
 
+typedef struct {
+  HomeworldsGoodMoveTrace trace;
+  gboolean called;
+} TestGoodMoveTraceCapture;
+
+typedef struct {
+  gchar *value;
+  gboolean had_value;
+} TestSavedEnv;
+
 static HomeworldsSystemRef test_homeworld_ref(guint side) {
   assert(side < 2);
 
@@ -680,6 +690,59 @@ static const HomeworldsMoveCandidate *test_find_action_candidate(const GameBacke
   }
 
   return NULL;
+}
+
+static void test_capture_good_move_trace(const HomeworldsGoodMoveTrace *trace, gpointer user_data) {
+  TestGoodMoveTraceCapture *capture = user_data;
+
+  assert(trace != NULL);
+  assert(capture != NULL);
+
+  capture->trace = *trace;
+  capture->called = TRUE;
+}
+
+static TestSavedEnv test_save_env(const char *name) {
+  const char *value = NULL;
+
+  assert(name != NULL);
+
+  value = g_getenv(name);
+  return (TestSavedEnv){
+    .value = value != NULL ? g_strdup(value) : NULL,
+    .had_value = value != NULL,
+  };
+}
+
+static void test_restore_env(const char *name, TestSavedEnv *saved) {
+  assert(name != NULL);
+  assert(saved != NULL);
+
+  if (saved->had_value) {
+    g_setenv(name, saved->value, TRUE);
+  } else {
+    g_unsetenv(name);
+  }
+  g_clear_pointer(&saved->value, g_free);
+  saved->had_value = FALSE;
+}
+
+static void test_assert_move_lists_equal(const GameBackend *backend,
+                                         const GameBackendMoveList *left,
+                                         const GameBackendMoveList *right) {
+  assert(backend != NULL);
+  assert(left != NULL);
+  assert(right != NULL);
+  assert(left->count == right->count);
+
+  for (gsize i = 0; i < left->count; ++i) {
+    const HomeworldsMove *left_move = backend->move_list_get(left, i);
+    const HomeworldsMove *right_move = backend->move_list_get(right, i);
+
+    assert(left_move != NULL);
+    assert(right_move != NULL);
+    assert(backend->moves_equal(left_move, right_move));
+  }
 }
 
 static const HomeworldsMoveCandidate *test_find_trade_color_candidate(const GameBackend *backend,
@@ -1531,6 +1594,63 @@ static void test_backend_good_moves_static_prunes_player_two_candidates(void) {
   }
 
   backend->move_list_free(&good_moves);
+}
+
+static void test_backend_good_move_trace_pruning_mode_defaults_off(void) {
+  static const char *env_name = "GCHECKERS_HOMEWORLDS_GOOD_MOVE_PRUNING";
+  const GameBackend *backend = &homeworlds_game_backend;
+  HomeworldsPosition position = {0};
+  GameBackendMoveList good_moves = {0};
+  TestGoodMoveTraceCapture capture = {0};
+  TestSavedEnv saved_env = test_save_env(env_name);
+
+  test_prepare_static_prune_position(&position, 20);
+  g_unsetenv(env_name);
+  homeworlds_backend_set_good_move_trace(test_capture_good_move_trace, &capture);
+
+  good_moves = backend->list_good_moves(&position, 0);
+  assert(capture.called);
+  assert(capture.trace.pruning_mode == HOMEWORLDS_GOOD_MOVE_PRUNING_OFF);
+  assert(capture.trace.pruning_checked_branches == 0);
+  assert(capture.trace.pruning_would_prune_branches == 0);
+  assert(capture.trace.pruning_pruned_branches == 0);
+  assert(capture.trace.pruning_verified_leaves == 0);
+  assert(capture.trace.pruning_verification_failures == 0);
+
+  backend->move_list_free(&good_moves);
+  homeworlds_backend_set_good_move_trace(NULL, NULL);
+  test_restore_env(env_name, &saved_env);
+}
+
+static void test_backend_good_move_pruning_verify_keeps_results(void) {
+  static const char *env_name = "GCHECKERS_HOMEWORLDS_GOOD_MOVE_PRUNING";
+  const GameBackend *backend = &homeworlds_game_backend;
+  HomeworldsPosition position = {0};
+  GameBackendMoveList off_moves = {0};
+  GameBackendMoveList verify_moves = {0};
+  TestGoodMoveTraceCapture capture = {0};
+  TestSavedEnv saved_env = test_save_env(env_name);
+
+  test_prepare_static_prune_position(&position, 20);
+
+  g_setenv(env_name, "off", TRUE);
+  off_moves = backend->list_good_moves(&position, 0);
+
+  g_setenv(env_name, "verify", TRUE);
+  homeworlds_backend_set_good_move_trace(test_capture_good_move_trace, &capture);
+  verify_moves = backend->list_good_moves(&position, 0);
+  assert(capture.called);
+  assert(capture.trace.pruning_mode == HOMEWORLDS_GOOD_MOVE_PRUNING_VERIFY);
+  assert(capture.trace.generated_leaves > 512);
+  assert(capture.trace.scored_moves >= capture.trace.kept_moves);
+  assert(capture.trace.pruning_pruned_branches == 0);
+  assert(capture.trace.pruning_verification_failures == 0);
+  test_assert_move_lists_equal(backend, &off_moves, &verify_moves);
+
+  backend->move_list_free(&verify_moves);
+  backend->move_list_free(&off_moves);
+  homeworlds_backend_set_good_move_trace(NULL, NULL);
+  test_restore_env(env_name, &saved_env);
 }
 
 static void test_backend_good_moves_follow_setup_policy_without_truncation(void) {
@@ -2537,6 +2657,8 @@ int main(void) {
   test_backend_good_moves_are_subset_and_ordered();
   test_backend_good_moves_static_prunes_candidates();
   test_backend_good_moves_static_prunes_player_two_candidates();
+  test_backend_good_move_trace_pruning_mode_defaults_off();
+  test_backend_good_move_pruning_verify_keeps_results();
   test_backend_good_moves_follow_setup_policy_without_truncation();
   test_backend_good_moves_first_turn_always_builds();
   test_backend_good_moves_use_symbolic_build_notation();

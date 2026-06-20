@@ -133,6 +133,7 @@ CREATE_PUZZLES_BIN := $(TOOLS_DIR)/checkers_create_puzzles
 BOOP_CREATE_PUZZLES_BIN := $(TOOLS_DIR)/boop_create_puzzles
 HOMEWORLDS_PROFILE_MOVES_BIN := $(TOOLS_DIR)/homeworlds_profile_moves
 HOMEWORLDS_EVAL_EXPERIMENT_BIN := $(TOOLS_DIR)/homeworlds_eval_experiment
+HOMEWORLDS_PROOF_PROBE_BIN := $(TOOLS_DIR)/homeworlds_proof_probe
 CREATE_PUZZLES_BINS := $(CREATE_PUZZLES_BIN) $(BOOP_CREATE_PUZZLES_BIN)
 TEST_GAME_BIN := $(TESTS_DIR)/test_game
 TEST_GAME_PRINT_BIN := $(TESTS_DIR)/test_game_print
@@ -142,6 +143,7 @@ TEST_HOMEWORLDS_GAME_BIN := $(TESTS_DIR)/test_homeworlds_game
 TEST_HOMEWORLDS_BACKEND_BIN := $(TESTS_DIR)/test_homeworlds_backend
 TEST_HOMEWORLDS_PROFILE_MOVES_BIN := $(TESTS_DIR)/test_homeworlds_profile_moves
 TEST_HOMEWORLDS_EVAL_EXPERIMENT_BIN := $(TESTS_DIR)/test_homeworlds_eval_experiment
+TEST_HOMEWORLDS_PROOF_PROBE_BIN := $(TESTS_DIR)/test_homeworlds_proof_probe
 TEST_HOMEWORLDS_WINDOW_BIN := $(TESTS_DIR)/test_homeworlds_window
 TEST_BOOP_GAME_BIN := $(TESTS_DIR)/test_boop_game
 TEST_BOOP_BACKEND_BIN := $(TESTS_DIR)/test_boop_backend
@@ -182,7 +184,7 @@ PROFILE_BIN ?= $(HOMEWORLDS_EVAL_EXPERIMENT_BIN)
 PROFILE_CMD = $(PROFILE_BIN) --variable large-ship --values 40 --games 1 --max-plies 300 --seed 4
 TEST_BINS := $(TEST_GAME_BIN) $(TEST_GAME_PRINT_BIN) $(TEST_GAME_BACKEND_BIN) $(TEST_GAME_MODEL_BIN) \
 	$(TEST_HOMEWORLDS_GAME_BIN) $(TEST_HOMEWORLDS_BACKEND_BIN) $(TEST_HOMEWORLDS_PROFILE_MOVES_BIN) \
-	$(TEST_HOMEWORLDS_EVAL_EXPERIMENT_BIN) $(TEST_HOMEWORLDS_WINDOW_BIN) \
+	$(TEST_HOMEWORLDS_EVAL_EXPERIMENT_BIN) $(TEST_HOMEWORLDS_PROOF_PROBE_BIN) $(TEST_HOMEWORLDS_WINDOW_BIN) \
 	$(TEST_BOOP_GAME_BIN) $(TEST_BOOP_BACKEND_BIN) $(TEST_BOARD_BIN) $(TEST_BOARD_GEOMETRY_BIN) \
 	$(TEST_MOVE_GEN_BIN) $(TEST_CREATE_PUZZLES_CLI_BIN) $(TEST_CREATE_PUZZLES_CHECK_BIN) \
 	$(TEST_CREATE_PUZZLES_RUNNER_BIN) $(TEST_CHECKERS_MODEL_BIN) $(TEST_AI_SEARCH_BIN) \
@@ -213,10 +215,10 @@ TEST_HOMEWORLDS_PROFILE_BATCH_BINS := $(filter-out $(TEST_WINDOW_ISOLATED_BINS),
 .PHONY: all clean test test-local coverage install install-checkers install-boop install-homeworlds install-schemas \
 	validate-desktop-metadata \
 	gcheckers gboop ghomeworlds all-checkers all-boop all-homeworlds create_puzzles homeworlds_profile_moves \
-	homeworlds_eval_experiment \
+	homeworlds_eval_experiment homeworlds_proof_probe \
 	libgame.a \
 test_game test_game_print test_game_backend test_game_model test_homeworlds_game test_homeworlds_backend \
-	test_homeworlds_profile_moves test_homeworlds_eval_experiment test_homeworlds_window \
+	test_homeworlds_profile_moves test_homeworlds_eval_experiment test_homeworlds_proof_probe test_homeworlds_window \
 	test_boop_game test_boop_backend test_board \
 	test_board_geometry test_move_gen \
 	test_create_puzzles_cli \
@@ -230,7 +232,7 @@ test_game test_game_print test_game_backend test_game_model test_homeworlds_game
 	callgrind-annotate
 
 all: $(GSETTINGS_SCHEMA_COMPILED) $(LIBGAME_A) $(CREATE_PUZZLES_BINS) $(HOMEWORLDS_PROFILE_MOVES_BIN) \
-	$(HOMEWORLDS_EVAL_EXPERIMENT_BIN) $(APP_BINS)
+	$(HOMEWORLDS_EVAL_EXPERIMENT_BIN) $(HOMEWORLDS_PROOF_PROBE_BIN) $(APP_BINS)
 
 gcheckers all-checkers: $(CHECKERS_APP_BIN)
 gboop all-boop: $(BOOP_APP_BIN)
@@ -240,6 +242,7 @@ libgame.a: $(LIBGAME_A)
 create_puzzles: $(CREATE_PUZZLES_BINS)
 homeworlds_profile_moves: $(HOMEWORLDS_PROFILE_MOVES_BIN)
 homeworlds_eval_experiment: $(HOMEWORLDS_EVAL_EXPERIMENT_BIN)
+homeworlds_proof_probe: $(HOMEWORLDS_PROOF_PROBE_BIN)
 
 $(LIBGAME_A): $(OBJS)
 	@mkdir -p $(dir $@)
@@ -343,6 +346,12 @@ $(TEST_HOMEWORLDS_EVAL_EXPERIMENT_BIN): tests/test_homeworlds_eval_experiment.c 
 	$(CC) $(CFLAGS) -DHOMEWORLDS_EVAL_EXPERIMENT_PATH=\"$(HOMEWORLDS_EVAL_EXPERIMENT_BIN)\" -o $@ \
 		tests/test_homeworlds_eval_experiment.c $(LDLIBS)
 
+test_homeworlds_proof_probe: $(TEST_HOMEWORLDS_PROOF_PROBE_BIN)
+$(TEST_HOMEWORLDS_PROOF_PROBE_BIN): tests/test_homeworlds_proof_probe.c $(HOMEWORLDS_PROOF_PROBE_BIN)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -DHOMEWORLDS_PROOF_PROBE_PATH=\"$(HOMEWORLDS_PROOF_PROBE_BIN)\" -o $@ \
+		tests/test_homeworlds_proof_probe.c $(LDLIBS)
+
 test_homeworlds_window: $(TEST_HOMEWORLDS_WINDOW_BIN)
 $(TEST_HOMEWORLDS_WINDOW_BIN): tests/test_homeworlds_window.c $(HOMEWORLDS_UI_SRCS) \
 	$(HOMEWORLDS_ALL_SRCS) src/application.c src/window.c $(APP_PATHS_SRCS) $(PUZZLE_PROGRESS_SRCS) \
@@ -437,6 +446,12 @@ $(HOMEWORLDS_EVAL_EXPERIMENT_BIN): src/homeworlds_eval_experiment.c src/ai_searc
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ src/homeworlds_eval_experiment.c src/ai_search.c $(HOMEWORLDS_ALL_SRCS) \
 		$(SGF_TREE_SRCS) $(LDLIBS)
+
+$(HOMEWORLDS_PROOF_PROBE_BIN): src/homeworlds_proof_probe.c $(HOMEWORLDS_ALL_SRCS) $(SGF_TREE_SRCS) \
+	$(HOMEWORLDS_DIR)/homeworlds_backend.h $(HOMEWORLDS_DIR)/homeworlds_game.h \
+	$(HOMEWORLDS_DIR)/homeworlds_move_builder.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -o $@ src/homeworlds_proof_probe.c $(HOMEWORLDS_ALL_SRCS) $(SGF_TREE_SRCS) $(LDLIBS)
 
 test_create_puzzles_cli: $(TEST_CREATE_PUZZLES_CLI_BIN)
 $(TEST_CREATE_PUZZLES_CLI_BIN): tests/test_create_puzzles_cli.c src/create_puzzles_launcher.c \

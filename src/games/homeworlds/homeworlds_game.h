@@ -72,6 +72,7 @@ gboolean homeworlds_system_find_smallest_bank_ship(const HomeworldsPosition *pos
 gboolean homeworlds_position_find_empty_system(const HomeworldsPosition *position, guint *out_system_index);
 
 const HomeworldsEvalWeights *homeworlds_eval_weights_default(void);
+const HomeworldsEvalWeights *homeworlds_eval_weights_active(void);
 void homeworlds_eval_weights_reset_active(void);
 void homeworlds_eval_weights_set_active(const HomeworldsEvalWeights *weights);
 gint homeworlds_position_evaluate_static_with_weights(const HomeworldsPosition *position,

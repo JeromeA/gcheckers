@@ -1105,6 +1105,10 @@ const HomeworldsEvalWeights *homeworlds_eval_weights_default(void) {
   return &homeworlds_default_eval_weights;
 }
 
+const HomeworldsEvalWeights *homeworlds_eval_weights_active(void) {
+  return &homeworlds_active_eval_weights;
+}
+
 void homeworlds_eval_weights_reset_active(void) {
   homeworlds_active_eval_weights = homeworlds_default_eval_weights;
 }

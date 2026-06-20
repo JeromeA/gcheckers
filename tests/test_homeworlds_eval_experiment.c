@@ -8,7 +8,9 @@
 
 static gchar **test_homeworlds_eval_experiment_base_env(void) {
   gchar **envp = g_get_environ();
-  return g_environ_unsetenv(envp, "GCHECKERS_HOMEWORLDS_EVAL_PROGRESS");
+
+  envp = g_environ_unsetenv(envp, "GCHECKERS_HOMEWORLDS_EVAL_PROGRESS");
+  return g_environ_unsetenv(envp, "GCHECKERS_HOMEWORLDS_GOOD_MOVE_PRUNING");
 }
 
 static void test_homeworlds_eval_experiment_runs_selected_variable(void) {
@@ -186,8 +188,10 @@ static void test_homeworlds_eval_experiment_traces_move_counts(void) {
   g_assert_nonnull(strstr(stdout_text, "value,candidate_wins,baseline_wins,win_ratio,draws,timeouts\n"));
   g_assert_nonnull(strstr(stderr_text,
                           "move-count,value,game,seed,candidate_side,ply,side,depth_hint,"
-                          "generated_leaves,scored_moves,kept_moves\n"));
-  g_assert_nonnull(strstr(stderr_text, "move-count,5,0,1,0,0,0,1,"));
+                          "generated_leaves,scored_moves,kept_moves,pruning_mode,pruning_checked_branches,"
+                          "pruning_would_prune_branches,pruning_pruned_branches,pruning_verified_leaves,"
+                          "pruning_verification_failures\n"));
+  g_assert_nonnull(strstr(stderr_text, "move-count,5,0,1,0,0,0,1,72,0,72,off,0,0,0,0,0\n"));
 }
 
 static void test_homeworlds_eval_experiment_shows_rewriting_progress(void) {
@@ -270,6 +274,12 @@ static void test_homeworlds_eval_experiment_writes_big_move_report(void) {
   g_assert_no_error(error);
   g_assert_cmpuint(report_len, >, 0);
   g_assert_nonnull(strstr(report_text, "good_moves_generated: "));
+  g_assert_nonnull(strstr(report_text, "good_moves_pruning_mode: off\n"));
+  g_assert_nonnull(strstr(report_text, "good_moves_pruning_checked_branches: "));
+  g_assert_nonnull(strstr(report_text, "good_moves_pruning_would_prune_branches: "));
+  g_assert_nonnull(strstr(report_text, "good_moves_pruning_pruned_branches: "));
+  g_assert_nonnull(strstr(report_text, "good_moves_pruning_verified_leaves: "));
+  g_assert_nonnull(strstr(report_text, "good_moves_pruning_verification_failures: "));
   g_assert_nonnull(strstr(report_text, "\nmoves:\n<none>\n\nposition:\nNo systems.\n"));
   g_assert_nonnull(strstr(report_text, "position:\nNo systems.\n"));
   g_assert_nonnull(strstr(report_text, "\nall_moves:\n"));

@@ -295,6 +295,19 @@ static const char *homeworlds_experiment_variable_name(HomeworldsExperimentVaria
   }
 }
 
+static const char *homeworlds_experiment_good_move_pruning_mode_name(HomeworldsGoodMovePruningMode mode) {
+  switch (mode) {
+    case HOMEWORLDS_GOOD_MOVE_PRUNING_OFF:
+      return "off";
+    case HOMEWORLDS_GOOD_MOVE_PRUNING_ON:
+      return "on";
+    case HOMEWORLDS_GOOD_MOVE_PRUNING_VERIFY:
+      return "verify";
+    default:
+      return "unknown";
+  }
+}
+
 static void homeworlds_experiment_apply_variable(HomeworldsEvalWeights *weights,
                                                  HomeworldsExperimentVariable variable,
                                                  gint value) {
@@ -363,7 +376,17 @@ static void homeworlds_experiment_write_big_move_report(const HomeworldsGoodMove
   fprintf(file, "depth_hint: %u\n", trace->depth_hint);
   fprintf(file, "good_moves_generated: %" G_GSIZE_FORMAT "\n", trace->generated_leaves);
   fprintf(file, "good_moves_scored: %" G_GSIZE_FORMAT "\n", trace->scored_moves);
-  fprintf(file, "good_moves_kept: %" G_GSIZE_FORMAT "\n\n", trace->kept_moves);
+  fprintf(file, "good_moves_kept: %" G_GSIZE_FORMAT "\n", trace->kept_moves);
+  fprintf(file,
+          "good_moves_pruning_mode: %s\n",
+          homeworlds_experiment_good_move_pruning_mode_name(trace->pruning_mode));
+  fprintf(file, "good_moves_pruning_checked_branches: %" G_GSIZE_FORMAT "\n", trace->pruning_checked_branches);
+  fprintf(file, "good_moves_pruning_would_prune_branches: %" G_GSIZE_FORMAT "\n", trace->pruning_would_prune_branches);
+  fprintf(file, "good_moves_pruning_pruned_branches: %" G_GSIZE_FORMAT "\n", trace->pruning_pruned_branches);
+  fprintf(file, "good_moves_pruning_verified_leaves: %" G_GSIZE_FORMAT "\n", trace->pruning_verified_leaves);
+  fprintf(file,
+          "good_moves_pruning_verification_failures: %" G_GSIZE_FORMAT "\n\n",
+          trace->pruning_verification_failures);
   report_written = homeworlds_move_report_write(file, trace->position, context->played_moves, &all_move_count);
 
   if (fclose(file) != 0 || !report_written) {
@@ -394,7 +417,9 @@ static void homeworlds_experiment_trace_move_generation(const HomeworldsGoodMove
 
   if (context->trace_move_counts) {
     homeworlds_experiment_progress_clear(context->progress);
-    g_printerr("move-count,%d,%u,%u,%u,%u,%u,%u,%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT "\n",
+    g_printerr("move-count,%d,%u,%u,%u,%u,%u,%u,%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT
+               ",%s,%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT
+               ",%" G_GSIZE_FORMAT "\n",
                context->value,
                context->game,
                context->seed,
@@ -404,7 +429,13 @@ static void homeworlds_experiment_trace_move_generation(const HomeworldsGoodMove
                trace->depth_hint,
                trace->generated_leaves,
                trace->scored_moves,
-               trace->kept_moves);
+               trace->kept_moves,
+               homeworlds_experiment_good_move_pruning_mode_name(trace->pruning_mode),
+               trace->pruning_checked_branches,
+               trace->pruning_would_prune_branches,
+               trace->pruning_pruned_branches,
+               trace->pruning_verified_leaves,
+               trace->pruning_verification_failures);
   }
 
   if (trace->generated_leaves > homeworlds_experiment_big_move_report_threshold()) {
@@ -740,7 +771,9 @@ int main(int argc, char **argv) {
   g_print("value,candidate_wins,baseline_wins,win_ratio,draws,timeouts\n");
   if (trace_move_counts_option) {
     g_printerr("move-count,value,game,seed,candidate_side,ply,side,depth_hint,"
-               "generated_leaves,scored_moves,kept_moves\n");
+               "generated_leaves,scored_moves,kept_moves,pruning_mode,pruning_checked_branches,"
+               "pruning_would_prune_branches,pruning_pruned_branches,pruning_verified_leaves,"
+               "pruning_verification_failures\n");
   }
 
   for (guint i = 0; i < values->len; ++i) {
