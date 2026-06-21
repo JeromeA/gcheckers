@@ -39,6 +39,8 @@ typedef struct {
   gsize ordering_candidate_lists;
   gsize ordering_reordered_candidate_lists;
   gsize ordering_reordered_candidates;
+  gsize ordering_single_step_passes;
+  gsize ordering_single_step_moves;
 } HomeworldsGoodMoveTrace;
 
 typedef struct {

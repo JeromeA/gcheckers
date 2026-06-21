@@ -1621,6 +1621,8 @@ static void test_backend_good_move_trace_pruning_mode_defaults_off(void) {
   assert(capture.trace.pruning_pruned_branches == 0);
   assert(capture.trace.pruning_verified_leaves == 0);
   assert(capture.trace.pruning_verification_failures == 0);
+  assert(capture.trace.ordering_single_step_passes > 0);
+  assert(capture.trace.ordering_single_step_moves > 0);
 
   backend->move_list_free(&good_moves);
   homeworlds_backend_set_good_move_trace(NULL, NULL);
@@ -1646,6 +1648,8 @@ static void test_backend_good_move_ordering_can_be_disabled(void) {
   assert(capture.trace.ordering_candidate_lists == 0);
   assert(capture.trace.ordering_reordered_candidate_lists == 0);
   assert(capture.trace.ordering_reordered_candidates == 0);
+  assert(capture.trace.ordering_single_step_passes == 0);
+  assert(capture.trace.ordering_single_step_moves == 0);
 
   backend->move_list_free(&good_moves);
   homeworlds_backend_set_good_move_trace(NULL, NULL);

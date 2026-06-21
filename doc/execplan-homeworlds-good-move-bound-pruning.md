@@ -40,6 +40,8 @@ the optimization can be tuned on real reports before it becomes a default behavi
 - [x] (2026-06-20 12:20Z) Added trace/report counters for ordering and score-window pruning, updated the proof probe,
   tests, and overview documentation.
 - [x] (2026-06-20 12:20Z) Measured the 3.3M report with the proof probe in pruning `off`, `on`, and `verify` modes.
+- [x] (2026-06-21 17:20Z) Added a simple-move pre-pass for normal ship-selection states so one-step attack, move,
+  build, and trade continuations are explored before sacrifice branches.
 - [ ] `make test-local` reached the known GTK window failure path and failed because the isolated retry also failed.
 
 ## Surprises & Discoveries
@@ -126,6 +128,12 @@ the optimization can be tuned on real reports before it becomes a default behavi
   pruning effectiveness. Stopping at 512 keeps the useful part and avoids that regression.
   Date/Author: 2026-06-20 / Codex.
 
+- Decision: Explore complete one-step moves before sacrifice branches without a 512-move guard.
+  Rationale: Ordinary attack, move, build, and trade turns are bounded enough to enumerate cheaply, and scoring them
+  first can raise the score-window cutoff before sacrifice enumeration reaches large branching factors. The pre-pass is
+  still controlled by `GCHECKERS_HOMEWORLDS_GOOD_MOVE_ORDERING=off` for old-order comparisons.
+  Date/Author: 2026-06-21 / Codex.
+
 ## Outcomes & Retrospective
 
 The implementation is nearly complete. Normal runs are unchanged by default, while setting
@@ -137,6 +145,8 @@ now replay a big move report and show the same proof status after each step of s
 The current revision also uses the best-score window as an early branch cutoff and orders active large-yellow
 candidates before the 512-move buffer is full. The 3.3M report shows this is sound, with zero verify failures, but the
 pre-512 ordering is not a large performance win for that specific report.
+The collector now also performs a simple-move pre-pass from normal ship-selection states before it explores sacrifice
+branches, with trace counters for the number of pre-passes and one-step continuations walked.
 Focused validation and the full build pass; the full local test target is blocked by a reproducing GTK window failure
 outside this backend change.
 

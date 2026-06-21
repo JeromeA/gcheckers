@@ -192,8 +192,9 @@ static void test_homeworlds_eval_experiment_traces_move_counts(void) {
                           "pruning_checked_branches,pruning_window_cutoff_branches,pruning_would_prune_branches,"
                           "pruning_pruned_branches,pruning_verified_leaves,pruning_verification_failures,"
                           "ordering_candidate_lists,ordering_reordered_candidate_lists,"
-                          "ordering_reordered_candidates\n"));
-  g_assert_nonnull(strstr(stderr_text, "move-count,5,0,1,0,0,0,1,72,0,72,off,on,0,0,0,0,0,0,0,0,0\n"));
+                          "ordering_reordered_candidates,ordering_single_step_passes,"
+                          "ordering_single_step_moves\n"));
+  g_assert_nonnull(strstr(stderr_text, "move-count,5,0,1,0,0,0,1,72,0,72,off,on,0,0,0,0,0,0,0,0,0,0,0\n"));
 }
 
 static void test_homeworlds_eval_experiment_shows_rewriting_progress(void) {
@@ -287,6 +288,8 @@ static void test_homeworlds_eval_experiment_writes_big_move_report(void) {
   g_assert_nonnull(strstr(report_text, "good_moves_ordering_candidate_lists: "));
   g_assert_nonnull(strstr(report_text, "good_moves_ordering_reordered_candidate_lists: "));
   g_assert_nonnull(strstr(report_text, "good_moves_ordering_reordered_candidates: "));
+  g_assert_nonnull(strstr(report_text, "good_moves_ordering_single_step_passes: "));
+  g_assert_nonnull(strstr(report_text, "good_moves_ordering_single_step_moves: "));
   g_assert_nonnull(strstr(report_text, "\nmoves:\n<none>\n\nposition:\nNo systems.\n"));
   g_assert_nonnull(strstr(report_text, "position:\nNo systems.\n"));
   g_assert_nonnull(strstr(report_text, "\nall_moves:\n"));

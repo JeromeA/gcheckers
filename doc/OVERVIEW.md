@@ -791,6 +791,8 @@ built-ship candidate because bank supply can make the built size ambiguous.
 During play, `good_moves()` scores each candidate by the one-ply static or terminal value, orders it from the current
 player's perspective, and keeps only the first 512 moves that are within 50 points of the best one. A very good
 completed move therefore raises an early score-window cutoff even before the buffer contains 512 moves.
+Before exploring sacrifice branches from a normal ship-selection state, the ordered collector first walks all complete
+one-step attack, move, build, and trade continuations so ordinary moves can populate that score window early.
 When optional pruning is enabled, active large yellow sacrifice branches are skipped when either that score-window
 cutoff or the full 512-move cutoff is available and a conservative bound proves that no remaining yellow continuation
 can reach it. The bound adds possible buildable-color gains, immediate catastrophe gains, and only the own catastrophe

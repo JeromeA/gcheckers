@@ -396,8 +396,12 @@ static void homeworlds_experiment_write_big_move_report(const HomeworldsGoodMove
           "good_moves_ordering_reordered_candidate_lists: %" G_GSIZE_FORMAT "\n",
           trace->ordering_reordered_candidate_lists);
   fprintf(file,
-          "good_moves_ordering_reordered_candidates: %" G_GSIZE_FORMAT "\n\n",
+          "good_moves_ordering_reordered_candidates: %" G_GSIZE_FORMAT "\n",
           trace->ordering_reordered_candidates);
+  fprintf(file, "good_moves_ordering_single_step_passes: %" G_GSIZE_FORMAT "\n", trace->ordering_single_step_passes);
+  fprintf(file,
+          "good_moves_ordering_single_step_moves: %" G_GSIZE_FORMAT "\n\n",
+          trace->ordering_single_step_moves);
   report_written = homeworlds_move_report_write(file, trace->position, context->played_moves, &all_move_count);
 
   if (fclose(file) != 0 || !report_written) {
@@ -431,7 +435,7 @@ static void homeworlds_experiment_trace_move_generation(const HomeworldsGoodMove
     g_printerr("move-count,%d,%u,%u,%u,%u,%u,%u,%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT
                ",%s,%s,%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT
                ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT
-               ",%" G_GSIZE_FORMAT "\n",
+               ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT "\n",
                context->value,
                context->game,
                context->seed,
@@ -452,7 +456,9 @@ static void homeworlds_experiment_trace_move_generation(const HomeworldsGoodMove
                trace->pruning_verification_failures,
                trace->ordering_candidate_lists,
                trace->ordering_reordered_candidate_lists,
-               trace->ordering_reordered_candidates);
+               trace->ordering_reordered_candidates,
+               trace->ordering_single_step_passes,
+               trace->ordering_single_step_moves);
   }
 
   if (trace->generated_leaves > homeworlds_experiment_big_move_report_threshold()) {
@@ -791,7 +797,8 @@ int main(int argc, char **argv) {
                "generated_leaves,scored_moves,kept_moves,pruning_mode,ordering,"
                "pruning_checked_branches,pruning_window_cutoff_branches,pruning_would_prune_branches,"
                "pruning_pruned_branches,pruning_verified_leaves,pruning_verification_failures,"
-               "ordering_candidate_lists,ordering_reordered_candidate_lists,ordering_reordered_candidates\n");
+               "ordering_candidate_lists,ordering_reordered_candidate_lists,ordering_reordered_candidates,"
+               "ordering_single_step_passes,ordering_single_step_moves\n");
   }
 
   for (guint i = 0; i < values->len; ++i) {

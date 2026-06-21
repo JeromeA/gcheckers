@@ -35,6 +35,8 @@ typedef struct {
   gsize ordering_candidate_lists;
   gsize ordering_reordered_candidate_lists;
   gsize ordering_reordered_candidates;
+  gsize ordering_single_step_passes;
+  gsize ordering_single_step_moves;
   gboolean pruning_verification_warning_emitted;
 } HomeworldsGoodMoveContext;
 
@@ -2215,6 +2217,461 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(
     HomeworldsMoveBuffer *buffer,
     gboolean allow_pass_move,
     const HomeworldsGoodMovePruningVerification *verification,
+    gboolean *out_covered);
+
+static gboolean homeworlds_backend_state_has_only_catastrophe_prefix(const HomeworldsMoveBuilderState *state) {
+  g_return_val_if_fail(state != NULL, FALSE);
+
+  if (state->move.kind != HOMEWORLDS_MOVE_KIND_TURN) {
+    return FALSE;
+  }
+
+  for (guint i = 0; i < state->move.step_count; ++i) {
+    if (state->move.steps[i].kind != HOMEWORLDS_STEP_CATASTROPHE) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+static gboolean homeworlds_backend_state_should_collect_single_steps_first(
+    const HomeworldsMoveBuilderState *state,
+    const HomeworldsGoodMoveContext *context) {
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(context != NULL, FALSE);
+
+  return context->ordering_enabled &&
+         state->working_position.phase == HOMEWORLDS_PHASE_PLAY &&
+         state->stage == HOMEWORLDS_BUILDER_STAGE_SELECT_SHIP &&
+         state->pending_actions_remaining == 0 &&
+         homeworlds_backend_state_has_only_catastrophe_prefix(state);
+}
+
+static gboolean homeworlds_backend_action_candidate_is_single_step(
+    const HomeworldsMoveCandidate *candidate) {
+  g_return_val_if_fail(candidate != NULL, FALSE);
+
+  if (candidate->data.kind != HOMEWORLDS_CANDIDATE_ACTION) {
+    return FALSE;
+  }
+
+  switch ((HomeworldsStepKind) candidate->data.target_color) {
+    case HOMEWORLDS_STEP_ATTACK:
+    case HOMEWORLDS_STEP_MOVE:
+    case HOMEWORLDS_STEP_BUILD:
+    case HOMEWORLDS_STEP_TRADE:
+      return TRUE;
+    case HOMEWORLDS_STEP_SACRIFICE:
+    case HOMEWORLDS_STEP_PASS:
+    case HOMEWORLDS_STEP_CATASTROPHE:
+    case HOMEWORLDS_STEP_DISCOVER:
+    case HOMEWORLDS_STEP_NONE:
+    default:
+      return FALSE;
+  }
+}
+
+static gboolean homeworlds_backend_collect_child_state(
+    const HomeworldsMoveBuilderState *state,
+    const HomeworldsGenerationContext *generation_context,
+    HomeworldsGoodMoveContext *context,
+    HomeworldsMoveBuffer *buffer,
+    gboolean allow_pass_move,
+    const HomeworldsGoodMovePruningVerification *verification,
+    const HomeworldsMoveBuilderState *child_state,
+    gboolean *out_child_covered) {
+  HomeworldsGenerationContext child_context = {0};
+  HomeworldsGenerationDedupe child_dedupe = {0};
+  HomeworldsGoodMovePruningVerification child_verification = {0};
+  const HomeworldsGoodMovePruningVerification *next_verification = verification;
+  gboolean prune_child = FALSE;
+  gboolean child_covered = FALSE;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(generation_context != NULL, FALSE);
+  g_return_val_if_fail(context != NULL, FALSE);
+  g_return_val_if_fail(buffer != NULL, FALSE);
+  g_return_val_if_fail(child_state != NULL, FALSE);
+  g_return_val_if_fail(out_child_covered != NULL, FALSE);
+
+  *out_child_covered = FALSE;
+  if (!homeworlds_generation_prepare_child_context(generation_context,
+                                                   state,
+                                                   child_state,
+                                                   &child_context,
+                                                   &child_dedupe,
+                                                   &prune_child)) {
+    return FALSE;
+  }
+  if (prune_child) {
+    *out_child_covered = TRUE;
+    homeworlds_generation_dedupe_clear(&child_dedupe);
+    return TRUE;
+  }
+  if (!homeworlds_backend_child_state_is_good_after_step(state, child_state)) {
+    homeworlds_generation_dedupe_clear(&child_dedupe);
+    return TRUE;
+  }
+  if (!homeworlds_backend_prepare_pruning_for_child(context,
+                                                    buffer,
+                                                    verification,
+                                                    child_state,
+                                                    &prune_child,
+                                                    &child_verification)) {
+    homeworlds_generation_dedupe_clear(&child_dedupe);
+    return FALSE;
+  }
+  if (prune_child) {
+    *out_child_covered = TRUE;
+    homeworlds_generation_dedupe_clear(&child_dedupe);
+    return TRUE;
+  }
+  if (child_verification.active) {
+    next_verification = &child_verification;
+  }
+  if (!homeworlds_backend_collect_good_moves_recursive(child_state,
+                                                       &child_context,
+                                                       context,
+                                                       buffer,
+                                                       allow_pass_move,
+                                                       next_verification,
+                                                       &child_covered)) {
+    homeworlds_generation_dedupe_clear(&child_dedupe);
+    return FALSE;
+  }
+
+  *out_child_covered = child_covered;
+  homeworlds_generation_dedupe_clear(&child_dedupe);
+  return TRUE;
+}
+
+static gboolean homeworlds_backend_collect_single_step_action(
+    const HomeworldsMoveBuilderState *state,
+    const HomeworldsGenerationContext *generation_context,
+    HomeworldsGoodMoveContext *context,
+    HomeworldsMoveBuffer *buffer,
+    gboolean allow_pass_move,
+    const HomeworldsGoodMovePruningVerification *verification,
+    const HomeworldsMoveCandidate *action_candidate,
+    gboolean *out_covered) {
+  HomeworldsMoveBuilderState action_state = {0};
+  GameBackendMoveBuilder action_builder = {0};
+  GameBackendMoveList target_candidates = {0};
+  gboolean covered = FALSE;
+  guint base_step_count = 0;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(generation_context != NULL, FALSE);
+  g_return_val_if_fail(context != NULL, FALSE);
+  g_return_val_if_fail(buffer != NULL, FALSE);
+  g_return_val_if_fail(action_candidate != NULL, FALSE);
+  g_return_val_if_fail(out_covered != NULL, FALSE);
+
+  *out_covered = FALSE;
+  action_state = *state;
+  action_builder.builder_state = &action_state;
+  action_builder.builder_state_size = sizeof(action_state);
+  base_step_count = state->move.step_count;
+
+  if (!homeworlds_backend_action_candidate_is_single_step(action_candidate) ||
+      !homeworlds_move_builder_step(&action_builder, action_candidate)) {
+    return TRUE;
+  }
+
+  if (action_state.move.step_count == base_step_count + 1) {
+    context->ordering_single_step_moves++;
+    return homeworlds_backend_collect_child_state(state,
+                                                  generation_context,
+                                                  context,
+                                                  buffer,
+                                                  allow_pass_move,
+                                                  verification,
+                                                  &action_state,
+                                                  out_covered);
+  }
+
+  if (action_state.move.step_count != base_step_count) {
+    return TRUE;
+  }
+
+  target_candidates = homeworlds_move_builder_list_candidates(&action_builder);
+  for (gsize i = 0; i < target_candidates.count; ++i) {
+    const HomeworldsMoveCandidate *target_candidate =
+        &((const HomeworldsMoveCandidate *) target_candidates.moves)[i];
+    HomeworldsMoveBuilderState target_state = action_state;
+    GameBackendMoveBuilder target_builder = {
+      .builder_state = &target_state,
+      .builder_state_size = sizeof(target_state),
+    };
+    gboolean child_covered = FALSE;
+
+    if (target_candidate == NULL ||
+        !homeworlds_move_builder_step(&target_builder, target_candidate) ||
+        target_state.move.step_count != base_step_count + 1) {
+      continue;
+    }
+
+    context->ordering_single_step_moves++;
+    if (!homeworlds_backend_collect_child_state(&action_state,
+                                                generation_context,
+                                                context,
+                                                buffer,
+                                                allow_pass_move,
+                                                verification,
+                                                &target_state,
+                                                &child_covered)) {
+      homeworlds_backend_move_list_free(&target_candidates);
+      return FALSE;
+    }
+    covered = covered || child_covered;
+  }
+
+  homeworlds_backend_move_list_free(&target_candidates);
+  *out_covered = covered;
+  return TRUE;
+}
+
+static gboolean homeworlds_backend_collect_single_step_moves_for_ship(
+    const HomeworldsMoveBuilderState *state,
+    const HomeworldsGenerationContext *generation_context,
+    HomeworldsGoodMoveContext *context,
+    HomeworldsMoveBuffer *buffer,
+    gboolean allow_pass_move,
+    const HomeworldsGoodMovePruningVerification *verification,
+    const HomeworldsMoveCandidate *ship_candidate,
+    gboolean *out_covered) {
+  HomeworldsMoveBuilderState selected_state = {0};
+  GameBackendMoveBuilder selected_builder = {0};
+  GameBackendMoveList action_candidates = {0};
+  gboolean covered = FALSE;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(generation_context != NULL, FALSE);
+  g_return_val_if_fail(context != NULL, FALSE);
+  g_return_val_if_fail(buffer != NULL, FALSE);
+  g_return_val_if_fail(ship_candidate != NULL, FALSE);
+  g_return_val_if_fail(out_covered != NULL, FALSE);
+
+  *out_covered = FALSE;
+  selected_state = *state;
+  selected_builder.builder_state = &selected_state;
+  selected_builder.builder_state_size = sizeof(selected_state);
+
+  if (ship_candidate->data.kind != HOMEWORLDS_CANDIDATE_SELECT_SHIP ||
+      !homeworlds_move_builder_step(&selected_builder, ship_candidate) ||
+      selected_state.stage != HOMEWORLDS_BUILDER_STAGE_SELECT_ACTION) {
+    return TRUE;
+  }
+
+  action_candidates = homeworlds_move_builder_list_candidates(&selected_builder);
+  for (gsize i = 0; i < action_candidates.count; ++i) {
+    const HomeworldsMoveCandidate *action_candidate =
+        &((const HomeworldsMoveCandidate *) action_candidates.moves)[i];
+    gboolean child_covered = FALSE;
+
+    if (action_candidate == NULL ||
+        !homeworlds_backend_action_candidate_is_single_step(action_candidate)) {
+      continue;
+    }
+    if (!homeworlds_backend_collect_single_step_action(&selected_state,
+                                                       generation_context,
+                                                       context,
+                                                       buffer,
+                                                       allow_pass_move,
+                                                       verification,
+                                                       action_candidate,
+                                                       &child_covered)) {
+      homeworlds_backend_move_list_free(&action_candidates);
+      return FALSE;
+    }
+    covered = covered || child_covered;
+  }
+
+  homeworlds_backend_move_list_free(&action_candidates);
+  *out_covered = covered;
+  return TRUE;
+}
+
+static gboolean homeworlds_backend_collect_sacrifice_for_ship(
+    const HomeworldsMoveBuilderState *state,
+    const HomeworldsGenerationContext *generation_context,
+    HomeworldsGoodMoveContext *context,
+    HomeworldsMoveBuffer *buffer,
+    gboolean allow_pass_move,
+    const HomeworldsGoodMovePruningVerification *verification,
+    const HomeworldsMoveCandidate *ship_candidate,
+    gboolean *out_covered) {
+  HomeworldsMoveBuilderState selected_state = {0};
+  GameBackendMoveBuilder selected_builder = {0};
+  GameBackendMoveList action_candidates = {0};
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(generation_context != NULL, FALSE);
+  g_return_val_if_fail(context != NULL, FALSE);
+  g_return_val_if_fail(buffer != NULL, FALSE);
+  g_return_val_if_fail(ship_candidate != NULL, FALSE);
+  g_return_val_if_fail(out_covered != NULL, FALSE);
+
+  *out_covered = FALSE;
+  selected_state = *state;
+  selected_builder.builder_state = &selected_state;
+  selected_builder.builder_state_size = sizeof(selected_state);
+
+  if (ship_candidate->data.kind != HOMEWORLDS_CANDIDATE_SELECT_SHIP ||
+      !homeworlds_move_builder_step(&selected_builder, ship_candidate) ||
+      selected_state.stage != HOMEWORLDS_BUILDER_STAGE_SELECT_ACTION) {
+    return TRUE;
+  }
+
+  action_candidates = homeworlds_move_builder_list_candidates(&selected_builder);
+  for (gsize i = 0; i < action_candidates.count; ++i) {
+    const HomeworldsMoveCandidate *action_candidate =
+        &((const HomeworldsMoveCandidate *) action_candidates.moves)[i];
+    HomeworldsMoveBuilderState child_state = selected_state;
+    GameBackendMoveBuilder child = {
+      .builder_state = &child_state,
+      .builder_state_size = sizeof(child_state),
+    };
+
+    if (action_candidate == NULL ||
+        action_candidate->data.kind != HOMEWORLDS_CANDIDATE_ACTION ||
+        action_candidate->data.target_color != HOMEWORLDS_STEP_SACRIFICE) {
+      continue;
+    }
+    if (!homeworlds_move_builder_step(&child, action_candidate)) {
+      continue;
+    }
+
+    if (!homeworlds_backend_collect_child_state(&selected_state,
+                                                generation_context,
+                                                context,
+                                                buffer,
+                                                allow_pass_move,
+                                                verification,
+                                                &child_state,
+                                                out_covered)) {
+      homeworlds_backend_move_list_free(&action_candidates);
+      return FALSE;
+    }
+    break;
+  }
+
+  homeworlds_backend_move_list_free(&action_candidates);
+  return TRUE;
+}
+
+static gboolean homeworlds_backend_collect_select_ship_with_single_steps_first(
+    const HomeworldsMoveBuilderState *state,
+    const HomeworldsGenerationContext *generation_context,
+    HomeworldsGoodMoveContext *context,
+    HomeworldsMoveBuffer *buffer,
+    gboolean allow_pass_move,
+    const HomeworldsGoodMovePruningVerification *verification,
+    gboolean *out_covered) {
+  GameBackendMoveBuilder builder = {0};
+  GameBackendMoveList candidates = {0};
+  const HomeworldsMoveCandidate *pass_candidate = NULL;
+  gboolean covered = FALSE;
+  gboolean candidate_covered = FALSE;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(generation_context != NULL, FALSE);
+  g_return_val_if_fail(context != NULL, FALSE);
+  g_return_val_if_fail(buffer != NULL, FALSE);
+  g_return_val_if_fail(out_covered != NULL, FALSE);
+
+  *out_covered = FALSE;
+  builder.builder_state = (gpointer) state;
+  builder.builder_state_size = sizeof(*state);
+  candidates = homeworlds_move_builder_list_candidates(&builder);
+  context->ordering_single_step_passes++;
+
+  for (gsize i = 0; i < candidates.count; ++i) {
+    const HomeworldsMoveCandidate *candidate = &((const HomeworldsMoveCandidate *) candidates.moves)[i];
+    gboolean child_covered = FALSE;
+
+    if (candidate != NULL && homeworlds_backend_candidate_is_pass(candidate)) {
+      pass_candidate = candidate;
+      continue;
+    }
+    if (candidate == NULL) {
+      continue;
+    }
+    if (!homeworlds_backend_collect_single_step_moves_for_ship(state,
+                                                               generation_context,
+                                                               context,
+                                                               buffer,
+                                                               allow_pass_move,
+                                                               verification,
+                                                               candidate,
+                                                               &child_covered)) {
+      homeworlds_backend_move_list_free(&candidates);
+      return FALSE;
+    }
+    covered = covered || child_covered;
+    candidate_covered = candidate_covered || child_covered;
+  }
+
+  for (gsize i = 0; i < candidates.count; ++i) {
+    const HomeworldsMoveCandidate *candidate = &((const HomeworldsMoveCandidate *) candidates.moves)[i];
+    gboolean child_covered = FALSE;
+
+    if (candidate == NULL || homeworlds_backend_candidate_is_pass(candidate)) {
+      continue;
+    }
+    if (!homeworlds_backend_collect_sacrifice_for_ship(state,
+                                                       generation_context,
+                                                       context,
+                                                       buffer,
+                                                       allow_pass_move,
+                                                       verification,
+                                                       candidate,
+                                                       &child_covered)) {
+      homeworlds_backend_move_list_free(&candidates);
+      return FALSE;
+    }
+    covered = covered || child_covered;
+    candidate_covered = candidate_covered || child_covered;
+  }
+
+  if (pass_candidate != NULL &&
+      !candidate_covered &&
+      homeworlds_backend_state_can_use_pass_fallback(state)) {
+    HomeworldsMoveBuilderState child_state = *state;
+    GameBackendMoveBuilder child = {
+      .builder_state = &child_state,
+      .builder_state_size = sizeof(child_state),
+    };
+    gboolean child_covered = FALSE;
+
+    if (homeworlds_move_builder_step(&child, pass_candidate)) {
+      if (!homeworlds_backend_collect_child_state(state,
+                                                  generation_context,
+                                                  context,
+                                                  buffer,
+                                                  TRUE,
+                                                  verification,
+                                                  &child_state,
+                                                  &child_covered)) {
+        homeworlds_backend_move_list_free(&candidates);
+        return FALSE;
+      }
+      covered = covered || child_covered;
+    }
+  }
+
+  homeworlds_backend_move_list_free(&candidates);
+  *out_covered = covered;
+  return TRUE;
+}
+
+static gboolean homeworlds_backend_collect_good_moves_recursive(
+    const HomeworldsMoveBuilderState *state,
+    const HomeworldsGenerationContext *generation_context,
+    HomeworldsGoodMoveContext *context,
+    HomeworldsMoveBuffer *buffer,
+    gboolean allow_pass_move,
+    const HomeworldsGoodMovePruningVerification *verification,
     gboolean *out_covered) {
   GameBackendMoveBuilder builder = {0};
   GameBackendMoveList candidates = {0};
@@ -2354,6 +2811,16 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(
     }
     *out_covered = TRUE;
     return TRUE;
+  }
+
+  if (homeworlds_backend_state_should_collect_single_steps_first(state, context)) {
+    return homeworlds_backend_collect_select_ship_with_single_steps_first(state,
+                                                                         generation_context,
+                                                                         context,
+                                                                         buffer,
+                                                                         allow_pass_move,
+                                                                         verification,
+                                                                         out_covered);
   }
 
   candidates = homeworlds_move_builder_list_candidates(&builder);
@@ -2584,6 +3051,8 @@ static void homeworlds_backend_trace_good_moves(const HomeworldsPosition *positi
     .ordering_candidate_lists = context->ordering_candidate_lists,
     .ordering_reordered_candidate_lists = context->ordering_reordered_candidate_lists,
     .ordering_reordered_candidates = context->ordering_reordered_candidates,
+    .ordering_single_step_passes = context->ordering_single_step_passes,
+    .ordering_single_step_moves = context->ordering_single_step_moves,
   };
 
   homeworlds_backend_good_move_trace_func(&trace, homeworlds_backend_good_move_trace_user_data);

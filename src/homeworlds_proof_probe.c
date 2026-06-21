@@ -648,7 +648,8 @@ int main(int argc, char **argv) {
           " pruning=%s ordering=%s checked=%" G_GSIZE_FORMAT " window=%" G_GSIZE_FORMAT
           " would=%" G_GSIZE_FORMAT " pruned=%" G_GSIZE_FORMAT " verified=%" G_GSIZE_FORMAT
           " failures=%" G_GSIZE_FORMAT " ordered=%" G_GSIZE_FORMAT " reordered_lists=%" G_GSIZE_FORMAT
-          " reordered_candidates=%" G_GSIZE_FORMAT "\n",
+          " reordered_candidates=%" G_GSIZE_FORMAT " single_step_passes=%" G_GSIZE_FORMAT
+          " single_step_moves=%" G_GSIZE_FORMAT "\n",
           trace.generated_leaves,
           trace.scored_moves,
           trace.kept_moves,
@@ -662,7 +663,9 @@ int main(int argc, char **argv) {
           trace.pruning_verification_failures,
           trace.ordering_candidate_lists,
           trace.ordering_reordered_candidate_lists,
-          trace.ordering_reordered_candidates);
+          trace.ordering_reordered_candidates,
+          trace.ordering_single_step_passes,
+          trace.ordering_single_step_moves);
 
   for (guint i = 0; i < moves->len; ++i) {
     ok = homeworlds_proof_probe_run_move(&position, side, cutoff, g_ptr_array_index(moves, i)) && ok;
