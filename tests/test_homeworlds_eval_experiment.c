@@ -9,8 +9,7 @@
 static gchar **test_homeworlds_eval_experiment_base_env(void) {
   gchar **envp = g_get_environ();
 
-  envp = g_environ_unsetenv(envp, "GCHECKERS_HOMEWORLDS_EVAL_PROGRESS");
-  return g_environ_unsetenv(envp, "GCHECKERS_HOMEWORLDS_GOOD_MOVE_PRUNING");
+  return g_environ_unsetenv(envp, "GCHECKERS_HOMEWORLDS_EVAL_PROGRESS");
 }
 
 static void test_homeworlds_eval_experiment_runs_selected_variable(void) {
@@ -188,13 +187,12 @@ static void test_homeworlds_eval_experiment_traces_move_counts(void) {
   g_assert_nonnull(strstr(stdout_text, "value,candidate_wins,baseline_wins,win_ratio,draws,timeouts\n"));
   g_assert_nonnull(strstr(stderr_text,
                           "move-count,value,game,seed,candidate_side,ply,side,depth_hint,"
-                          "generated_leaves,scored_moves,kept_moves,pruning_mode,ordering,"
-                          "pruning_checked_branches,pruning_window_cutoff_branches,pruning_would_prune_branches,"
-                          "pruning_pruned_branches,pruning_verified_leaves,pruning_verification_failures,"
+                          "generated_leaves,scored_moves,kept_moves,"
+                          "pruning_checked_branches,pruning_window_cutoff_branches,pruning_pruned_branches,"
                           "ordering_candidate_lists,ordering_reordered_candidate_lists,"
                           "ordering_reordered_candidates,ordering_single_step_passes,"
                           "ordering_single_step_moves\n"));
-  g_assert_nonnull(strstr(stderr_text, "move-count,5,0,1,0,0,0,1,72,0,72,off,on,0,0,0,0,0,0,0,0,0,0,0\n"));
+  g_assert_nonnull(strstr(stderr_text, "move-count,5,0,1,0,0,0,1,72,0,72,0,0,0,0,0,0,0,0\n"));
 }
 
 static void test_homeworlds_eval_experiment_shows_rewriting_progress(void) {
@@ -277,14 +275,9 @@ static void test_homeworlds_eval_experiment_writes_big_move_report(void) {
   g_assert_no_error(error);
   g_assert_cmpuint(report_len, >, 0);
   g_assert_nonnull(strstr(report_text, "good_moves_generated: "));
-  g_assert_nonnull(strstr(report_text, "good_moves_pruning_mode: off\n"));
-  g_assert_nonnull(strstr(report_text, "good_moves_ordering: on\n"));
   g_assert_nonnull(strstr(report_text, "good_moves_pruning_checked_branches: "));
   g_assert_nonnull(strstr(report_text, "good_moves_pruning_window_cutoff_branches: "));
-  g_assert_nonnull(strstr(report_text, "good_moves_pruning_would_prune_branches: "));
   g_assert_nonnull(strstr(report_text, "good_moves_pruning_pruned_branches: "));
-  g_assert_nonnull(strstr(report_text, "good_moves_pruning_verified_leaves: "));
-  g_assert_nonnull(strstr(report_text, "good_moves_pruning_verification_failures: "));
   g_assert_nonnull(strstr(report_text, "good_moves_ordering_candidate_lists: "));
   g_assert_nonnull(strstr(report_text, "good_moves_ordering_reordered_candidate_lists: "));
   g_assert_nonnull(strstr(report_text, "good_moves_ordering_reordered_candidates: "));
@@ -295,6 +288,11 @@ static void test_homeworlds_eval_experiment_writes_big_move_report(void) {
   g_assert_nonnull(strstr(report_text, "\nall_moves:\n"));
   g_assert_nonnull(strstr(report_text, "all_moves_streamed: "));
   g_assert_null(strstr(report_text, "good_moves():"));
+  g_assert_null(strstr(report_text, "good_moves_pruning_mode:"));
+  g_assert_null(strstr(report_text, "good_moves_pruning_would_prune_branches:"));
+  g_assert_null(strstr(report_text, "good_moves_pruning_verified_leaves:"));
+  g_assert_null(strstr(report_text, "good_moves_pruning_verification_failures:"));
+  g_assert_null(strstr(report_text, "good_moves_ordering:"));
   g_assert_cmpint(g_remove(report_path), ==, 0);
   g_assert_cmpint(g_rmdir(tmp_dir), ==, 0);
 }

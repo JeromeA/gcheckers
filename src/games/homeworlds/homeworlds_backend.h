@@ -6,12 +6,6 @@
 #include "homeworlds_types.h"
 
 typedef enum {
-  HOMEWORLDS_GOOD_MOVE_PRUNING_OFF = 0,
-  HOMEWORLDS_GOOD_MOVE_PRUNING_ON,
-  HOMEWORLDS_GOOD_MOVE_PRUNING_VERIFY,
-} HomeworldsGoodMovePruningMode;
-
-typedef enum {
   HOMEWORLDS_GOOD_MOVE_PROOF_NOT_ACTIVE = 0,
   HOMEWORLDS_GOOD_MOVE_PROOF_NOT_PLAY,
   HOMEWORLDS_GOOD_MOVE_PROOF_COMPLETE,
@@ -28,14 +22,9 @@ typedef struct {
   gsize generated_leaves;
   gsize scored_moves;
   gsize kept_moves;
-  HomeworldsGoodMovePruningMode pruning_mode;
-  gboolean ordering_enabled;
   gsize pruning_checked_branches;
   gsize pruning_window_cutoff_branches;
-  gsize pruning_would_prune_branches;
   gsize pruning_pruned_branches;
-  gsize pruning_verified_leaves;
-  gsize pruning_verification_failures;
   gsize ordering_candidate_lists;
   gsize ordering_reordered_candidate_lists;
   gsize ordering_reordered_candidates;

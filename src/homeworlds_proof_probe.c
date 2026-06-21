@@ -332,21 +332,8 @@ static gboolean homeworlds_proof_probe_score_reaches_cutoff(guint side, gint sco
   return side == 0 ? score >= cutoff : score <= cutoff;
 }
 
-static const char *homeworlds_proof_probe_pruning_mode_name(HomeworldsGoodMovePruningMode mode) {
-  switch (mode) {
-    case HOMEWORLDS_GOOD_MOVE_PRUNING_ON:
-      return "on";
-    case HOMEWORLDS_GOOD_MOVE_PRUNING_VERIFY:
-      return "verify";
-    case HOMEWORLDS_GOOD_MOVE_PRUNING_OFF:
-    default:
-      return "off";
-  }
-}
-
 static gboolean homeworlds_proof_probe_find_cutoff(const HomeworldsPosition *position,
                                                    guint side,
-                                                   gboolean force_pruning_off,
                                                    gint *out_cutoff,
                                                    HomeworldsGoodMoveTrace *out_trace) {
   GameBackendMoveList moves = {0};
@@ -359,9 +346,6 @@ static gboolean homeworlds_proof_probe_find_cutoff(const HomeworldsPosition *pos
   g_return_val_if_fail(out_cutoff != NULL, FALSE);
   g_return_val_if_fail(out_trace != NULL, FALSE);
 
-  if (force_pruning_off) {
-    g_setenv("GCHECKERS_HOMEWORLDS_GOOD_MOVE_PRUNING", "off", TRUE);
-  }
   homeworlds_backend_set_good_move_trace(homeworlds_proof_probe_capture_trace, &trace_capture);
   moves = homeworlds_game_backend.list_good_moves(position, 0);
   homeworlds_backend_set_good_move_trace(NULL, NULL);
@@ -594,7 +578,6 @@ static void homeworlds_proof_probe_print_usage(const char *program_name) {
   g_printerr("usage: %s REPORT [ALL_MOVE_ROW | MOVE_NOTATION]...\n", program_name);
   g_printerr("If no rows or moves are provided, the first %u all_moves rows are probed.\n",
              HOMEWORLDS_PROOF_PROBE_DEFAULT_SAMPLE_COUNT);
-  g_printerr("Use --current-good-move-mode to keep the caller's pruning env while recomputing good_moves().\n");
 }
 
 int main(int argc, char **argv) {
@@ -602,7 +585,6 @@ int main(int argc, char **argv) {
   HomeworldsPosition position = {0};
   HomeworldsGoodMoveTrace trace = {0};
   gboolean use_default_sample = FALSE;
-  gboolean force_pruning_off = TRUE;
   guint side = 0;
   gint cutoff = 0;
   gboolean ok = TRUE;
@@ -616,11 +598,6 @@ int main(int argc, char **argv) {
     HomeworldsProofProbeMove *move = g_new0(HomeworldsProofProbeMove, 1);
     guint row = 0;
 
-    if (g_strcmp0(argv[i], "--current-good-move-mode") == 0) {
-      g_free(move);
-      force_pruning_off = FALSE;
-      continue;
-    }
     if (homeworlds_proof_probe_text_is_uint(argv[i], &row)) {
       move->row = row;
     } else {
@@ -639,28 +616,22 @@ int main(int argc, char **argv) {
   }
 
   side = homeworlds_position_turn(&position);
-  if (!homeworlds_proof_probe_find_cutoff(&position, side, force_pruning_off, &cutoff, &trace)) {
+  if (!homeworlds_proof_probe_find_cutoff(&position, side, &cutoff, &trace)) {
     homeworlds_position_clear(&position);
     return 1;
   }
   g_print("cutoff=%d\n", cutoff);
   g_print("trace: generated=%" G_GSIZE_FORMAT " scored=%" G_GSIZE_FORMAT " kept=%" G_GSIZE_FORMAT
-          " pruning=%s ordering=%s checked=%" G_GSIZE_FORMAT " window=%" G_GSIZE_FORMAT
-          " would=%" G_GSIZE_FORMAT " pruned=%" G_GSIZE_FORMAT " verified=%" G_GSIZE_FORMAT
-          " failures=%" G_GSIZE_FORMAT " ordered=%" G_GSIZE_FORMAT " reordered_lists=%" G_GSIZE_FORMAT
+          " checked=%" G_GSIZE_FORMAT " window=%" G_GSIZE_FORMAT " pruned=%" G_GSIZE_FORMAT
+          " ordered=%" G_GSIZE_FORMAT " reordered_lists=%" G_GSIZE_FORMAT
           " reordered_candidates=%" G_GSIZE_FORMAT " single_step_passes=%" G_GSIZE_FORMAT
           " single_step_moves=%" G_GSIZE_FORMAT "\n",
           trace.generated_leaves,
           trace.scored_moves,
           trace.kept_moves,
-          homeworlds_proof_probe_pruning_mode_name(trace.pruning_mode),
-          trace.ordering_enabled ? "on" : "off",
           trace.pruning_checked_branches,
           trace.pruning_window_cutoff_branches,
-          trace.pruning_would_prune_branches,
           trace.pruning_pruned_branches,
-          trace.pruning_verified_leaves,
-          trace.pruning_verification_failures,
           trace.ordering_candidate_lists,
           trace.ordering_reordered_candidate_lists,
           trace.ordering_reordered_candidates,

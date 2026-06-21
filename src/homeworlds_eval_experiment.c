@@ -295,19 +295,6 @@ static const char *homeworlds_experiment_variable_name(HomeworldsExperimentVaria
   }
 }
 
-static const char *homeworlds_experiment_good_move_pruning_mode_name(HomeworldsGoodMovePruningMode mode) {
-  switch (mode) {
-    case HOMEWORLDS_GOOD_MOVE_PRUNING_OFF:
-      return "off";
-    case HOMEWORLDS_GOOD_MOVE_PRUNING_ON:
-      return "on";
-    case HOMEWORLDS_GOOD_MOVE_PRUNING_VERIFY:
-      return "verify";
-    default:
-      return "unknown";
-  }
-}
-
 static void homeworlds_experiment_apply_variable(HomeworldsEvalWeights *weights,
                                                  HomeworldsExperimentVariable variable,
                                                  gint value) {
@@ -377,20 +364,11 @@ static void homeworlds_experiment_write_big_move_report(const HomeworldsGoodMove
   fprintf(file, "good_moves_generated: %" G_GSIZE_FORMAT "\n", trace->generated_leaves);
   fprintf(file, "good_moves_scored: %" G_GSIZE_FORMAT "\n", trace->scored_moves);
   fprintf(file, "good_moves_kept: %" G_GSIZE_FORMAT "\n", trace->kept_moves);
-  fprintf(file,
-          "good_moves_pruning_mode: %s\n",
-          homeworlds_experiment_good_move_pruning_mode_name(trace->pruning_mode));
-  fprintf(file, "good_moves_ordering: %s\n", trace->ordering_enabled ? "on" : "off");
   fprintf(file, "good_moves_pruning_checked_branches: %" G_GSIZE_FORMAT "\n", trace->pruning_checked_branches);
   fprintf(file,
           "good_moves_pruning_window_cutoff_branches: %" G_GSIZE_FORMAT "\n",
           trace->pruning_window_cutoff_branches);
-  fprintf(file, "good_moves_pruning_would_prune_branches: %" G_GSIZE_FORMAT "\n", trace->pruning_would_prune_branches);
   fprintf(file, "good_moves_pruning_pruned_branches: %" G_GSIZE_FORMAT "\n", trace->pruning_pruned_branches);
-  fprintf(file, "good_moves_pruning_verified_leaves: %" G_GSIZE_FORMAT "\n", trace->pruning_verified_leaves);
-  fprintf(file,
-          "good_moves_pruning_verification_failures: %" G_GSIZE_FORMAT "\n",
-          trace->pruning_verification_failures);
   fprintf(file, "good_moves_ordering_candidate_lists: %" G_GSIZE_FORMAT "\n", trace->ordering_candidate_lists);
   fprintf(file,
           "good_moves_ordering_reordered_candidate_lists: %" G_GSIZE_FORMAT "\n",
@@ -433,9 +411,8 @@ static void homeworlds_experiment_trace_move_generation(const HomeworldsGoodMove
   if (context->trace_move_counts) {
     homeworlds_experiment_progress_clear(context->progress);
     g_printerr("move-count,%d,%u,%u,%u,%u,%u,%u,%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT
-               ",%s,%s,%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT
                ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT
-               ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT "\n",
+               ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT "\n",
                context->value,
                context->game,
                context->seed,
@@ -446,14 +423,9 @@ static void homeworlds_experiment_trace_move_generation(const HomeworldsGoodMove
                trace->generated_leaves,
                trace->scored_moves,
                trace->kept_moves,
-               homeworlds_experiment_good_move_pruning_mode_name(trace->pruning_mode),
-               trace->ordering_enabled ? "on" : "off",
                trace->pruning_checked_branches,
                trace->pruning_window_cutoff_branches,
-               trace->pruning_would_prune_branches,
                trace->pruning_pruned_branches,
-               trace->pruning_verified_leaves,
-               trace->pruning_verification_failures,
                trace->ordering_candidate_lists,
                trace->ordering_reordered_candidate_lists,
                trace->ordering_reordered_candidates,
@@ -794,9 +766,8 @@ int main(int argc, char **argv) {
   g_print("value,candidate_wins,baseline_wins,win_ratio,draws,timeouts\n");
   if (trace_move_counts_option) {
     g_printerr("move-count,value,game,seed,candidate_side,ply,side,depth_hint,"
-               "generated_leaves,scored_moves,kept_moves,pruning_mode,ordering,"
-               "pruning_checked_branches,pruning_window_cutoff_branches,pruning_would_prune_branches,"
-               "pruning_pruned_branches,pruning_verified_leaves,pruning_verification_failures,"
+               "generated_leaves,scored_moves,kept_moves,"
+               "pruning_checked_branches,pruning_window_cutoff_branches,pruning_pruned_branches,"
                "ordering_candidate_lists,ordering_reordered_candidate_lists,ordering_reordered_candidates,"
                "ordering_single_step_passes,ordering_single_step_moves\n");
   }

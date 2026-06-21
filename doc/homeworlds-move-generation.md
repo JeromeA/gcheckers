@@ -34,8 +34,11 @@ deduplicated and not used by the AI. When
 `build/tools/homeworlds_profile_moves` applies `--moves` random `good_moves()` choices from the initial position using
 `--seed`, or replays the first `--moves` main-line moves from an existing Homeworlds SGF with `--file`. It prints a
 non-GTK ASCII board snapshot, then runs the AI at `--depth` and prints the scored moves plus search stats. The
-Makefile's default `callgrind-run` target profiles this command so Homeworlds AI search can be measured without
-starting GTK.
+AI report shows a terminal-only stderr progress line with the searched node count, and `--node-limit` stops a profiling
+run after the requested number of searched nodes. The Makefile's default `callgrind-run` target profiles this command
+so Homeworlds AI search can be measured without starting GTK; by default, it analyzes the newest SGF in
+`~/.local/share/gcheckers/bga-imports/homeworlds` after 38 replayed moves at depth 4. Override `PROFILE_FILE`,
+`PROFILE_MOVES`, `PROFILE_DEPTH`, or `PROFILE_NODE_LIMIT` for another profiling point.
 
 ## Legal Moves Versus AI Moves
 
@@ -89,6 +92,8 @@ ordinary actions and sacrifice-granted actions. The AI does not move or sacrific
 rejects builds that create an unfavorable catastrophe, and rejects a small sacrifice when the sacrificed color's action
 was already available at that system. Equivalent continuations inside a sacrifice are pruned by the shared
 sacrifice-scoped builder-state deduper instead of by color-specific adjacent-step rules.
+Large yellow sacrifice branches also use a conservative proof bound during normal `good_moves()` traversal; when the
+bound cannot reach the current static-prune cutoff, the branch is not explored.
 
 The catastrophe policy distinguishes profitable and unfavorable catastrophes from the moving side's perspective. A
 profitable catastrophe destroys more opponent ship pips than own ship pips. If such a catastrophe exists at the start

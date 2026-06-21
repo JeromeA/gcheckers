@@ -9,15 +9,33 @@
 #include "sgf_io.h"
 #include "sgf_move_props.h"
 
+#include <errno.h>
 #include <stdio.h>
+
+#ifdef G_OS_UNIX
+#include <unistd.h>
+#endif
 
 enum {
   HOMEWORLDS_PROFILE_DEFAULT_DEPTH = 1,
+  HOMEWORLDS_PROFILE_PROGRESS_INTERVAL_USEC = 250 * 1000,
   HOMEWORLDS_PROFILE_TT_SIZE_MB = 256,
 };
 
+#define HOMEWORLDS_PROFILE_PROGRESS_ENV "GCHECKERS_HOMEWORLDS_PROFILE_PROGRESS"
+
+typedef struct {
+  const GameAiSearchStats *stats;
+  guint64 node_limit;
+  gint64 next_report_time_us;
+  gboolean enabled;
+  gboolean visible;
+  gboolean node_limit_reached;
+} HomeworldsProfileAnalysisProgress;
+
 static gint homeworlds_profile_requested_moves = 2;
 static gboolean homeworlds_profile_requested_moves_set = FALSE;
+static guint64 homeworlds_profile_node_limit = 0;
 
 static gboolean homeworlds_profile_parse_moves_option(const gchar * /*option_name*/,
                                                       const gchar *value,
@@ -45,6 +63,140 @@ static gboolean homeworlds_profile_parse_moves_option(const gchar * /*option_nam
 
   homeworlds_profile_requested_moves = (gint)parsed_value;
   homeworlds_profile_requested_moves_set = TRUE;
+  return TRUE;
+}
+
+static gboolean homeworlds_profile_parse_node_limit_option(const gchar * /*option_name*/,
+                                                           const gchar *value,
+                                                           gpointer /*data*/,
+                                                           GError **error) {
+  guint64 parsed_value = 0;
+  char *end_ptr = NULL;
+
+  if (value == NULL || *value == '\0') {
+    g_set_error_literal(error, G_OPTION_ERROR, G_OPTION_ERROR_BAD_VALUE, "--node-limit must be positive.");
+    return FALSE;
+  }
+  for (const char *cursor = value; *cursor != '\0'; ++cursor) {
+    if (!g_ascii_isdigit(*cursor)) {
+      g_set_error_literal(error, G_OPTION_ERROR, G_OPTION_ERROR_BAD_VALUE, "--node-limit must be positive.");
+      return FALSE;
+    }
+  }
+
+  errno = 0;
+  parsed_value = g_ascii_strtoull(value, &end_ptr, 10);
+  if (errno != 0 || end_ptr == value || end_ptr == NULL || *end_ptr != '\0' || parsed_value == 0) {
+    g_set_error_literal(error, G_OPTION_ERROR, G_OPTION_ERROR_BAD_VALUE, "--node-limit must be positive.");
+    return FALSE;
+  }
+
+  homeworlds_profile_node_limit = parsed_value;
+  return TRUE;
+}
+
+static gboolean homeworlds_profile_stderr_is_terminal(void) {
+#ifdef G_OS_UNIX
+  return isatty(fileno(stderr));
+#else
+  return FALSE;
+#endif
+}
+
+static gboolean homeworlds_profile_progress_setting_is_true(const char *text) {
+  g_return_val_if_fail(text != NULL, FALSE);
+
+  return g_ascii_strcasecmp(text, "1") == 0 ||
+      g_ascii_strcasecmp(text, "true") == 0 ||
+      g_ascii_strcasecmp(text, "yes") == 0 ||
+      g_ascii_strcasecmp(text, "always") == 0;
+}
+
+static gboolean homeworlds_profile_progress_setting_is_false(const char *text) {
+  g_return_val_if_fail(text != NULL, FALSE);
+
+  return g_ascii_strcasecmp(text, "0") == 0 ||
+      g_ascii_strcasecmp(text, "false") == 0 ||
+      g_ascii_strcasecmp(text, "no") == 0 ||
+      g_ascii_strcasecmp(text, "never") == 0;
+}
+
+static gboolean homeworlds_profile_progress_is_enabled(void) {
+  const char *progress_text = g_getenv(HOMEWORLDS_PROFILE_PROGRESS_ENV);
+
+  if (progress_text == NULL || progress_text[0] == '\0' ||
+      g_ascii_strcasecmp(progress_text, "auto") == 0) {
+    return homeworlds_profile_stderr_is_terminal();
+  }
+  if (homeworlds_profile_progress_setting_is_true(progress_text)) {
+    return TRUE;
+  }
+  if (homeworlds_profile_progress_setting_is_false(progress_text)) {
+    return FALSE;
+  }
+
+  g_debug("Ignoring invalid %s value", HOMEWORLDS_PROFILE_PROGRESS_ENV);
+  return homeworlds_profile_stderr_is_terminal();
+}
+
+static HomeworldsProfileAnalysisProgress homeworlds_profile_analysis_progress_new(const GameAiSearchStats *stats,
+                                                                                  guint64 node_limit) {
+  HomeworldsProfileAnalysisProgress progress = {
+    .stats = stats,
+    .node_limit = node_limit,
+    .next_report_time_us = 0,
+    .enabled = homeworlds_profile_progress_is_enabled(),
+    .visible = FALSE,
+    .node_limit_reached = FALSE,
+  };
+
+  return progress;
+}
+
+static void homeworlds_profile_analysis_progress_update(const GameAiSearchStats *stats, gpointer user_data) {
+  HomeworldsProfileAnalysisProgress *progress = user_data;
+  gint64 now_us = 0;
+
+  g_return_if_fail(stats != NULL);
+  g_return_if_fail(progress != NULL);
+
+  if (!progress->enabled) {
+    return;
+  }
+
+  now_us = g_get_monotonic_time();
+  if (progress->visible && now_us < progress->next_report_time_us) {
+    return;
+  }
+
+  g_printerr("\r\033[2Khomeworlds_profile_moves: nodes=%" G_GUINT64_FORMAT, stats->nodes);
+  fflush(stderr);
+  progress->visible = TRUE;
+  progress->next_report_time_us = now_us + HOMEWORLDS_PROFILE_PROGRESS_INTERVAL_USEC;
+}
+
+static void homeworlds_profile_analysis_progress_clear(HomeworldsProfileAnalysisProgress *progress) {
+  g_return_if_fail(progress != NULL);
+
+  if (!progress->enabled || !progress->visible) {
+    return;
+  }
+
+  g_printerr("\r\033[2K");
+  fflush(stderr);
+  progress->visible = FALSE;
+}
+
+static gboolean homeworlds_profile_analysis_should_cancel(gpointer user_data) {
+  HomeworldsProfileAnalysisProgress *progress = user_data;
+
+  g_return_val_if_fail(progress != NULL, FALSE);
+
+  if (progress->node_limit == 0 || progress->stats == NULL || progress->stats->nodes < progress->node_limit) {
+    return FALSE;
+  }
+
+  progress->node_limit_reached = TRUE;
   return TRUE;
 }
 
@@ -267,27 +419,48 @@ static gboolean homeworlds_profile_print_move_report(const HomeworldsPosition *p
 static gboolean homeworlds_profile_print_ai_analysis(const HomeworldsPosition *position,
                                                      guint applied_moves,
                                                      gboolean replayed,
-                                                     guint depth) {
+                                                     guint depth,
+                                                     guint64 node_limit) {
   GameAiScoredMoveList moves = {0};
   GameAiSearchStats stats = {0};
+  HomeworldsProfileAnalysisProgress progress = {0};
   GameAiTranspositionTable *tt = NULL;
+  gboolean success = FALSE;
 
   g_return_val_if_fail(position != NULL, FALSE);
 
   tt = game_ai_tt_new(HOMEWORLDS_PROFILE_TT_SIZE_MB, homeworlds_game_backend.move_size);
   game_ai_search_stats_clear(&stats);
-  if (!game_ai_search_analyze_moves_cancellable_with_tt(&homeworlds_game_backend,
-                                                        position,
-                                                        depth,
-                                                        &moves,
-                                                        NULL,
-                                                        NULL,
-                                                        NULL,
-                                                        NULL,
-                                                        tt,
-                                                        &stats)) {
+  progress = homeworlds_profile_analysis_progress_new(&stats, node_limit);
+  success = game_ai_search_analyze_moves_cancellable_with_tt(&homeworlds_game_backend,
+                                                             position,
+                                                             depth,
+                                                             &moves,
+                                                             node_limit != 0
+                                                                 ? homeworlds_profile_analysis_should_cancel
+                                                                 : NULL,
+                                                             &progress,
+                                                             progress.enabled
+                                                                 ? homeworlds_profile_analysis_progress_update
+                                                                 : NULL,
+                                                             &progress,
+                                                             tt,
+                                                             &stats);
+  homeworlds_profile_analysis_progress_clear(&progress);
+  if (!success) {
     if (tt != NULL) {
       game_ai_tt_free(tt);
+    }
+    if (progress.node_limit_reached) {
+      g_print("\nAI analysis stopped after %" G_GUINT64_FORMAT " nodes (limit %" G_GUINT64_FORMAT
+              ") at depth %u.\n",
+              stats.nodes,
+              node_limit,
+              depth);
+      g_print("TT probes: %" G_GUINT64_FORMAT "\n", stats.tt_probes);
+      g_print("TT hits: %" G_GUINT64_FORMAT "\n", stats.tt_hits);
+      g_print("TT cutoffs: %" G_GUINT64_FORMAT "\n", stats.tt_cutoffs);
+      return TRUE;
     }
     g_printerr("Failed to analyze moves at depth %u.\n", depth);
     return FALSE;
@@ -354,6 +527,15 @@ int main(int argc, char **argv) {
       .arg_data = &analysis_depth,
       .description = "AI search depth to run when --ai-report is set",
       .arg_description = "DEPTH",
+    },
+    {
+      .long_name = "node-limit",
+      .short_name = 0,
+      .flags = 0,
+      .arg = G_OPTION_ARG_CALLBACK,
+      .arg_data = homeworlds_profile_parse_node_limit_option,
+      .description = "Stop AI analysis after N searched nodes",
+      .arg_description = "N",
     },
     {
       .long_name = "seed",
@@ -490,7 +672,8 @@ int main(int argc, char **argv) {
     if (!homeworlds_profile_print_ai_analysis(&position,
                                               applied_moves,
                                               file_path != NULL,
-                                              (guint)analysis_depth)) {
+                                              (guint)analysis_depth,
+                                              homeworlds_profile_node_limit)) {
       if (random != NULL) {
         g_rand_free(random);
       }

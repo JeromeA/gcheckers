@@ -4,16 +4,12 @@
 #include "homeworlds_move_builder.h"
 #include "homeworlds_sgf_position.h"
 
-#include <stdlib.h>
 #include <string.h>
 
 enum {
   HOMEWORLDS_GOOD_MOVE_STATIC_PRUNE_LIMIT = 512,
   HOMEWORLDS_GOOD_MOVE_STATIC_PRUNE_WINDOW = 50,
 };
-
-static const char *HOMEWORLDS_GOOD_MOVE_PRUNING_ENV = "GCHECKERS_HOMEWORLDS_GOOD_MOVE_PRUNING";
-static const char *HOMEWORLDS_GOOD_MOVE_ORDERING_ENV = "GCHECKERS_HOMEWORLDS_GOOD_MOVE_ORDERING";
 
 typedef struct {
   guint system_index;
@@ -24,20 +20,14 @@ typedef struct {
 typedef struct {
   HomeworldsProfitableCatastrophe root_catastrophes[HOMEWORLDS_SYSTEM_SLOT_COUNT * 4];
   guint root_catastrophe_count;
-  HomeworldsGoodMovePruningMode pruning_mode;
-  gboolean ordering_enabled;
   gsize pruning_checked_branches;
   gsize pruning_window_cutoff_branches;
-  gsize pruning_would_prune_branches;
   gsize pruning_pruned_branches;
-  gsize pruning_verified_leaves;
-  gsize pruning_verification_failures;
   gsize ordering_candidate_lists;
   gsize ordering_reordered_candidate_lists;
   gsize ordering_reordered_candidates;
   gsize ordering_single_step_passes;
   gsize ordering_single_step_moves;
-  gboolean pruning_verification_warning_emitted;
 } HomeworldsGoodMoveContext;
 
 typedef enum {
@@ -45,11 +35,6 @@ typedef enum {
   HOMEWORLDS_GOOD_MOVE_CUTOFF_SCORE_WINDOW,
   HOMEWORLDS_GOOD_MOVE_CUTOFF_FULL_BUFFER,
 } HomeworldsGoodMoveCutoffKind;
-
-typedef struct {
-  gboolean active;
-  gint cutoff;
-} HomeworldsGoodMovePruningVerification;
 
 typedef struct {
   HomeworldsMove move;
@@ -92,37 +77,6 @@ static gint homeworlds_backend_future_catastrophe_gain_ceiling(const HomeworldsM
                                                                guint system_index,
                                                                HomeworldsColor color,
                                                                guint side);
-
-static gboolean homeworlds_backend_good_move_ordering_enabled(void) {
-  const char *value = g_getenv(HOMEWORLDS_GOOD_MOVE_ORDERING_ENV);
-
-  if (value == NULL || value[0] == '\0' || g_strcmp0(value, "on") == 0) {
-    return TRUE;
-  }
-  if (g_strcmp0(value, "off") == 0) {
-    return FALSE;
-  }
-
-  g_debug("Ignoring invalid %s value", HOMEWORLDS_GOOD_MOVE_ORDERING_ENV);
-  return TRUE;
-}
-
-static HomeworldsGoodMovePruningMode homeworlds_backend_good_move_pruning_mode(void) {
-  const char *value = g_getenv(HOMEWORLDS_GOOD_MOVE_PRUNING_ENV);
-
-  if (value == NULL || value[0] == '\0' || g_strcmp0(value, "off") == 0) {
-    return HOMEWORLDS_GOOD_MOVE_PRUNING_OFF;
-  }
-  if (g_strcmp0(value, "on") == 0) {
-    return HOMEWORLDS_GOOD_MOVE_PRUNING_ON;
-  }
-  if (g_strcmp0(value, "verify") == 0) {
-    return HOMEWORLDS_GOOD_MOVE_PRUNING_VERIFY;
-  }
-
-  g_debug("Ignoring invalid %s value", HOMEWORLDS_GOOD_MOVE_PRUNING_ENV);
-  return HOMEWORLDS_GOOD_MOVE_PRUNING_OFF;
-}
 
 void homeworlds_backend_set_good_move_trace(HomeworldsGoodMoveTraceFunc trace_func, gpointer user_data) {
   homeworlds_backend_good_move_trace_func = trace_func;
@@ -387,15 +341,6 @@ static gboolean homeworlds_backend_score_is_better(guint side, gint score, gint 
   return score < other_score;
 }
 
-static gboolean homeworlds_backend_score_reaches_cutoff(guint side, gint score, gint cutoff) {
-  g_return_val_if_fail(side < 2, FALSE);
-
-  if (side == 0) {
-    return score >= cutoff;
-  }
-  return score <= cutoff;
-}
-
 static gint homeworlds_backend_scored_move_order_compare(guint side,
                                                          const HomeworldsScoredMove *left,
                                                          const HomeworldsScoredMove *right) {
@@ -539,8 +484,7 @@ static gboolean homeworlds_backend_move_buffer_append_unsorted(HomeworldsMoveBuf
 static gboolean homeworlds_backend_move_buffer_append_scored(
     HomeworldsMoveBuffer *buffer,
     const HomeworldsMove *move,
-    HomeworldsGoodMoveContext *context,
-    const HomeworldsGoodMovePruningVerification *verification) {
+    HomeworldsGoodMoveContext *context) {
   HomeworldsScoredMove scored_move = {0};
   gint score = 0;
 
@@ -554,16 +498,6 @@ static gboolean homeworlds_backend_move_buffer_append_scored(
   }
 
   buffer->scored_moves++;
-  if (verification != NULL && verification->active) {
-    context->pruning_verified_leaves++;
-    if (homeworlds_backend_score_reaches_cutoff(buffer->side, score, verification->cutoff)) {
-      context->pruning_verification_failures++;
-      if (!context->pruning_verification_warning_emitted) {
-        g_warning("Homeworlds good_moves() pruning verification found a score that reaches the cutoff");
-        context->pruning_verification_warning_emitted = TRUE;
-      }
-    }
-  }
   scored_move = (HomeworldsScoredMove){
     .move = *move,
     .score = score,
@@ -593,15 +527,14 @@ static gboolean homeworlds_backend_move_buffer_append_scored(
 static gboolean homeworlds_backend_move_buffer_append(
     HomeworldsMoveBuffer *buffer,
     const HomeworldsMove *move,
-    HomeworldsGoodMoveContext *context,
-    const HomeworldsGoodMovePruningVerification *verification) {
+    HomeworldsGoodMoveContext *context) {
   g_return_val_if_fail(buffer != NULL, FALSE);
   g_return_val_if_fail(move != NULL, FALSE);
   g_return_val_if_fail(context != NULL, FALSE);
 
   buffer->leaves_seen++;
   if (buffer->prune_by_score) {
-    return homeworlds_backend_move_buffer_append_scored(buffer, move, context, verification);
+    return homeworlds_backend_move_buffer_append_scored(buffer, move, context);
   }
   return homeworlds_backend_move_buffer_append_unsorted(buffer, move);
 }
@@ -1544,10 +1477,8 @@ static gboolean homeworlds_backend_large_yellow_sacrifice_bound_prunes(
 static gboolean homeworlds_backend_prepare_pruning_for_child(
     HomeworldsGoodMoveContext *context,
     const HomeworldsMoveBuffer *buffer,
-    const HomeworldsGoodMovePruningVerification *verification,
     const HomeworldsMoveBuilderState *child_state,
-    gboolean *out_prune_child,
-    HomeworldsGoodMovePruningVerification *out_child_verification) {
+    gboolean *out_prune_child) {
   gint cutoff = 0;
   HomeworldsGoodMoveCutoffKind cutoff_kind = HOMEWORLDS_GOOD_MOVE_CUTOFF_NONE;
   gboolean prune_child = FALSE;
@@ -1556,13 +1487,9 @@ static gboolean homeworlds_backend_prepare_pruning_for_child(
   g_return_val_if_fail(buffer != NULL, FALSE);
   g_return_val_if_fail(child_state != NULL, FALSE);
   g_return_val_if_fail(out_prune_child != NULL, FALSE);
-  g_return_val_if_fail(out_child_verification != NULL, FALSE);
 
   *out_prune_child = FALSE;
-  *out_child_verification = (HomeworldsGoodMovePruningVerification){0};
-  if (context->pruning_mode == HOMEWORLDS_GOOD_MOVE_PRUNING_OFF ||
-      (verification != NULL && verification->active) ||
-      !homeworlds_backend_move_buffer_current_cutoff(buffer, &cutoff, &cutoff_kind)) {
+  if (!homeworlds_backend_move_buffer_current_cutoff(buffer, &cutoff, &cutoff_kind)) {
     return TRUE;
   }
 
@@ -1581,15 +1508,8 @@ static gboolean homeworlds_backend_prepare_pruning_for_child(
     return TRUE;
   }
 
-  context->pruning_would_prune_branches++;
-  if (context->pruning_mode == HOMEWORLDS_GOOD_MOVE_PRUNING_ON) {
-    context->pruning_pruned_branches++;
-    *out_prune_child = TRUE;
-    return TRUE;
-  }
-
-  out_child_verification->active = TRUE;
-  out_child_verification->cutoff = cutoff;
+  context->pruning_pruned_branches++;
+  *out_prune_child = TRUE;
   return TRUE;
 }
 
@@ -2008,7 +1928,6 @@ static gboolean homeworlds_backend_candidate_order_find_priority(const Homeworld
 static gboolean homeworlds_backend_build_candidate_order(const HomeworldsPosition *root_position,
                                                          const HomeworldsMoveBuilderState *state,
                                                          HomeworldsGoodMoveContext *context,
-                                                         const HomeworldsMoveBuffer *buffer,
                                                          const GameBackendMoveList *candidates,
                                                          HomeworldsCandidateOrder **out_order) {
   HomeworldsCandidateOrder *order = NULL;
@@ -2018,7 +1937,6 @@ static gboolean homeworlds_backend_build_candidate_order(const HomeworldsPositio
   g_return_val_if_fail(root_position != NULL, FALSE);
   g_return_val_if_fail(state != NULL, FALSE);
   g_return_val_if_fail(context != NULL, FALSE);
-  g_return_val_if_fail(buffer != NULL, FALSE);
   g_return_val_if_fail(candidates != NULL, FALSE);
   g_return_val_if_fail(out_order != NULL, FALSE);
 
@@ -2029,9 +1947,7 @@ static gboolean homeworlds_backend_build_candidate_order(const HomeworldsPositio
 
   order = g_new0(HomeworldsCandidateOrder, candidates->count);
   g_return_val_if_fail(order != NULL, FALSE);
-  should_order = context->ordering_enabled &&
-                 buffer->count < HOMEWORLDS_GOOD_MOVE_STATIC_PRUNE_LIMIT &&
-                 candidates->count > 1 &&
+  should_order = candidates->count > 1 &&
                  homeworlds_backend_state_has_active_large_sacrifice(state, HOMEWORLDS_COLOR_YELLOW);
   if (should_order) {
     context->ordering_candidate_lists++;
@@ -2205,7 +2121,6 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(
     HomeworldsGoodMoveContext *context,
     HomeworldsMoveBuffer *buffer,
     gboolean allow_pass_move,
-    const HomeworldsGoodMovePruningVerification *verification,
     gboolean *out_covered);
 
 static gboolean homeworlds_backend_state_has_only_catastrophe_prefix(const HomeworldsMoveBuilderState *state) {
@@ -2223,14 +2138,10 @@ static gboolean homeworlds_backend_state_has_only_catastrophe_prefix(const Homew
   return TRUE;
 }
 
-static gboolean homeworlds_backend_state_should_collect_single_steps_first(
-    const HomeworldsMoveBuilderState *state,
-    const HomeworldsGoodMoveContext *context) {
+static gboolean homeworlds_backend_state_should_collect_single_steps_first(const HomeworldsMoveBuilderState *state) {
   g_return_val_if_fail(state != NULL, FALSE);
-  g_return_val_if_fail(context != NULL, FALSE);
 
-  return context->ordering_enabled &&
-         state->working_position.phase == HOMEWORLDS_PHASE_PLAY &&
+  return state->working_position.phase == HOMEWORLDS_PHASE_PLAY &&
          state->stage == HOMEWORLDS_BUILDER_STAGE_SELECT_SHIP &&
          state->pending_actions_remaining == 0 &&
          homeworlds_backend_state_has_only_catastrophe_prefix(state);
@@ -2266,13 +2177,10 @@ static gboolean homeworlds_backend_collect_child_state(
     HomeworldsGoodMoveContext *context,
     HomeworldsMoveBuffer *buffer,
     gboolean allow_pass_move,
-    const HomeworldsGoodMovePruningVerification *verification,
     const HomeworldsMoveBuilderState *child_state,
     gboolean *out_child_covered) {
   HomeworldsGenerationContext child_context = {0};
   HomeworldsGenerationDedupe child_dedupe = {0};
-  HomeworldsGoodMovePruningVerification child_verification = {0};
-  const HomeworldsGoodMovePruningVerification *next_verification = verification;
   gboolean prune_child = FALSE;
   gboolean child_covered = FALSE;
 
@@ -2303,10 +2211,8 @@ static gboolean homeworlds_backend_collect_child_state(
   }
   if (!homeworlds_backend_prepare_pruning_for_child(context,
                                                     buffer,
-                                                    verification,
                                                     child_state,
-                                                    &prune_child,
-                                                    &child_verification)) {
+                                                    &prune_child)) {
     homeworlds_generation_dedupe_clear(&child_dedupe);
     return FALSE;
   }
@@ -2315,15 +2221,11 @@ static gboolean homeworlds_backend_collect_child_state(
     homeworlds_generation_dedupe_clear(&child_dedupe);
     return TRUE;
   }
-  if (child_verification.active) {
-    next_verification = &child_verification;
-  }
   if (!homeworlds_backend_collect_good_moves_recursive(child_state,
                                                        &child_context,
                                                        context,
                                                        buffer,
                                                        allow_pass_move,
-                                                       next_verification,
                                                        &child_covered)) {
     homeworlds_generation_dedupe_clear(&child_dedupe);
     return FALSE;
@@ -2340,7 +2242,6 @@ static gboolean homeworlds_backend_collect_single_step_action(
     HomeworldsGoodMoveContext *context,
     HomeworldsMoveBuffer *buffer,
     gboolean allow_pass_move,
-    const HomeworldsGoodMovePruningVerification *verification,
     const HomeworldsMoveCandidate *action_candidate,
     gboolean *out_covered) {
   HomeworldsMoveBuilderState action_state = {0};
@@ -2374,7 +2275,6 @@ static gboolean homeworlds_backend_collect_single_step_action(
                                                   context,
                                                   buffer,
                                                   allow_pass_move,
-                                                  verification,
                                                   &action_state,
                                                   out_covered);
   }
@@ -2406,7 +2306,6 @@ static gboolean homeworlds_backend_collect_single_step_action(
                                                 context,
                                                 buffer,
                                                 allow_pass_move,
-                                                verification,
                                                 &target_state,
                                                 &child_covered)) {
       homeworlds_backend_move_list_free(&target_candidates);
@@ -2426,7 +2325,6 @@ static gboolean homeworlds_backend_collect_single_step_moves_for_ship(
     HomeworldsGoodMoveContext *context,
     HomeworldsMoveBuffer *buffer,
     gboolean allow_pass_move,
-    const HomeworldsGoodMovePruningVerification *verification,
     const HomeworldsMoveCandidate *ship_candidate,
     gboolean *out_covered) {
   HomeworldsMoveBuilderState selected_state = {0};
@@ -2467,7 +2365,6 @@ static gboolean homeworlds_backend_collect_single_step_moves_for_ship(
                                                        context,
                                                        buffer,
                                                        allow_pass_move,
-                                                       verification,
                                                        action_candidate,
                                                        &child_covered)) {
       homeworlds_backend_move_list_free(&action_candidates);
@@ -2487,7 +2384,6 @@ static gboolean homeworlds_backend_collect_sacrifice_for_ship(
     HomeworldsGoodMoveContext *context,
     HomeworldsMoveBuffer *buffer,
     gboolean allow_pass_move,
-    const HomeworldsGoodMovePruningVerification *verification,
     const HomeworldsMoveCandidate *ship_candidate,
     gboolean *out_covered) {
   HomeworldsMoveBuilderState selected_state = {0};
@@ -2536,7 +2432,6 @@ static gboolean homeworlds_backend_collect_sacrifice_for_ship(
                                                 context,
                                                 buffer,
                                                 allow_pass_move,
-                                                verification,
                                                 &child_state,
                                                 out_covered)) {
       homeworlds_backend_move_list_free(&action_candidates);
@@ -2555,7 +2450,6 @@ static gboolean homeworlds_backend_collect_select_ship_with_single_steps_first(
     HomeworldsGoodMoveContext *context,
     HomeworldsMoveBuffer *buffer,
     gboolean allow_pass_move,
-    const HomeworldsGoodMovePruningVerification *verification,
     gboolean *out_covered) {
   GameBackendMoveBuilder builder = {0};
   GameBackendMoveList candidates = {0};
@@ -2591,7 +2485,6 @@ static gboolean homeworlds_backend_collect_select_ship_with_single_steps_first(
                                                                context,
                                                                buffer,
                                                                allow_pass_move,
-                                                               verification,
                                                                candidate,
                                                                &child_covered)) {
       homeworlds_backend_move_list_free(&candidates);
@@ -2613,7 +2506,6 @@ static gboolean homeworlds_backend_collect_select_ship_with_single_steps_first(
                                                        context,
                                                        buffer,
                                                        allow_pass_move,
-                                                       verification,
                                                        candidate,
                                                        &child_covered)) {
       homeworlds_backend_move_list_free(&candidates);
@@ -2639,7 +2531,6 @@ static gboolean homeworlds_backend_collect_select_ship_with_single_steps_first(
                                                   context,
                                                   buffer,
                                                   TRUE,
-                                                  verification,
                                                   &child_state,
                                                   &child_covered)) {
         homeworlds_backend_move_list_free(&candidates);
@@ -2660,7 +2551,6 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(
     HomeworldsGoodMoveContext *context,
     HomeworldsMoveBuffer *buffer,
     gboolean allow_pass_move,
-    const HomeworldsGoodMovePruningVerification *verification,
     gboolean *out_covered) {
   GameBackendMoveBuilder builder = {0};
   GameBackendMoveList candidates = {0};
@@ -2728,7 +2618,6 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(
                                                            context,
                                                            buffer,
                                                            allow_pass_move,
-                                                           verification,
                                                            &child_covered)) {
         homeworlds_generation_dedupe_clear(&child_dedupe);
         return FALSE;
@@ -2773,7 +2662,6 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(
                                                          context,
                                                          buffer,
                                                          allow_pass_move,
-                                                         verification,
                                                          &child_covered)) {
       homeworlds_generation_dedupe_clear(&child_dedupe);
       return FALSE;
@@ -2795,20 +2683,19 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(
       return TRUE;
     }
 
-    if (!homeworlds_backend_move_buffer_append(buffer, &move, context, verification)) {
+    if (!homeworlds_backend_move_buffer_append(buffer, &move, context)) {
       return FALSE;
     }
     *out_covered = TRUE;
     return TRUE;
   }
 
-  if (homeworlds_backend_state_should_collect_single_steps_first(state, context)) {
+  if (homeworlds_backend_state_should_collect_single_steps_first(state)) {
     return homeworlds_backend_collect_select_ship_with_single_steps_first(state,
                                                                          generation_context,
                                                                          context,
                                                                          buffer,
                                                                          allow_pass_move,
-                                                                         verification,
                                                                          out_covered);
   }
 
@@ -2816,7 +2703,6 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(
   if (!homeworlds_backend_build_candidate_order(buffer->position,
                                                 state,
                                                 context,
-                                                buffer,
                                                 &candidates,
                                                 &candidate_order)) {
     homeworlds_backend_move_list_free(&candidates);
@@ -2832,8 +2718,6 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(
       .builder_state = &child_state,
       .builder_state_size = sizeof(child_state),
     };
-    HomeworldsGoodMovePruningVerification child_verification = {0};
-    const HomeworldsGoodMovePruningVerification *next_verification = verification;
     gboolean prune_child = FALSE;
     gboolean child_covered = FALSE;
 
@@ -2868,10 +2752,8 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(
     }
     if (!homeworlds_backend_prepare_pruning_for_child(context,
                                                       buffer,
-                                                      verification,
                                                       &child_state,
-                                                      &prune_child,
-                                                      &child_verification)) {
+                                                      &prune_child)) {
       homeworlds_generation_dedupe_clear(&child_dedupe);
       g_free(candidate_order);
       homeworlds_backend_move_list_free(&candidates);
@@ -2883,15 +2765,11 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(
       homeworlds_generation_dedupe_clear(&child_dedupe);
       continue;
     }
-    if (child_verification.active) {
-      next_verification = &child_verification;
-    }
     if (!homeworlds_backend_collect_good_moves_recursive(&child_state,
                                                          &child_context,
                                                          context,
                                                          buffer,
                                                          allow_pass_move,
-                                                         next_verification,
                                                          &child_covered)) {
       homeworlds_generation_dedupe_clear(&child_dedupe);
       g_free(candidate_order);
@@ -2913,8 +2791,6 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(
       .builder_state = &child_state,
       .builder_state_size = sizeof(child_state),
     };
-    HomeworldsGoodMovePruningVerification child_verification = {0};
-    const HomeworldsGoodMovePruningVerification *next_verification = verification;
     gboolean prune_child = FALSE;
     gboolean child_covered = FALSE;
 
@@ -2934,10 +2810,8 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(
       } else if (homeworlds_backend_child_state_is_good_after_step(state, &child_state)) {
         if (!homeworlds_backend_prepare_pruning_for_child(context,
                                                           buffer,
-                                                          verification,
                                                           &child_state,
-                                                          &prune_child,
-                                                          &child_verification)) {
+                                                          &prune_child)) {
           homeworlds_generation_dedupe_clear(&child_dedupe);
           g_free(candidate_order);
           homeworlds_backend_move_list_free(&candidates);
@@ -2946,15 +2820,11 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(
         if (prune_child) {
           covered = TRUE;
         } else {
-          if (child_verification.active) {
-            next_verification = &child_verification;
-          }
           if (!homeworlds_backend_collect_good_moves_recursive(&child_state,
                                                                &child_context,
                                                                context,
                                                                buffer,
                                                                TRUE,
-                                                               next_verification,
                                                                &child_covered)) {
             homeworlds_generation_dedupe_clear(&child_dedupe);
             g_free(candidate_order);
@@ -3029,14 +2899,9 @@ static void homeworlds_backend_trace_good_moves(const HomeworldsPosition *positi
     .generated_leaves = generated_leaves,
     .scored_moves = scored_moves,
     .kept_moves = kept_moves,
-    .pruning_mode = context->pruning_mode,
-    .ordering_enabled = context->ordering_enabled,
     .pruning_checked_branches = context->pruning_checked_branches,
     .pruning_window_cutoff_branches = context->pruning_window_cutoff_branches,
-    .pruning_would_prune_branches = context->pruning_would_prune_branches,
     .pruning_pruned_branches = context->pruning_pruned_branches,
-    .pruning_verified_leaves = context->pruning_verified_leaves,
-    .pruning_verification_failures = context->pruning_verification_failures,
     .ordering_candidate_lists = context->ordering_candidate_lists,
     .ordering_reordered_candidate_lists = context->ordering_reordered_candidate_lists,
     .ordering_reordered_candidates = context->ordering_reordered_candidates,
@@ -3052,7 +2917,6 @@ static GameBackendMoveList homeworlds_backend_list_good_moves(gconstpointer posi
   GameBackendMoveBuilder builder = {0};
   HomeworldsGenerationContext generation_context = {0};
   HomeworldsGoodMoveContext context = {0};
-  HomeworldsGoodMovePruningVerification verification = {0};
   HomeworldsMoveBuffer buffer = {0};
   HomeworldsMove *moves = NULL;
   gsize count = 0;
@@ -3065,8 +2929,6 @@ static GameBackendMoveList homeworlds_backend_list_good_moves(gconstpointer posi
     homeworlds_backend_move_buffer_clear(&buffer);
     return (GameBackendMoveList){0};
   }
-  context.pruning_mode = homeworlds_backend_good_move_pruning_mode();
-  context.ordering_enabled = homeworlds_backend_good_move_ordering_enabled();
   context.root_catastrophe_count = homeworlds_backend_collect_profitable_catastrophes(
       builder.builder_state,
       context.root_catastrophes,
@@ -3077,7 +2939,6 @@ static GameBackendMoveList homeworlds_backend_list_good_moves(gconstpointer posi
                                                        &context,
                                                        &buffer,
                                                        FALSE,
-                                                       &verification,
                                                        &covered)) {
     homeworlds_move_builder_clear(&builder);
     homeworlds_backend_move_buffer_clear(&buffer);

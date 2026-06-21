@@ -722,11 +722,9 @@ a shared sacrifice-scoped state deduper: generated sacrifice branches keep one t
 that sacrifice, prune catastrophe-before-sacrifice spellings, and drop equivalent continuation states without storing
 hashes for the whole move tree. The backend `good_moves()` collector scores complete play-position moves while walking
 the builder tree and retains only the best static-pruned set, so memory remains bounded even when millions of complete
-leaves are reached before pruning. `GCHECKERS_HOMEWORLDS_GOOD_MOVE_PRUNING` can enable optional branch-bound pruning
-for conservative large yellow sacrifice proofs with `on`, or run the same proof in non-pruning `verify` mode; the
-default `off` mode leaves normal move selection unchanged. During active large yellow sacrifices, `good_moves()` also
-orders local builder candidates by the same optimistic bound so likely high-scoring continuations are explored first;
-set `GCHECKERS_HOMEWORLDS_GOOD_MOVE_ORDERING=off` to restore the old candidate order for diagnostics. `GameBackend`
+leaves are reached before pruning. During active large yellow sacrifices, `good_moves()` prunes branches whose
+optimistic proof bound cannot reach the current cutoff, and also orders local builder candidates by the same bound so
+likely high-scoring continuations are explored first. `GameBackend`
 exposes an optional streamed all-move API for diagnostics; Homeworlds
 implements it by walking complete generated move paths without materializing a `GameBackendMoveList`. The
 `View` -> `Move report` action disables its report before the collector runs. The separate
@@ -734,15 +732,17 @@ implements it by walking complete generated move paths without materializing a `
 CLI applies `--moves` random good moves from a `--seed` or replays a Homeworlds SGF or ASCII text main line with
 `--file`; omitting `--moves` during file replay reaches the end of the provided move list. It prints an ASCII board
 snapshot, can print the shared Homeworlds move report with `--move-report`, and runs the AI at `--depth` only when
-`--ai-report` is provided. The `build/tools/homeworlds_eval_experiment` CLI varies one static-evaluation weight at a
-time and runs paired depth-1 self-play against the default weights. Each seed produces one game with the candidate
+`--ai-report` is provided. During AI reports, it shows a terminal-only stderr progress line with the searched node
+count and accepts `--node-limit` to stop after a requested number of searched nodes. The
+`build/tools/homeworlds_eval_experiment` CLI varies one static-evaluation weight at a time and runs paired depth-1
+self-play against the default weights. Each seed produces one game with the candidate
 starting and one with the baseline starting, and aggregate wins are counted from the side-aware outcome. It reports one
 CSV-style
 summary row per tested value, including a `win_ratio` field computed as candidate wins divided by candidate plus
 baseline wins so draws and timeouts do not affect the ratio. Its variable names are `ship1`, `ship2`, `ship3`,
 `single-star`, and `buildable-color`; the old descriptive ship aliases and removed `homeworld-shipN` variables are not
 accepted. With `--trace-move-counts`, it uses the Homeworlds backend trace hook to print per-ply
-complete-leaf, scored-move, kept-move, pruning-mode, ordering, pruning-counter, and ordering-counter values to stderr
+complete-leaf, scored-move, kept-move, pruning-counter, and ordering-counter values to stderr
 without mixing them into the CSV summary. During
 interactive runs, it also renders one stderr progress line for the current value/game/ply using carriage return plus
 ANSI clear-line control and clears that line before each result row is shown. `GCHECKERS_HOMEWORLDS_EVAL_PROGRESS`
@@ -800,14 +800,12 @@ player's perspective, and keeps only the first 512 moves that are within 50 poin
 completed move therefore raises an early score-window cutoff even before the buffer contains 512 moves.
 Before exploring sacrifice branches from a normal ship-selection state, the ordered collector first walks all complete
 one-step attack, move, build, and trade continuations so ordinary moves can populate that score window early.
-When optional pruning is enabled, active large yellow sacrifice branches are skipped when either that score-window
-cutoff or the full 512-move cutoff is available and a conservative bound proves that no remaining yellow continuation
-can reach it. The bound adds possible buildable-color gains, immediate catastrophe gains, and only the own catastrophe
-losses that remaining yellow actions could still avoid by moving doomed ships away first. Future positive
-catastrophes count opponent ships that would be orphaned by star destruction and signed homeworld-star effects, and
-count only when enough same-color own ships can reach the target system without spending the whole gain.
-In `verify` mode those branches are still explored and scored, and any completed move that reaches the decision-time
-cutoff is counted as a verification failure.
+Active large yellow sacrifice branches are skipped when either that score-window cutoff or the full 512-move cutoff is
+available and a conservative bound proves that no remaining yellow continuation can reach it. The bound adds possible
+buildable-color gains, immediate catastrophe gains, and only the own catastrophe losses that remaining yellow actions
+could still avoid by moving doomed ships away first. Future positive catastrophes count opponent ships that would be
+orphaned by star destruction and signed homeworld-star effects, and count only when enough same-color own ships can
+reach the target system without spending the whole gain.
 Profitable catastrophes available at the start of a turn are required somewhere in the final move, while profitable
 catastrophes created by an earlier step are forced immediately in the staged walk.
 `doc/homeworlds-move-generation.md` describes how the legal builder, diagnostic move report, profiling CLI,

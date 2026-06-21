@@ -178,10 +178,16 @@ TEST_PUZZLE_PROGRESS_BIN := $(TESTS_DIR)/test_puzzle_progress
 TEST_PUZZLE_PROGRESS_REPORT_SERVER_BIN := $(TESTS_DIR)/test_puzzle_progress_report_server
 CALLGRIND_OUT := $(CALLGRIND_DIR)/callgrind.out
 CALLGRIND_ANNOTATION := $(CALLGRIND_DIR)/callgrind.annotated
-#PROFILE_BIN ?= $(HOMEWORLDS_PROFILE_MOVES_BIN)
-PROFILE_BIN ?= $(HOMEWORLDS_EVAL_EXPERIMENT_BIN)
-# PROFILE_CMD = $(PROFILE_BIN) --moves 10 --seed 1
-PROFILE_CMD = $(PROFILE_BIN) --variable large-ship --values 40 --games 1 --max-plies 300 --seed 4
+HOMEWORLDS_LIBRARY_DIR ?= $(HOME)/.local/share/gcheckers/bga-imports/homeworlds
+PROFILE_FILE ?= $(shell find "$(HOMEWORLDS_LIBRARY_DIR)" -maxdepth 1 -type f -name '*.sgf' -printf '%T@ %p\n' \
+	2>/dev/null | sort -nr | sed -n '1s/^[^ ]* //p')
+PROFILE_MOVES ?= 38
+PROFILE_DEPTH ?= 4
+PROFILE_NODE_LIMIT ?=
+PROFILE_NODE_LIMIT_ARG = $(if $(PROFILE_NODE_LIMIT), --node-limit $(PROFILE_NODE_LIMIT),)
+PROFILE_BIN ?= $(HOMEWORLDS_PROFILE_MOVES_BIN)
+PROFILE_CMD ?= $(PROFILE_BIN) --file "$(PROFILE_FILE)" --moves $(PROFILE_MOVES) --depth $(PROFILE_DEPTH) \
+	--ai-report$(PROFILE_NODE_LIMIT_ARG)
 TEST_BINS := $(TEST_GAME_BIN) $(TEST_GAME_PRINT_BIN) $(TEST_GAME_BACKEND_BIN) $(TEST_GAME_MODEL_BIN) \
 	$(TEST_HOMEWORLDS_GAME_BIN) $(TEST_HOMEWORLDS_BACKEND_BIN) $(TEST_HOMEWORLDS_PROFILE_MOVES_BIN) \
 	$(TEST_HOMEWORLDS_EVAL_EXPERIMENT_BIN) $(TEST_HOMEWORLDS_PROOF_PROBE_BIN) $(TEST_HOMEWORLDS_WINDOW_BIN) \
@@ -955,10 +961,15 @@ coverage: $(COV_OBJS) $(COV_BOARD_OBJS)
 # annotated later with `make callgrind-annotate` if $(CALLGRIND_OUT) exists.
 callgrind-run: $(PROFILE_BIN)
 	@mkdir -p $(CALLGRIND_DIR)
+	@if [ -z "$(PROFILE_FILE)" ]; then \
+		echo "No Homeworlds SGF found in $(HOMEWORLDS_LIBRARY_DIR). Set PROFILE_FILE=/path/to/game.sgf"; \
+		exit 1; \
+	fi
 	@if ! command -v valgrind >/dev/null 2>&1; then \
 		echo "valgrind not found"; \
 		exit 1; \
 	fi
+	@echo "Profiling $(PROFILE_FILE) after $(PROFILE_MOVES) moves at depth $(PROFILE_DEPTH)"
 	valgrind --tool=callgrind --dump-instr=yes --collect-jumps=yes --callgrind-out-file=$(CALLGRIND_OUT) $(PROFILE_CMD)
 
 callgrind-annotate:
