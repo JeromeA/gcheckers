@@ -1209,6 +1209,23 @@ static void test_homeworlds_view_board_content_size_matches_viewport_when_rows_f
   g_assert_cmpfloat(homeworlds_view_calculate_board_content_width(&position, 900.0), ==, 900.0);
 }
 
+static void test_homeworlds_view_system_centers_reserve_action_legend(void) {
+  HomeworldsPosition position = {0};
+  double player_1_x = 0.0;
+  double player_1_y = 0.0;
+  const double board_height = 700.0;
+
+  test_homeworlds_prepare_compact_row_position(&position);
+
+  g_assert_true(homeworlds_view_calculate_system_center(&position,
+                                                        0,
+                                                        900.0,
+                                                        board_height,
+                                                        &player_1_x,
+                                                        &player_1_y));
+  g_assert_cmpfloat(player_1_y, <, board_height - homeworlds_view_action_legend_height());
+}
+
 static void test_homeworlds_view_board_content_height_expands_for_tall_rows(void) {
   HomeworldsPosition position = {0};
   int content_width = 0;
@@ -2422,6 +2439,8 @@ int main(int argc, char **argv) {
                   test_homeworlds_view_board_content_width_expands_for_wide_rows);
   g_test_add_func("/homeworlds/view/board-size-matches-viewport-when-rows-fit",
                   test_homeworlds_view_board_content_size_matches_viewport_when_rows_fit);
+  g_test_add_func("/homeworlds/view/action-legend-reserved-space",
+                  test_homeworlds_view_system_centers_reserve_action_legend);
   g_test_add_func("/homeworlds/view/board-height-expands-for-tall-rows",
                   test_homeworlds_view_board_content_height_expands_for_tall_rows);
   g_test_add_func("/homeworlds/view/piece-metrics", test_homeworlds_view_piece_metrics_keep_pyramids_tall);

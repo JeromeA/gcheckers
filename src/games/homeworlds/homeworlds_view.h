@@ -90,6 +90,7 @@ gboolean homeworlds_view_calculate_board_content_size(const HomeworldsPosition *
                                                       int *out_height);
 double homeworlds_view_calculate_board_content_width(const HomeworldsPosition *position, double viewport_width);
 gboolean homeworlds_view_pyramid_metrics(HomeworldsSize size, HomeworldsViewPyramidMetrics *out_metrics);
+double homeworlds_view_action_legend_height(void);
 double homeworlds_view_pip_radius(void);
 double homeworlds_view_star_side(HomeworldsSize size);
 gboolean homeworlds_view_collect_previous_move_markers(const HomeworldsPosition *before_position,

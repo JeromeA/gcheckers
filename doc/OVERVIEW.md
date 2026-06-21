@@ -697,7 +697,8 @@ when needed, viewport-tracking drawing-area content size that expands width for 
 crowded row boxes, mapped-frame ticks that recheck startup allocation without replacing stable click targets, a fixed
 minimum board viewport, `H1`/`H2`/`S0`-style system labels matching move notation, homeworld board titles that append
 root `PB`/`PW` player names when present, pipped square stars, tall pipped ship pyramids, overlaid compact bank piles
-with a shared base button style, an in-panel title, staged legal-choice
+with a shared base button style, a centered bottom legend mapping Attack, Move, Build, and Trade to the red, yellow,
+green, and blue action colors, an in-panel title, staged legal-choice
 buttons, and catastrophe buttons that stage normal symbolic steps into the
 current move so SGF, model state, and the last-move label stay synchronized. Homeworld rendering keeps player 1 at the
 bottom, player 2 at

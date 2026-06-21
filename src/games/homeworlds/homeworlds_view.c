@@ -62,6 +62,9 @@ typedef struct {
 #define HOMEWORLDS_VIEW_PREVIOUS_MARKER_LINE_WIDTH 2.5
 #define HOMEWORLDS_VIEW_PREVIOUS_DISC_LINE_WIDTH 1.4
 #define HOMEWORLDS_VIEW_PREVIOUS_CATASTROPHE_LINE_WIDTH 1.3
+#define HOMEWORLDS_VIEW_ACTION_LEGEND_HEIGHT 46.0
+#define HOMEWORLDS_VIEW_ACTION_LEGEND_FONT_SIZE 17.0
+#define HOMEWORLDS_VIEW_ACTION_LEGEND_WORD_GAP 28.0
 typedef enum {
   HOMEWORLDS_VIEW_SYSTEM_ROW_TOP = 0,
   HOMEWORLDS_VIEW_SYSTEM_ROW_MIDDLE,
@@ -125,6 +128,11 @@ typedef struct {
   HomeworldsColor color;
 } HomeworldsViewCatastropheChoice;
 
+typedef struct {
+  const char *label;
+  HomeworldsColor color;
+} HomeworldsViewActionLegendItem;
+
 static HomeworldsViewBoardRow homeworlds_view_board_row_for_system(const HomeworldsPosition *position,
                                                                    guint system_index);
 
@@ -183,6 +191,13 @@ static const HomeworldsColorStyle homeworlds_view_color_styles[] = {
   [HOMEWORLDS_COLOR_BLUE] = {0.18, 0.45, 0.86, "blue", "B"},
 };
 
+static const HomeworldsViewActionLegendItem homeworlds_view_action_legend_items[] = {
+  {"Attack", HOMEWORLDS_COLOR_RED},
+  {"Move", HOMEWORLDS_COLOR_YELLOW},
+  {"Build", HOMEWORLDS_COLOR_GREEN},
+  {"Trade", HOMEWORLDS_COLOR_BLUE},
+};
+
 static double homeworlds_view_size_factor(HomeworldsSize size) {
   switch (size) {
     case HOMEWORLDS_SIZE_SMALL:
@@ -223,6 +238,16 @@ double homeworlds_view_pip_radius(void) {
   g_return_val_if_fail(homeworlds_view_pyramid_metrics(HOMEWORLDS_SIZE_MEDIUM, &metrics), 0.0);
 
   return metrics.height * HOMEWORLDS_VIEW_PIP_REFERENCE_RATIO;
+}
+
+double homeworlds_view_action_legend_height(void) {
+  return HOMEWORLDS_VIEW_ACTION_LEGEND_HEIGHT;
+}
+
+static double homeworlds_view_system_area_height(double board_height) {
+  g_return_val_if_fail(board_height > 0.0, 1.0);
+
+  return MAX(1.0, board_height - homeworlds_view_action_legend_height());
 }
 
 static double homeworlds_view_bank_button_width(HomeworldsSize size) {
@@ -1753,6 +1778,8 @@ gboolean homeworlds_view_calculate_board_content_size(const HomeworldsPosition *
                                                       int *out_width,
                                                       int *out_height) {
   double required_width = viewport_width;
+  double system_viewport_height = 0.0;
+  double required_system_height = 0.0;
   HomeworldsViewBoardRowExtent extents[HOMEWORLDS_VIEW_BOARD_ROW_COUNT] = {0};
 
   g_return_val_if_fail(position != NULL, FALSE);
@@ -1812,8 +1839,10 @@ gboolean homeworlds_view_calculate_board_content_size(const HomeworldsPosition *
     }
   }
 
+  system_viewport_height = homeworlds_view_system_area_height(viewport_height);
+  required_system_height = homeworlds_view_required_height_for_row_extents(extents, system_viewport_height);
   *out_width = (int)ceil(required_width);
-  *out_height = (int)homeworlds_view_required_height_for_row_extents(extents, viewport_height);
+  *out_height = (int)ceil(required_system_height + homeworlds_view_action_legend_height());
   return TRUE;
 }
 
@@ -1861,7 +1890,7 @@ gboolean homeworlds_view_calculate_system_center(const HomeworldsPosition *posit
     return FALSE;
   }
 
-  homeworlds_view_row_y_positions(position, height, row_y);
+  homeworlds_view_row_y_positions(position, homeworlds_view_system_area_height(height), row_y);
   homeworlds_view_row_x_bounds(width, &row_left, &row_right);
   if (!homeworlds_view_collect_target_row(position,
                                           system_index,
@@ -2849,6 +2878,54 @@ static void homeworlds_view_draw_starfield(cairo_t *cr, int width, int height) {
   }
 }
 
+static void homeworlds_view_draw_action_legend(cairo_t *cr, double width, double height) {
+  double text_widths[G_N_ELEMENTS(homeworlds_view_action_legend_items)] = {0.0};
+  double total_width = 0.0;
+  double x = 0.0;
+  double y = 0.0;
+  cairo_font_extents_t font_extents = {0};
+
+  g_return_if_fail(cr != NULL);
+  g_return_if_fail(width > 0.0);
+  g_return_if_fail(height > 0.0);
+
+  cairo_save(cr);
+  cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+  cairo_set_font_size(cr, HOMEWORLDS_VIEW_ACTION_LEGEND_FONT_SIZE);
+  cairo_font_extents(cr, &font_extents);
+
+  for (guint i = 0; i < G_N_ELEMENTS(homeworlds_view_action_legend_items); ++i) {
+    cairo_text_extents_t text_extents = {0};
+
+    cairo_text_extents(cr, homeworlds_view_action_legend_items[i].label, &text_extents);
+    text_widths[i] = text_extents.x_advance;
+    total_width += text_widths[i];
+  }
+  total_width += HOMEWORLDS_VIEW_ACTION_LEGEND_WORD_GAP *
+                 (double)(G_N_ELEMENTS(homeworlds_view_action_legend_items) - 1);
+
+  x = (width - total_width) / 2.0;
+  y = height - (homeworlds_view_action_legend_height() / 2.0) +
+      ((font_extents.ascent - font_extents.descent) / 2.0);
+
+  for (guint i = 0; i < G_N_ELEMENTS(homeworlds_view_action_legend_items); ++i) {
+    const HomeworldsViewActionLegendItem *item = &homeworlds_view_action_legend_items[i];
+    const HomeworldsColorStyle *style = &homeworlds_view_color_styles[item->color];
+
+    cairo_move_to(cr, x + 1.0, y + 1.0);
+    cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.62);
+    cairo_show_text(cr, item->label);
+
+    cairo_move_to(cr, x, y);
+    cairo_set_source_rgba(cr, style->red, style->green, style->blue, 0.98);
+    cairo_show_text(cr, item->label);
+
+    x += text_widths[i] + HOMEWORLDS_VIEW_ACTION_LEGEND_WORD_GAP;
+  }
+
+  cairo_restore(cr);
+}
+
 static void homeworlds_view_draw(GtkDrawingArea * /*drawing_area*/,
                                  cairo_t *cr,
                                  int width,
@@ -2882,6 +2959,8 @@ static void homeworlds_view_draw(GtkDrawingArea * /*drawing_area*/,
     }
     homeworlds_view_draw_system(view, cr, &position->systems[system_index], system_index, center_x, center_y, selected);
   }
+
+  homeworlds_view_draw_action_legend(cr, (double) width, (double) height);
 }
 
 static void homeworlds_view_rebuild_builder(HomeworldsView *view) {
