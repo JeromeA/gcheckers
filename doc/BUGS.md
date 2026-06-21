@@ -119,6 +119,19 @@ single-node progress/report text, and left every other node without saved analys
 The fix reuses the shared full-game analysis entry point from the puzzle button, so puzzle Analyze now produces the
 same status updates and per-node reports as a normal full-game analysis run.
 
+## Homeworlds good moves rejected homeworld-killing star catastrophes as own-material losses
+
+A yellow sacrifice should keep moves that create and trigger a catastrophe removing the opponent's last homeworld star,
+even when the overpopulated color contains only the mover's own ships.
+
+The good-move safety filter scored catastrophes by comparing only same-color own and opponent ships. A catastrophe such
+as `H2y!` could therefore look bad because it destroyed only the mover's yellow ships, even though destroying the last
+opponent homeworld star also orphaned opponent ships and won the game.
+
+The fix gives catastrophe scoring a signed homeworld-star component and counts opponent ships orphaned by star
+destruction while still treating the mover's non-color ships as potentially saveable before a future catastrophe. The
+same score now feeds the unsafe-catastrophe filter, profitable-catastrophe expansion, and large-yellow pruning proof.
+
 ## Homeworlds good-move generation read staged candidates with the move accessor
 
 The Homeworlds backend should walk staged `HomeworldsMoveCandidate` choices and only build `HomeworldsMove` values at

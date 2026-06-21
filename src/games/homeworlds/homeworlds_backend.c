@@ -88,6 +88,10 @@ static gboolean homeworlds_backend_score_after_move(const HomeworldsPosition *po
                                                     const HomeworldsMove *move,
                                                     gint *out_score);
 static gboolean homeworlds_backend_score_is_inside_prune_window(guint side, gint score, gint best_score);
+static gint homeworlds_backend_future_catastrophe_gain_ceiling(const HomeworldsMoveBuilderState *state,
+                                                               guint system_index,
+                                                               HomeworldsColor color,
+                                                               guint side);
 
 static gboolean homeworlds_backend_good_move_ordering_enabled(void) {
   const char *value = g_getenv(HOMEWORLDS_GOOD_MOVE_ORDERING_ENV);
@@ -759,48 +763,25 @@ static gboolean homeworlds_backend_position_is_initial_turn(const HomeworldsPosi
   return TRUE;
 }
 
-static guint homeworlds_backend_system_ship_pips_for_color(const HomeworldsSystem *system,
-                                                           HomeworldsColor color,
-                                                           guint side) {
-  guint pips = 0;
+static gboolean homeworlds_backend_system_has_unfavorable_catastrophe(const HomeworldsMoveBuilderState *state,
+                                                                      guint system_index,
+                                                                      guint side) {
+  const HomeworldsSystem *system = NULL;
 
-  g_return_val_if_fail(system != NULL, 0);
-  g_return_val_if_fail(color <= HOMEWORLDS_COLOR_BLUE, 0);
-  g_return_val_if_fail(side < 2, 0);
-
-  for (guint slot = 0; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
-    HomeworldsPyramid ship = system->ships[side][slot];
-
-    if (!homeworlds_pyramid_is_valid(ship)) {
-      break;
-    }
-    if (homeworlds_pyramid_color(ship) != color) {
-      continue;
-    }
-    pips += homeworlds_pyramid_size(ship);
-  }
-
-  return pips;
-}
-
-static gboolean homeworlds_backend_system_has_unfavorable_catastrophe(const HomeworldsSystem *system, guint side) {
-  guint opponent = 0;
-
-  g_return_val_if_fail(system != NULL, FALSE);
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
   g_return_val_if_fail(side < 2, FALSE);
 
-  opponent = side == 0 ? 1 : 0;
+  system = &state->working_position.systems[system_index];
   for (guint color = HOMEWORLDS_COLOR_RED; color <= HOMEWORLDS_COLOR_BLUE; ++color) {
-    guint own_pips = 0;
-    guint opponent_pips = 0;
+    gint gain = 0;
 
     if (homeworlds_system_color_count(system, (HomeworldsColor) color) < 4) {
       continue;
     }
 
-    own_pips = homeworlds_backend_system_ship_pips_for_color(system, (HomeworldsColor) color, side);
-    opponent_pips = homeworlds_backend_system_ship_pips_for_color(system, (HomeworldsColor) color, opponent);
-    if (own_pips > opponent_pips) {
+    gain = homeworlds_backend_future_catastrophe_gain_ceiling(state, system_index, (HomeworldsColor) color, side);
+    if (gain != G_MAXINT && gain < 0) {
       return TRUE;
     }
   }
@@ -1048,14 +1029,25 @@ static guint homeworlds_backend_system_ship_value_for_side(const HomeworldsSyste
   return value;
 }
 
-static guint homeworlds_backend_opponent_homeworld_star_margin(const HomeworldsSystem *system,
-                                                               guint system_index,
-                                                               HomeworldsColor color,
-                                                               guint side,
-                                                               const HomeworldsEvalWeights *weights) {
+static gint homeworlds_backend_homeworld_star_value_for_count(guint star_count,
+                                                              const HomeworldsEvalWeights *weights) {
+  g_return_val_if_fail(weights != NULL, 0);
+
+  return star_count == 1 ? weights->single_star_homeworld_penalty : 0;
+}
+
+static gint homeworlds_backend_homeworld_star_gain(const HomeworldsSystem *system,
+                                                   guint system_index,
+                                                   HomeworldsColor color,
+                                                   guint side,
+                                                   const HomeworldsEvalWeights *weights) {
   guint opponent = 0;
   guint star_count = 0;
   guint color_star_count = 0;
+  guint remaining_star_count = 0;
+  gint before_value = 0;
+  gint after_value = 0;
+  gint owner_delta = 0;
 
   g_return_val_if_fail(system != NULL, 0);
   g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, 0);
@@ -1064,7 +1056,7 @@ static guint homeworlds_backend_opponent_homeworld_star_margin(const HomeworldsS
   g_return_val_if_fail(weights != NULL, 0);
 
   opponent = side == 0 ? 1 : 0;
-  if (system_index != opponent) {
+  if (system_index != side && system_index != opponent) {
     return 0;
   }
 
@@ -1074,10 +1066,15 @@ static guint homeworlds_backend_opponent_homeworld_star_margin(const HomeworldsS
   }
 
   star_count = homeworlds_backend_system_star_count(system);
-  if (star_count == 1 || star_count == color_star_count) {
-    return 1000;
+  remaining_star_count = star_count - color_star_count;
+  if (remaining_star_count == 0) {
+    return system_index == opponent ? 1000 : -1000;
   }
-  return weights->single_star_homeworld_penalty < 0 ? (guint)-weights->single_star_homeworld_penalty : 0;
+
+  before_value = homeworlds_backend_homeworld_star_value_for_count(star_count, weights);
+  after_value = homeworlds_backend_homeworld_star_value_for_count(remaining_star_count, weights);
+  owner_delta = after_value - before_value;
+  return system_index == side ? owner_delta : -owner_delta;
 }
 
 static gboolean homeworlds_backend_catastrophe_removes_all_stars(const HomeworldsSystem *system,
@@ -1096,7 +1093,7 @@ static gint homeworlds_backend_future_catastrophe_ship_gain_ceiling(const Homewo
                                                                     const HomeworldsEvalWeights *weights) {
   guint opponent = 0;
   gint color_gain = 0;
-  gint all_ship_gain = 0;
+  gint star_removal_gain = 0;
 
   g_return_val_if_fail(system != NULL, 0);
   g_return_val_if_fail(color <= HOMEWORLDS_COLOR_BLUE, 0);
@@ -1111,9 +1108,9 @@ static gint homeworlds_backend_future_catastrophe_ship_gain_ceiling(const Homewo
     return color_gain;
   }
 
-  all_ship_gain = (gint)homeworlds_backend_system_ship_value_for_side(system, opponent, weights) -
-                  (gint)homeworlds_backend_system_ship_value_for_side(system, side, weights);
-  return MAX(color_gain, all_ship_gain);
+  star_removal_gain = (gint)homeworlds_backend_system_ship_value_for_side(system, opponent, weights) -
+                      (gint)homeworlds_backend_system_ship_value_for_color(system, color, side, weights);
+  return star_removal_gain;
 }
 
 /* For an existing catastrophe, taking it now also orphans ships when all stars disappear. */
@@ -1145,7 +1142,7 @@ static gint homeworlds_backend_immediate_catastrophe_gain(const HomeworldsMoveBu
     gain = homeworlds_backend_future_catastrophe_ship_gain_ceiling(system, color, side, weights);
   }
 
-  gain += (gint)homeworlds_backend_opponent_homeworld_star_margin(system, system_index, color, side, weights);
+  gain += homeworlds_backend_homeworld_star_gain(system, system_index, color, side, weights);
   return gain;
 }
 
@@ -1171,7 +1168,7 @@ static gint homeworlds_backend_future_catastrophe_gain_ceiling(const HomeworldsM
   system = &state->working_position.systems[system_index];
 
   gain = homeworlds_backend_future_catastrophe_ship_gain_ceiling(system, color, side, weights);
-  gain += (gint)homeworlds_backend_opponent_homeworld_star_margin(system, system_index, color, side, weights);
+  gain += homeworlds_backend_homeworld_star_gain(system, system_index, color, side, weights);
   return gain;
 }
 
@@ -1681,12 +1678,11 @@ static gboolean homeworlds_backend_step_creates_unfavorable_build_catastrophe(
   }
 
   side = state->working_position.turn;
-  if (homeworlds_backend_system_has_unfavorable_catastrophe(&state->working_position.systems[system_index], side)) {
+  if (homeworlds_backend_system_has_unfavorable_catastrophe(state, system_index, side)) {
     return FALSE;
   }
 
-  return homeworlds_backend_system_has_unfavorable_catastrophe(&child_state->working_position.systems[system_index],
-                                                               side);
+  return homeworlds_backend_system_has_unfavorable_catastrophe(child_state, system_index, side);
 }
 
 static gboolean homeworlds_backend_step_creates_unfavorable_trade_catastrophe(
@@ -1706,12 +1702,11 @@ static gboolean homeworlds_backend_step_creates_unfavorable_trade_catastrophe(
   }
 
   side = state->working_position.turn;
-  if (homeworlds_backend_system_has_unfavorable_catastrophe(&state->working_position.systems[system_index], side)) {
+  if (homeworlds_backend_system_has_unfavorable_catastrophe(state, system_index, side)) {
     return FALSE;
   }
 
-  return homeworlds_backend_system_has_unfavorable_catastrophe(&child_state->working_position.systems[system_index],
-                                                               side);
+  return homeworlds_backend_system_has_unfavorable_catastrophe(child_state, system_index, side);
 }
 
 static gboolean homeworlds_backend_step_enters_unfavorable_catastrophe(
@@ -1735,9 +1730,7 @@ static gboolean homeworlds_backend_step_enters_unfavorable_catastrophe(
   }
 
   side = state->working_position.turn;
-  return homeworlds_backend_system_has_unfavorable_catastrophe(
-      &child_state->working_position.systems[target_system_index],
-      side);
+  return homeworlds_backend_system_has_unfavorable_catastrophe(child_state, target_system_index, side);
 }
 
 static gboolean homeworlds_backend_child_state_is_good_after_step(
@@ -2126,7 +2119,6 @@ static guint homeworlds_backend_collect_profitable_catastrophes(const Homeworlds
                                                                 guint max_catastrophes) {
   guint count = 0;
   guint side = 0;
-  guint opponent = 0;
 
   g_return_val_if_fail(state != NULL, 0);
   g_return_val_if_fail(out_catastrophes != NULL || max_catastrophes == 0, 0);
@@ -2140,21 +2132,18 @@ static guint homeworlds_backend_collect_profitable_catastrophes(const Homeworlds
   }
 
   side = state->working_position.turn;
-  opponent = side == 0 ? 1 : 0;
   for (guint system_index = 0; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
     const HomeworldsSystem *system = &state->working_position.systems[system_index];
 
     for (guint color = HOMEWORLDS_COLOR_RED; color <= HOMEWORLDS_COLOR_BLUE; ++color) {
-      guint own_pips = 0;
-      guint opponent_pips = 0;
+      gint gain = 0;
 
       if (homeworlds_system_color_count(system, (HomeworldsColor) color) < 4) {
         continue;
       }
 
-      own_pips = homeworlds_backend_system_ship_pips_for_color(system, (HomeworldsColor) color, side);
-      opponent_pips = homeworlds_backend_system_ship_pips_for_color(system, (HomeworldsColor) color, opponent);
-      if (opponent_pips <= own_pips) {
+      gain = homeworlds_backend_immediate_catastrophe_gain(state, system_index, (HomeworldsColor) color, side);
+      if (gain <= 0) {
         continue;
       }
 

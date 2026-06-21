@@ -42,6 +42,8 @@ the optimization can be tuned on real reports before it becomes a default behavi
 - [x] (2026-06-20 12:20Z) Measured the 3.3M report with the proof probe in pruning `off`, `on`, and `verify` modes.
 - [x] (2026-06-21 17:20Z) Added a simple-move pre-pass for normal ship-selection states so one-step attack, move,
   build, and trade continuations are explored before sacrifice branches.
+- [x] (2026-06-21) Counted opponent ships orphaned by star destruction and signed homeworld-star effects when scoring
+  catastrophes for the proof, safety filters, and profitable-catastrophe expansion.
 - [ ] `make test-local` reached the known GTK window failure path and failed because the isolated retry also failed.
 
 ## Surprises & Discoveries
@@ -115,6 +117,13 @@ the optimization can be tuned on real reports before it becomes a default behavi
   as yellow actions save doomed own ships. If the first yellow action does not save one, the ceiling drops in the child
   state and the branch can then prune.
   Date/Author: 2026-06-20 / Codex.
+
+- Decision: Star-removing catastrophe estimates always count opponent ships that would be orphaned and the signed
+  homeworld-star score change.
+  Rationale: Own non-color ships may still be saved before a future catastrophe, but opponent ships are not assumed to
+  move away on our turn. A catastrophe that removes a homeworld star can also dominate same-color ship material, so the
+  safety filter and profitable-catastrophe expansion need the same scoring as the pruning proof.
+  Date/Author: 2026-06-21 / Codex.
 
 - Decision: Candidate ordering may change which equivalent move representative survives deduplication.
   Rationale: The user explicitly only cares about the score quality of the final buffer, not byte-for-byte identity of
@@ -296,3 +305,8 @@ move identities as long as the retained scores remain at least as good.
 Revision note, 2026-06-20 12:20Z: Implemented early score-window cutoffs, pre-512 candidate ordering, ordering trace
 counters, and proof-probe trace output. The initial full-tree ordering attempt was measured and narrowed to pre-512
 ordering because it otherwise scored slightly more leaves on the 3.3M report.
+
+Revision note, 2026-06-21: Catastrophe scoring now includes opponent ships orphaned by star destruction and signed
+homeworld-star effects. This also feeds the unsafe-catastrophe filter and profitable-catastrophe collector, so
+homeworld-killing catastrophes created by yellow sacrifice moves are kept instead of being rejected as local own-ship
+losses.

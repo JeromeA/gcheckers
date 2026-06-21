@@ -780,7 +780,9 @@ one's homeworld. When a builder choice
 appends a turn step, the AI applies the same safety checks to ordinary actions and sacrifice-granted actions: it keeps
 the last own homeworld ship in place, rejects moves into unfavorable catastrophes, rejects builds that create
 unfavorable catastrophes, rejects trades that create unfavorable catastrophes, and skips one-action sacrifices when
-that color action is already available at the selected system. It also skips two-action green sacrifices that only
+that color action is already available at the selected system. Catastrophe safety uses an optimistic score that counts
+opponent ships orphaned by star destruction and signed homeworld-star effects before deciding a catastrophe is
+unfavorable. It also skips two-action green sacrifices that only
 build green again at the sacrificed medium ship's source plus perform a build that was already legal before the
 sacrifice. It also prunes yellow-sacrifice move chains when a ship returns to its original source or reaches a system
 the original source could already reach directly without crossing a destination-system catastrophe boundary.
@@ -797,7 +799,8 @@ When optional pruning is enabled, active large yellow sacrifice branches are ski
 cutoff or the full 512-move cutoff is available and a conservative bound proves that no remaining yellow continuation
 can reach it. The bound adds possible buildable-color gains, immediate catastrophe gains, and only the own catastrophe
 losses that remaining yellow actions could still avoid by moving doomed ships away first. Future positive
-catastrophes count only when enough same-color own ships can reach the target system without spending the whole gain.
+catastrophes count opponent ships that would be orphaned by star destruction and signed homeworld-star effects, and
+count only when enough same-color own ships can reach the target system without spending the whole gain.
 In `verify` mode those branches are still explored and scored, and any completed move that reaches the decision-time
 cutoff is counted as a verification failure.
 Profitable catastrophes available at the start of a turn are required somewhere in the final move, while profitable
