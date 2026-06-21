@@ -27,6 +27,7 @@
 
 # Bugs
 
+- First create a test to reproduce the bug, then fix it.
 - When fixing a bug, add an entry in doc/BUGS.md.
 
 # ExecPlans
