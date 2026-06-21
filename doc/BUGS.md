@@ -1470,3 +1470,16 @@ The window test waited for a parent-window draw immediately after clicking Load.
 display, that draw wait could run while the child toplevel was being torn down and hit a NULL-instance GTK critical.
 
 The fix waits for the Library toplevel to disappear instead and releases the test's dialog reference after the close.
+
+## Full-game analysis overwrote deeper SGF node analysis
+
+Analyzing a game at a shallow depth should preserve any existing per-node SGF analysis that was already computed deeply
+enough.
+
+The analysis code reused stored analysis from direct SGF children when searching their parent, but it did not check
+whether the node currently being analyzed already had a sufficient report. Full-game analysis at depth 2 could therefore
+replace a depth-4 node report while walking through the game.
+
+The fix adds a shared current-node reuse check. Current-position analysis skips immediately when the selected node is
+already deep enough, resumes at the next missing depth when it is not, and full-game analysis marks reused nodes as
+processed while preserving their stored reports for parent child-score reuse.

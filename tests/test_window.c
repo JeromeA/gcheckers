@@ -54,6 +54,13 @@ typedef struct {
   gint expected_score;
 } TestGGameWindowAnalysisScoreWait;
 
+typedef struct {
+  GGameWindow *window;
+  const SgfNode *node;
+  guint expected_depth;
+  const char *action_name;
+} TestGGameWindowAnalysisDepthAndActionWait;
+
 static void test_analysis_graph_score_compression(void) {
   g_assert_cmpfloat_with_epsilon(analysis_graph_compress_score(0.0), 0.0, 0.000001);
   g_assert_cmpfloat_with_epsilon(analysis_graph_compress_score(1800.0), 900.0, 0.000001);
@@ -764,6 +771,22 @@ static gboolean test_ggame_window_analysis_score_matches(gpointer user_data) {
   }
 
   return g_strcmp0(entry->move_text, wait->expected_move) == 0 && entry->score == wait->expected_score;
+}
+
+static gboolean test_ggame_window_analysis_depth_and_action_enabled(gpointer user_data) {
+  TestGGameWindowAnalysisDepthAndActionWait *wait = user_data;
+
+  g_return_val_if_fail(wait != NULL, FALSE);
+  g_return_val_if_fail(GGAME_IS_WINDOW(wait->window), FALSE);
+  g_return_val_if_fail(wait->node != NULL, FALSE);
+  g_return_val_if_fail(wait->action_name != NULL, FALSE);
+
+  if (!g_action_group_get_action_enabled(G_ACTION_GROUP(wait->window), wait->action_name)) {
+    return FALSE;
+  }
+
+  g_autoptr(SgfNodeAnalysis) analysis = sgf_node_get_analysis(wait->node);
+  return analysis != NULL && analysis->depth == wait->expected_depth;
 }
 
 static gboolean test_ggame_window_adjustment_has_positive_value(gpointer user_data) {
@@ -2006,6 +2029,65 @@ static void test_ggame_window_analysis_reuses_direct_child_score(void) {
   g_clear_object(&app);
 }
 
+static void test_ggame_window_full_analysis_reuses_existing_node_analysis(void) {
+  GtkApplication *app = test_ggame_window_create_app();
+  GCheckersModel *model = gcheckers_model_new();
+  GGameWindow *window = test_ggame_window_new(app, model);
+
+  GGameSgfController *controller = ggame_window_get_sgf_controller(window);
+  g_assert_nonnull(controller);
+  SgfTree *tree = ggame_sgf_controller_get_tree(controller);
+  g_assert_nonnull(tree);
+
+  SgfNode *root = (SgfNode *)sgf_tree_get_root(tree);
+  g_assert_nonnull(root);
+  const SgfNode *child = sgf_tree_append_move(tree, SGF_COLOR_WHITE, "22-18");
+  g_assert_nonnull(child);
+
+  g_autoptr(SgfNodeAnalysis) root_analysis = sgf_node_analysis_new();
+  g_assert_nonnull(root_analysis);
+  root_analysis->depth = 4;
+  root_analysis->nodes = 12345;
+  g_assert_true(sgf_node_analysis_add_scored_move(root_analysis, "22-18", 777, 99));
+  g_assert_true(sgf_node_set_analysis(root, root_analysis));
+
+  g_assert_true(ggame_sgf_controller_select_node(controller, root));
+  ggame_window_set_analysis_depth(window, 2);
+  test_ggame_window_wait_for_draw(window);
+
+  GAction *action = g_action_map_lookup_action(G_ACTION_MAP(window), "analysis-whole-game");
+  g_assert_nonnull(action);
+  g_action_activate(action, NULL);
+
+  TestGGameWindowAnalysisDepthAndActionWait wait = {
+    .window = window,
+    .node = child,
+    .expected_depth = 2,
+    .action_name = "analysis-whole-game",
+  };
+  g_assert_true(test_ggame_window_wait_until(window,
+                                            test_ggame_window_analysis_depth_and_action_enabled,
+                                            &wait,
+                                            5 * G_USEC_PER_SEC));
+
+  g_autoptr(SgfNodeAnalysis) final_root_analysis = sgf_node_get_analysis(root);
+  g_assert_nonnull(final_root_analysis);
+  g_assert_cmpuint(final_root_analysis->depth, ==, 4);
+  g_assert_cmpuint(final_root_analysis->nodes, ==, 12345);
+  g_assert_nonnull(final_root_analysis->moves);
+  g_assert_cmpuint(final_root_analysis->moves->len, ==, 1);
+
+  const SgfNodeScoredMove *entry = g_ptr_array_index(final_root_analysis->moves, 0);
+  g_assert_nonnull(entry);
+  g_assert_cmpstr(entry->move_text, ==, "22-18");
+  g_assert_cmpint(entry->score, ==, 777);
+  g_assert_cmpuint(entry->nodes, ==, 99);
+
+  g_clear_object(&window);
+  g_clear_object(&model);
+  g_clear_object(&app);
+}
+
 static void test_ggame_window_puzzle_mode_solves_and_exits_to_analysis(void) {
   g_autofree char *dir_path = NULL;
   g_autofree char *progress_dir = test_ggame_window_make_progress_dir();
@@ -3239,6 +3321,8 @@ int main(int argc, char **argv) {
                   test_ggame_window_analysis_depth_slider_is_independent);
   g_test_add_func("/gcheckers-window/analysis-reuses-direct-child-score",
                   test_ggame_window_analysis_reuses_direct_child_score);
+  g_test_add_func("/gcheckers-window/full-analysis-reuses-existing-node-analysis",
+                  test_ggame_window_full_analysis_reuses_existing_node_analysis);
   g_test_add_func("/gcheckers-window/node-selection-updates-report",
                   test_ggame_window_node_selection_updates_report);
   g_test_add_func("/gcheckers-window/settings-dialog",

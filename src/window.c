@@ -114,6 +114,7 @@ typedef struct {
   gint generation;
   GameAiTranspositionTable *tt;
   GPtrArray *known_child_scores;
+  guint start_depth;
   guint current_depth;
   guint target_depth;
   gint64 last_progress_publish_us;
@@ -2619,6 +2620,17 @@ static gboolean ggame_window_node_first_score(const SgfNode *node, gint *out_sco
   return TRUE;
 }
 
+static SgfNodeAnalysis *ggame_window_node_reusable_analysis(const SgfNode *node, guint min_analysis_depth) {
+  g_return_val_if_fail(node != NULL, NULL);
+
+  g_autoptr(SgfNodeAnalysis) analysis = sgf_node_get_analysis(node);
+  if (analysis == NULL || analysis->depth < min_analysis_depth) {
+    return NULL;
+  }
+
+  return g_steal_pointer(&analysis);
+}
+
 static void ggame_window_known_child_score_free(gpointer data) {
   GGameWindowKnownChildScore *score = data;
   if (score == NULL) {
@@ -3146,7 +3158,7 @@ static gpointer ggame_window_analysis_thread(gpointer user_data) {
   g_return_val_if_fail(task->backend != NULL, NULL);
   g_return_val_if_fail(task->position != NULL, NULL);
 
-  for (guint depth = GGAME_WINDOW_ANALYSIS_DEPTH_MIN;
+  for (guint depth = MAX(task->start_depth, GGAME_WINDOW_ANALYSIS_DEPTH_MIN);
        depth <= task->target_depth && !ggame_window_should_cancel_analysis(task);
        ++depth) {
     task->current_depth = depth;
@@ -3227,6 +3239,25 @@ static gpointer ggame_window_analysis_thread(gpointer user_data) {
   return NULL;
 }
 
+static void ggame_window_full_analysis_store_reusable_node(GGameWindowFullAnalysisTask *task,
+                                                           const SgfNode *node,
+                                                           const SgfNodeAnalysis *analysis) {
+  g_return_if_fail(task != NULL);
+  g_return_if_fail(node != NULL);
+  g_return_if_fail(analysis != NULL);
+
+  if (task->analysis_by_node == NULL) {
+    return;
+  }
+
+  SgfNodeAnalysis *analysis_copy = sgf_node_analysis_copy(analysis);
+  if (analysis_copy != NULL) {
+    g_hash_table_replace(task->analysis_by_node, (gpointer)node, analysis_copy);
+  } else {
+    g_debug("Failed to copy reusable full-game analysis for child-score reuse");
+  }
+}
+
 static void ggame_window_full_node_job_free(gpointer data) {
   GGameWindowFullNodeJob *job = data;
   if (job == NULL) {
@@ -3287,6 +3318,27 @@ static gpointer ggame_window_full_analysis_thread(gpointer user_data) {
 
     GGameWindowFullNodeJob *job = g_ptr_array_index(task->jobs, i);
     g_return_val_if_fail(job != NULL, NULL);
+
+    g_autoptr(SgfNodeAnalysis) reusable_analysis = ggame_window_node_reusable_analysis(job->node, task->depth);
+    if (reusable_analysis != NULL) {
+      ggame_window_full_analysis_store_reusable_node(task, job->node, reusable_analysis);
+      ggame_window_analysis_publish_payload(task->self,
+                                            task->generation,
+                                            GGAME_WINDOW_ANALYSIS_MODE_FULL_GAME,
+                                            reusable_analysis,
+                                            job->node);
+      g_autofree char *text = ggame_window_analysis_format_full_game_status(i + 1,
+                                                                            task->jobs->len,
+                                                                            task->explored_nodes,
+                                                                            "reused");
+      ggame_window_analysis_publish_status(task->self,
+                                           task->generation,
+                                           GGAME_WINDOW_ANALYSIS_MODE_FULL_GAME,
+                                           FALSE,
+                                           FALSE,
+                                           text);
+      continue;
+    }
 
     g_autoptr(GError) replay_error = NULL;
     GameAiScoredMoveList moves = {0};
@@ -3501,13 +3553,39 @@ static void ggame_window_start_analysis(GGameWindow *self) {
   ggame_window_analysis_begin_session(self, GGAME_WINDOW_ANALYSIS_MODE_CURRENT, 0);
   ggame_window_set_analysis_status(self, "Analyzing current position...");
 
+  guint target_depth = ggame_window_get_analysis_depth(self);
+  g_autoptr(SgfNodeAnalysis) reusable_analysis =
+      ggame_window_node_reusable_analysis(target_node, GGAME_WINDOW_ANALYSIS_DEPTH_MIN);
+  if (reusable_analysis != NULL && reusable_analysis->depth >= target_depth) {
+    g_autofree char *text = ggame_window_format_analysis_status(reusable_analysis);
+    ggame_window_analysis_publish_payload(self,
+                                          generation,
+                                          GGAME_WINDOW_ANALYSIS_MODE_CURRENT,
+                                          reusable_analysis,
+                                          target_node);
+    ggame_window_analysis_publish_status(self,
+                                         generation,
+                                         GGAME_WINDOW_ANALYSIS_MODE_CURRENT,
+                                         FALSE,
+                                         FALSE,
+                                         text);
+    ggame_window_analysis_publish_status(self,
+                                         generation,
+                                         GGAME_WINDOW_ANALYSIS_MODE_CURRENT,
+                                         TRUE,
+                                         FALSE,
+                                         NULL);
+    return;
+  }
+
   GGameWindowAnalysisTask *task = g_new0(GGameWindowAnalysisTask, 1);
   task->self = g_object_ref(self);
   task->backend = backend;
   task->position = g_steal_pointer(&position);
   task->generation = generation;
   task->target_node = target_node;
-  task->target_depth = ggame_window_get_analysis_depth(self);
+  task->target_depth = target_depth;
+  task->start_depth = reusable_analysis != NULL ? reusable_analysis->depth + 1 : GGAME_WINDOW_ANALYSIS_DEPTH_MIN;
   task->known_child_scores = ggame_window_build_known_child_scores(backend, target_node, 0, NULL);
   task->tt = game_ai_tt_new(GGAME_WINDOW_ANALYSIS_TT_SIZE_MB, backend->move_size);
   if (task->tt == NULL) {

@@ -52,7 +52,9 @@ disabled and the player controls expose a Stop button that cancels the pending r
 and player controls (left), SGF mode selector and SGF view (middle), and analysis (right). Analysis is launched from
 shared window actions exposed in the `Analysis` menubar submenu: current-position analysis iterates on the selected
 node, and full-game analysis always processes nodes in reverse order so TT state is reused from later positions
-first. Current-position analysis now runs through the generic backend AI API for every shared-shell build, while
+first. Existing SGF analysis attached to the node being analyzed is reused when it is already deep enough, and
+current-position analysis resumes from the next missing depth instead of publishing lower-depth replacement reports.
+Current-position analysis now runs through the generic backend AI API for every shared-shell build, while
 full-game analysis keeps the checkers setup-aware replay path for checkers and uses backend-position SGF replay for
 boop and Homeworlds. The toplevel window default size, pane separator positions, and shared panel visibility are loaded
 from and saved to the shared `ggame` settings schema under the active profile path, so checkers, boop, and Homeworlds
@@ -134,6 +136,8 @@ attached to SGF nodes on the main thread, while text in the panel is formatted f
 Analysis score text always shows an explicit `+` sign for positive centipawn-style values and converts known terminal
 score bands, including Homeworlds `900..1000` and checkers `2900..3000`, into compact `W#X` / `B#X`
 mate-distance-style labels.
+Full-game analysis records reused stored node analysis in its per-run lookup table before moving to parent nodes, so
+parent searches can still reuse child scores even when the child itself did not need a fresh search.
 Static material in search also values man advancement: men gain `+1/+2/+3` as they get within three rows of
 promotion, while the standalone static-material API remains pure material.
 Full-game completion gating uses processed-job counts (not only payload-attached counts), so terminal/no-move nodes do
