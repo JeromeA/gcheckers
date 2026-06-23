@@ -815,7 +815,12 @@ static void test_position_ascii_formats_systems_by_reachability(void) {
                 "\n"
                 "S1: - R2Y3 -\n"
                 "S2: - R1 y2\n"
-                "H1: - G2B3 g3\n") == 0);
+                "H1: - G2B3 g3\n"
+                "Bank: "
+                "b1b1b1b2b2b2b3b3b3 "
+                "g1g1g1g2g2g2g3g3g3 "
+                "r1r1r1r2r2r2r3r3r3 "
+                "y1y1y1y2y2y2y3y3y3\n") == 0);
   g_free(text);
 }
 
@@ -826,7 +831,27 @@ static void test_position_ascii_formats_empty_position(void) {
   homeworlds_position_init(&position);
   text = homeworlds_position_format_ascii(&position);
   assert(text != NULL);
-  assert(strcmp(text, "No systems.\n") == 0);
+  assert(strcmp(text,
+                "No systems.\n"
+                "Bank: "
+                "b1b1b1b2b2b2b3b3b3 "
+                "g1g1g1g2g2g2g3g3g3 "
+                "r1r1r1r2r2r2r3r3r3 "
+                "y1y1y1y2y2y2y3y3y3\n") == 0);
+  g_free(text);
+}
+
+static void test_position_ascii_formats_empty_bank(void) {
+  HomeworldsPosition position = {0};
+  char *text = NULL;
+
+  homeworlds_position_init(&position);
+  memset(position.bank, 0, sizeof(position.bank));
+  text = homeworlds_position_format_ascii(&position);
+  assert(text != NULL);
+  assert(strcmp(text,
+                "No systems.\n"
+                "Bank: (empty)\n") == 0);
   g_free(text);
 }
 
@@ -963,6 +988,7 @@ int main(void) {
   test_terminal_score_uses_win_scale();
   test_position_ascii_formats_systems_by_reachability();
   test_position_ascii_formats_empty_position();
+  test_position_ascii_formats_empty_bank();
   test_move_parse_failure_leaves_output_unchanged();
   test_move_parse_rejects_legacy_step_separators();
   test_move_equality_uses_structural_notation_identity();

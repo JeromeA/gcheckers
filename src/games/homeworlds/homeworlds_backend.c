@@ -4,11 +4,14 @@
 #include "homeworlds_move_builder.h"
 #include "homeworlds_sgf_position.h"
 
+#include <stdarg.h>
 #include <string.h>
 
 enum {
   HOMEWORLDS_GOOD_MOVE_STATIC_PRUNE_LIMIT = 512,
   HOMEWORLDS_GOOD_MOVE_STATIC_PRUNE_WINDOW = 50,
+  HOMEWORLDS_GOAL_BRANCH_SMALL_LEAF_LIMIT = 50,
+  HOMEWORLDS_GOAL_REPORT_MAX_LINES = 2048,
 };
 
 typedef struct {
@@ -20,6 +23,11 @@ typedef struct {
 typedef struct {
   HomeworldsProfitableCatastrophe root_catastrophes[HOMEWORLDS_SYSTEM_SLOT_COUNT * 4];
   guint root_catastrophe_count;
+  gboolean has_score_interval;
+  gint score_interval_min;
+  gint score_interval_max;
+  gboolean defer_root_catastrophes;
+  guint root_defer_step_count;
   gsize pruning_checked_branches;
   gsize pruning_window_cutoff_branches;
   gsize pruning_pruned_branches;
@@ -28,6 +36,23 @@ typedef struct {
   gsize ordering_reordered_candidates;
   gsize ordering_single_step_passes;
   gsize ordering_single_step_moves;
+  gsize goal_branches_created;
+  gsize goal_branches_selected;
+  gsize goal_branches_split;
+  gsize goal_branches_requeued;
+  gsize goal_branches_direct;
+  gsize goal_branches_skipped;
+  gsize goal_branches_exhausted;
+  gsize goal_duplicate_states;
+  gsize goal_rejected_steps;
+  gsize goal_rejected_bad_moves;
+  gsize goal_rejected_root_catastrophes;
+  gsize goal_rejected_score_intervals;
+  gsize goal_rejected_score_windows;
+  gsize goal_rejected_full_buffer;
+  GString *goal_report;
+  gsize goal_report_lines;
+  gboolean goal_report_truncated;
 } HomeworldsGoodMoveContext;
 
 typedef enum {
@@ -66,6 +91,44 @@ typedef struct {
   guint catastrophe_gain;
 } HomeworldsCandidateOrder;
 
+typedef enum {
+  HOMEWORLDS_GOAL_BRANCH_ROOT = 0,
+  HOMEWORLDS_GOAL_BRANCH_ROOT_CATASTROPHE_NOW,
+  HOMEWORLDS_GOAL_BRANCH_ROOT_CATASTROPHE_POSTPONE,
+  HOMEWORLDS_GOAL_BRANCH_SINGLE_STEP,
+  HOMEWORLDS_GOAL_BRANCH_SACRIFICE,
+  HOMEWORLDS_GOAL_BRANCH_LARGE_YELLOW_SACRIFICE,
+  HOMEWORLDS_GOAL_BRANCH_GENERIC,
+} HomeworldsGoalBranchKind;
+
+typedef struct {
+  gint ref_count;
+  HomeworldsGenerationDedupe dedupe;
+} HomeworldsGoalDedupeRef;
+
+typedef struct {
+  gsize id;
+  HomeworldsGoalBranchKind kind;
+  HomeworldsMoveBuilderState state;
+  HomeworldsGenerationContext generation_context;
+  HomeworldsGoalDedupeRef *dedupe_ref;
+  gint interval_min;
+  gint interval_max;
+  gint parent_score;
+  gint parent_delta_min;
+  gint parent_delta_max;
+  gsize leaf_upper_bound;
+  guint root_defer_step_count;
+  gboolean defer_root_catastrophes;
+  gboolean allow_pass_move;
+  char reason[96];
+} HomeworldsGoalBranch;
+
+typedef struct {
+  GPtrArray *branches;
+  gsize next_branch_id;
+} HomeworldsGoalQueue;
+
 static HomeworldsGoodMoveTraceFunc homeworlds_backend_good_move_trace_func = NULL;
 static gpointer homeworlds_backend_good_move_trace_user_data = NULL;
 
@@ -73,10 +136,16 @@ static gboolean homeworlds_backend_score_after_move(const HomeworldsPosition *po
                                                     const HomeworldsMove *move,
                                                     gint *out_score);
 static gboolean homeworlds_backend_score_is_inside_prune_window(guint side, gint score, gint best_score);
+static gboolean homeworlds_backend_move_buffer_current_cutoff(const HomeworldsMoveBuffer *buffer,
+                                                              gint *out_cutoff,
+                                                              HomeworldsGoodMoveCutoffKind *out_cutoff_kind);
 static gint homeworlds_backend_future_catastrophe_gain_ceiling(const HomeworldsMoveBuilderState *state,
                                                                guint system_index,
                                                                HomeworldsColor color,
                                                                guint side);
+static guint homeworlds_backend_collect_profitable_catastrophes(const HomeworldsMoveBuilderState *state,
+                                                                HomeworldsProfitableCatastrophe *out_catastrophes,
+                                                                guint max_catastrophes);
 
 void homeworlds_backend_set_good_move_trace(HomeworldsGoodMoveTraceFunc trace_func, gpointer user_data) {
   homeworlds_backend_good_move_trace_func = trace_func;
@@ -341,6 +410,360 @@ static gboolean homeworlds_backend_score_is_better(guint side, gint score, gint 
   return score < other_score;
 }
 
+static gboolean homeworlds_backend_score_reaches_cutoff(guint side, gint score, gint cutoff) {
+  g_return_val_if_fail(side < 2, FALSE);
+
+  return side == 0 ? score >= cutoff : score <= cutoff;
+}
+
+static gboolean homeworlds_backend_score_interval_contains(guint side,
+                                                           gint score,
+                                                           gint interval_min,
+                                                           gint interval_max) {
+  g_return_val_if_fail(side < 2, FALSE);
+
+  return score >= interval_min && score <= interval_max;
+}
+
+static gint homeworlds_backend_goal_branch_best_bound(guint side, const HomeworldsGoalBranch *branch) {
+  g_return_val_if_fail(side < 2, 0);
+  g_return_val_if_fail(branch != NULL, 0);
+
+  return side == 0 ? branch->interval_max : branch->interval_min;
+}
+
+static gboolean homeworlds_backend_goal_branch_can_reach_cutoff(guint side,
+                                                                const HomeworldsGoalBranch *branch,
+                                                                gint cutoff) {
+  g_return_val_if_fail(side < 2, FALSE);
+  g_return_val_if_fail(branch != NULL, FALSE);
+
+  return homeworlds_backend_score_reaches_cutoff(side,
+                                                 homeworlds_backend_goal_branch_best_bound(side, branch),
+                                                 cutoff);
+}
+
+static gboolean homeworlds_backend_goal_bound_is_finite(gint bound) {
+  return bound != G_MININT && bound != G_MAXINT;
+}
+
+static void homeworlds_backend_format_optional_goal_score(gboolean has_score,
+                                                          gint score,
+                                                          char *buffer,
+                                                          gsize buffer_size) {
+  g_return_if_fail(buffer != NULL);
+  g_return_if_fail(buffer_size > 0);
+
+  if (!has_score) {
+    g_strlcpy(buffer, "none", buffer_size);
+    return;
+  }
+
+  g_snprintf(buffer, buffer_size, "%d", score);
+}
+
+static void homeworlds_backend_format_goal_cutoff(const HomeworldsMoveBuffer *buffer,
+                                                  char *buffer_text,
+                                                  gsize buffer_text_size) {
+  HomeworldsGoodMoveCutoffKind cutoff_kind = HOMEWORLDS_GOOD_MOVE_CUTOFF_NONE;
+  gint cutoff = 0;
+
+  g_return_if_fail(buffer != NULL);
+  g_return_if_fail(buffer_text != NULL);
+  g_return_if_fail(buffer_text_size > 0);
+
+  if (!homeworlds_backend_move_buffer_current_cutoff(buffer, &cutoff, &cutoff_kind)) {
+    g_strlcpy(buffer_text, "none", buffer_text_size);
+    return;
+  }
+
+  switch (cutoff_kind) {
+    case HOMEWORLDS_GOOD_MOVE_CUTOFF_SCORE_WINDOW:
+      g_snprintf(buffer_text, buffer_text_size, "%d/window", cutoff);
+      return;
+    case HOMEWORLDS_GOOD_MOVE_CUTOFF_FULL_BUFFER:
+      g_snprintf(buffer_text, buffer_text_size, "%d/full", cutoff);
+      return;
+    case HOMEWORLDS_GOOD_MOVE_CUTOFF_NONE:
+    default:
+      g_strlcpy(buffer_text, "none", buffer_text_size);
+      return;
+  }
+}
+
+static void homeworlds_backend_goal_branch_format_prefix(const HomeworldsGoalBranch *branch,
+                                                         char *buffer,
+                                                         gsize buffer_size) {
+  g_return_if_fail(branch != NULL);
+  g_return_if_fail(buffer != NULL);
+  g_return_if_fail(buffer_size > 0);
+
+  if (branch->state.move.kind != HOMEWORLDS_MOVE_KIND_TURN || branch->state.move.step_count == 0) {
+    g_strlcpy(buffer, "<root>", buffer_size);
+    return;
+  }
+  if (!homeworlds_move_format(&branch->state.move, buffer, buffer_size)) {
+    g_strlcpy(buffer, "<unformatted>", buffer_size);
+  }
+}
+
+static const char *homeworlds_backend_goal_branch_kind_name(HomeworldsGoalBranchKind kind) {
+  switch (kind) {
+    case HOMEWORLDS_GOAL_BRANCH_ROOT:
+      return "root";
+    case HOMEWORLDS_GOAL_BRANCH_ROOT_CATASTROPHE_NOW:
+      return "root-cat-now";
+    case HOMEWORLDS_GOAL_BRANCH_ROOT_CATASTROPHE_POSTPONE:
+      return "root-cat-postpone";
+    case HOMEWORLDS_GOAL_BRANCH_SINGLE_STEP:
+      return "single-step";
+    case HOMEWORLDS_GOAL_BRANCH_SACRIFICE:
+      return "sacrifice";
+    case HOMEWORLDS_GOAL_BRANCH_LARGE_YELLOW_SACRIFICE:
+      return "large-yellow-sacrifice";
+    case HOMEWORLDS_GOAL_BRANCH_GENERIC:
+    default:
+      return "generic";
+  }
+}
+
+static void homeworlds_backend_goal_report_append(HomeworldsGoodMoveContext *context, const char *format, ...) {
+  va_list args;
+
+  g_return_if_fail(context != NULL);
+  g_return_if_fail(format != NULL);
+
+  if (context->goal_report == NULL) {
+    context->goal_report = g_string_new("");
+    g_return_if_fail(context->goal_report != NULL);
+  }
+  if (context->goal_report_lines >= HOMEWORLDS_GOAL_REPORT_MAX_LINES) {
+    if (!context->goal_report_truncated) {
+      g_string_append(context->goal_report, "... goal tree report truncated ...\n");
+      context->goal_report_truncated = TRUE;
+    }
+    return;
+  }
+
+  va_start(args, format);
+  g_string_append_vprintf(context->goal_report, format, args);
+  va_end(args);
+  g_string_append_c(context->goal_report, '\n');
+  context->goal_report_lines++;
+}
+
+static HomeworldsGoalDedupeRef *homeworlds_backend_goal_dedupe_ref_new(void) {
+  HomeworldsGoalDedupeRef *ref = g_new0(HomeworldsGoalDedupeRef, 1);
+
+  g_return_val_if_fail(ref != NULL, NULL);
+  ref->ref_count = 1;
+  homeworlds_generation_dedupe_init(&ref->dedupe);
+  return ref;
+}
+
+static HomeworldsGoalDedupeRef *homeworlds_backend_goal_dedupe_ref_ref(HomeworldsGoalDedupeRef *ref) {
+  g_return_val_if_fail(ref != NULL, NULL);
+
+  ref->ref_count++;
+  return ref;
+}
+
+static void homeworlds_backend_goal_dedupe_ref_unref(HomeworldsGoalDedupeRef *ref) {
+  if (ref == NULL) {
+    return;
+  }
+
+  g_return_if_fail(ref->ref_count > 0);
+  ref->ref_count--;
+  if (ref->ref_count > 0) {
+    return;
+  }
+
+  homeworlds_generation_dedupe_clear(&ref->dedupe);
+  g_free(ref);
+}
+
+static HomeworldsGoalBranch *homeworlds_backend_goal_branch_new(HomeworldsGoalQueue *queue,
+                                                                HomeworldsGoalBranchKind kind,
+                                                                const HomeworldsMoveBuilderState *state,
+                                                                const HomeworldsGenerationContext *generation_context,
+                                                                HomeworldsGoalDedupeRef *dedupe_ref,
+                                                                const char *reason) {
+  HomeworldsGoalBranch *branch = NULL;
+
+  g_return_val_if_fail(queue != NULL, NULL);
+  g_return_val_if_fail(state != NULL, NULL);
+  g_return_val_if_fail(generation_context != NULL, NULL);
+
+  branch = g_new0(HomeworldsGoalBranch, 1);
+  g_return_val_if_fail(branch != NULL, NULL);
+  branch->id = queue->next_branch_id++;
+  branch->kind = kind;
+  branch->state = *state;
+  branch->generation_context = *generation_context;
+  branch->dedupe_ref = dedupe_ref != NULL ? homeworlds_backend_goal_dedupe_ref_ref(dedupe_ref) : NULL;
+  branch->interval_min = G_MININT;
+  branch->interval_max = G_MAXINT;
+  branch->leaf_upper_bound = G_MAXSIZE;
+  if (reason != NULL) {
+    g_strlcpy(branch->reason, reason, sizeof(branch->reason));
+  }
+  return branch;
+}
+
+static void homeworlds_backend_goal_branch_free(gpointer data) {
+  HomeworldsGoalBranch *branch = data;
+
+  if (branch == NULL) {
+    return;
+  }
+
+  homeworlds_backend_goal_dedupe_ref_unref(branch->dedupe_ref);
+  g_free(branch);
+}
+
+static void homeworlds_backend_goal_queue_init(HomeworldsGoalQueue *queue) {
+  g_return_if_fail(queue != NULL);
+
+  memset(queue, 0, sizeof(*queue));
+  queue->branches = g_ptr_array_new_with_free_func(homeworlds_backend_goal_branch_free);
+  g_return_if_fail(queue->branches != NULL);
+}
+
+static void homeworlds_backend_goal_queue_clear(HomeworldsGoalQueue *queue) {
+  g_return_if_fail(queue != NULL);
+
+  g_clear_pointer(&queue->branches, g_ptr_array_unref);
+  queue->next_branch_id = 0;
+}
+
+static void homeworlds_backend_goal_queue_push(HomeworldsGoalQueue *queue,
+                                               HomeworldsGoodMoveContext *context,
+                                               HomeworldsGoalBranch *branch) {
+  char prefix[256] = {0};
+
+  g_return_if_fail(queue != NULL);
+  g_return_if_fail(context != NULL);
+  g_return_if_fail(branch != NULL);
+  g_return_if_fail(queue->branches != NULL);
+
+  context->goal_branches_created++;
+  homeworlds_backend_goal_branch_format_prefix(branch, prefix, sizeof(prefix));
+  homeworlds_backend_goal_report_append(context,
+                                        "create #%zu %s interval=[%d,%d] parent_delta=[%d,%d] leaves<=%zu "
+                                        "prefix=[%s] %s",
+                                        branch->id,
+                                        homeworlds_backend_goal_branch_kind_name(branch->kind),
+                                        branch->interval_min,
+                                        branch->interval_max,
+                                        branch->parent_delta_min,
+                                        branch->parent_delta_max,
+                                        branch->leaf_upper_bound,
+                                        prefix,
+                                        branch->reason);
+  g_ptr_array_add(queue->branches, branch);
+}
+
+static HomeworldsGoalBranch *homeworlds_backend_goal_branch_clone_for_interval(HomeworldsGoalQueue *queue,
+                                                                               const HomeworldsGoalBranch *branch,
+                                                                               gint interval_min,
+                                                                               gint interval_max,
+                                                                               const char *reason) {
+  HomeworldsGoalBranch *clone = NULL;
+
+  g_return_val_if_fail(queue != NULL, NULL);
+  g_return_val_if_fail(branch != NULL, NULL);
+  g_return_val_if_fail(interval_min <= interval_max, NULL);
+
+  clone = homeworlds_backend_goal_branch_new(queue,
+                                             branch->kind,
+                                             &branch->state,
+                                             &branch->generation_context,
+                                             NULL,
+                                             reason);
+  g_return_val_if_fail(clone != NULL, NULL);
+  clone->interval_min = interval_min;
+  clone->interval_max = interval_max;
+  clone->parent_score = branch->parent_score;
+  clone->parent_delta_min = interval_min == G_MININT ? G_MININT : interval_min - branch->parent_score;
+  clone->parent_delta_max = interval_max == G_MAXINT ? G_MAXINT : interval_max - branch->parent_score;
+  clone->leaf_upper_bound = branch->leaf_upper_bound;
+  clone->defer_root_catastrophes = branch->defer_root_catastrophes;
+  clone->root_defer_step_count = branch->root_defer_step_count;
+  clone->allow_pass_move = branch->allow_pass_move;
+
+  if (branch->dedupe_ref != NULL) {
+    clone->dedupe_ref = homeworlds_backend_goal_dedupe_ref_new();
+    if (clone->dedupe_ref == NULL) {
+      homeworlds_backend_goal_branch_free(clone);
+      return NULL;
+    }
+    clone->generation_context.sacrifice_dedupe = &clone->dedupe_ref->dedupe;
+  }
+
+  return clone;
+}
+
+static guint homeworlds_backend_goal_queue_best_index(const HomeworldsGoalQueue *queue, guint side) {
+  guint best_index = 0;
+
+  g_return_val_if_fail(queue != NULL, 0);
+  g_return_val_if_fail(queue->branches != NULL, 0);
+  g_return_val_if_fail(queue->branches->len > 0, 0);
+  g_return_val_if_fail(side < 2, 0);
+
+  for (guint i = 1; i < queue->branches->len; ++i) {
+    const HomeworldsGoalBranch *candidate = g_ptr_array_index(queue->branches, i);
+    const HomeworldsGoalBranch *best = g_ptr_array_index(queue->branches, best_index);
+    gint candidate_bound = homeworlds_backend_goal_branch_best_bound(side, candidate);
+    gint best_bound = homeworlds_backend_goal_branch_best_bound(side, best);
+
+    if (candidate_bound == best_bound) {
+      if (candidate->id < best->id) {
+        best_index = i;
+      }
+      continue;
+    }
+    if (homeworlds_backend_score_is_better(side, candidate_bound, best_bound)) {
+      best_index = i;
+    }
+  }
+  return best_index;
+}
+
+static HomeworldsGoalBranch *homeworlds_backend_goal_queue_pop_best(HomeworldsGoalQueue *queue, guint side) {
+  guint best_index = 0;
+  HomeworldsGoalBranch *branch = NULL;
+
+  g_return_val_if_fail(queue != NULL, NULL);
+  g_return_val_if_fail(queue->branches != NULL, NULL);
+  g_return_val_if_fail(queue->branches->len > 0, NULL);
+  g_return_val_if_fail(side < 2, NULL);
+
+  best_index = homeworlds_backend_goal_queue_best_index(queue, side);
+  branch = g_ptr_array_index(queue->branches, best_index);
+  g_ptr_array_steal_index(queue->branches, best_index);
+  return branch;
+}
+
+static gboolean homeworlds_backend_goal_queue_best_bound(const HomeworldsGoalQueue *queue,
+                                                         guint side,
+                                                         gint *out_bound) {
+  g_return_val_if_fail(queue != NULL, FALSE);
+  g_return_val_if_fail(queue->branches != NULL, FALSE);
+  g_return_val_if_fail(side < 2, FALSE);
+  g_return_val_if_fail(out_bound != NULL, FALSE);
+
+  if (queue->branches->len == 0) {
+    return FALSE;
+  }
+
+  *out_bound = homeworlds_backend_goal_branch_best_bound(
+      side,
+      g_ptr_array_index(queue->branches, homeworlds_backend_goal_queue_best_index(queue, side)));
+  return TRUE;
+}
+
 static gint homeworlds_backend_scored_move_order_compare(guint side,
                                                          const HomeworldsScoredMove *left,
                                                          const HomeworldsScoredMove *right) {
@@ -498,6 +921,15 @@ static gboolean homeworlds_backend_move_buffer_append_scored(
   }
 
   buffer->scored_moves++;
+  if (context->has_score_interval &&
+      !homeworlds_backend_score_interval_contains(buffer->side,
+                                                  score,
+                                                  context->score_interval_min,
+                                                  context->score_interval_max)) {
+    context->goal_rejected_score_intervals++;
+    return TRUE;
+  }
+
   scored_move = (HomeworldsScoredMove){
     .move = *move,
     .score = score,
@@ -509,6 +941,7 @@ static gboolean homeworlds_backend_move_buffer_append_scored(
     buffer->has_best_score = TRUE;
     homeworlds_backend_move_buffer_prune_score_window(buffer);
   } else if (!homeworlds_backend_score_is_inside_prune_window(buffer->side, score, buffer->best_score)) {
+    context->goal_rejected_score_windows++;
     return TRUE;
   }
 
@@ -516,6 +949,7 @@ static gboolean homeworlds_backend_move_buffer_append_scored(
     g_return_val_if_fail(buffer->count > 0, FALSE);
     if (homeworlds_backend_scored_move_order_compare(buffer->side, &scored_move, &buffer->moves[buffer->count - 1]) >=
         0) {
+      context->goal_rejected_full_buffer++;
       return TRUE;
     }
     homeworlds_backend_move_buffer_remove_at(buffer, buffer->count - 1);
@@ -1482,6 +1916,7 @@ static gboolean homeworlds_backend_prepare_pruning_for_child(
   gint cutoff = 0;
   HomeworldsGoodMoveCutoffKind cutoff_kind = HOMEWORLDS_GOOD_MOVE_CUTOFF_NONE;
   gboolean prune_child = FALSE;
+  gboolean has_cutoff = FALSE;
 
   g_return_val_if_fail(context != NULL, FALSE);
   g_return_val_if_fail(buffer != NULL, FALSE);
@@ -1489,7 +1924,17 @@ static gboolean homeworlds_backend_prepare_pruning_for_child(
   g_return_val_if_fail(out_prune_child != NULL, FALSE);
 
   *out_prune_child = FALSE;
-  if (!homeworlds_backend_move_buffer_current_cutoff(buffer, &cutoff, &cutoff_kind)) {
+  has_cutoff = homeworlds_backend_move_buffer_current_cutoff(buffer, &cutoff, &cutoff_kind);
+  if (context->has_score_interval) {
+    gint interval_cutoff = buffer->side == 0 ? context->score_interval_min : context->score_interval_max;
+
+    if (!has_cutoff || homeworlds_backend_score_is_better(buffer->side, interval_cutoff, cutoff)) {
+      cutoff = interval_cutoff;
+      cutoff_kind = HOMEWORLDS_GOOD_MOVE_CUTOFF_SCORE_WINDOW;
+      has_cutoff = TRUE;
+    }
+  }
+  if (!has_cutoff) {
     return TRUE;
   }
 
@@ -1925,6 +2370,506 @@ static gboolean homeworlds_backend_candidate_order_find_priority(const Homeworld
   return TRUE;
 }
 
+static gsize homeworlds_backend_saturating_add(gsize left, gsize right) {
+  if (left > G_MAXSIZE - right) {
+    return G_MAXSIZE;
+  }
+  return left + right;
+}
+
+static guint homeworlds_backend_bank_pyramid_count(const HomeworldsPosition *position, HomeworldsPyramid pyramid) {
+  guint count = 0;
+
+  g_return_val_if_fail(position != NULL, 0);
+  g_return_val_if_fail(homeworlds_pyramid_is_valid(pyramid), 0);
+
+  for (guint bank_slot = 0; bank_slot < HOMEWORLDS_BANK_SLOT_COUNT; ++bank_slot) {
+    if (position->bank[bank_slot] == pyramid) {
+      count++;
+    }
+  }
+  return count;
+}
+
+static guint homeworlds_backend_bank_color_count(const HomeworldsPosition *position, HomeworldsColor color) {
+  guint count = 0;
+
+  g_return_val_if_fail(position != NULL, 0);
+  g_return_val_if_fail(color <= HOMEWORLDS_COLOR_BLUE, 0);
+
+  for (HomeworldsSize size = HOMEWORLDS_SIZE_SMALL; size <= HOMEWORLDS_SIZE_LARGE; size++) {
+    count += homeworlds_backend_bank_pyramid_count(position, homeworlds_pyramid_make(color, size));
+  }
+  return count;
+}
+
+static guint homeworlds_backend_forced_action_color_bank_count(const HomeworldsPosition *position,
+                                                               HomeworldsColor color) {
+  g_return_val_if_fail(position != NULL, 0);
+  g_return_val_if_fail(color <= HOMEWORLDS_COLOR_BLUE, 0);
+
+  return homeworlds_backend_bank_color_count(position, color);
+}
+
+static guint homeworlds_backend_forced_action_pyramid_bank_count(const HomeworldsPosition *position,
+                                                                 HomeworldsPyramid pyramid) {
+  g_return_val_if_fail(position != NULL, 0);
+  g_return_val_if_fail(homeworlds_pyramid_is_valid(pyramid), 0);
+
+  return homeworlds_backend_bank_pyramid_count(position, pyramid);
+}
+
+static gsize homeworlds_backend_saturating_permutation(gsize choices, guint length) {
+  gsize result = 1;
+
+  if (choices < length) {
+    return 0;
+  }
+
+  for (guint i = 0; i < length; ++i) {
+    gsize factor = choices - i;
+
+    if (factor != 0 && result > G_MAXSIZE / factor) {
+      return G_MAXSIZE;
+    }
+    result *= factor;
+  }
+  return result;
+}
+
+static gsize homeworlds_backend_count_current_positive_catastrophe_steps(
+    const HomeworldsMoveBuilderState *state) {
+  HomeworldsProfitableCatastrophe catastrophes[HOMEWORLDS_SYSTEM_SLOT_COUNT * 4] = {0};
+
+  g_return_val_if_fail(state != NULL, 0);
+
+  return homeworlds_backend_collect_profitable_catastrophes(state, catastrophes, G_N_ELEMENTS(catastrophes));
+}
+
+static gboolean homeworlds_backend_future_catastrophe_can_be_positive(const HomeworldsMoveBuilderState *state,
+                                                                      guint system_index,
+                                                                      HomeworldsColor color,
+                                                                      guint side) {
+  gint gain = 0;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
+  g_return_val_if_fail(color <= HOMEWORLDS_COLOR_BLUE, FALSE);
+  g_return_val_if_fail(side < 2, FALSE);
+
+  gain = homeworlds_backend_future_catastrophe_gain_ceiling(state, system_index, color, side);
+  return gain == G_MAXINT || gain > 0;
+}
+
+static guint homeworlds_backend_forced_green_build_count_for_system(
+    const HomeworldsMoveBuilderState *state,
+    guint system_index,
+    HomeworldsColor color) {
+  const HomeworldsSystem *system = NULL;
+
+  g_return_val_if_fail(state != NULL, 0);
+  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, 0);
+  g_return_val_if_fail(color <= HOMEWORLDS_COLOR_BLUE, 0);
+
+  system = &state->working_position.systems[system_index];
+  if (system->ship_color_counts[state->working_position.turn][color] == 0) {
+    return 0;
+  }
+  return homeworlds_backend_forced_action_color_bank_count(&state->working_position, color);
+}
+
+static gsize homeworlds_backend_count_forced_green_build_steps(const HomeworldsMoveBuilderState *state) {
+  gsize choices = 0;
+  guint side = 0;
+
+  g_return_val_if_fail(state != NULL, 0);
+
+  side = state->working_position.turn;
+  for (guint system_index = 0; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
+    const HomeworldsSystem *system = &state->working_position.systems[system_index];
+
+    for (HomeworldsColor color = HOMEWORLDS_COLOR_RED; color <= HOMEWORLDS_COLOR_BLUE; color++) {
+      guint count = 0;
+
+      if (system->ship_color_counts[side][color] == 0) {
+        continue;
+      }
+      count = homeworlds_backend_forced_green_build_count_for_system(state,
+                                                                     system_index,
+                                                                     color);
+      choices = homeworlds_backend_saturating_add(choices, count);
+      if (choices == G_MAXSIZE) {
+        return G_MAXSIZE;
+      }
+    }
+  }
+  return choices;
+}
+
+static gsize homeworlds_backend_count_green_build_catastrophe_steps(
+    const HomeworldsMoveBuilderState *state) {
+  gsize count = 0;
+  guint side = 0;
+
+  g_return_val_if_fail(state != NULL, 0);
+
+  side = state->working_position.turn;
+  for (guint system_index = 0; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
+    const HomeworldsSystem *system = &state->working_position.systems[system_index];
+
+    for (HomeworldsColor color = HOMEWORLDS_COLOR_RED; color <= HOMEWORLDS_COLOR_BLUE; color++) {
+      guint current_count = homeworlds_system_color_count(system, color);
+      guint needed_builds = 0;
+      guint build_count = 0;
+
+      if (current_count >= 4 || current_count == 0) {
+        continue;
+      }
+      needed_builds = 4 - current_count;
+      if (needed_builds > state->pending_actions_remaining ||
+          !homeworlds_backend_future_catastrophe_can_be_positive(state, system_index, color, side)) {
+        continue;
+      }
+      build_count = homeworlds_backend_forced_green_build_count_for_system(state,
+                                                                           system_index,
+                                                                           color);
+      if (build_count >= needed_builds) {
+        count++;
+      }
+    }
+  }
+  return count;
+}
+
+static gsize homeworlds_backend_count_forced_red_attack_steps(const HomeworldsMoveBuilderState *state) {
+  gsize choices = 0;
+  guint side = 0;
+  guint opponent = 0;
+
+  g_return_val_if_fail(state != NULL, 0);
+
+  side = state->working_position.turn;
+  opponent = side == 0 ? 1 : 0;
+  for (guint system_index = 0; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
+    const HomeworldsSystem *system = &state->working_position.systems[system_index];
+
+    for (guint attacker_slot = 0; attacker_slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++attacker_slot) {
+      HomeworldsPyramid attacker = system->ships[side][attacker_slot];
+
+      if (!homeworlds_pyramid_is_valid(attacker)) {
+        break;
+      }
+      for (guint target_slot = 0; target_slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++target_slot) {
+        HomeworldsPyramid target = system->ships[opponent][target_slot];
+
+        if (!homeworlds_pyramid_is_valid(target)) {
+          break;
+        }
+        if (homeworlds_pyramid_size(attacker) < homeworlds_pyramid_size(target)) {
+          continue;
+        }
+        choices = homeworlds_backend_saturating_add(choices, 1);
+        if (choices == G_MAXSIZE) {
+          return G_MAXSIZE;
+        }
+      }
+    }
+  }
+  return choices;
+}
+
+static guint homeworlds_backend_forced_blue_trade_count_for_ship(
+    const HomeworldsMoveBuilderState *state,
+    HomeworldsPyramid ship,
+    HomeworldsColor target_color) {
+  HomeworldsPyramid target = 0;
+
+  g_return_val_if_fail(state != NULL, 0);
+  g_return_val_if_fail(homeworlds_pyramid_is_valid(ship), 0);
+  g_return_val_if_fail(target_color <= HOMEWORLDS_COLOR_BLUE, 0);
+
+  if (homeworlds_pyramid_color(ship) == target_color) {
+    return 0;
+  }
+
+  target = homeworlds_pyramid_make(target_color, homeworlds_pyramid_size(ship));
+  return homeworlds_backend_forced_action_pyramid_bank_count(&state->working_position, target);
+}
+
+static gsize homeworlds_backend_count_forced_blue_trade_steps(const HomeworldsMoveBuilderState *state) {
+  gsize choices = 0;
+  guint side = 0;
+
+  g_return_val_if_fail(state != NULL, 0);
+
+  side = state->working_position.turn;
+  for (guint system_index = 0; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
+    const HomeworldsSystem *system = &state->working_position.systems[system_index];
+
+    for (guint ship_slot = 0; ship_slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++ship_slot) {
+      HomeworldsPyramid ship = system->ships[side][ship_slot];
+
+      if (!homeworlds_pyramid_is_valid(ship)) {
+        break;
+      }
+      for (HomeworldsColor target_color = HOMEWORLDS_COLOR_RED; target_color <= HOMEWORLDS_COLOR_BLUE; target_color++) {
+        guint count = homeworlds_backend_forced_blue_trade_count_for_ship(state,
+                                                                          ship,
+                                                                          target_color);
+
+        choices = homeworlds_backend_saturating_add(choices, count);
+        if (choices == G_MAXSIZE) {
+          return G_MAXSIZE;
+        }
+      }
+    }
+  }
+  return choices;
+}
+
+static guint homeworlds_backend_forced_blue_trade_count_for_system_color(
+    const HomeworldsMoveBuilderState *state,
+    guint system_index,
+    HomeworldsColor target_color) {
+  const HomeworldsSystem *system = NULL;
+  guint count = 0;
+  guint side = 0;
+
+  g_return_val_if_fail(state != NULL, 0);
+  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, 0);
+  g_return_val_if_fail(target_color <= HOMEWORLDS_COLOR_BLUE, 0);
+
+  side = state->working_position.turn;
+  system = &state->working_position.systems[system_index];
+  for (guint ship_slot = 0; ship_slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++ship_slot) {
+    HomeworldsPyramid ship = system->ships[side][ship_slot];
+
+    if (!homeworlds_pyramid_is_valid(ship)) {
+      break;
+    }
+    count += homeworlds_backend_forced_blue_trade_count_for_ship(state,
+                                                                 ship,
+                                                                 target_color);
+  }
+  return count;
+}
+
+static gsize homeworlds_backend_count_blue_trade_catastrophe_steps(const HomeworldsMoveBuilderState *state) {
+  gsize count = 0;
+  guint side = 0;
+
+  g_return_val_if_fail(state != NULL, 0);
+
+  side = state->working_position.turn;
+  for (guint system_index = 0; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
+    const HomeworldsSystem *system = &state->working_position.systems[system_index];
+
+    for (HomeworldsColor color = HOMEWORLDS_COLOR_RED; color <= HOMEWORLDS_COLOR_BLUE; color++) {
+      guint current_count = homeworlds_system_color_count(system, color);
+      guint needed_trades = 0;
+      guint trade_count = 0;
+
+      if (current_count >= 4 || current_count == 0) {
+        continue;
+      }
+      needed_trades = 4 - current_count;
+      if (needed_trades > state->pending_actions_remaining ||
+          !homeworlds_backend_future_catastrophe_can_be_positive(state, system_index, color, side)) {
+        continue;
+      }
+      trade_count = homeworlds_backend_forced_blue_trade_count_for_system_color(state,
+                                                                                system_index,
+                                                                                color);
+      if (trade_count >= needed_trades) {
+        count++;
+      }
+    }
+  }
+  return count;
+}
+
+static gboolean homeworlds_backend_discovery_star_is_connected(const HomeworldsSystem *source,
+                                                               HomeworldsPyramid star) {
+  HomeworldsSystem discovery = {0};
+
+  g_return_val_if_fail(source != NULL, FALSE);
+  g_return_val_if_fail(homeworlds_pyramid_is_valid(star), FALSE);
+
+  discovery.stars[0] = star;
+  return homeworlds_system_is_connected(source, &discovery);
+}
+
+static gsize homeworlds_backend_count_yellow_discoveries_from_system(const HomeworldsMoveBuilderState *state,
+                                                                     guint source_index) {
+  const HomeworldsSystem *source = NULL;
+  gsize count = 0;
+  gboolean seen_discovery_stars[13] = {FALSE};
+
+  g_return_val_if_fail(state != NULL, 0);
+  g_return_val_if_fail(source_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, 0);
+
+  source = &state->working_position.systems[source_index];
+  for (guint bank_slot = 0; bank_slot < HOMEWORLDS_BANK_SLOT_COUNT; ++bank_slot) {
+    HomeworldsPyramid star = state->working_position.bank[bank_slot];
+
+    if (!homeworlds_pyramid_is_valid(star) || seen_discovery_stars[star]) {
+      continue;
+    }
+    seen_discovery_stars[star] = TRUE;
+    if (homeworlds_backend_discovery_star_is_connected(source, star)) {
+      count++;
+    }
+  }
+  return count;
+}
+
+static gsize homeworlds_backend_count_forced_yellow_move_steps(const HomeworldsMoveBuilderState *state) {
+  gsize choices = 0;
+  guint side = 0;
+
+  g_return_val_if_fail(state != NULL, 0);
+
+  side = state->working_position.turn;
+  for (guint source_index = 0; source_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++source_index) {
+    const HomeworldsSystem *source = &state->working_position.systems[source_index];
+    gsize discovery_count = 0;
+    guint connected_system_count = 0;
+
+    if (homeworlds_system_is_empty(source)) {
+      continue;
+    }
+
+    for (guint target_index = 0; target_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++target_index) {
+      const HomeworldsSystem *target = &state->working_position.systems[target_index];
+
+      if (target_index == source_index || homeworlds_system_is_empty(target)) {
+        continue;
+      }
+      if (homeworlds_system_is_connected(source, target)) {
+        connected_system_count++;
+      }
+    }
+    discovery_count =
+        homeworlds_backend_count_yellow_discoveries_from_system(state, source_index);
+
+    for (guint ship_slot = 0; ship_slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++ship_slot) {
+      HomeworldsPyramid ship = source->ships[side][ship_slot];
+      gsize ship_choices = 0;
+
+      if (!homeworlds_pyramid_is_valid(ship)) {
+        break;
+      }
+
+      ship_choices = homeworlds_backend_saturating_add(connected_system_count, discovery_count);
+      choices = homeworlds_backend_saturating_add(choices, ship_choices);
+      if (choices == G_MAXSIZE) {
+        return G_MAXSIZE;
+      }
+    }
+  }
+  return choices;
+}
+
+static gsize homeworlds_backend_count_yellow_move_catastrophe_steps(const HomeworldsMoveBuilderState *state) {
+  gsize count = 0;
+  guint side = 0;
+
+  g_return_val_if_fail(state != NULL, 0);
+
+  side = state->working_position.turn;
+  for (guint system_index = 0; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
+    const HomeworldsSystem *system = &state->working_position.systems[system_index];
+
+    for (HomeworldsColor color = HOMEWORLDS_COLOR_RED; color <= HOMEWORLDS_COLOR_BLUE; color++) {
+      guint current_count = homeworlds_system_color_count(system, color);
+      guint needed_pyramids = 0;
+
+      if (current_count >= 4 || current_count == 0) {
+        continue;
+      }
+      needed_pyramids = 4 - current_count;
+      if (needed_pyramids > state->pending_actions_remaining ||
+          !homeworlds_backend_future_catastrophe_can_be_positive(state, system_index, color, side)) {
+        continue;
+      }
+      if (homeworlds_backend_yellow_can_make_catastrophe_profitable(state,
+                                                                    system_index,
+                                                                    color,
+                                                                    side,
+                                                                    needed_pyramids,
+                                                                    state->pending_actions_remaining,
+                                                                    G_MAXUINT)) {
+        count++;
+      }
+    }
+  }
+  return count;
+}
+
+static gsize homeworlds_backend_count_forced_sacrifice_steps(const HomeworldsMoveBuilderState *state,
+                                                             gboolean /*allow_catastrophe_recycling*/) {
+  g_return_val_if_fail(state != NULL, G_MAXSIZE);
+
+  switch ((HomeworldsColor) state->forced_action_color) {
+    case HOMEWORLDS_COLOR_GREEN:
+      return homeworlds_backend_count_forced_green_build_steps(state);
+    case HOMEWORLDS_COLOR_RED:
+      return homeworlds_backend_count_forced_red_attack_steps(state);
+    case HOMEWORLDS_COLOR_BLUE:
+      return homeworlds_backend_count_forced_blue_trade_steps(state);
+    case HOMEWORLDS_COLOR_YELLOW:
+      return homeworlds_backend_count_forced_yellow_move_steps(state);
+    default:
+      return G_MAXSIZE;
+  }
+}
+
+static gsize homeworlds_backend_count_reachable_positive_catastrophe_steps(
+    const HomeworldsMoveBuilderState *state,
+    gboolean /*allow_catastrophe_recycling*/) {
+  gsize count = 0;
+
+  g_return_val_if_fail(state != NULL, 0);
+
+  count = homeworlds_backend_count_current_positive_catastrophe_steps(state);
+  switch ((HomeworldsColor) state->forced_action_color) {
+    case HOMEWORLDS_COLOR_GREEN:
+      return homeworlds_backend_saturating_add(
+          count,
+          homeworlds_backend_count_green_build_catastrophe_steps(state));
+    case HOMEWORLDS_COLOR_BLUE:
+      return homeworlds_backend_saturating_add(
+          count,
+          homeworlds_backend_count_blue_trade_catastrophe_steps(state));
+    case HOMEWORLDS_COLOR_RED:
+      return count;
+    case HOMEWORLDS_COLOR_YELLOW:
+      return homeworlds_backend_saturating_add(count, homeworlds_backend_count_yellow_move_catastrophe_steps(state));
+    default:
+      return G_MAXSIZE;
+  }
+}
+
+static gsize homeworlds_backend_estimate_forced_sacrifice_leaf_upper_bound(
+    const HomeworldsMoveBuilderState *state) {
+  gsize catastrophe_steps = 0;
+  gsize forced_steps = 0;
+  gsize choices = 0;
+
+  g_return_val_if_fail(state != NULL, G_MAXSIZE);
+
+  if (state->working_position.phase != HOMEWORLDS_PHASE_PLAY ||
+      state->pending_actions_remaining == 0 ||
+      state->forced_action_color > HOMEWORLDS_COLOR_BLUE) {
+    return G_MAXSIZE;
+  }
+
+  catastrophe_steps = homeworlds_backend_count_reachable_positive_catastrophe_steps(state, FALSE);
+  forced_steps = homeworlds_backend_count_forced_sacrifice_steps(state, FALSE);
+  choices = homeworlds_backend_saturating_add(forced_steps, catastrophe_steps);
+  return homeworlds_backend_saturating_permutation(choices, state->pending_actions_remaining);
+}
+
 static gboolean homeworlds_backend_build_candidate_order(const HomeworldsPosition *root_position,
                                                          const HomeworldsMoveBuilderState *state,
                                                          HomeworldsGoodMoveContext *context,
@@ -2004,6 +2949,124 @@ static gboolean homeworlds_backend_build_candidate_order(const HomeworldsPositio
   }
 
   *out_order = order;
+  return TRUE;
+}
+
+static gsize homeworlds_backend_goal_estimate_leaf_upper_bound(const HomeworldsMoveBuilderState *state) {
+  GameBackendMoveBuilder builder = {
+    .builder_state = (gpointer) state,
+    .builder_state_size = sizeof(*state),
+  };
+  gsize forced_sacrifice_bound = G_MAXSIZE;
+
+  g_return_val_if_fail(state != NULL, G_MAXSIZE);
+
+  if (homeworlds_move_builder_is_complete(&builder)) {
+    return 1;
+  }
+  if (state->pending_actions_remaining == 0) {
+    return HOMEWORLDS_GOAL_BRANCH_SMALL_LEAF_LIMIT;
+  }
+  if (state->pending_actions_remaining <= 1) {
+    return HOMEWORLDS_GOAL_BRANCH_SMALL_LEAF_LIMIT;
+  }
+
+  forced_sacrifice_bound = homeworlds_backend_estimate_forced_sacrifice_leaf_upper_bound(state);
+  if (forced_sacrifice_bound != G_MAXSIZE) {
+    return forced_sacrifice_bound;
+  }
+  return G_MAXSIZE;
+}
+
+static void homeworlds_backend_goal_branch_set_interval_from_bound(HomeworldsGoalBranch *branch,
+                                                                   guint side,
+                                                                   gint bound) {
+  g_return_if_fail(branch != NULL);
+  g_return_if_fail(side < 2);
+
+  if (side == 0) {
+    branch->interval_max = bound;
+  } else {
+    branch->interval_min = bound;
+  }
+}
+
+static gboolean homeworlds_backend_goal_branch_update_estimate(const HomeworldsPosition *root_position,
+                                                               guint side,
+                                                               HomeworldsGoalBranch *branch) {
+  HomeworldsCandidateOrder order = {0};
+  gint state_score = 0;
+  guint base_step_count = 0;
+
+  g_return_val_if_fail(root_position != NULL, FALSE);
+  g_return_val_if_fail(side < 2, FALSE);
+  g_return_val_if_fail(branch != NULL, FALSE);
+
+  state_score = homeworlds_position_evaluate_static(&branch->state.working_position);
+  branch->parent_score = state_score;
+  branch->leaf_upper_bound = homeworlds_backend_goal_estimate_leaf_upper_bound(&branch->state);
+  if (branch->kind == HOMEWORLDS_GOAL_BRANCH_ROOT &&
+      branch->state.working_position.phase == HOMEWORLDS_PHASE_PLAY) {
+    branch->leaf_upper_bound = G_MAXSIZE;
+  }
+
+  if (branch->kind == HOMEWORLDS_GOAL_BRANCH_SINGLE_STEP) {
+    HomeworldsMove move = {0};
+    GameBackendMoveBuilder builder = {
+      .builder_state = &branch->state,
+      .builder_state_size = sizeof(branch->state),
+    };
+    gint exact_score = 0;
+
+    if (homeworlds_move_builder_is_complete(&builder) &&
+        homeworlds_move_builder_build_move(&builder, &move) &&
+        homeworlds_backend_score_after_move(root_position, &move, &exact_score)) {
+      branch->interval_min = exact_score;
+      branch->interval_max = exact_score;
+    }
+  }
+
+  if (branch->kind != HOMEWORLDS_GOAL_BRANCH_ROOT &&
+      branch->kind != HOMEWORLDS_GOAL_BRANCH_ROOT_CATASTROPHE_NOW &&
+      branch->kind != HOMEWORLDS_GOAL_BRANCH_ROOT_CATASTROPHE_POSTPONE &&
+      branch->interval_min == G_MININT &&
+      branch->interval_max == G_MAXINT) {
+    base_step_count = branch->state.move.kind == HOMEWORLDS_MOVE_KIND_TURN ? branch->state.move.step_count : 0;
+    if (homeworlds_backend_candidate_order_find_priority(root_position,
+                                                         &branch->state,
+                                                         side,
+                                                         base_step_count,
+                                                         4,
+                                                         &order) &&
+        order.has_priority) {
+      homeworlds_backend_goal_branch_set_interval_from_bound(branch, side, order.bound);
+    }
+  }
+
+  if (homeworlds_backend_state_has_active_large_sacrifice(&branch->state, HOMEWORLDS_COLOR_YELLOW)) {
+    HomeworldsGoodMoveProofStatus status = {0};
+
+    if (!homeworlds_backend_describe_large_yellow_sacrifice_proof(&branch->state, side, 0, &status)) {
+      return FALSE;
+    }
+    switch (status.result) {
+      case HOMEWORLDS_GOOD_MOVE_PROOF_KEEP:
+      case HOMEWORLDS_GOOD_MOVE_PROOF_REJECT:
+        homeworlds_backend_goal_branch_set_interval_from_bound(branch, side, status.bound);
+        break;
+      case HOMEWORLDS_GOOD_MOVE_PROOF_UNCERTAIN:
+        break;
+      case HOMEWORLDS_GOOD_MOVE_PROOF_NOT_ACTIVE:
+      case HOMEWORLDS_GOOD_MOVE_PROOF_NOT_PLAY:
+      case HOMEWORLDS_GOOD_MOVE_PROOF_COMPLETE:
+      case HOMEWORLDS_GOOD_MOVE_PROOF_UNSUPPORTED_WEIGHTS:
+      default:
+        break;
+    }
+  }
+
+  branch->parent_delta_min = branch->interval_min == G_MININT ? G_MININT : branch->interval_min - state_score;
+  branch->parent_delta_max = branch->interval_max == G_MAXINT ? G_MAXINT : branch->interval_max - state_score;
   return TRUE;
 }
 
@@ -2115,6 +3178,136 @@ static gboolean homeworlds_backend_apply_profitable_catastrophe(HomeworldsMoveBu
   return TRUE;
 }
 
+static gboolean homeworlds_backend_root_catastrophe_is_optimal_now(
+    const HomeworldsMoveBuilderState *state,
+    const HomeworldsProfitableCatastrophe *catastrophe) {
+  guint side = 0;
+  gint immediate_gain = 0;
+  guint ceiling = 0;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(catastrophe != NULL, FALSE);
+  g_return_val_if_fail(catastrophe->system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
+
+  side = state->working_position.turn;
+  immediate_gain = homeworlds_backend_immediate_catastrophe_gain(state,
+                                                                 catastrophe->system_index,
+                                                                 catastrophe->color,
+                                                                 side);
+  if (immediate_gain == G_MAXINT) {
+    return FALSE;
+  }
+
+  ceiling = homeworlds_backend_existing_catastrophe_gain_ceiling(state,
+                                                                 catastrophe->system_index,
+                                                                 catastrophe->color,
+                                                                 side,
+                                                                 HOMEWORLDS_SIZE_LARGE);
+  if (ceiling == G_MAXUINT) {
+    return FALSE;
+  }
+  return immediate_gain >= 0 && (guint) immediate_gain >= ceiling;
+}
+
+static gboolean homeworlds_backend_root_catastrophes_are_all_optimal(
+    const HomeworldsMoveBuilderState *state,
+    const HomeworldsGoodMoveContext *context) {
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(context != NULL, FALSE);
+
+  for (guint i = 0; i < context->root_catastrophe_count; ++i) {
+    if (!homeworlds_backend_root_catastrophe_is_optimal_now(state, &context->root_catastrophes[i])) {
+      return FALSE;
+    }
+  }
+  return context->root_catastrophe_count > 0;
+}
+
+static gboolean homeworlds_backend_goal_make_child_branch(
+    const HomeworldsPosition *root_position,
+    HomeworldsGoalQueue *queue,
+    HomeworldsGoodMoveContext *context,
+    const HomeworldsGoalBranch *parent_branch,
+    const HomeworldsMoveBuilderState *parent_state,
+    const HomeworldsMoveBuilderState *child_state,
+    HomeworldsGoalBranchKind kind,
+    gsize leaf_upper_bound,
+    const char *reason,
+    HomeworldsGoalBranch **out_branch) {
+  HomeworldsGenerationContext child_context = {0};
+  HomeworldsGoalDedupeRef *child_dedupe_ref = NULL;
+  HomeworldsGenerationDedupe stack_dedupe = {0};
+  gboolean prune_child = FALSE;
+  HomeworldsGoalBranch *branch = NULL;
+
+  g_return_val_if_fail(root_position != NULL, FALSE);
+  g_return_val_if_fail(queue != NULL, FALSE);
+  g_return_val_if_fail(context != NULL, FALSE);
+  g_return_val_if_fail(parent_branch != NULL, FALSE);
+  g_return_val_if_fail(parent_state != NULL, FALSE);
+  g_return_val_if_fail(child_state != NULL, FALSE);
+  g_return_val_if_fail(out_branch != NULL, FALSE);
+
+  *out_branch = NULL;
+  if (!homeworlds_generation_prepare_child_context(&parent_branch->generation_context,
+                                                   parent_state,
+                                                   child_state,
+                                                   &child_context,
+                                                   &stack_dedupe,
+                                                   &prune_child)) {
+    return FALSE;
+  }
+  if (prune_child) {
+    homeworlds_generation_dedupe_clear(&stack_dedupe);
+    return TRUE;
+  }
+
+  if (!homeworlds_backend_child_state_is_good_after_step(parent_state, child_state)) {
+    homeworlds_generation_dedupe_clear(&stack_dedupe);
+    return TRUE;
+  }
+
+  if (child_context.sacrifice_dedupe == &stack_dedupe) {
+    child_dedupe_ref = homeworlds_backend_goal_dedupe_ref_new();
+    if (child_dedupe_ref == NULL) {
+      homeworlds_generation_dedupe_clear(&stack_dedupe);
+      return FALSE;
+    }
+    child_context.sacrifice_dedupe = &child_dedupe_ref->dedupe;
+  } else if (child_context.sacrifice_dedupe != NULL) {
+    child_dedupe_ref = parent_branch->dedupe_ref;
+  }
+
+  branch = homeworlds_backend_goal_branch_new(queue,
+                                              kind,
+                                              child_state,
+                                              &child_context,
+                                              child_dedupe_ref,
+                                              reason);
+  if (child_context.sacrifice_dedupe == &stack_dedupe) {
+    child_context.sacrifice_dedupe = NULL;
+  }
+  homeworlds_generation_dedupe_clear(&stack_dedupe);
+  if (child_dedupe_ref != NULL && child_dedupe_ref != parent_branch->dedupe_ref) {
+    homeworlds_backend_goal_dedupe_ref_unref(child_dedupe_ref);
+  }
+  if (branch == NULL) {
+    return FALSE;
+  }
+
+  branch->defer_root_catastrophes = parent_branch->defer_root_catastrophes;
+  branch->root_defer_step_count = parent_branch->root_defer_step_count;
+  if (!homeworlds_backend_goal_branch_update_estimate(root_position, child_state->working_position.turn, branch)) {
+    homeworlds_backend_goal_branch_free(branch);
+    return FALSE;
+  }
+  if (leaf_upper_bound != G_MAXSIZE) {
+    branch->leaf_upper_bound = MIN(branch->leaf_upper_bound, leaf_upper_bound);
+  }
+  *out_branch = branch;
+  return TRUE;
+}
+
 static gboolean homeworlds_backend_collect_good_moves_recursive(
     const HomeworldsMoveBuilderState *state,
     const HomeworldsGenerationContext *generation_context,
@@ -2171,6 +3364,398 @@ static gboolean homeworlds_backend_action_candidate_is_single_step(
   }
 }
 
+static gboolean homeworlds_backend_goal_enqueue_branch(HomeworldsGoalQueue *queue,
+                                                       HomeworldsGoodMoveContext *context,
+                                                       HomeworldsGoalBranch *branch) {
+  g_return_val_if_fail(queue != NULL, FALSE);
+  g_return_val_if_fail(context != NULL, FALSE);
+  g_return_val_if_fail(branch != NULL, FALSE);
+
+  homeworlds_backend_goal_queue_push(queue, context, branch);
+  return TRUE;
+}
+
+static gboolean homeworlds_backend_goal_split_root_catastrophes(const HomeworldsPosition *root_position,
+                                                                HomeworldsGoalQueue *queue,
+                                                                HomeworldsGoodMoveContext *context,
+                                                                const HomeworldsGoalBranch *branch,
+                                                                gboolean *out_split) {
+  gboolean all_optimal = FALSE;
+
+  g_return_val_if_fail(root_position != NULL, FALSE);
+  g_return_val_if_fail(queue != NULL, FALSE);
+  g_return_val_if_fail(context != NULL, FALSE);
+  g_return_val_if_fail(branch != NULL, FALSE);
+  g_return_val_if_fail(out_split != NULL, FALSE);
+
+  *out_split = FALSE;
+  if (branch->kind != HOMEWORLDS_GOAL_BRANCH_ROOT ||
+      context->root_catastrophe_count == 0 ||
+      branch->state.move.step_count != 0) {
+    return TRUE;
+  }
+
+  all_optimal = homeworlds_backend_root_catastrophes_are_all_optimal(&branch->state, context);
+  if (all_optimal) {
+    HomeworldsGoalBranch *forced = homeworlds_backend_goal_branch_new(queue,
+                                                                      HOMEWORLDS_GOAL_BRANCH_ROOT_CATASTROPHE_NOW,
+                                                                      &branch->state,
+                                                                      &branch->generation_context,
+                                                                      branch->dedupe_ref,
+                                                                      "force optimal catastrophe from #0");
+
+    if (forced == NULL) {
+      return FALSE;
+    }
+    if (!homeworlds_backend_goal_branch_update_estimate(root_position, root_position->turn, forced)) {
+      homeworlds_backend_goal_branch_free(forced);
+      return FALSE;
+    }
+    homeworlds_backend_goal_enqueue_branch(queue, context, forced);
+    context->goal_branches_split++;
+    *out_split = TRUE;
+    return TRUE;
+  }
+
+  for (guint i = 0; i < context->root_catastrophe_count; ++i) {
+    HomeworldsMoveBuilderState child_state = branch->state;
+    HomeworldsGoalBranch *child_branch = NULL;
+
+    if (!homeworlds_backend_apply_profitable_catastrophe(&child_state, &context->root_catastrophes[i])) {
+      continue;
+    }
+    if (!homeworlds_backend_goal_make_child_branch(root_position,
+                                                   queue,
+                                                   context,
+                                                   branch,
+                                                   &branch->state,
+                                                   &child_state,
+                                                   HOMEWORLDS_GOAL_BRANCH_ROOT_CATASTROPHE_NOW,
+                                                   G_MAXSIZE,
+                                                   "play profitable catastrophe from #0 now",
+                                                   &child_branch)) {
+      return FALSE;
+    }
+    if (child_branch != NULL) {
+      homeworlds_backend_goal_enqueue_branch(queue, context, child_branch);
+    }
+  }
+
+  HomeworldsGoalBranch *postpone = homeworlds_backend_goal_branch_new(queue,
+                                                                      HOMEWORLDS_GOAL_BRANCH_ROOT_CATASTROPHE_POSTPONE,
+                                                                      &branch->state,
+                                                                      &branch->generation_context,
+                                                                      branch->dedupe_ref,
+                                                                      "postpone improvable catastrophe from #0");
+
+  if (postpone == NULL) {
+    return FALSE;
+  }
+  postpone->defer_root_catastrophes = TRUE;
+  postpone->root_defer_step_count = branch->state.move.step_count;
+  if (!homeworlds_backend_goal_branch_update_estimate(root_position, root_position->turn, postpone)) {
+    homeworlds_backend_goal_branch_free(postpone);
+    return FALSE;
+  }
+  homeworlds_backend_goal_enqueue_branch(queue, context, postpone);
+
+  context->goal_branches_split++;
+  *out_split = TRUE;
+  return TRUE;
+}
+
+static gboolean homeworlds_backend_goal_split_single_step_action(const HomeworldsPosition *root_position,
+                                                                 HomeworldsGoalQueue *queue,
+                                                                 HomeworldsGoodMoveContext *context,
+                                                                 const HomeworldsGoalBranch *branch,
+                                                                 const HomeworldsMoveBuilderState *selected_state,
+                                                                 const HomeworldsMoveCandidate *action_candidate,
+                                                                 guint *inout_created_count) {
+  HomeworldsMoveBuilderState action_state = {0};
+  GameBackendMoveBuilder action_builder = {0};
+  GameBackendMoveList target_candidates = {0};
+  guint base_step_count = 0;
+
+  g_return_val_if_fail(root_position != NULL, FALSE);
+  g_return_val_if_fail(queue != NULL, FALSE);
+  g_return_val_if_fail(context != NULL, FALSE);
+  g_return_val_if_fail(branch != NULL, FALSE);
+  g_return_val_if_fail(selected_state != NULL, FALSE);
+  g_return_val_if_fail(action_candidate != NULL, FALSE);
+  g_return_val_if_fail(inout_created_count != NULL, FALSE);
+
+  action_state = *selected_state;
+  action_builder.builder_state = &action_state;
+  action_builder.builder_state_size = sizeof(action_state);
+  base_step_count = selected_state->move.step_count;
+
+  if (!homeworlds_backend_action_candidate_is_single_step(action_candidate) ||
+      !homeworlds_move_builder_step(&action_builder, action_candidate)) {
+    return TRUE;
+  }
+
+  if (action_state.move.step_count == base_step_count + 1) {
+    HomeworldsGoalBranch *child_branch = NULL;
+
+    if (!homeworlds_backend_goal_make_child_branch(root_position,
+                                                   queue,
+                                                   context,
+                                                   branch,
+                                                   selected_state,
+                                                   &action_state,
+                                                   HOMEWORLDS_GOAL_BRANCH_SINGLE_STEP,
+                                                   HOMEWORLDS_GOAL_BRANCH_SMALL_LEAF_LIMIT,
+                                                   "single-step action from #0",
+                                                   &child_branch)) {
+      return FALSE;
+    }
+    if (child_branch != NULL) {
+      context->ordering_single_step_moves++;
+      (*inout_created_count)++;
+      homeworlds_backend_goal_enqueue_branch(queue, context, child_branch);
+    }
+    return TRUE;
+  }
+
+  if (action_state.move.step_count != base_step_count) {
+    return TRUE;
+  }
+
+  target_candidates = homeworlds_move_builder_list_candidates(&action_builder);
+  for (gsize i = 0; i < target_candidates.count; ++i) {
+    const HomeworldsMoveCandidate *target_candidate =
+        &((const HomeworldsMoveCandidate *) target_candidates.moves)[i];
+    HomeworldsMoveBuilderState target_state = action_state;
+    GameBackendMoveBuilder target_builder = {
+      .builder_state = &target_state,
+      .builder_state_size = sizeof(target_state),
+    };
+    HomeworldsGoalBranch *child_branch = NULL;
+
+    if (target_candidate == NULL ||
+        !homeworlds_move_builder_step(&target_builder, target_candidate) ||
+        target_state.move.step_count != base_step_count + 1) {
+      continue;
+    }
+    if (!homeworlds_backend_goal_make_child_branch(root_position,
+                                                   queue,
+                                                   context,
+                                                   branch,
+                                                   &action_state,
+                                                   &target_state,
+                                                   HOMEWORLDS_GOAL_BRANCH_SINGLE_STEP,
+                                                   HOMEWORLDS_GOAL_BRANCH_SMALL_LEAF_LIMIT,
+                                                   "single-step target action from #0",
+                                                   &child_branch)) {
+      homeworlds_backend_move_list_free(&target_candidates);
+      return FALSE;
+    }
+    if (child_branch != NULL) {
+      context->ordering_single_step_moves++;
+      (*inout_created_count)++;
+      homeworlds_backend_goal_enqueue_branch(queue, context, child_branch);
+    }
+  }
+
+  homeworlds_backend_move_list_free(&target_candidates);
+  return TRUE;
+}
+
+static gboolean homeworlds_backend_goal_split_sacrifice_action(const HomeworldsPosition *root_position,
+                                                               HomeworldsGoalQueue *queue,
+                                                               HomeworldsGoodMoveContext *context,
+                                                               const HomeworldsGoalBranch *branch,
+                                                               const HomeworldsMoveBuilderState *selected_state,
+                                                               const HomeworldsMoveCandidate *action_candidate,
+                                                               guint *inout_created_count) {
+  HomeworldsMoveBuilderState child_state = *selected_state;
+  GameBackendMoveBuilder child = {
+    .builder_state = &child_state,
+    .builder_state_size = sizeof(child_state),
+  };
+  HomeworldsGoalBranchKind kind = HOMEWORLDS_GOAL_BRANCH_SACRIFICE;
+  HomeworldsGoalBranch *child_branch = NULL;
+
+  g_return_val_if_fail(root_position != NULL, FALSE);
+  g_return_val_if_fail(queue != NULL, FALSE);
+  g_return_val_if_fail(context != NULL, FALSE);
+  g_return_val_if_fail(branch != NULL, FALSE);
+  g_return_val_if_fail(selected_state != NULL, FALSE);
+  g_return_val_if_fail(action_candidate != NULL, FALSE);
+  g_return_val_if_fail(inout_created_count != NULL, FALSE);
+
+  if (action_candidate->data.kind != HOMEWORLDS_CANDIDATE_ACTION ||
+      action_candidate->data.target_color != HOMEWORLDS_STEP_SACRIFICE ||
+      !homeworlds_move_builder_step(&child, action_candidate)) {
+    return TRUE;
+  }
+
+  if (homeworlds_backend_state_has_active_large_sacrifice(&child_state, HOMEWORLDS_COLOR_YELLOW)) {
+    kind = HOMEWORLDS_GOAL_BRANCH_LARGE_YELLOW_SACRIFICE;
+  }
+  if (!homeworlds_backend_goal_make_child_branch(root_position,
+                                                 queue,
+                                                 context,
+                                                 branch,
+                                                 selected_state,
+                                                 &child_state,
+                                                 kind,
+                                                 G_MAXSIZE,
+                                                 "sacrifice from #0",
+                                                 &child_branch)) {
+    return FALSE;
+  }
+  if (child_branch != NULL) {
+    (*inout_created_count)++;
+    homeworlds_backend_goal_enqueue_branch(queue, context, child_branch);
+  }
+  return TRUE;
+}
+
+static gboolean homeworlds_backend_goal_split_select_ship_root(const HomeworldsPosition *root_position,
+                                                               HomeworldsGoalQueue *queue,
+                                                               HomeworldsGoodMoveContext *context,
+                                                               const HomeworldsGoalBranch *branch,
+                                                               gboolean *out_split) {
+  GameBackendMoveBuilder builder = {0};
+  GameBackendMoveList candidates = {0};
+  const HomeworldsMoveCandidate *pass_candidate = NULL;
+  guint created_count = 0;
+  gboolean enqueued_pass = FALSE;
+
+  g_return_val_if_fail(root_position != NULL, FALSE);
+  g_return_val_if_fail(queue != NULL, FALSE);
+  g_return_val_if_fail(context != NULL, FALSE);
+  g_return_val_if_fail(branch != NULL, FALSE);
+  g_return_val_if_fail(out_split != NULL, FALSE);
+
+  *out_split = FALSE;
+  if (!homeworlds_backend_state_should_collect_single_steps_first(&branch->state)) {
+    return TRUE;
+  }
+
+  builder.builder_state = (gpointer) &branch->state;
+  builder.builder_state_size = sizeof(branch->state);
+  candidates = homeworlds_move_builder_list_candidates(&builder);
+  context->ordering_single_step_passes++;
+
+  for (gsize i = 0; i < candidates.count; ++i) {
+    const HomeworldsMoveCandidate *candidate = &((const HomeworldsMoveCandidate *) candidates.moves)[i];
+    HomeworldsMoveBuilderState selected_state = branch->state;
+    GameBackendMoveBuilder selected_builder = {
+      .builder_state = &selected_state,
+      .builder_state_size = sizeof(selected_state),
+    };
+    GameBackendMoveList action_candidates = {0};
+
+    if (candidate != NULL && homeworlds_backend_candidate_is_pass(candidate)) {
+      pass_candidate = candidate;
+      continue;
+    }
+    if (candidate == NULL ||
+        candidate->data.kind != HOMEWORLDS_CANDIDATE_SELECT_SHIP ||
+        !homeworlds_move_builder_step(&selected_builder, candidate) ||
+        selected_state.stage != HOMEWORLDS_BUILDER_STAGE_SELECT_ACTION) {
+      continue;
+    }
+
+    action_candidates = homeworlds_move_builder_list_candidates(&selected_builder);
+    for (gsize action_index = 0; action_index < action_candidates.count; ++action_index) {
+      const HomeworldsMoveCandidate *action_candidate =
+          &((const HomeworldsMoveCandidate *) action_candidates.moves)[action_index];
+
+      if (action_candidate == NULL) {
+        continue;
+      }
+      if (homeworlds_backend_action_candidate_is_single_step(action_candidate)) {
+        if (!homeworlds_backend_goal_split_single_step_action(root_position,
+                                                              queue,
+                                                              context,
+                                                              branch,
+                                                              &selected_state,
+                                                              action_candidate,
+                                                              &created_count)) {
+          homeworlds_backend_move_list_free(&action_candidates);
+          homeworlds_backend_move_list_free(&candidates);
+          return FALSE;
+        }
+        continue;
+      }
+      if (!homeworlds_backend_goal_split_sacrifice_action(root_position,
+                                                          queue,
+                                                          context,
+                                                          branch,
+                                                          &selected_state,
+                                                          action_candidate,
+                                                          &created_count)) {
+        homeworlds_backend_move_list_free(&action_candidates);
+        homeworlds_backend_move_list_free(&candidates);
+        return FALSE;
+      }
+    }
+    homeworlds_backend_move_list_free(&action_candidates);
+  }
+
+  if (created_count == 0 &&
+      pass_candidate != NULL &&
+      homeworlds_backend_state_can_use_pass_fallback(&branch->state)) {
+    HomeworldsMoveBuilderState child_state = branch->state;
+    GameBackendMoveBuilder child = {
+      .builder_state = &child_state,
+      .builder_state_size = sizeof(child_state),
+    };
+    HomeworldsGoalBranch *pass_branch = NULL;
+
+    if (homeworlds_move_builder_step(&child, pass_candidate) &&
+        !homeworlds_backend_goal_make_child_branch(root_position,
+                                                   queue,
+                                                   context,
+                                                   branch,
+                                                   &branch->state,
+                                                   &child_state,
+                                                   HOMEWORLDS_GOAL_BRANCH_SINGLE_STEP,
+                                                   1,
+                                                   "pass fallback",
+                                                   &pass_branch)) {
+      homeworlds_backend_move_list_free(&candidates);
+      return FALSE;
+    }
+    if (pass_branch != NULL) {
+      pass_branch->allow_pass_move = TRUE;
+      homeworlds_backend_goal_enqueue_branch(queue, context, pass_branch);
+      enqueued_pass = TRUE;
+    }
+  }
+
+  homeworlds_backend_move_list_free(&candidates);
+  if (created_count > 0 || enqueued_pass) {
+    context->goal_branches_split++;
+    *out_split = TRUE;
+  }
+  return TRUE;
+}
+
+static gboolean homeworlds_backend_goal_try_split_branch(const HomeworldsPosition *root_position,
+                                                         HomeworldsGoalQueue *queue,
+                                                         HomeworldsGoodMoveContext *context,
+                                                         const HomeworldsGoalBranch *branch,
+                                                         gboolean *out_split) {
+  g_return_val_if_fail(root_position != NULL, FALSE);
+  g_return_val_if_fail(queue != NULL, FALSE);
+  g_return_val_if_fail(context != NULL, FALSE);
+  g_return_val_if_fail(branch != NULL, FALSE);
+  g_return_val_if_fail(out_split != NULL, FALSE);
+
+  *out_split = FALSE;
+  if (!homeworlds_backend_goal_split_root_catastrophes(root_position, queue, context, branch, out_split)) {
+    return FALSE;
+  }
+  if (*out_split) {
+    return TRUE;
+  }
+  return homeworlds_backend_goal_split_select_ship_root(root_position, queue, context, branch, out_split);
+}
+
 static gboolean homeworlds_backend_collect_child_state(
     const HomeworldsMoveBuilderState *state,
     const HomeworldsGenerationContext *generation_context,
@@ -2206,6 +3791,7 @@ static gboolean homeworlds_backend_collect_child_state(
     return TRUE;
   }
   if (!homeworlds_backend_child_state_is_good_after_step(state, child_state)) {
+    context->goal_rejected_steps++;
     homeworlds_generation_dedupe_clear(&child_dedupe);
     return TRUE;
   }
@@ -2574,6 +4160,7 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(
     return FALSE;
   }
   if (duplicate) {
+    context->goal_duplicate_states++;
     *out_covered = TRUE;
     return TRUE;
   }
@@ -2640,6 +4227,8 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(
     gboolean child_covered = FALSE;
 
     if (!homeworlds_backend_catastrophe_is_root_required(context, &catastrophes[i]) ||
+        (context->defer_root_catastrophes &&
+         state->move.step_count <= context->root_defer_step_count) ||
         homeworlds_backend_move_has_profitable_catastrophe(&state->move, &catastrophes[i]) ||
         !homeworlds_backend_apply_profitable_catastrophe(&child_state, &catastrophes[i])) {
       continue;
@@ -2677,9 +4266,11 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(
       return FALSE;
     }
     if (!homeworlds_backend_move_is_good(state, &move, allow_pass_move)) {
+      context->goal_rejected_bad_moves++;
       return TRUE;
     }
     if (!homeworlds_backend_move_satisfies_root_catastrophe_requirement(&move, context)) {
+      context->goal_rejected_root_catastrophes++;
       return TRUE;
     }
 
@@ -2747,6 +4338,7 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(
       continue;
     }
     if (!homeworlds_backend_child_state_is_good_after_step(state, &child_state)) {
+      context->goal_rejected_steps++;
       homeworlds_generation_dedupe_clear(&child_dedupe);
       continue;
     }
@@ -2844,6 +4436,322 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(
   return TRUE;
 }
 
+static void homeworlds_backend_goal_branch_update_delta(HomeworldsGoalBranch *branch) {
+  g_return_if_fail(branch != NULL);
+
+  branch->parent_delta_min = branch->interval_min == G_MININT ? G_MININT : branch->interval_min - branch->parent_score;
+  branch->parent_delta_max = branch->interval_max == G_MAXINT ? G_MAXINT : branch->interval_max - branch->parent_score;
+}
+
+static gboolean homeworlds_backend_goal_branch_split_score_interval(HomeworldsGoalQueue *queue,
+                                                                    HomeworldsGoodMoveContext *context,
+                                                                    HomeworldsGoalBranch *branch,
+                                                                    guint side,
+                                                                    gint second_best_bound) {
+  HomeworldsGoalBranch *remainder = NULL;
+  gint old_min = 0;
+  gint old_max = 0;
+
+  g_return_val_if_fail(queue != NULL, FALSE);
+  g_return_val_if_fail(context != NULL, FALSE);
+  g_return_val_if_fail(branch != NULL, FALSE);
+  g_return_val_if_fail(side < 2, FALSE);
+
+  if (!homeworlds_backend_goal_bound_is_finite(second_best_bound) ||
+      !homeworlds_backend_goal_bound_is_finite(homeworlds_backend_goal_branch_best_bound(side, branch))) {
+    return TRUE;
+  }
+
+  old_min = branch->interval_min;
+  old_max = branch->interval_max;
+  if (side == 0) {
+    gint top_min = MAX(old_min, second_best_bound);
+
+    if (top_min <= old_min || top_min > old_max || top_min == G_MININT) {
+      return TRUE;
+    }
+    remainder = homeworlds_backend_goal_branch_clone_for_interval(queue,
+                                                                  branch,
+                                                                  old_min,
+                                                                  top_min - 1,
+                                                                  "remaining lower score band");
+    if (remainder == NULL) {
+      return FALSE;
+    }
+    branch->interval_min = top_min;
+  } else {
+    gint top_max = MIN(old_max, second_best_bound);
+
+    if (top_max >= old_max || top_max < old_min || top_max == G_MAXINT) {
+      return TRUE;
+    }
+    remainder = homeworlds_backend_goal_branch_clone_for_interval(queue,
+                                                                  branch,
+                                                                  top_max + 1,
+                                                                  old_max,
+                                                                  "remaining higher score band");
+    if (remainder == NULL) {
+      return FALSE;
+    }
+    branch->interval_max = top_max;
+  }
+
+  homeworlds_backend_goal_branch_update_delta(branch);
+  context->goal_branches_split++;
+  context->goal_branches_requeued++;
+  homeworlds_backend_goal_report_append(context,
+                                        "score-split #%zu explore=[%d,%d] requeue=[%d,%d]",
+                                        branch->id,
+                                        branch->interval_min,
+                                        branch->interval_max,
+                                        remainder->interval_min,
+                                        remainder->interval_max);
+  homeworlds_backend_goal_queue_push(queue, context, remainder);
+  return TRUE;
+}
+
+static gboolean homeworlds_backend_goal_branch_is_cutoff_skipped(const HomeworldsMoveBuffer *buffer,
+                                                                 const HomeworldsGoalBranch *branch,
+                                                                 gint *out_cutoff) {
+  gint cutoff = 0;
+  HomeworldsGoodMoveCutoffKind cutoff_kind = HOMEWORLDS_GOOD_MOVE_CUTOFF_NONE;
+
+  g_return_val_if_fail(buffer != NULL, FALSE);
+  g_return_val_if_fail(branch != NULL, FALSE);
+  g_return_val_if_fail(out_cutoff != NULL, FALSE);
+
+  if (!homeworlds_backend_move_buffer_current_cutoff(buffer, &cutoff, &cutoff_kind)) {
+    return FALSE;
+  }
+
+  *out_cutoff = cutoff;
+  return !homeworlds_backend_goal_branch_can_reach_cutoff(buffer->side, branch, cutoff);
+}
+
+static gboolean homeworlds_backend_goal_explore_branch(HomeworldsGoodMoveContext *context,
+                                                       HomeworldsMoveBuffer *buffer,
+                                                       const HomeworldsGoalBranch *branch) {
+  gboolean old_has_score_interval = FALSE;
+  gint old_score_interval_min = 0;
+  gint old_score_interval_max = 0;
+  gboolean old_defer_root_catastrophes = FALSE;
+  guint old_root_defer_step_count = 0;
+  gsize old_leaves_seen = 0;
+  gsize old_scored_moves = 0;
+  gsize old_kept_moves = 0;
+  gsize old_pruned_branches = 0;
+  gsize old_created_branches = 0;
+  gsize old_duplicate_states = 0;
+  gsize old_rejected_steps = 0;
+  gsize old_rejected_bad_moves = 0;
+  gsize old_rejected_root_catastrophes = 0;
+  gsize old_rejected_score_intervals = 0;
+  gsize old_rejected_score_windows = 0;
+  gsize old_rejected_full_buffer = 0;
+  gint old_best_score = 0;
+  gboolean old_has_best_score = FALSE;
+  char old_best_text[32] = {0};
+  char new_best_text[32] = {0};
+  char old_cutoff_text[32] = {0};
+  char new_cutoff_text[32] = {0};
+  char prefix[256] = {0};
+  gboolean covered = FALSE;
+
+  g_return_val_if_fail(context != NULL, FALSE);
+  g_return_val_if_fail(buffer != NULL, FALSE);
+  g_return_val_if_fail(branch != NULL, FALSE);
+
+  old_has_score_interval = context->has_score_interval;
+  old_score_interval_min = context->score_interval_min;
+  old_score_interval_max = context->score_interval_max;
+  old_defer_root_catastrophes = context->defer_root_catastrophes;
+  old_root_defer_step_count = context->root_defer_step_count;
+  old_leaves_seen = buffer->leaves_seen;
+  old_scored_moves = buffer->scored_moves;
+  old_kept_moves = buffer->count;
+  old_pruned_branches = context->pruning_pruned_branches;
+  old_created_branches = context->goal_branches_created;
+  old_duplicate_states = context->goal_duplicate_states;
+  old_rejected_steps = context->goal_rejected_steps;
+  old_rejected_bad_moves = context->goal_rejected_bad_moves;
+  old_rejected_root_catastrophes = context->goal_rejected_root_catastrophes;
+  old_rejected_score_intervals = context->goal_rejected_score_intervals;
+  old_rejected_score_windows = context->goal_rejected_score_windows;
+  old_rejected_full_buffer = context->goal_rejected_full_buffer;
+  old_best_score = buffer->best_score;
+  old_has_best_score = buffer->has_best_score;
+  homeworlds_backend_format_optional_goal_score(old_has_best_score,
+                                                old_best_score,
+                                                old_best_text,
+                                                sizeof(old_best_text));
+  homeworlds_backend_format_goal_cutoff(buffer, old_cutoff_text, sizeof(old_cutoff_text));
+  homeworlds_backend_goal_branch_format_prefix(branch, prefix, sizeof(prefix));
+
+  context->has_score_interval = TRUE;
+  context->score_interval_min = branch->interval_min;
+  context->score_interval_max = branch->interval_max;
+  context->defer_root_catastrophes = branch->defer_root_catastrophes;
+  context->root_defer_step_count = branch->root_defer_step_count;
+
+  context->goal_branches_direct++;
+  homeworlds_backend_goal_report_append(context,
+                                        "explore #%zu %s interval=[%d,%d] leaves<=%zu prefix=[%s]",
+                                        branch->id,
+                                        homeworlds_backend_goal_branch_kind_name(branch->kind),
+                                        branch->interval_min,
+                                        branch->interval_max,
+                                        branch->leaf_upper_bound,
+                                        prefix);
+  if (!homeworlds_backend_collect_good_moves_recursive(&branch->state,
+                                                       &branch->generation_context,
+                                                       context,
+                                                       buffer,
+                                                       branch->allow_pass_move,
+                                                       &covered)) {
+    context->has_score_interval = old_has_score_interval;
+    context->score_interval_min = old_score_interval_min;
+    context->score_interval_max = old_score_interval_max;
+    context->defer_root_catastrophes = old_defer_root_catastrophes;
+    context->root_defer_step_count = old_root_defer_step_count;
+    return FALSE;
+  }
+
+  context->goal_branches_exhausted++;
+  homeworlds_backend_format_optional_goal_score(buffer->has_best_score,
+                                                buffer->best_score,
+                                                new_best_text,
+                                                sizeof(new_best_text));
+  homeworlds_backend_format_goal_cutoff(buffer, new_cutoff_text, sizeof(new_cutoff_text));
+  homeworlds_backend_goal_report_append(context,
+                                        "explore-result #%zu covered=%u leaves+=%zu scored+=%zu kept=%zu->%zu "
+                                        "best=%s->%s cutoff=%s->%s pruned+=%zu created+=%zu duplicate+=%zu "
+                                        "step_reject+=%zu bad_move+=%zu root_cat_reject+=%zu interval_reject+=%zu "
+                                        "window_reject+=%zu full_reject+=%zu",
+                                        branch->id,
+                                        covered ? 1 : 0,
+                                        buffer->leaves_seen - old_leaves_seen,
+                                        buffer->scored_moves - old_scored_moves,
+                                        old_kept_moves,
+                                        buffer->count,
+                                        old_best_text,
+                                        new_best_text,
+                                        old_cutoff_text,
+                                        new_cutoff_text,
+                                        context->pruning_pruned_branches - old_pruned_branches,
+                                        context->goal_branches_created - old_created_branches,
+                                        context->goal_duplicate_states - old_duplicate_states,
+                                        context->goal_rejected_steps - old_rejected_steps,
+                                        context->goal_rejected_bad_moves - old_rejected_bad_moves,
+                                        context->goal_rejected_root_catastrophes - old_rejected_root_catastrophes,
+                                        context->goal_rejected_score_intervals - old_rejected_score_intervals,
+                                        context->goal_rejected_score_windows - old_rejected_score_windows,
+                                        context->goal_rejected_full_buffer - old_rejected_full_buffer);
+  context->has_score_interval = old_has_score_interval;
+  context->score_interval_min = old_score_interval_min;
+  context->score_interval_max = old_score_interval_max;
+  context->defer_root_catastrophes = old_defer_root_catastrophes;
+  context->root_defer_step_count = old_root_defer_step_count;
+  return TRUE;
+}
+
+static gboolean homeworlds_backend_goal_collect_good_moves(const HomeworldsPosition *root_position,
+                                                           const HomeworldsMoveBuilderState *root_state,
+                                                           const HomeworldsGenerationContext *generation_context,
+                                                           HomeworldsGoodMoveContext *context,
+                                                           HomeworldsMoveBuffer *buffer) {
+  HomeworldsGoalQueue queue = {0};
+  HomeworldsGoalBranch *root_branch = NULL;
+  gboolean ok = TRUE;
+
+  g_return_val_if_fail(root_position != NULL, FALSE);
+  g_return_val_if_fail(root_state != NULL, FALSE);
+  g_return_val_if_fail(generation_context != NULL, FALSE);
+  g_return_val_if_fail(context != NULL, FALSE);
+  g_return_val_if_fail(buffer != NULL, FALSE);
+
+  homeworlds_backend_goal_queue_init(&queue);
+  root_branch = homeworlds_backend_goal_branch_new(&queue,
+                                                   HOMEWORLDS_GOAL_BRANCH_ROOT,
+                                                   root_state,
+                                                   generation_context,
+                                                   NULL,
+                                                   "root");
+  if (root_branch == NULL ||
+      !homeworlds_backend_goal_branch_update_estimate(root_position, root_position->turn, root_branch)) {
+    homeworlds_backend_goal_branch_free(root_branch);
+    homeworlds_backend_goal_queue_clear(&queue);
+    return FALSE;
+  }
+  homeworlds_backend_goal_queue_push(&queue, context, root_branch);
+
+  while (ok && queue.branches->len > 0) {
+    HomeworldsGoalBranch *branch = homeworlds_backend_goal_queue_pop_best(&queue, root_position->turn);
+    gint cutoff = 0;
+    gint second_best_bound = 0;
+    gsize created_before_split = 0;
+    char prefix[256] = {0};
+    gboolean split = FALSE;
+
+    homeworlds_backend_goal_branch_format_prefix(branch, prefix, sizeof(prefix));
+    context->goal_branches_selected++;
+    homeworlds_backend_goal_report_append(context,
+                                          "select #%zu %s interval=[%d,%d] leaves<=%zu prefix=[%s]",
+                                          branch->id,
+                                          homeworlds_backend_goal_branch_kind_name(branch->kind),
+                                          branch->interval_min,
+                                          branch->interval_max,
+                                          branch->leaf_upper_bound,
+                                          prefix);
+
+    if (homeworlds_backend_goal_branch_is_cutoff_skipped(buffer, branch, &cutoff)) {
+      context->goal_branches_skipped++;
+      homeworlds_backend_goal_report_append(context,
+                                            "skip #%zu cutoff=%d interval=[%d,%d] prefix=[%s]",
+                                            branch->id,
+                                            cutoff,
+                                            branch->interval_min,
+                                            branch->interval_max,
+                                            prefix);
+      homeworlds_backend_goal_branch_free(branch);
+      continue;
+    }
+
+    created_before_split = context->goal_branches_created;
+    if (branch->leaf_upper_bound > HOMEWORLDS_GOAL_BRANCH_SMALL_LEAF_LIMIT &&
+        !homeworlds_backend_goal_try_split_branch(root_position, &queue, context, branch, &split)) {
+      homeworlds_backend_goal_branch_free(branch);
+      ok = FALSE;
+      break;
+    }
+    if (split) {
+      homeworlds_backend_goal_report_append(context,
+                                            "split-result #%zu created+=%zu queue=%u",
+                                            branch->id,
+                                            context->goal_branches_created - created_before_split,
+                                            queue.branches->len);
+      homeworlds_backend_goal_branch_free(branch);
+      continue;
+    }
+
+    if (homeworlds_backend_goal_queue_best_bound(&queue, root_position->turn, &second_best_bound) &&
+        !homeworlds_backend_goal_branch_split_score_interval(&queue,
+                                                             context,
+                                                             branch,
+                                                             root_position->turn,
+                                                             second_best_bound)) {
+      homeworlds_backend_goal_branch_free(branch);
+      ok = FALSE;
+      break;
+    }
+
+    ok = homeworlds_backend_goal_explore_branch(context, buffer, branch);
+    homeworlds_backend_goal_branch_free(branch);
+  }
+
+  homeworlds_backend_goal_queue_clear(&queue);
+  return ok;
+}
+
 static gboolean homeworlds_backend_score_after_move(const HomeworldsPosition *position,
                                                     const HomeworldsMove *move,
                                                     gint *out_score) {
@@ -2907,6 +4815,14 @@ static void homeworlds_backend_trace_good_moves(const HomeworldsPosition *positi
     .ordering_reordered_candidates = context->ordering_reordered_candidates,
     .ordering_single_step_passes = context->ordering_single_step_passes,
     .ordering_single_step_moves = context->ordering_single_step_moves,
+    .goal_branches_created = context->goal_branches_created,
+    .goal_branches_selected = context->goal_branches_selected,
+    .goal_branches_split = context->goal_branches_split,
+    .goal_branches_requeued = context->goal_branches_requeued,
+    .goal_branches_direct = context->goal_branches_direct,
+    .goal_branches_skipped = context->goal_branches_skipped,
+    .goal_branches_exhausted = context->goal_branches_exhausted,
+    .goal_report = context->goal_report != NULL ? context->goal_report->str : NULL,
   };
 
   homeworlds_backend_good_move_trace_func(&trace, homeworlds_backend_good_move_trace_user_data);
@@ -2920,7 +4836,6 @@ static GameBackendMoveList homeworlds_backend_list_good_moves(gconstpointer posi
   HomeworldsMoveBuffer buffer = {0};
   HomeworldsMove *moves = NULL;
   gsize count = 0;
-  gboolean covered = FALSE;
 
   g_return_val_if_fail(homeworlds_position != NULL, (GameBackendMoveList){0});
 
@@ -2934,14 +4849,16 @@ static GameBackendMoveList homeworlds_backend_list_good_moves(gconstpointer posi
       context.root_catastrophes,
       G_N_ELEMENTS(context.root_catastrophes));
   homeworlds_generation_context_init(&generation_context);
-  if (!homeworlds_backend_collect_good_moves_recursive(builder.builder_state,
-                                                       &generation_context,
-                                                       &context,
-                                                       &buffer,
-                                                       FALSE,
-                                                       &covered)) {
+  if (!homeworlds_backend_goal_collect_good_moves(homeworlds_position,
+                                                  builder.builder_state,
+                                                  &generation_context,
+                                                  &context,
+                                                  &buffer)) {
     homeworlds_move_builder_clear(&builder);
     homeworlds_backend_move_buffer_clear(&buffer);
+    if (context.goal_report != NULL) {
+      g_string_free(context.goal_report, TRUE);
+    }
     return (GameBackendMoveList){0};
   }
 
@@ -2957,6 +4874,9 @@ static GameBackendMoveList homeworlds_backend_list_good_moves(gconstpointer posi
 
   homeworlds_move_builder_clear(&builder);
   homeworlds_backend_move_buffer_clear(&buffer);
+  if (context.goal_report != NULL) {
+    g_string_free(context.goal_report, TRUE);
+  }
   return (GameBackendMoveList){
     .moves = moves,
     .count = count,

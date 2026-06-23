@@ -380,6 +380,16 @@ static void homeworlds_experiment_write_big_move_report(const HomeworldsGoodMove
   fprintf(file,
           "good_moves_ordering_single_step_moves: %" G_GSIZE_FORMAT "\n\n",
           trace->ordering_single_step_moves);
+  fprintf(file, "good_moves_goal_branches_created: %" G_GSIZE_FORMAT "\n", trace->goal_branches_created);
+  fprintf(file, "good_moves_goal_branches_selected: %" G_GSIZE_FORMAT "\n", trace->goal_branches_selected);
+  fprintf(file, "good_moves_goal_branches_split: %" G_GSIZE_FORMAT "\n", trace->goal_branches_split);
+  fprintf(file, "good_moves_goal_branches_requeued: %" G_GSIZE_FORMAT "\n", trace->goal_branches_requeued);
+  fprintf(file, "good_moves_goal_branches_direct: %" G_GSIZE_FORMAT "\n", trace->goal_branches_direct);
+  fprintf(file, "good_moves_goal_branches_skipped: %" G_GSIZE_FORMAT "\n", trace->goal_branches_skipped);
+  fprintf(file, "good_moves_goal_branches_exhausted: %" G_GSIZE_FORMAT "\n\n", trace->goal_branches_exhausted);
+  if (trace->goal_report != NULL && trace->goal_report[0] != '\0') {
+    fprintf(file, "goal_tree:\n%s\n", trace->goal_report);
+  }
   report_written = homeworlds_move_report_write(file, trace->position, context->played_moves, &all_move_count);
 
   if (fclose(file) != 0 || !report_written) {
@@ -412,7 +422,9 @@ static void homeworlds_experiment_trace_move_generation(const HomeworldsGoodMove
     homeworlds_experiment_progress_clear(context->progress);
     g_printerr("move-count,%d,%u,%u,%u,%u,%u,%u,%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT
                ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT
-               ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT "\n",
+               ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT
+               ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT
+               ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT "\n",
                context->value,
                context->game,
                context->seed,
@@ -430,7 +442,14 @@ static void homeworlds_experiment_trace_move_generation(const HomeworldsGoodMove
                trace->ordering_reordered_candidate_lists,
                trace->ordering_reordered_candidates,
                trace->ordering_single_step_passes,
-               trace->ordering_single_step_moves);
+               trace->ordering_single_step_moves,
+               trace->goal_branches_created,
+               trace->goal_branches_selected,
+               trace->goal_branches_split,
+               trace->goal_branches_requeued,
+               trace->goal_branches_direct,
+               trace->goal_branches_skipped,
+               trace->goal_branches_exhausted);
   }
 
   if (trace->generated_leaves > homeworlds_experiment_big_move_report_threshold()) {
@@ -769,7 +788,9 @@ int main(int argc, char **argv) {
                "generated_leaves,scored_moves,kept_moves,"
                "pruning_checked_branches,pruning_window_cutoff_branches,pruning_pruned_branches,"
                "ordering_candidate_lists,ordering_reordered_candidate_lists,ordering_reordered_candidates,"
-               "ordering_single_step_passes,ordering_single_step_moves\n");
+               "ordering_single_step_passes,ordering_single_step_moves,"
+               "goal_branches_created,goal_branches_selected,goal_branches_split,goal_branches_requeued,"
+               "goal_branches_direct,goal_branches_skipped,goal_branches_exhausted\n");
   }
 
   for (guint i = 0; i < values->len; ++i) {

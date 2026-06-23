@@ -720,11 +720,16 @@ duplicate raw candidate-field tests. During play, the side panel also reports th
 all-move generator without calling the AI-oriented `good_moves()` path. Both all-move generation and `good_moves()` use
 a shared sacrifice-scoped state deduper: generated sacrifice branches keep one temporary table for the descendants of
 that sacrifice, prune catastrophe-before-sacrifice spellings, and drop equivalent continuation states without storing
-hashes for the whole move tree. The backend `good_moves()` collector scores complete play-position moves while walking
-the builder tree and retains only the best static-pruned set, so memory remains bounded even when millions of complete
-leaves are reached before pruning. During active large yellow sacrifices, `good_moves()` prunes branches whose
-optimistic proof bound cannot reach the current cutoff, and also orders local builder candidates by the same bound so
-likely high-scoring continuations are explored first. `GameBackend`
+hashes for the whole move tree. The backend `good_moves()` collector schedules play-position exploration as a goal
+tree. Branches hold copied builder states, conservative score intervals, and upper bounds on possible leaves; the
+scheduler explores the best current score band first, requeues any remaining band, and skips branches whose optimistic
+bound cannot reach the current cutoff. During active large yellow sacrifices, the same optimistic proof bound is used
+both for branch pruning and for local continuation ordering. Forced sacrifice branches also estimate a conservative
+leaf upper bound from the current set of possible forced steps plus reachable positive catastrophes: green counts build
+choices, red counts attacks, blue counts trades, and yellow counts one-hop moves/discoveries. Empty or very small
+forced-action trees can therefore be reported and explored directly. Complete leaves are still scored exactly before
+entering the 512-move static-prune buffer, so memory remains bounded even when millions of legal leaves exist.
+`GameBackend`
 exposes an optional streamed all-move API for diagnostics; Homeworlds
 implements it by walking complete generated move paths without materializing a `GameBackendMoveList`. The
 `View` -> `Move report` action disables its report before the collector runs. The separate
@@ -732,8 +737,9 @@ implements it by walking complete generated move paths without materializing a `
 CLI applies `--moves` random good moves from a `--seed` or replays a Homeworlds SGF or ASCII text main line with
 `--file`; omitting `--moves` during file replay reaches the end of the provided move list. It prints an ASCII board
 snapshot, can print the shared Homeworlds move report with `--move-report`, and runs the AI at `--depth` only when
-`--ai-report` is provided. During AI reports, it shows a terminal-only stderr progress line with the searched node
-count and accepts `--node-limit` to stop after a requested number of searched nodes. The
+`--ai-report` is provided. Homeworlds ASCII position text includes a final `Bank:` line listing remaining bank
+pyramids by color group, or `Bank: (empty)`. During AI reports, it shows a terminal-only stderr progress line with the
+searched node count and accepts `--node-limit` to stop after a requested number of searched nodes. The
 `build/tools/homeworlds_eval_experiment` CLI varies one static-evaluation weight at a time and runs paired depth-1
 self-play against the default weights. Each seed produces one game with the candidate
 starting and one with the baseline starting, and aggregate wins are counted from the side-aware outcome. It reports one
@@ -742,20 +748,22 @@ summary row per tested value, including a `win_ratio` field computed as candidat
 baseline wins so draws and timeouts do not affect the ratio. Its variable names are `ship1`, `ship2`, `ship3`,
 `single-star`, and `buildable-color`; the old descriptive ship aliases and removed `homeworld-shipN` variables are not
 accepted. With `--trace-move-counts`, it uses the Homeworlds backend trace hook to print per-ply
-complete-leaf, scored-move, kept-move, pruning-counter, and ordering-counter values to stderr
+complete-leaf, scored-move, kept-move, pruning-counter, ordering-counter, and goal-branch-counter values to stderr
 without mixing them into the CSV summary. During
 interactive runs, it also renders one stderr progress line for the current value/game/ply using carriage return plus
 ANSI clear-line control and clears that line before each result row is shown. `GCHECKERS_HOMEWORLDS_EVAL_PROGRESS`
 can force that progress display with `always`, disable it with `never`, or leave the default terminal-only `auto`
 behavior. If a `good_moves()` call generates more than 500,000 deduplicated complete leaves, it writes
 `big_move_report_###.txt` in the current
-directory with the `good_moves()` trace, pruning counts, and ordering counts followed by the same move-report body used
-by `homeworlds_profile_moves`: the moves leading to the reported position, the ASCII position, and a streamed dump of
-all generated move paths. After the stream finishes, reports below the default 5,000,000 streamed-move cutoff are
-deleted.
-The `build/tools/homeworlds_proof_probe` CLI reads one of those move reports, recomputes the current `good_moves()`
-cutoff, and prints the large-yellow-sacrifice proof status after each step of requested `all_moves` row numbers or
-quoted move notations. The
+directory with the `good_moves()` trace, pruning counts, ordering counts, goal-tree branch counts, a bounded
+human-readable goal-tree report, and the same move-report body used by `homeworlds_profile_moves`: the moves leading
+to the reported position, the ASCII position, and a streamed dump of all generated move paths. After the stream
+finishes, reports below the default 5,000,000 streamed-move cutoff are deleted.
+The `build/tools/homeworlds_proof_probe` CLI reads one of those move reports and recomputes the current `good_moves()`
+cutoff. With `--iterations`, it prints a compact goal-tree report with iteration 1 for the initial `#0` expansion and
+iterations 2+ for the selected branches that follow, grouping similar branches and summarizing what each selected
+branch did. With requested `all_moves` row numbers or quoted move notations, it prints the large-yellow-sacrifice proof
+status after each step. The
 `GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_THRESHOLD` and `GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_MIN_TOTAL_MOVES`
 environment variables can override those thresholds for diagnostic runs and tests. It frees any
 generated candidate list before leaving an error path. The Homeworlds board host also syncs its

@@ -205,6 +205,59 @@ static void homeworlds_position_text_append_system(GString *text,
   g_string_append_c(text, '\n');
 }
 
+static HomeworldsColor homeworlds_position_text_bank_color_order(guint index) {
+  switch (index) {
+    case 0:
+      return HOMEWORLDS_COLOR_BLUE;
+    case 1:
+      return HOMEWORLDS_COLOR_GREEN;
+    case 2:
+      return HOMEWORLDS_COLOR_RED;
+    case 3:
+    default:
+      return HOMEWORLDS_COLOR_YELLOW;
+  }
+}
+
+static void homeworlds_position_text_append_bank(GString *text, const HomeworldsPosition *position) {
+  guint counts[HOMEWORLDS_COLOR_BLUE + 1][HOMEWORLDS_SIZE_LARGE + 1] = {0};
+  gboolean appended_any = FALSE;
+
+  g_return_if_fail(text != NULL);
+  g_return_if_fail(position != NULL);
+
+  for (guint bank_slot = 0; bank_slot < HOMEWORLDS_BANK_SLOT_COUNT; ++bank_slot) {
+    HomeworldsPyramid pyramid = position->bank[bank_slot];
+
+    if (!homeworlds_pyramid_is_valid(pyramid)) {
+      continue;
+    }
+    counts[homeworlds_pyramid_color(pyramid)][homeworlds_pyramid_size(pyramid)]++;
+  }
+
+  g_string_append(text, "Bank: ");
+  for (guint color_index = 0; color_index <= HOMEWORLDS_COLOR_BLUE; ++color_index) {
+    HomeworldsColor color = homeworlds_position_text_bank_color_order(color_index);
+    gboolean appended_color = FALSE;
+
+    for (HomeworldsSize size = HOMEWORLDS_SIZE_SMALL; size <= HOMEWORLDS_SIZE_LARGE; size++) {
+      for (guint count = 0; count < counts[color][size]; ++count) {
+        if (appended_any && !appended_color) {
+          g_string_append_c(text, ' ');
+        }
+        homeworlds_position_text_append_pyramid(text, homeworlds_pyramid_make(color, size), FALSE);
+        appended_any = TRUE;
+        appended_color = TRUE;
+      }
+    }
+  }
+
+  if (!appended_any) {
+    g_string_append(text, "(empty)");
+  }
+  g_string_append_c(text, '\n');
+}
+
 char *homeworlds_position_format_ascii(const HomeworldsPosition *position) {
   GString *text = NULL;
   HomeworldsPositionTextRowGroup rows[5] = {0};
@@ -255,5 +308,6 @@ char *homeworlds_position_format_ascii(const HomeworldsPosition *position) {
     g_string_append(text, "No systems.\n");
   }
 
+  homeworlds_position_text_append_bank(text, position);
   return g_string_free(text, FALSE);
 }

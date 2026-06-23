@@ -76,10 +76,13 @@ H2: g3 Y2B3 -
 S0: - B2 g1
 
 H1: - Y1G3 b3
+Bank: b1b2b3 g1g2g3 r1r2r3 y1y2y3
 ```
 
 This shows Player 2's homeworld with a `g3` ship at stars `Y2B3`, non-homeworld system `S0` with a `B2` star and a
 Player 1 `g1` ship, and Player 1's homeworld with a `b3` ship at stars `Y1G3`.
+The `Bank:` line lists remaining bank pyramids as lowercase pyramids, grouped by color in `b g r y` order and by
+ascending size inside each color. An empty bank is printed as `Bank: (empty)`.
 
 Line order is layout-oriented:
 

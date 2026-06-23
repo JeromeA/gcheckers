@@ -21,9 +21,12 @@ generic model or SGF controller, `homeworlds_position_apply_move()` replays the 
 position and rejects invalid moves. For Homeworlds, the generic model cannot validate against `list_moves()`, because
 Homeworlds intentionally does not expose a full legal move list.
 
-`homeworlds_backend.c` implements `list_good_moves()`. It also walks the staged builder, but it applies AI policy while
-walking. That means `good_moves()` is not the same thing as legal move generation: it is a legal-move traversal plus a
-set of pruning and forcing rules that keep alpha-beta focused on sensible moves.
+`homeworlds_backend.c` implements `list_good_moves()`. It uses the staged builder as the legal next-choice source, but
+it schedules AI exploration through a goal tree. A goal branch owns a copied builder state, a side-aware score interval,
+and an optimistic leaf-count bound. The scheduler explores the branch whose best score bound is currently most useful,
+splits it by score band when another branch becomes competitive, and skips branches whose upper bound cannot enter the
+static-prune buffer. That means `good_moves()` is not the same thing as legal move generation: it is legal move
+generation plus AI policy, branch ordering, and pruning.
 
 `homeworlds_move_report.c` has a separate diagnostic collector for the text panel and profiling tools. It recursively
 walks the builder to show the legal moves, then displays a count header for `good_moves()` and all moves before listing
@@ -78,8 +81,13 @@ catastrophe-first order.
 
 ## Current Good-Move Policy
 
-The current Homeworlds `good_moves()` traversal handles pass before stepping candidates, applies action safety after a
-builder choice appends a step, and checks whole-move obligations when a complete move is ready to append.
+The current Homeworlds `good_moves()` scheduler creates goal branches, then explores each selected branch with the
+same staged builder used by the UI. Branches can represent root catastrophe policy, root single-step actions,
+sacrifices, large yellow sacrifice continuations, or a generic fallback. A branch stores an integer score interval. If
+the best branch can reach `+50` and the next best branch can reach only `+30`, the scheduler explores the best branch's
+`+30` to `+50` band first and requeues the lower band as a separate branch. For player 2 the same comparison is
+reversed because lower scores are better. Branches with a conservative leaf upper bound of 50 or less are explored
+directly instead of being split further.
 
 Setup moves are filtered to prefer playable starts: three distinct colors across the two stars and starting ship, a
 large starting ship, two different homeworld star sizes, green included for player 1, and a different star-size
@@ -92,8 +100,8 @@ ordinary actions and sacrifice-granted actions. The AI does not move or sacrific
 rejects builds that create an unfavorable catastrophe, and rejects a small sacrifice when the sacrificed color's action
 was already available at that system. Equivalent continuations inside a sacrifice are pruned by the shared
 sacrifice-scoped builder-state deduper instead of by color-specific adjacent-step rules.
-Large yellow sacrifice branches also use a conservative proof bound during normal `good_moves()` traversal; when the
-bound cannot reach the current static-prune cutoff, the branch is not explored.
+Large yellow sacrifice branches also use a conservative proof bound during branch scheduling and branch exploration;
+when the bound cannot reach the current static-prune cutoff or the active score interval, the branch is not explored.
 
 The catastrophe policy distinguishes profitable and unfavorable catastrophes from the moving side's perspective. A
 profitable catastrophe destroys more opponent ship pips than own ship pips. If such a catastrophe exists at the start
@@ -108,8 +116,9 @@ candidates in the builder, so that branch naturally fails to produce a completed
 
 ## Good Move Policy Shape
 
-The recursive traversal keeps policy in named predicates rather than hiding it in traversal mechanics. The important
-decision points are pass handling, child-state checks after an appended step, and completed-move checks:
+The branch explorer keeps policy in named predicates rather than hiding it in traversal mechanics. The important
+decision points are pass handling, child-state checks after an appended step, branch score-interval filtering, and
+completed-move checks:
 
 ```c
 if (candidate_is_pass(candidate)) {
@@ -124,10 +133,15 @@ if (!child_state_is_good_after_step(state, child)) {
 if (!completed_move_satisfies_root_catastrophe_requirement(context, move)) {
   prune;
 }
+if (!completed_score_is_inside_active_branch_interval(context, score)) {
+  discard;
+}
 ```
 
 The exact helper names are not important. Child-state predicates say why the consequence of a choice is unsafe.
-Completed-move predicates say what whole-turn obligation remains.
+Completed-move predicates say what whole-turn obligation remains. Score intervals decide exploration order and early
+discarding only; every completed leaf that can enter the buffer is still scored exactly from the root position before
+being kept.
 
 ## Alpha-Beta Interaction
 

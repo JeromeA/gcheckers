@@ -62,6 +62,36 @@ static void test_homeworlds_proof_probe_reads_report_row(void) {
   g_assert_cmpint(g_remove(report_path), ==, 0);
 }
 
+static void test_homeworlds_proof_probe_prints_iteration_report(void) {
+  g_autofree gchar *report_path = test_homeworlds_proof_probe_create_report();
+  g_autofree gchar *stdout_text = NULL;
+  g_autofree gchar *stderr_text = NULL;
+  g_autoptr(GError) error = NULL;
+  gint wait_status = 0;
+  gchar *argv[] = {
+    (gchar *)HOMEWORLDS_PROOF_PROBE_PATH,
+    (gchar *)"--iterations",
+    report_path,
+    NULL,
+  };
+
+  g_assert_true(g_spawn_sync(NULL, argv, NULL, G_SPAWN_DEFAULT, NULL, NULL,
+                             &stdout_text, &stderr_text, &wait_status, &error));
+  g_assert_no_error(error);
+  g_assert_true(g_spawn_check_wait_status(wait_status, &error));
+  g_assert_no_error(error);
+  g_assert_cmpstr(stderr_text, ==, "");
+  g_assert_nonnull(strstr(stdout_text, "position:\n"));
+  g_assert_nonnull(strstr(stdout_text, "Bank: "));
+  g_assert_nonnull(strstr(stdout_text, "cutoff="));
+  g_assert_nonnull(strstr(stdout_text, "\nIteration 1:\n"));
+  g_assert_nonnull(strstr(stdout_text, "#0 expansion:"));
+  g_assert_nonnull(strstr(stdout_text, "\nIterations 2+:\n"));
+  g_assert_nonnull(strstr(stdout_text, "selected branches after iteration 1:"));
+  g_assert_null(strstr(stdout_text, "root expansion:"));
+  g_assert_cmpint(g_remove(report_path), ==, 0);
+}
+
 static void test_homeworlds_proof_probe_rejects_missing_report_row(void) {
   g_autofree gchar *report_path = test_homeworlds_proof_probe_create_report();
   g_autofree gchar *stdout_text = NULL;
@@ -88,6 +118,8 @@ int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
 
   g_test_add_func("/homeworlds-proof-probe/reads-report-row", test_homeworlds_proof_probe_reads_report_row);
+  g_test_add_func("/homeworlds-proof-probe/prints-iteration-report",
+                  test_homeworlds_proof_probe_prints_iteration_report);
   g_test_add_func("/homeworlds-proof-probe/rejects-missing-report-row",
                   test_homeworlds_proof_probe_rejects_missing_report_row);
 
