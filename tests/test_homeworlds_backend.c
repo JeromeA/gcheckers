@@ -1762,6 +1762,7 @@ static void test_backend_good_move_trace_bounds_yellow_sacrifices(void) {
   assert(strstr(capture.goal_report, "prefix=[H1y2-]") != NULL);
   assert(strstr(capture.goal_report, "leaves<=unknown prefix=[H1y2-]") == NULL);
   assert(strstr(capture.goal_report, "yellow-sacrifice interval=[-2147483648,") == NULL);
+  assert(strstr(capture.goal_report, "parent_" "delta") == NULL);
 
   backend->move_list_free(&good_moves);
   homeworlds_backend_set_good_move_trace(NULL, NULL);

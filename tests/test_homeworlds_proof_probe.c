@@ -89,6 +89,7 @@ static void test_homeworlds_proof_probe_prints_iteration_report(void) {
   g_assert_nonnull(strstr(stdout_text, "\nIterations 2+:\n"));
   g_assert_nonnull(strstr(stdout_text, "selected branches after iteration 1:"));
   g_assert_null(strstr(stdout_text, "root expansion:"));
+  g_assert_null(strstr(stdout_text, "parent_" "delta"));
   g_assert_cmpint(g_remove(report_path), ==, 0);
 }
 

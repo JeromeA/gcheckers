@@ -33,8 +33,6 @@ typedef struct {
   char kind[64];
   gint interval_min;
   gint interval_max;
-  gint parent_delta_min;
-  gint parent_delta_max;
   gsize leaf_upper_bound;
   char prefix[128];
   char reason[128];
@@ -178,16 +176,14 @@ static gboolean homeworlds_proof_probe_parse_create_line(const char *line,
   g_return_val_if_fail(out_event != NULL, FALSE);
 
   matched = sscanf(line,
-                   "create #%zu %63s interval=[%d,%d] parent_delta=[%d,%d] leaves<=%zu %n",
+                   "create #%zu %63s interval=[%d,%d] leaves<=%zu %n",
                    &event.id,
                    event.kind,
                    &event.interval_min,
                    &event.interval_max,
-                   &event.parent_delta_min,
-                   &event.parent_delta_max,
                    &event.leaf_upper_bound,
                    &offset);
-  if (matched < 7) {
+  if (matched < 5) {
     return FALSE;
   }
 
@@ -417,8 +413,6 @@ static gboolean homeworlds_proof_probe_create_group_matches(const HomeworldsProo
   return g_strcmp0(group->event.kind, event->kind) == 0 &&
       group->event.interval_min == event->interval_min &&
       group->event.interval_max == event->interval_max &&
-      group->event.parent_delta_min == event->parent_delta_min &&
-      group->event.parent_delta_max == event->parent_delta_max &&
       group->event.leaf_upper_bound == event->leaf_upper_bound &&
       g_strcmp0(group->event.reason, event->reason) == 0;
 }
@@ -454,7 +448,6 @@ static void homeworlds_proof_probe_add_create_group(GPtrArray *groups,
 static void homeworlds_proof_probe_print_create_group(const HomeworldsProofProbeCreateGroup *group) {
   const gsize *ids = NULL;
   char interval_text[64] = {0};
-  char delta_text[64] = {0};
   char leaf_text[32] = {0};
 
   g_return_if_fail(group != NULL);
@@ -466,21 +459,12 @@ static void homeworlds_proof_probe_print_create_group(const HomeworldsProofProbe
                                           group->event.interval_max,
                                           interval_text,
                                           sizeof(interval_text));
-  if (group->event.parent_delta_min == group->event.parent_delta_max) {
-    homeworlds_proof_probe_format_score(group->event.parent_delta_min, delta_text, sizeof(delta_text));
-  } else {
-    homeworlds_proof_probe_format_interval(group->event.parent_delta_min,
-                                            group->event.parent_delta_max,
-                                            delta_text,
-                                            sizeof(delta_text));
-  }
   homeworlds_proof_probe_format_leaf_bound(group->event.leaf_upper_bound, leaf_text, sizeof(leaf_text));
 
-  g_print("  #%zu %s %s parent_delta=%s leaves<=%s",
+  g_print("  #%zu %s %s leaves<=%s",
           ids[0],
           group->event.kind,
           interval_text,
-          delta_text,
           leaf_text);
   if (group->event.reason[0] != '\0') {
     g_print(" - %s", group->event.reason);

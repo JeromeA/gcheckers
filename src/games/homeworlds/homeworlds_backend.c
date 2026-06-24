@@ -114,9 +114,6 @@ typedef struct {
   HomeworldsGoalDedupeRef *dedupe_ref;
   gint interval_min;
   gint interval_max;
-  gint parent_score;
-  gint parent_delta_min;
-  gint parent_delta_max;
   gsize leaf_upper_bound;
   guint root_defer_step_count;
   gboolean defer_root_catastrophes;
@@ -650,14 +647,11 @@ static void homeworlds_backend_goal_queue_push(HomeworldsGoalQueue *queue,
   context->goal_branches_created++;
   homeworlds_backend_goal_branch_format_prefix(branch, prefix, sizeof(prefix));
   homeworlds_backend_goal_report_append(context,
-                                        "create #%zu %s interval=[%d,%d] parent_delta=[%d,%d] leaves<=%zu "
-                                        "prefix=[%s] %s",
+                                        "create #%zu %s interval=[%d,%d] leaves<=%zu prefix=[%s] %s",
                                         branch->id,
                                         homeworlds_backend_goal_branch_kind_name(branch->kind),
                                         branch->interval_min,
                                         branch->interval_max,
-                                        branch->parent_delta_min,
-                                        branch->parent_delta_max,
                                         branch->leaf_upper_bound,
                                         prefix,
                                         branch->reason);
@@ -684,9 +678,6 @@ static HomeworldsGoalBranch *homeworlds_backend_goal_branch_clone_for_interval(H
   g_return_val_if_fail(clone != NULL, NULL);
   clone->interval_min = interval_min;
   clone->interval_max = interval_max;
-  clone->parent_score = branch->parent_score;
-  clone->parent_delta_min = interval_min == G_MININT ? G_MININT : interval_min - branch->parent_score;
-  clone->parent_delta_max = interval_max == G_MAXINT ? G_MAXINT : interval_max - branch->parent_score;
   clone->leaf_upper_bound = branch->leaf_upper_bound;
   clone->defer_root_catastrophes = branch->defer_root_catastrophes;
   clone->root_defer_step_count = branch->root_defer_step_count;
@@ -3092,7 +3083,6 @@ static gboolean homeworlds_backend_goal_branch_update_estimate(const HomeworldsP
                                                                guint side,
                                                                HomeworldsGoalBranch *branch) {
   HomeworldsCandidateOrder order = {0};
-  gint state_score = 0;
   guint base_step_count = 0;
 
   g_return_val_if_fail(root_position != NULL, FALSE);
@@ -3100,8 +3090,6 @@ static gboolean homeworlds_backend_goal_branch_update_estimate(const HomeworldsP
   g_return_val_if_fail(side < 2, FALSE);
   g_return_val_if_fail(branch != NULL, FALSE);
 
-  state_score = homeworlds_position_evaluate_static(&branch->state.working_position);
-  branch->parent_score = state_score;
   branch->leaf_upper_bound = homeworlds_backend_goal_estimate_leaf_upper_bound(&branch->state);
   if (branch->kind == HOMEWORLDS_GOAL_BRANCH_ROOT &&
       branch->state.working_position.phase == HOMEWORLDS_PHASE_PLAY) {
@@ -3167,8 +3155,6 @@ static gboolean homeworlds_backend_goal_branch_update_estimate(const HomeworldsP
     return FALSE;
   }
 
-  branch->parent_delta_min = branch->interval_min == G_MININT ? G_MININT : branch->interval_min - state_score;
-  branch->parent_delta_max = branch->interval_max == G_MAXINT ? G_MAXINT : branch->interval_max - state_score;
   return TRUE;
 }
 
@@ -4543,13 +4529,6 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(
   return TRUE;
 }
 
-static void homeworlds_backend_goal_branch_update_delta(HomeworldsGoalBranch *branch) {
-  g_return_if_fail(branch != NULL);
-
-  branch->parent_delta_min = branch->interval_min == G_MININT ? G_MININT : branch->interval_min - branch->parent_score;
-  branch->parent_delta_max = branch->interval_max == G_MAXINT ? G_MAXINT : branch->interval_max - branch->parent_score;
-}
-
 static gboolean homeworlds_backend_goal_branch_split_score_interval(HomeworldsGoalQueue *queue,
                                                                     HomeworldsGoodMoveContext *context,
                                                                     HomeworldsGoalBranch *branch,
@@ -4603,7 +4582,6 @@ static gboolean homeworlds_backend_goal_branch_split_score_interval(HomeworldsGo
     branch->interval_max = top_max;
   }
 
-  homeworlds_backend_goal_branch_update_delta(branch);
   context->goal_branches_split++;
   context->goal_branches_requeued++;
   homeworlds_backend_goal_report_append(context,
