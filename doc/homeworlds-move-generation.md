@@ -53,6 +53,11 @@ deduplication. If a move is absent from the second section, the first checks sho
 equal to another displayed move and whether the move is actually legal under `homeworlds_position_apply_move()`. It
 should not be absent merely because `good_moves()` dislikes it.
 
+Plain pass remains a `good_moves()` fallback when no non-pass move survives, but pass completions inside a sacrifice are
+generated and scored like other sacrifice leaves. This keeps the real sacrifice cost available to the goal tree: the
+branch can always stop at the sacrificed ship plus forced passes, and worse continuations are filtered by score instead
+of by a special pass rule.
+
 ## Duplicate Control
 
 Move generation avoids duplicates without keeping a global result-position table.

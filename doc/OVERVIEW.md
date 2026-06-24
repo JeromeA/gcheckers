@@ -784,8 +784,9 @@ shared SGF controller validates completed moves by applying them to a copied pos
 Homeworlds SGF position snapshots reject duplicate per-system entries instead of letting a later `GHS` property
 silently replace an earlier snapshot for the same system.
 `homeworlds_backend.c` walks the same staged builder to feed the shared alpha-beta search with backend-good moves. That
-AI path deduplicates completed symbolic moves, rejects pass moves while non-pass good moves remain, keeps pass as a
-top-level fallback when every non-pass branch is filtered away before a primary action is staged, applies
+AI path deduplicates completed symbolic moves, rejects plain pass moves while non-pass good moves remain, keeps plain
+pass as a top-level fallback when every non-pass branch is filtered away before a primary action is staged, scores
+pass completions inside sacrifices as the sacrifice branch floor, applies
 Homeworlds-specific opening and safety heuristics, and lets dead-end choices such as attacks with no target naturally
 produce no completed move. Opening setup candidates keep only large starting ships, distinct colors with green and blue
 both present plus either red or yellow, differently sized stars, and second-player star sizes that differ from player

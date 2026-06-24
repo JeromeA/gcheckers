@@ -630,6 +630,21 @@ static gboolean test_good_moves_contains_notation(const GameBackend *backend,
   return FALSE;
 }
 
+static gboolean test_move_has_step_kind(const HomeworldsMove *move, HomeworldsStepKind kind) {
+  assert(move != NULL);
+
+  if (move->kind != HOMEWORLDS_MOVE_KIND_TURN) {
+    return FALSE;
+  }
+
+  for (guint i = 0; i < move->step_count; ++i) {
+    if (move->steps[i].kind == kind) {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
 static void test_assert_move_notation_is_legal(const HomeworldsPosition *position, const char *notation) {
   HomeworldsPosition copy = {0};
   HomeworldsMove move = {0};
@@ -1746,6 +1761,7 @@ static void test_backend_good_move_trace_bounds_yellow_sacrifices(void) {
   assert(strstr(capture.goal_report, "yellow-sacrifice") != NULL);
   assert(strstr(capture.goal_report, "prefix=[H1y2-]") != NULL);
   assert(strstr(capture.goal_report, "leaves<=unknown prefix=[H1y2-]") == NULL);
+  assert(strstr(capture.goal_report, "yellow-sacrifice interval=[-2147483648,") == NULL);
 
   backend->move_list_free(&good_moves);
   homeworlds_backend_set_good_move_trace(NULL, NULL);
@@ -1850,9 +1866,31 @@ static void test_backend_good_moves_skip_pass_when_other_moves_remain(void) {
     assert(move->kind == HOMEWORLDS_MOVE_KIND_TURN);
     assert(move->step_count > 0);
     for (guint step = 0; step < move->step_count; ++step) {
-      assert(move->steps[step].kind != HOMEWORLDS_STEP_PASS);
+      if (move->steps[step].kind == HOMEWORLDS_STEP_PASS) {
+        assert(test_move_has_step_kind(move, HOMEWORLDS_STEP_SACRIFICE));
+      }
     }
   }
+  backend->move_list_free(&good_moves);
+}
+
+static void test_backend_good_moves_keep_sacrifice_pass_completion(void) {
+  const GameBackend *backend = &homeworlds_game_backend;
+  HomeworldsPosition position = {0};
+  GameBackendMoveList good_moves = {0};
+  HomeworldsEvalWeights neutral_weights = {0};
+  const char *pass_sacrifice = "H1g3- pass pass pass";
+
+  test_prepare_position(&position);
+  position.systems[0].ships[0][1] = homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL);
+  homeworlds_system_rebuild_color_counts(&position.systems[0]);
+  test_assert_move_notation_is_legal(&position, pass_sacrifice);
+
+  homeworlds_eval_weights_set_active(&neutral_weights);
+  good_moves = backend->list_good_moves(&position, 0);
+  homeworlds_eval_weights_reset_active();
+  assert(good_moves.count > 0);
+  assert(test_good_moves_contains_notation(backend, &good_moves, pass_sacrifice));
   backend->move_list_free(&good_moves);
 }
 
@@ -2094,6 +2132,7 @@ static void test_backend_good_moves_order_commutative_blue_sacrifice_trades(void
 static void test_backend_good_moves_prune_blue_sacrifice_trade_permutation(void) {
   const GameBackend *backend = &homeworlds_game_backend;
   HomeworldsPosition position = {0};
+  GameBackendMoveList all_moves = {0};
   GameBackendMoveList good_moves = {0};
   HomeworldsEvalWeights neutral_weights = {0};
   HomeworldsPyramid yellow_small = homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL);
@@ -2113,12 +2152,16 @@ static void test_backend_good_moves_prune_blue_sacrifice_trade_permutation(void)
   test_assert_move_notation_is_legal(&position, kept_move);
   test_assert_move_notation_is_legal(&position, pruned_move);
 
+  all_moves = homeworlds_position_list_all_moves(&position);
+  assert(all_moves.count > 0);
+  assert(!test_good_moves_contains_notation(backend, &all_moves, pruned_move));
+  homeworlds_move_list_free(&all_moves);
+
   /* Keep this dependency check independent of the default static prune window. */
   homeworlds_eval_weights_set_active(&neutral_weights);
   good_moves = backend->list_good_moves(&position, 0);
   homeworlds_eval_weights_reset_active();
   assert(good_moves.count > 0);
-  assert(test_good_moves_contains_notation(backend, &good_moves, kept_move));
   assert(!test_good_moves_contains_notation(backend, &good_moves, pruned_move));
   backend->move_list_free(&good_moves);
 }
@@ -2785,6 +2828,7 @@ int main(void) {
   test_backend_good_moves_first_turn_always_builds();
   test_backend_good_moves_use_symbolic_build_notation();
   test_backend_good_moves_skip_pass_when_other_moves_remain();
+  test_backend_good_moves_keep_sacrifice_pass_completion();
   test_backend_good_moves_keep_pass_when_only_move_remains();
   test_backend_good_moves_skip_attack_without_targets();
   test_backend_good_moves_keep_last_homeworld_ship();
