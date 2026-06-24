@@ -83,7 +83,7 @@ catastrophe-first order.
 
 The current Homeworlds `good_moves()` scheduler creates goal branches, then explores each selected branch with the
 same staged builder used by the UI. Branches can represent root catastrophe policy, root single-step actions,
-sacrifices, large yellow sacrifice continuations, or a generic fallback. A branch stores an integer score interval. If
+sacrifices, yellow sacrifice continuations, or a generic fallback. A branch stores an integer score interval. If
 the best branch can reach `+50` and the next best branch can reach only `+30`, the scheduler explores the best branch's
 `+30` to `+50` band first and requeues the lower band as a separate branch. For player 2 the same comparison is
 reversed because lower scores are better. Branches with a conservative leaf upper bound of 50 or less are explored
@@ -100,7 +100,7 @@ ordinary actions and sacrifice-granted actions. The AI does not move or sacrific
 rejects builds that create an unfavorable catastrophe, and rejects a small sacrifice when the sacrificed color's action
 was already available at that system. Equivalent continuations inside a sacrifice are pruned by the shared
 sacrifice-scoped builder-state deduper instead of by color-specific adjacent-step rules.
-Large yellow sacrifice branches also use a conservative proof bound during branch scheduling and branch exploration;
+Yellow sacrifice branches also use a conservative proof bound during branch scheduling and branch exploration;
 when the bound cannot reach the current static-prune cutoff or the active score interval, the branch is not explored.
 
 The catastrophe policy distinguishes profitable and unfavorable catastrophes from the moving side's perspective. A

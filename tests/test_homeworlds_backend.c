@@ -1721,7 +1721,7 @@ static void test_backend_good_move_trace_bounds_yellow_sacrifices(void) {
     },
     .ships = {
       [0] = {
-        homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_LARGE),
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_MEDIUM),
         homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL),
       },
     },
@@ -1743,8 +1743,9 @@ static void test_backend_good_move_trace_bounds_yellow_sacrifices(void) {
   good_moves = backend->list_good_moves(&position, 0);
   assert(capture.called);
   assert(capture.goal_report != NULL);
-  assert(strstr(capture.goal_report, "prefix=[H1y3-]") != NULL);
-  assert(strstr(capture.goal_report, "leaves<=unknown prefix=[H1y3-]") == NULL);
+  assert(strstr(capture.goal_report, "yellow-sacrifice") != NULL);
+  assert(strstr(capture.goal_report, "prefix=[H1y2-]") != NULL);
+  assert(strstr(capture.goal_report, "leaves<=unknown prefix=[H1y2-]") == NULL);
 
   backend->move_list_free(&good_moves);
   homeworlds_backend_set_good_move_trace(NULL, NULL);

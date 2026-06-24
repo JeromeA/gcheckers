@@ -20,22 +20,22 @@ the optimization can be tuned on real reports before it becomes a default behavi
 - [x] (2026-06-19 22:16Z) Analyzed `homeworlds_3.3M_moves.txt` enough to see that the example is dominated by large
   yellow sacrifices, not green sacrifices.
 - [x] (2026-06-19 22:30Z) Added optional pruning mode parsing, trace counters, and verification state.
-- [x] (2026-06-19 22:30Z) Implemented the first conservative proof for active large yellow sacrifices.
+- [x] (2026-06-19 22:30Z) Implemented the first conservative proof for active yellow sacrifices.
 - [x] (2026-06-19 22:30Z) Added tests for mode control, trace output, verification failures, and unchanged `verify`
   results.
 - [x] (2026-06-19 22:30Z) Updated `doc/OVERVIEW.md`.
 - [x] (2026-06-19 22:42Z) Ran focused build/test commands, `git diff --check`, wrap scan, and full `make`.
-- [x] (2026-06-20 07:37Z) Strengthened the large-yellow proof to ignore only non-positive catastrophes and to prove
+- [x] (2026-06-20 07:37Z) Strengthened the yellow-sacrifice proof to ignore only non-positive catastrophes and to prove
   same-color ship reachability before declining to prune.
 - [x] (2026-06-20 09:14Z) Replaced the binary positive-catastrophe guard with a numeric catastrophe-gain ceiling that
   charges future yellow actions for saving doomed own ships.
 - [x] (2026-06-20 10:53Z) Added `build/tools/homeworlds_proof_probe` for repeatable per-prefix proof inspection from
   big move reports.
-- [x] (2026-06-20 11:55Z) Decided to add local candidate ordering for active large yellow sacrifices and to judge the
+- [x] (2026-06-20 11:55Z) Decided to add local candidate ordering for active yellow sacrifices and to judge the
   result by the final buffer's score quality rather than by exact move-list identity.
 - [x] (2026-06-20 12:20Z) Implemented early branch cutoffs from the existing best-score window before the 512-move
   buffer is full.
-- [x] (2026-06-20 12:20Z) Implemented stable local ordering for active large yellow sacrifice candidate lists, limited
+- [x] (2026-06-20 12:20Z) Implemented stable local ordering for active yellow sacrifice candidate lists, limited
   to the pre-512 phase where it can raise the bar.
 - [x] (2026-06-20 12:20Z) Added trace/report counters for ordering and score-window pruning, updated the proof probe,
   tests, and overview documentation.
@@ -53,7 +53,7 @@ the optimization can be tuned on real reports before it becomes a default behavi
   first-step prefixes were `S2y3-` with about 1,698,384 moves and `H1y3-` with about 1,596,583 moves. All `g3-` and
   `g2-` occurrences together were about 1,819.
 
-- Observation: The compact existing test positions do not reliably trigger a nonzero large-yellow pruning counter.
+- Observation: The compact existing test positions do not reliably trigger a nonzero yellow-sacrifice pruning counter.
   Evidence: The focused backend test validates that `verify` mode returns the same static-pruned moves and reports zero
   failures, but it does not assert a positive pruned-branch count.
 
@@ -73,8 +73,8 @@ the optimization can be tuned on real reports before it becomes a default behavi
   completed moves outside the 50-point static-prune window. The branch-bound proof previously ignored that bar because
   it only requested a cutoff after the buffer held 512 moves.
 
-- Observation: Always-on ordering through the entire large-yellow tree made the 3.3M pruning run slightly worse.
-  Evidence: With pruning `on`, ordering through every active large-yellow candidate list scored 814,178 leaves, while
+- Observation: Always-on ordering through the entire yellow-sacrifice tree made the 3.3M pruning run slightly worse.
+  Evidence: With pruning `on`, ordering through every active yellow-sacrifice candidate list scored 814,178 leaves, while
   old ordering scored 809,701 leaves. Limiting ordering to the pre-512 phase restored the 809,701 scored-leaf count.
 
 - Observation: On the 3.3M report, pre-512 ordering is safe but not yet a major improvement.
@@ -105,7 +105,7 @@ the optimization can be tuned on real reports before it becomes a default behavi
   Date/Author: 2026-06-19 / Codex.
 
 - Decision: Treat only material-positive catastrophes, plus opponent-homeworld star destruction, as cutoff-relevant
-  for the large-yellow proof.
+  for the yellow-sacrifice proof.
   Rationale: A catastrophe that only destroys the mover's own ships cannot improve the retained static score, but a
   catastrophe that destroys opponent material or can damage the opponent homeworld might. Reachability is then checked
   by finding enough same-color own ships that can be moved to the target system within the remaining yellow actions.
@@ -148,10 +148,10 @@ the optimization can be tuned on real reports before it becomes a default behavi
 The implementation is nearly complete. Normal runs are unchanged by default, while setting
 `GCHECKERS_HOMEWORLDS_GOOD_MOVE_PRUNING=verify` exposes would-prune and verification-failure counters in Homeworlds
 good-move traces. The eval experiment trace rows and big-move reports include the same pruning fields. The strengthened
-large-yellow proof now uses a numeric catastrophe-gain ceiling; on the 3.3M report it cuts scored leaves by about 64%
+yellow-sacrifice proof now uses a numeric catastrophe-gain ceiling; on the 3.3M report it cuts scored leaves by about 64%
 in `on` mode with the same returned move digest and zero verification failures. The `homeworlds_proof_probe` tool can
 now replay a big move report and show the same proof status after each step of selected `all_moves` rows.
-The current revision also uses the best-score window as an early branch cutoff and orders active large-yellow
+The current revision also uses the best-score window as an early branch cutoff and orders active yellow-sacrifice
 candidates before the 512-move buffer is full. The 3.3M report shows this is sound, with zero verify failures, but the
 pre-512 ordering is not a large performance win for that specific report.
 The collector now also performs a simple-move pre-pass from normal ship-selection states before it explores sacrifice
@@ -189,8 +189,8 @@ Second, expose the current good-move cutoff from `HomeworldsMoveBuffer` once it 
 the current lowest score among the kept moves. For Player 2 it is the current highest score among the kept moves. The
 first implementation should use strict comparisons and not prune equal-to-cutoff branches.
 
-Third, implement yellow large-sacrifice proof logic. Detect an active large yellow sacrifice by checking that a staged
-state has remaining forced yellow actions and that the staged move contains a large yellow sacrifice step. Only inspect
+Third, implement yellow sacrifice proof logic. Detect an active yellow sacrifice by checking that a staged state has
+remaining forced yellow actions and that the staged move contains a yellow sacrifice step. Only inspect
 branches after normal move-builder application, dedupe handling, and existing good-move safety checks. The proof should
 decline to prune if the branch is terminal, complete, not a play position, or lacks a cutoff. Otherwise, compute the
 current static score plus optimistic buildable-color gains and catastrophe gains. Existing catastrophes count their
@@ -206,8 +206,8 @@ warning. In mode `on`, skip the branch and increment actually-pruned counters.
 Fifth, update tooling and docs. The eval experiment trace header and report body should include the new counters.
 `doc/OVERVIEW.md` should explain that bound pruning is optional, off by default, and traceable/verifyable.
 
-Sixth, order active large yellow sacrifice candidates locally. A candidate list is local to one staged builder state.
-When the state is inside a large yellow sacrifice, compute an optimistic priority for each candidate by applying the
+Sixth, order active yellow sacrifice candidates locally. A candidate list is local to one staged builder state.
+When the state is inside a yellow sacrifice, compute an optimistic priority for each candidate by applying the
 candidate to a temporary child state and looking ahead only until the next real turn step is appended. The priority is
 the same proof bound used for pruning: better bounds are explored first. Ties keep the original candidate order, so the
 change is deterministic. The ordering has an escape hatch, `GCHECKERS_HOMEWORLDS_GOOD_MOVE_ORDERING=off`, to compare
@@ -285,7 +285,7 @@ Revision note, 2026-06-19 22:42Z: Focused Homeworlds tests, formatting checks, w
 `make test-local` failed at `/gcheckers-window/library-loads-imported-game`; the harness reran the same isolated path
 and it failed again, so the non-reproducible-failure filter correctly did not ignore it.
 
-Revision note, 2026-06-20 07:37Z: The large-yellow proof now ignores only non-positive catastrophes and checks whether
+Revision note, 2026-06-20 07:37Z: The yellow-sacrifice proof now ignores only non-positive catastrophes and checks whether
 enough same-color ships can reach the target system within the remaining yellow actions before it declines to prune.
 The 3.3M probe reports zero verification failures and the same returned move digest in `off`, `verify`, and `on`.
 
@@ -295,11 +295,11 @@ that spend yellow actions elsewhere lose that upside in the child state. The 3.3
 failures and the same returned digest, with `on` mode scoring 809,701 leaves instead of 2,259,128.
 
 Revision note, 2026-06-20 10:53Z: Added `homeworlds_proof_probe` as a maintained build tool. It accepts a move report
-plus `all_moves` row numbers or quoted move notations, recomputes the current cutoff, and prints the large-yellow proof
+plus `all_moves` row numbers or quoted move notations, recomputes the current cutoff, and prints the yellow-sacrifice proof
 state after each prefix step.
 
 Revision note, 2026-06-20 11:55Z: Expanded the plan to cover score-window branch cutoffs before 512 kept moves and
-local ordering for active large yellow sacrifice candidates. The validation standard now allows different retained
+local ordering for active yellow sacrifice candidates. The validation standard now allows different retained
 move identities as long as the retained scores remain at least as good.
 
 Revision note, 2026-06-20 12:20Z: Implemented early score-window cutoffs, pre-512 candidate ordering, ordering trace

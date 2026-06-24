@@ -9,7 +9,7 @@ This document is maintained according to `doc/PLANS.md` from the repository root
 
 Homeworlds `good_moves()` currently has an environment-controlled proof pruning mode with `off`, `on`, and `verify`.
 The profiling work showed that leaving pruning off by default makes AI profiling spend most time generating and scoring
-moves that the proof can reject. After this change there is only one behavior: the large-yellow-sacrifice proof prunes
+moves that the proof can reject. After this change there is only one behavior: the yellow-sacrifice proof prunes
 branches whenever it can. Users and profiling tools no longer need to remember an environment variable to get the fast
 path.
 
@@ -24,7 +24,7 @@ path.
 
 ## Surprises & Discoveries
 
-- Observation: `homeworlds_backend_describe_large_yellow_sacrifice_proof()` is used by both pruning and candidate
+- Observation: `homeworlds_backend_describe_yellow_sacrifice_proof()` is used by both pruning and candidate
   ordering.
   Evidence: `homeworlds_backend_candidate_order_set_proof_bound()` calls it independently of
   `homeworlds_backend_prepare_pruning_for_child()`.
@@ -38,11 +38,11 @@ path.
 
 ## Outcomes & Retrospective
 
-`good_moves()` now always applies the large-yellow-sacrifice proof when a cutoff exists. The public trace keeps only
+`good_moves()` now always applies the yellow-sacrifice proof when a cutoff exists. The public trace keeps only
 the counters that still describe production behavior: checked branches, score-window cutoff branches, and pruned
 branches. Eval experiment reports and proof probe output no longer include pruning mode, would-prune, verified-leaf, or
 verification-failure fields. Candidate ordering is also always active: normal single-step moves are collected before
-sacrifices, and active large-yellow-sacrifice candidates are ordered by proof priority regardless of how full the
+sacrifices, and active yellow-sacrifice candidates are ordered by proof priority regardless of how full the
 static-prune buffer already is.
 
 ## Context and Orientation
@@ -51,7 +51,7 @@ The Homeworlds backend lives in `src/games/homeworlds/homeworlds_backend.c` and 
 `src/games/homeworlds/homeworlds_backend.h`. The function `homeworlds_backend_list_good_moves()` builds the AI move
 list by recursively walking the interactive move builder. The proof pruning logic is in
 `homeworlds_backend_prepare_pruning_for_child()`: it computes the current cutoff from the move buffer, asks
-`homeworlds_backend_large_yellow_sacrifice_bound_prunes()` whether a large yellow sacrifice branch can still reach the
+`homeworlds_backend_yellow_sacrifice_bound_prunes()` whether a yellow sacrifice branch can still reach the
 cutoff, and skips the branch when the proof says it cannot.
 
 The old `verify` mode continued exploring branches that would have been pruned and counted whether any completed move

@@ -98,8 +98,8 @@ walks those states to collect `good_moves()`, which is the AI subset of legal mo
 
 The existing backend already has useful policy helpers. The move buffer keeps at most 512 moves during play and only
 keeps moves within 50 static-eval points of the best static score found so far. Profitable catastrophe helpers identify
-catastrophes that are positive from the moving side's perspective. The large-yellow-sacrifice proof computes an
-optimistic bound for a branch after a large yellow sacrifice. These helpers should be reused rather than rewritten.
+catastrophes that are positive from the moving side's perspective. The yellow-sacrifice proof computes an optimistic
+bound for a branch after any yellow sacrifice. These helpers should be reused rather than rewritten.
 
 A goal branch is a scheduled unit of move generation. It owns a copied builder state, a generation context, a
 side-aware score interval, a conservative upper bound on leaf count, and a reason string for diagnostics. A branch can

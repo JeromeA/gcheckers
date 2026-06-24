@@ -75,7 +75,7 @@ static void test_homeworlds_eval_experiment_reports_win_ratio(void) {
   g_assert_no_error(error);
   g_assert_cmpstr(stderr_text, ==, "");
   g_assert_nonnull(strstr(stdout_text, "value,candidate_wins,baseline_wins,win_ratio,draws,timeouts\n"));
-  g_assert_nonnull(strstr(stdout_text, "5,0,0,,0,2\n"));
+  g_assert_nonnull(strstr(stdout_text, "5,1,1,0.500000,0,0\n"));
 }
 
 static void test_homeworlds_eval_experiment_rejects_unknown_variable(void) {

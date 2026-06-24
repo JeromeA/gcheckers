@@ -723,7 +723,7 @@ that sacrifice, prune catastrophe-before-sacrifice spellings, and drop equivalen
 hashes for the whole move tree. The backend `good_moves()` collector schedules play-position exploration as a goal
 tree. Branches hold copied builder states, conservative score intervals, and upper bounds on possible leaves; the
 scheduler explores the best current score band first, requeues any remaining band, and skips branches whose optimistic
-bound cannot reach the current cutoff. During active large yellow sacrifices, the same optimistic proof bound is used
+bound cannot reach the current cutoff. During active yellow sacrifices, the same optimistic proof bound is used
 both for branch pruning and for local continuation ordering. Forced sacrifice branches also estimate a conservative
 leaf upper bound from the current set of possible forced steps plus reachable positive catastrophes: green counts build
 choices, red counts attacks, blue counts trades, and yellow counts one-hop moves/discoveries. Empty or very small
@@ -762,7 +762,7 @@ finishes, reports below the default 5,000,000 streamed-move cutoff are deleted.
 The `build/tools/homeworlds_proof_probe` CLI reads one of those move reports and recomputes the current `good_moves()`
 cutoff. With `--iterations`, it prints a compact goal-tree report with iteration 1 for the initial `#0` expansion and
 iterations 2+ for the selected branches that follow, grouping similar branches and summarizing what each selected
-branch did. With requested `all_moves` row numbers or quoted move notations, it prints the large-yellow-sacrifice proof
+branch did. With requested `all_moves` row numbers or quoted move notations, it prints the yellow-sacrifice proof
 status after each step. The
 `GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_THRESHOLD` and `GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_MIN_TOTAL_MOVES`
 environment variables can override those thresholds for diagnostic runs and tests. It frees any
@@ -808,7 +808,7 @@ player's perspective, and keeps only the first 512 moves that are within 50 poin
 completed move therefore raises an early score-window cutoff even before the buffer contains 512 moves.
 Before exploring sacrifice branches from a normal ship-selection state, the ordered collector first walks all complete
 one-step attack, move, build, and trade continuations so ordinary moves can populate that score window early.
-Active large yellow sacrifice branches are skipped when either that score-window cutoff or the full 512-move cutoff is
+Active yellow sacrifice branches are skipped when either that score-window cutoff or the full 512-move cutoff is
 available and a conservative bound proves that no remaining yellow continuation can reach it. The bound adds possible
 buildable-color gains, immediate catastrophe gains, and only the own catastrophe losses that remaining yellow actions
 could still avoid by moving doomed ships away first. Future positive catastrophes count opponent ships that would be

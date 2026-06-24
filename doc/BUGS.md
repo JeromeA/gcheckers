@@ -130,7 +130,7 @@ opponent homeworld star also orphaned opponent ships and won the game.
 
 The fix gives catastrophe scoring a signed homeworld-star component and counts opponent ships orphaned by star
 destruction while still treating the mover's non-color ships as potentially saveable before a future catastrophe. The
-same score now feeds the unsafe-catastrophe filter, profitable-catastrophe expansion, and large-yellow pruning proof.
+same score now feeds the unsafe-catastrophe filter, profitable-catastrophe expansion, and yellow-sacrifice pruning proof.
 
 ## Homeworlds good-move generation read staged candidates with the move accessor
 

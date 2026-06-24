@@ -1170,7 +1170,7 @@ static void homeworlds_proof_probe_print_status(const HomeworldsMoveBuilderState
   g_return_if_fail(side < 2);
   g_return_if_fail(out_status != NULL);
 
-  if (!homeworlds_backend_describe_large_yellow_sacrifice_proof(state, side, cutoff, &status)) {
+  if (!homeworlds_backend_describe_yellow_sacrifice_proof(state, side, cutoff, &status)) {
     g_print("    proof=error\n");
     *out_status = status;
     return;

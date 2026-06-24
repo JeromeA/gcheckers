@@ -97,7 +97,7 @@ typedef enum {
   HOMEWORLDS_GOAL_BRANCH_ROOT_CATASTROPHE_POSTPONE,
   HOMEWORLDS_GOAL_BRANCH_SINGLE_STEP,
   HOMEWORLDS_GOAL_BRANCH_SACRIFICE,
-  HOMEWORLDS_GOAL_BRANCH_LARGE_YELLOW_SACRIFICE,
+  HOMEWORLDS_GOAL_BRANCH_YELLOW_SACRIFICE,
   HOMEWORLDS_GOAL_BRANCH_GENERIC,
 } HomeworldsGoalBranchKind;
 
@@ -519,8 +519,8 @@ static const char *homeworlds_backend_goal_branch_kind_name(HomeworldsGoalBranch
       return "single-step";
     case HOMEWORLDS_GOAL_BRANCH_SACRIFICE:
       return "sacrifice";
-    case HOMEWORLDS_GOAL_BRANCH_LARGE_YELLOW_SACRIFICE:
-      return "large-yellow-sacrifice";
+    case HOMEWORLDS_GOAL_BRANCH_YELLOW_SACRIFICE:
+      return "yellow-sacrifice";
     case HOMEWORLDS_GOAL_BRANCH_GENERIC:
     default:
       return "generic";
@@ -1183,8 +1183,8 @@ static guint homeworlds_backend_buildable_color_count_for_side(const HomeworldsP
   return count;
 }
 
-static gboolean homeworlds_backend_state_has_active_large_sacrifice(const HomeworldsMoveBuilderState *state,
-                                                                    HomeworldsColor color) {
+static gboolean homeworlds_backend_state_has_active_sacrifice(const HomeworldsMoveBuilderState *state,
+                                                              HomeworldsColor color) {
   g_return_val_if_fail(state != NULL, FALSE);
   g_return_val_if_fail(color <= HOMEWORLDS_COLOR_BLUE, FALSE);
 
@@ -1199,9 +1199,7 @@ static gboolean homeworlds_backend_state_has_active_large_sacrifice(const Homewo
     if (step->kind != HOMEWORLDS_STEP_SACRIFICE) {
       continue;
     }
-    return homeworlds_pyramid_is_valid(step->actor.ship) &&
-           homeworlds_pyramid_color(step->actor.ship) == color &&
-           homeworlds_pyramid_size(step->actor.ship) == HOMEWORLDS_SIZE_LARGE;
+    return homeworlds_pyramid_is_valid(step->actor.ship) && homeworlds_pyramid_color(step->actor.ship) == color;
   }
 
   return FALSE;
@@ -1832,10 +1830,10 @@ static guint homeworlds_backend_yellow_sacrifice_catastrophe_gain_ceiling(
   return total_gain;
 }
 
-gboolean homeworlds_backend_describe_large_yellow_sacrifice_proof(const HomeworldsMoveBuilderState *state,
-                                                                  guint side,
-                                                                  gint cutoff,
-                                                                  HomeworldsGoodMoveProofStatus *out_status) {
+gboolean homeworlds_backend_describe_yellow_sacrifice_proof(const HomeworldsMoveBuilderState *state,
+                                                            guint side,
+                                                            gint cutoff,
+                                                            HomeworldsGoodMoveProofStatus *out_status) {
   const HomeworldsEvalWeights *weights = NULL;
   guint buildable_count = 0;
   gint max_gain = 0;
@@ -1852,7 +1850,7 @@ gboolean homeworlds_backend_describe_large_yellow_sacrifice_proof(const Homeworl
     .current_score = homeworlds_position_evaluate_static(&state->working_position),
   };
 
-  if (!homeworlds_backend_state_has_active_large_sacrifice(state, HOMEWORLDS_COLOR_YELLOW)) {
+  if (!homeworlds_backend_state_has_active_sacrifice(state, HOMEWORLDS_COLOR_YELLOW)) {
     return TRUE;
   }
   if (state->working_position.phase != HOMEWORLDS_PHASE_PLAY) {
@@ -1888,7 +1886,7 @@ gboolean homeworlds_backend_describe_large_yellow_sacrifice_proof(const Homeworl
   return TRUE;
 }
 
-static gboolean homeworlds_backend_large_yellow_sacrifice_bound_prunes(
+static gboolean homeworlds_backend_yellow_sacrifice_bound_prunes(
     const HomeworldsMoveBuilderState *state,
     guint side,
     gint cutoff,
@@ -1900,7 +1898,7 @@ static gboolean homeworlds_backend_large_yellow_sacrifice_bound_prunes(
   g_return_val_if_fail(out_prune != NULL, FALSE);
 
   *out_prune = FALSE;
-  if (!homeworlds_backend_describe_large_yellow_sacrifice_proof(state, side, cutoff, &status)) {
+  if (!homeworlds_backend_describe_yellow_sacrifice_proof(state, side, cutoff, &status)) {
     return FALSE;
   }
 
@@ -1938,7 +1936,7 @@ static gboolean homeworlds_backend_prepare_pruning_for_child(
     return TRUE;
   }
 
-  if (!homeworlds_backend_state_has_active_large_sacrifice(child_state, HOMEWORLDS_COLOR_YELLOW)) {
+  if (!homeworlds_backend_state_has_active_sacrifice(child_state, HOMEWORLDS_COLOR_YELLOW)) {
     return TRUE;
   }
 
@@ -1946,7 +1944,7 @@ static gboolean homeworlds_backend_prepare_pruning_for_child(
   if (cutoff_kind == HOMEWORLDS_GOOD_MOVE_CUTOFF_SCORE_WINDOW) {
     context->pruning_window_cutoff_branches++;
   }
-  if (!homeworlds_backend_large_yellow_sacrifice_bound_prunes(child_state, buffer->side, cutoff, &prune_child)) {
+  if (!homeworlds_backend_yellow_sacrifice_bound_prunes(child_state, buffer->side, cutoff, &prune_child)) {
     return FALSE;
   }
   if (!prune_child) {
@@ -2273,7 +2271,7 @@ static gboolean homeworlds_backend_candidate_order_set_proof_bound(const Homewor
   g_return_val_if_fail(side < 2, FALSE);
   g_return_val_if_fail(out_order != NULL, FALSE);
 
-  if (!homeworlds_backend_describe_large_yellow_sacrifice_proof(state, side, 0, &status)) {
+  if (!homeworlds_backend_describe_yellow_sacrifice_proof(state, side, 0, &status)) {
     return FALSE;
   }
 
@@ -2893,7 +2891,7 @@ static gboolean homeworlds_backend_build_candidate_order(const HomeworldsPositio
   order = g_new0(HomeworldsCandidateOrder, candidates->count);
   g_return_val_if_fail(order != NULL, FALSE);
   should_order = candidates->count > 1 &&
-                 homeworlds_backend_state_has_active_large_sacrifice(state, HOMEWORLDS_COLOR_YELLOW);
+                 homeworlds_backend_state_has_active_sacrifice(state, HOMEWORLDS_COLOR_YELLOW);
   if (should_order) {
     context->ordering_candidate_lists++;
   }
@@ -3043,10 +3041,10 @@ static gboolean homeworlds_backend_goal_branch_update_estimate(const HomeworldsP
     }
   }
 
-  if (homeworlds_backend_state_has_active_large_sacrifice(&branch->state, HOMEWORLDS_COLOR_YELLOW)) {
+  if (homeworlds_backend_state_has_active_sacrifice(&branch->state, HOMEWORLDS_COLOR_YELLOW)) {
     HomeworldsGoodMoveProofStatus status = {0};
 
-    if (!homeworlds_backend_describe_large_yellow_sacrifice_proof(&branch->state, side, 0, &status)) {
+    if (!homeworlds_backend_describe_yellow_sacrifice_proof(&branch->state, side, 0, &status)) {
       return FALSE;
     }
     switch (status.result) {
@@ -3590,8 +3588,8 @@ static gboolean homeworlds_backend_goal_split_sacrifice_action(const HomeworldsP
     return TRUE;
   }
 
-  if (homeworlds_backend_state_has_active_large_sacrifice(&child_state, HOMEWORLDS_COLOR_YELLOW)) {
-    kind = HOMEWORLDS_GOAL_BRANCH_LARGE_YELLOW_SACRIFICE;
+  if (homeworlds_backend_state_has_active_sacrifice(&child_state, HOMEWORLDS_COLOR_YELLOW)) {
+    kind = HOMEWORLDS_GOAL_BRANCH_YELLOW_SACRIFICE;
   }
   if (!homeworlds_backend_goal_make_child_branch(root_position,
                                                  queue,
