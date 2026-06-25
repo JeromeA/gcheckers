@@ -38,12 +38,6 @@ typedef struct {
   char reason[128];
 } HomeworldsProofProbeCreateEvent;
 
-typedef struct {
-  HomeworldsProofProbeCreateEvent event;
-  GArray *ids;
-  GPtrArray *prefixes;
-} HomeworldsProofProbeCreateGroup;
-
 static void homeworlds_proof_probe_capture_trace(const HomeworldsGoodMoveTrace *trace, gpointer user_data) {
   HomeworldsProofProbeTraceCapture *capture = user_data;
 
@@ -69,18 +63,6 @@ static void homeworlds_proof_probe_trace_clear(HomeworldsGoodMoveTrace *trace) {
 
   g_free((char *) trace->goal_report);
   trace->goal_report = NULL;
-}
-
-static void homeworlds_proof_probe_create_group_free(gpointer data) {
-  HomeworldsProofProbeCreateGroup *group = data;
-
-  if (group == NULL) {
-    return;
-  }
-
-  g_clear_pointer(&group->ids, g_array_unref);
-  g_clear_pointer(&group->prefixes, g_ptr_array_unref);
-  g_free(group);
 }
 
 static void homeworlds_proof_probe_move_free(gpointer data) {
@@ -405,97 +387,35 @@ static void homeworlds_proof_probe_format_leaf_bound(gsize leaf_upper_bound,
   g_snprintf(buffer, buffer_size, "%" G_GSIZE_FORMAT, leaf_upper_bound);
 }
 
-static gboolean homeworlds_proof_probe_create_group_matches(const HomeworldsProofProbeCreateGroup *group,
-                                                            const HomeworldsProofProbeCreateEvent *event) {
-  g_return_val_if_fail(group != NULL, FALSE);
-  g_return_val_if_fail(event != NULL, FALSE);
-
-  return g_strcmp0(group->event.kind, event->kind) == 0 &&
-      group->event.interval_min == event->interval_min &&
-      group->event.interval_max == event->interval_max &&
-      group->event.leaf_upper_bound == event->leaf_upper_bound &&
-      g_strcmp0(group->event.reason, event->reason) == 0;
-}
-
-static void homeworlds_proof_probe_add_create_group(GPtrArray *groups,
-                                                    const HomeworldsProofProbeCreateEvent *event) {
-  g_return_if_fail(groups != NULL);
-  g_return_if_fail(event != NULL);
-
-  for (guint i = 0; i < groups->len; ++i) {
-    HomeworldsProofProbeCreateGroup *group = g_ptr_array_index(groups, i);
-
-    if (homeworlds_proof_probe_create_group_matches(group, event)) {
-      g_array_append_val(group->ids, event->id);
-      g_ptr_array_add(group->prefixes, g_strdup(event->prefix));
-      return;
-    }
-  }
-
-  HomeworldsProofProbeCreateGroup *group = g_new0(HomeworldsProofProbeCreateGroup, 1);
-
-  g_return_if_fail(group != NULL);
-  group->event = *event;
-  group->ids = g_array_new(FALSE, FALSE, sizeof(gsize));
-  g_return_if_fail(group->ids != NULL);
-  group->prefixes = g_ptr_array_new_with_free_func(g_free);
-  g_return_if_fail(group->prefixes != NULL);
-  g_array_append_val(group->ids, event->id);
-  g_ptr_array_add(group->prefixes, g_strdup(event->prefix));
-  g_ptr_array_add(groups, group);
-}
-
-static void homeworlds_proof_probe_print_create_group(const HomeworldsProofProbeCreateGroup *group) {
-  const gsize *ids = NULL;
+static void homeworlds_proof_probe_print_create_event(const HomeworldsProofProbeCreateEvent *event) {
   char interval_text[64] = {0};
   char leaf_text[32] = {0};
 
-  g_return_if_fail(group != NULL);
-  g_return_if_fail(group->ids != NULL);
-  g_return_if_fail(group->ids->len > 0);
+  g_return_if_fail(event != NULL);
 
-  ids = (const gsize *) group->ids->data;
-  homeworlds_proof_probe_format_interval(group->event.interval_min,
-                                          group->event.interval_max,
+  homeworlds_proof_probe_format_interval(event->interval_min,
+                                          event->interval_max,
                                           interval_text,
                                           sizeof(interval_text));
-  homeworlds_proof_probe_format_leaf_bound(group->event.leaf_upper_bound, leaf_text, sizeof(leaf_text));
+  homeworlds_proof_probe_format_leaf_bound(event->leaf_upper_bound, leaf_text, sizeof(leaf_text));
 
   g_print("  #%zu %s %s leaves<=%s",
-          ids[0],
-          group->event.kind,
+          event->id,
+          event->kind,
           interval_text,
           leaf_text);
-  if (group->event.reason[0] != '\0') {
-    g_print(" - %s", group->event.reason);
+  if (event->reason[0] != '\0') {
+    g_print(" - %s", event->reason);
   }
-  if (group->event.prefix[0] != '\0') {
-    g_print("; prefix %s", group->event.prefix);
-  }
-  if (group->ids->len > 1) {
-    guint shown = MIN(group->ids->len, 7);
-
-    g_print(" (+%u same-shape branches", group->ids->len - 1);
-    if (shown > 1) {
-      g_print(": ");
-      for (guint i = 1; i < shown; ++i) {
-        const char *prefix = group->prefixes != NULL ? g_ptr_array_index(group->prefixes, i) : "";
-
-        g_print("%s#%zu", i == 1 ? "" : ", ", ids[i]);
-        if (prefix != NULL && prefix[0] != '\0') {
-          g_print(" %s", prefix);
-        }
-      }
-      if (group->ids->len > shown) {
-        g_print(", plus %u more", group->ids->len - shown);
-      }
-    }
-    g_print(")");
+  if (event->prefix[0] != '\0') {
+    g_print("; prefix %s", event->prefix);
   }
   g_print("\n");
 }
 
-static void homeworlds_proof_probe_print_collection_result(const char *line, const char *summary) {
+static void homeworlds_proof_probe_print_collection_result(const char *line,
+                                                           const char *summary,
+                                                           const char *indent) {
   char covered[16] = {0};
   char leaves[32] = {0};
   char scored[32] = {0};
@@ -517,6 +437,7 @@ static void homeworlds_proof_probe_print_collection_result(const char *line, con
 
   g_return_if_fail(line != NULL);
   g_return_if_fail(summary != NULL);
+  g_return_if_fail(indent != NULL);
 
   if (!homeworlds_proof_probe_extract_token_value(line, "covered=", covered, sizeof(covered)) ||
       !homeworlds_proof_probe_extract_token_value(line, "leaves+=", leaves, sizeof(leaves)) ||
@@ -526,7 +447,7 @@ static void homeworlds_proof_probe_print_collection_result(const char *line, con
       !homeworlds_proof_probe_extract_token_value(line, "cutoff=", cutoff, sizeof(cutoff)) ||
       !homeworlds_proof_probe_extract_token_value(line, "pruned+=", pruned, sizeof(pruned)) ||
       !homeworlds_proof_probe_extract_token_value(line, "created+=", created, sizeof(created))) {
-    g_print("    result: %s\n", line);
+    g_print("%sresult: %s\n", indent, line);
     return;
   }
   if (!homeworlds_proof_probe_extract_token_value(line,
@@ -536,8 +457,9 @@ static void homeworlds_proof_probe_print_collection_result(const char *line, con
     g_strlcpy(inside_interval, scored, sizeof(inside_interval));
   }
 
-  g_print("    result: %s; leaves +%s, scored +%s, inside interval +%s, kept %s, best %s, cutoff %s, "
+  g_print("%sresult: %s; leaves +%s, scored +%s, inside interval +%s, kept %s, best %s, cutoff %s, "
           "pruned descendants +%s, created goal branches +%s",
+          indent,
           summary,
           leaves,
           scored,
@@ -615,7 +537,6 @@ static void homeworlds_proof_probe_print_later_iterations(char **lines,
   g_return_if_fail(lines != NULL);
   g_return_if_fail(max_selected > 0);
 
-  g_print("\nSelected branches after #0 expansion (limit %u):\n", max_selected);
   while (index < line_count && shown < max_selected) {
     char kind[64] = {0};
     char interval_text[64] = {0};
@@ -643,7 +564,7 @@ static void homeworlds_proof_probe_print_later_iterations(char **lines,
     homeworlds_proof_probe_format_leaf_bound(leaf_upper_bound, leaf_text, sizeof(leaf_text));
     homeworlds_proof_probe_extract_bracket_value(lines[index], "prefix=[", prefix, sizeof(prefix));
     homeworlds_proof_probe_extract_bracket_value(lines[index], "goal=[", goal, sizeof(goal));
-    g_print("  select #%zu %s %s leaves<=%s", id, kind, interval_text, leaf_text);
+    g_print("\nselect #%zu %s %s leaves<=%s", id, kind, interval_text, leaf_text);
     if (prefix[0] != '\0') {
       g_print(" prefix=%s", prefix);
     }
@@ -654,79 +575,89 @@ static void homeworlds_proof_probe_print_later_iterations(char **lines,
     shown++;
     index++;
 
-    if (index < line_count) {
-      gsize split_id = 0;
-      gsize created = 0;
-      guint queue = 0;
-
-      if (homeworlds_proof_probe_parse_split_result_line(lines[index], &split_id, &created, &queue) &&
-          split_id == id) {
-        g_print("    result: expanded into %zu child branches; queue now has %u branches; no leaves scored here\n",
-                created,
-                queue);
-        index++;
-        continue;
-      }
-    }
-
-    if (index < line_count && g_str_has_prefix(lines[index], "goal-split-fallback #")) {
-      g_print("    result: kept as one broad yellow branch because the goal split was not bounded enough\n");
-      index++;
-    }
-
-    if (index < line_count) {
-      gsize split_id = 0;
-      gint explore_min = 0;
-      gint explore_max = 0;
-      gint requeue_min = 0;
-      gint requeue_max = 0;
-
-      if (homeworlds_proof_probe_parse_score_split_line(lines[index],
-                                                        &split_id,
-                                                        &explore_min,
-                                                        &explore_max,
-                                                        &requeue_min,
-                                                        &requeue_max) &&
-          split_id == id) {
-        HomeworldsProofProbeCreateEvent requeue_event = {0};
-        char explore_text[64] = {0};
-        char requeue_text[64] = {0};
-
-        homeworlds_proof_probe_format_interval(explore_min, explore_max, explore_text, sizeof(explore_text));
-        homeworlds_proof_probe_format_interval(requeue_min, requeue_max, requeue_text, sizeof(requeue_text));
-        g_print("    score split: explore %s now; requeue %s", explore_text, requeue_text);
-        index++;
-        if (index < line_count && homeworlds_proof_probe_parse_create_line(lines[index], &requeue_event)) {
-          g_print(" as #%zu", requeue_event.id);
-          index++;
-        }
-        g_print("\n");
-      }
-    }
-
-    if (index < line_count) {
-      gsize skip_id = 0;
-      gint cutoff = 0;
-      gint skip_min = 0;
-      gint skip_max = 0;
-
-      if (homeworlds_proof_probe_parse_skip_line(lines[index], &skip_id, &cutoff, &skip_min, &skip_max) &&
-          skip_id == id) {
-        char skip_text[64] = {0};
-
-        homeworlds_proof_probe_format_interval(skip_min, skip_max, skip_text, sizeof(skip_text));
-        g_print("    result: skipped because cutoff %d cannot be reached from %s\n", cutoff, skip_text);
-        index++;
-        continue;
-      }
-    }
-
-    if (index < line_count) {
+    while (index < line_count) {
+      HomeworldsProofProbeCreateEvent create_event = {0};
       char explore_kind[64] = {0};
       gsize explore_id = 0;
       gint explore_min = 0;
       gint explore_max = 0;
       gsize explore_leaf_upper_bound = 0;
+      gsize split_id = 0;
+      gsize created = 0;
+      guint queue = 0;
+      gint score_explore_min = 0;
+      gint score_explore_max = 0;
+      gint score_requeue_min = 0;
+      gint score_requeue_max = 0;
+      gsize skip_id = 0;
+      gint cutoff = 0;
+      gint skip_min = 0;
+      gint skip_max = 0;
+      gsize next_id = 0;
+      char next_kind[64] = {0};
+      gint next_interval_min = 0;
+      gint next_interval_max = 0;
+      gsize next_leaf_upper_bound = 0;
+
+      if (homeworlds_proof_probe_parse_branch_line(lines[index],
+                                                   "select",
+                                                   &next_id,
+                                                   next_kind,
+                                                   sizeof(next_kind),
+                                                   &next_interval_min,
+                                                   &next_interval_max,
+                                                   &next_leaf_upper_bound)) {
+        break;
+      }
+      if (homeworlds_proof_probe_parse_create_line(lines[index], &create_event)) {
+        homeworlds_proof_probe_print_create_event(&create_event);
+        index++;
+        continue;
+      }
+      if (homeworlds_proof_probe_parse_split_result_line(lines[index], &split_id, &created, &queue) &&
+          split_id == id) {
+        g_print("  result: expanded into %zu child branches; queue now has %u branches; no leaves scored here\n",
+                created,
+                queue);
+        index++;
+        break;
+      }
+      if (g_str_has_prefix(lines[index], "goal-split-fallback #")) {
+        g_print("  result: kept as one broad yellow branch because the goal split was not bounded enough\n");
+        index++;
+        continue;
+      }
+      if (homeworlds_proof_probe_parse_score_split_line(lines[index],
+                                                        &split_id,
+                                                        &score_explore_min,
+                                                        &score_explore_max,
+                                                        &score_requeue_min,
+                                                        &score_requeue_max) &&
+          split_id == id) {
+        char explore_text[64] = {0};
+        char requeue_text[64] = {0};
+
+        homeworlds_proof_probe_format_interval(score_explore_min,
+                                                score_explore_max,
+                                                explore_text,
+                                                sizeof(explore_text));
+        homeworlds_proof_probe_format_interval(score_requeue_min,
+                                                score_requeue_max,
+                                                requeue_text,
+                                                sizeof(requeue_text));
+        g_print("  score split: explore %s now; requeue %s\n", explore_text, requeue_text);
+        index++;
+        continue;
+      }
+      if (homeworlds_proof_probe_parse_skip_line(lines[index], &skip_id, &cutoff, &skip_min, &skip_max) &&
+          skip_id == id) {
+        char skip_text[64] = {0};
+
+        homeworlds_proof_probe_format_interval(skip_min, skip_max, skip_text, sizeof(skip_text));
+        g_print("  result: skipped because cutoff %d cannot be reached from %s\n", cutoff, skip_text);
+        index++;
+        break;
+      }
 
       if (homeworlds_proof_probe_parse_branch_line(lines[index],
                                                    "explore",
@@ -737,25 +668,36 @@ static void homeworlds_proof_probe_print_later_iterations(char **lines,
                                                    &explore_max,
                                                    &explore_leaf_upper_bound) &&
           explore_id == id) {
-        g_print("    action: recursively explore this branch in the selected interval\n");
+        g_print("  action: recursively explore this branch in the selected interval\n");
         index++;
-        if (index < line_count && g_str_has_prefix(lines[index], "explore-result #")) {
-          homeworlds_proof_probe_print_collection_result(lines[index],
-                                                         "finished traversal with selected score filter");
-          index++;
-        }
+        continue;
       }
+      if (g_str_has_prefix(lines[index], "explore-result #")) {
+        homeworlds_proof_probe_print_collection_result(lines[index],
+                                                       "finished traversal with selected score filter",
+                                                       "  ");
+        index++;
+        break;
+      }
+      if (g_str_has_prefix(lines[index], "direct-result #")) {
+        homeworlds_proof_probe_print_collection_result(lines[index],
+                                                       "directly collected selected branch moves",
+                                                       "  ");
+        index++;
+        continue;
+      }
+      g_print("  trace: %s\n", lines[index]);
+      index++;
     }
   }
 
   if (shown == max_selected) {
-    g_print("  compact report stopped after %u selected branches after #0 expansion\n", max_selected);
+    g_print("\ncompact report stopped after %u selected branches after #0 expansion\n", max_selected);
   }
 }
 
 static void homeworlds_proof_probe_print_iteration_report(const char *goal_report, guint iteration_limit) {
   g_auto(GStrv) lines = NULL;
-  g_autoptr(GPtrArray) groups = NULL;
   guint line_count = 0;
   guint index = 0;
   gsize root_id = 0;
@@ -773,9 +715,7 @@ static void homeworlds_proof_probe_print_iteration_report(const char *goal_repor
   }
 
   lines = g_strsplit(goal_report, "\n", -1);
-  groups = g_ptr_array_new_with_free_func(homeworlds_proof_probe_create_group_free);
   g_return_if_fail(lines != NULL);
-  g_return_if_fail(groups != NULL);
 
   while (lines[line_count] != NULL) {
     line_count++;
@@ -801,12 +741,16 @@ static void homeworlds_proof_probe_print_iteration_report(const char *goal_repor
     HomeworldsProofProbeCreateEvent event = {0};
 
     if (g_str_has_prefix(lines[index], "direct-result #0 single-steps")) {
-      homeworlds_proof_probe_print_collection_result(lines[index], "directly collected root single-step moves");
+      homeworlds_proof_probe_print_collection_result(lines[index],
+                                                     "directly collected root single-step moves",
+                                                     "    ");
       index++;
       continue;
     }
     if (g_str_has_prefix(lines[index], "direct-result #0 pass-fallback")) {
-      homeworlds_proof_probe_print_collection_result(lines[index], "directly collected root pass fallback");
+      homeworlds_proof_probe_print_collection_result(lines[index],
+                                                     "directly collected root pass fallback",
+                                                     "    ");
       index++;
       continue;
     }
@@ -818,16 +762,10 @@ static void homeworlds_proof_probe_print_iteration_report(const char *goal_repor
     if (!homeworlds_proof_probe_parse_create_line(lines[index], &event)) {
       break;
     }
-    homeworlds_proof_probe_add_create_group(groups, &event);
+    homeworlds_proof_probe_print_create_event(&event);
     index++;
   }
 
-  if (split_id != 0 || split_created == 0) {
-    g_print("  create events before the next selection are sibling branches\n");
-  }
-  for (guint i = 0; i < groups->len; ++i) {
-    homeworlds_proof_probe_print_create_group(g_ptr_array_index(groups, i));
-  }
   if (split_id == 0 && split_created > 0) {
     g_print("  queue after #0 expansion: %u branches\n", split_queue);
   }

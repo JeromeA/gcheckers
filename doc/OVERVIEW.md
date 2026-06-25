@@ -765,7 +765,7 @@ to the reported position, the ASCII position, and a streamed dump of all generat
 finishes, reports below the default 5,000,000 streamed-move cutoff are deleted.
 The `build/tools/homeworlds_proof_probe` CLI reads one of those move reports and recomputes the current `good_moves()`
 cutoff. With `--iterations COUNT`, it prints a compact goal-tree report with the initial `#0` expansion and the next
-COUNT selected scheduler branches, grouping similar branches and summarizing what each selected branch did. With
+COUNT selected scheduler branches, listing each created branch and summarizing what each selected branch did. With
 requested `all_moves` row numbers or quoted move notations, it prints the yellow-sacrifice proof status after each
 step. The
 `GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_THRESHOLD` and `GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_MIN_TOTAL_MOVES`
