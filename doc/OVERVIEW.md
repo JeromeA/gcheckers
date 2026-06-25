@@ -764,10 +764,10 @@ human-readable goal-tree report, and the same move-report body used by `homeworl
 to the reported position, the ASCII position, and a streamed dump of all generated move paths. After the stream
 finishes, reports below the default 5,000,000 streamed-move cutoff are deleted.
 The `build/tools/homeworlds_proof_probe` CLI reads one of those move reports and recomputes the current `good_moves()`
-cutoff. With `--iterations`, it prints a compact goal-tree report with iteration 1 for the initial `#0` expansion and
-iterations 2+ for the selected branches that follow, grouping similar branches and summarizing what each selected
-branch did. With requested `all_moves` row numbers or quoted move notations, it prints the yellow-sacrifice proof
-status after each step. The
+cutoff. With `--iterations COUNT`, it prints a compact goal-tree report with the initial `#0` expansion and the next
+COUNT selected scheduler branches, grouping similar branches and summarizing what each selected branch did. With
+requested `all_moves` row numbers or quoted move notations, it prints the yellow-sacrifice proof status after each
+step. The
 `GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_THRESHOLD` and `GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_MIN_TOTAL_MOVES`
 environment variables can override those thresholds for diagnostic runs and tests. It frees any
 generated candidate list before leaving an error path. The Homeworlds board host also syncs its

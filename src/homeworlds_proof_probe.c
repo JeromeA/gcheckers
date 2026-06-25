@@ -607,15 +607,15 @@ static void homeworlds_proof_probe_print_collection_result(const char *line, con
 
 static void homeworlds_proof_probe_print_later_iterations(char **lines,
                                                           guint line_count,
-                                                          guint start_index) {
-  const guint max_selected = 12;
+                                                          guint start_index,
+                                                          guint max_selected) {
   guint index = start_index;
   guint shown = 0;
 
   g_return_if_fail(lines != NULL);
+  g_return_if_fail(max_selected > 0);
 
-  g_print("\nIterations 2+:\n");
-  g_print("selected branches after iteration 1:\n");
+  g_print("\nSelected branches after #0 expansion (limit %u):\n", max_selected);
   while (index < line_count && shown < max_selected) {
     char kind[64] = {0};
     char interval_text[64] = {0};
@@ -749,11 +749,11 @@ static void homeworlds_proof_probe_print_later_iterations(char **lines,
   }
 
   if (shown == max_selected) {
-    g_print("  compact report stopped after the first %u selected branches\n", max_selected);
+    g_print("  compact report stopped after %u selected branches after #0 expansion\n", max_selected);
   }
 }
 
-static void homeworlds_proof_probe_print_iteration_report(const char *goal_report) {
+static void homeworlds_proof_probe_print_iteration_report(const char *goal_report, guint iteration_limit) {
   g_auto(GStrv) lines = NULL;
   g_autoptr(GPtrArray) groups = NULL;
   guint line_count = 0;
@@ -768,7 +768,7 @@ static void homeworlds_proof_probe_print_iteration_report(const char *goal_repor
   gsize root_leaf_upper_bound = 0;
 
   if (goal_report == NULL || goal_report[0] == '\0') {
-    g_print("\nIteration 1:\n  no goal-tree report was captured\n");
+    g_print("\n#0 expansion:\n  no goal-tree report was captured\n");
     return;
   }
 
@@ -781,7 +781,7 @@ static void homeworlds_proof_probe_print_iteration_report(const char *goal_repor
     line_count++;
   }
 
-  g_print("\nIteration 1:\n");
+  g_print("\n#0 expansion:\n");
   if (line_count < 2 ||
       !homeworlds_proof_probe_parse_branch_line(lines[1],
                                                 "select",
@@ -822,7 +822,6 @@ static void homeworlds_proof_probe_print_iteration_report(const char *goal_repor
     index++;
   }
 
-  g_print("#0 expansion:\n");
   if (split_id != 0 || split_created == 0) {
     g_print("  create events before the next selection are sibling branches\n");
   }
@@ -830,10 +829,10 @@ static void homeworlds_proof_probe_print_iteration_report(const char *goal_repor
     homeworlds_proof_probe_print_create_group(g_ptr_array_index(groups, i));
   }
   if (split_id == 0 && split_created > 0) {
-    g_print("  queue after iteration 1: %u branches\n", split_queue);
+    g_print("  queue after #0 expansion: %u branches\n", split_queue);
   }
 
-  homeworlds_proof_probe_print_later_iterations(lines, line_count, index);
+  homeworlds_proof_probe_print_later_iterations(lines, line_count, index, iteration_limit);
 }
 
 static gboolean homeworlds_proof_probe_print_position(const HomeworldsPosition *position) {
@@ -1312,8 +1311,8 @@ static gboolean homeworlds_proof_probe_run_move(const HomeworldsPosition *positi
 }
 
 static void homeworlds_proof_probe_print_usage(const char *program_name) {
-  g_printerr("usage: %s [--iterations] REPORT [ALL_MOVE_ROW | MOVE_NOTATION]...\n", program_name);
-  g_printerr("  --iterations  print a compact scheduler-iteration goal-tree report.\n");
+  g_printerr("usage: %s [--iterations COUNT] REPORT [ALL_MOVE_ROW | MOVE_NOTATION]...\n", program_name);
+  g_printerr("  --iterations COUNT  print #0 expansion, then COUNT selected scheduler branches.\n");
   g_printerr("If no rows or moves are provided, the first %u all_moves rows are probed.\n",
              HOMEWORLDS_PROOF_PROBE_DEFAULT_SAMPLE_COUNT);
 }
@@ -1323,7 +1322,7 @@ int main(int argc, char **argv) {
   HomeworldsPosition position = {0};
   HomeworldsGoodMoveTrace trace = {0};
   gboolean use_default_sample = FALSE;
-  gboolean print_iteration_report = FALSE;
+  guint iteration_limit = 0;
   const char *report_path = NULL;
   guint side = 0;
   gint cutoff = 0;
@@ -1343,8 +1342,22 @@ int main(int argc, char **argv) {
       g_free(move);
       return 0;
     }
+    if (g_str_has_prefix(argv[i], "--iterations=")) {
+      if (!homeworlds_proof_probe_text_is_uint(argv[i] + strlen("--iterations="), &iteration_limit)) {
+        homeworlds_proof_probe_print_usage(argv[0]);
+        g_free(move);
+        return 2;
+      }
+      g_free(move);
+      continue;
+    }
     if (g_strcmp0(argv[i], "--iterations") == 0) {
-      print_iteration_report = TRUE;
+      if (i + 1 >= argc || !homeworlds_proof_probe_text_is_uint(argv[i + 1], &iteration_limit)) {
+        homeworlds_proof_probe_print_usage(argv[0]);
+        g_free(move);
+        return 2;
+      }
+      i++;
       g_free(move);
       continue;
     }
@@ -1365,7 +1378,7 @@ int main(int argc, char **argv) {
     homeworlds_proof_probe_print_usage(argv[0]);
     return 2;
   }
-  use_default_sample = moves->len == 0 && !print_iteration_report;
+  use_default_sample = moves->len == 0 && iteration_limit == 0;
 
   if (!homeworlds_proof_probe_read_report(report_path, &position, moves, use_default_sample)) {
     return 1;
@@ -1380,7 +1393,7 @@ int main(int argc, char **argv) {
     homeworlds_position_clear(&position);
     return 1;
   }
-  if (print_iteration_report && !homeworlds_proof_probe_print_position(&position)) {
+  if (iteration_limit > 0 && !homeworlds_proof_probe_print_position(&position)) {
     homeworlds_proof_probe_trace_clear(&trace);
     homeworlds_position_clear(&position);
     return 1;
@@ -1414,8 +1427,8 @@ int main(int argc, char **argv) {
           trace.goal_branches_skipped,
           trace.goal_branches_exhausted);
 
-  if (print_iteration_report) {
-    homeworlds_proof_probe_print_iteration_report(trace.goal_report);
+  if (iteration_limit > 0) {
+    homeworlds_proof_probe_print_iteration_report(trace.goal_report, iteration_limit);
   }
 
   for (guint i = 0; i < moves->len; ++i) {
