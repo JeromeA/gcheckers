@@ -87,8 +87,11 @@ catastrophe-first order.
 ## Current Good-Move Policy
 
 The current Homeworlds `good_moves()` scheduler creates goal branches, then explores each selected branch with the
-same staged builder used by the UI. Branches can represent root catastrophe policy, root single-step actions,
-sacrifices, yellow sacrifice continuations, or a generic fallback. A branch stores an integer score interval. If
+same staged builder used by the UI. Branches can represent root catastrophe policy, directly collected root
+single-step actions, sacrifices, yellow sacrifice goal partitions, or a generic fallback. A yellow sacrifice with
+reachable positive catastrophe goals is split by exact goal set first. With two scheduled goals, for example, the
+partitions are "both goals", "first goal only", "second goal only", and "none of those goals"; completed moves that do
+not match the branch's exact goal set are rejected by that branch. A branch also stores an integer score interval. If
 the best branch can reach `+50` and the next best branch can reach only `+30`, the scheduler explores the best branch's
 `+30` to `+50` band first and requeues the lower band as a separate branch. For player 2 the same comparison is
 reversed because lower scores are better. Branches with a conservative leaf upper bound of 50 or less are explored
@@ -105,8 +108,11 @@ ordinary actions and sacrifice-granted actions. The AI does not move or sacrific
 rejects builds that create an unfavorable catastrophe, and rejects a small sacrifice when the sacrificed color's action
 was already available at that system. Equivalent continuations inside a sacrifice are pruned by the shared
 sacrifice-scoped builder-state deduper instead of by color-specific adjacent-step rules.
-Yellow sacrifice branches also use a conservative proof bound during branch scheduling and branch exploration;
-when the bound cannot reach the current static-prune cutoff or the active score interval, the branch is not explored.
+Yellow sacrifice branches also use a conservative proof bound during branch scheduling and branch exploration. The
+same reachability proof identifies the concrete catastrophe goals used for goal-set partitioning. Score intervals are
+secondary to those goals: a goal branch may still be split into score bands, but score bands do not define the tactical
+branch. When the bound cannot reach the current static-prune cutoff or the active score interval, the branch is not
+explored.
 
 The catastrophe policy distinguishes profitable and unfavorable catastrophes from the moving side's perspective. A
 profitable catastrophe destroys more opponent ship pips than own ship pips. If such a catastrophe exists at the start

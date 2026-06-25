@@ -31,6 +31,8 @@ may change, but kept moves must still obey the existing static score quality win
 - [x] (2026-06-23 13:21Z) Added branch trace counters and detailed goal-tree report output for eval reports and probes.
 - [x] (2026-06-23 13:25Z) Updated tests, `doc/homeworlds-move-generation.md`, and `doc/OVERVIEW.md`.
 - [x] (2026-06-23 13:29Z) Built all binaries with `make` and ran `make test-local` unsandboxed.
+- [x] (2026-06-25 11:20Z) Changed broad yellow-sacrifice scheduling to split first by exact reachable catastrophe
+  goal set, then by score interval inside each goal branch.
 
 ## Surprises & Discoveries
 
@@ -55,6 +57,10 @@ may change, but kept moves must still obey the existing static score quality win
   `GLib-GObject-FATAL-CRITICAL: invalid (NULL) pointer instance`, reran the isolated path, passed it, and ignored the
   non-reproducible local failure as configured.
 
+- Observation: The existing yellow proof already exposed the right concrete ingredients for goal partitioning.
+  Evidence: the proof walked each system/color pair, checked yellow reachability, and computed a positive catastrophe
+  gain ceiling; the implementation now records those same pairs as scheduled branch goals.
+
 ## Decision Log
 
 - Decision: Production will not keep an old-recursion runtime toggle.
@@ -77,17 +83,30 @@ may change, but kept moves must still obey the existing static score quality win
   score interval until the scheduler explicitly splits them.
   Date/Author: 2026-06-23 / Codex
 
+- Decision: Yellow-sacrifice goal branches are exact, disjoint goal-set partitions.
+  Rationale: If two catastrophe goals are reachable, a move that triggers both belongs to the combined branch, not to
+  either one-goal branch. This keeps reports explainable and prevents branch overlap from rescoring the same tactical
+  leaf under multiple goals.
+  Date/Author: 2026-06-25 / Codex
+
+- Decision: Goal-set splitting is capped at four reachable catastrophe goals.
+  Rationale: Exact subsets grow exponentially. Positions with more concrete goals keep the previous broad
+  yellow-sacrifice branch and report the fallback instead of flooding the scheduler with partitions.
+  Date/Author: 2026-06-25 / Codex
+
 ## Outcomes & Retrospective
 
 Implemented the v1 goal-tree scheduler. `good_moves()` now seeds a queue with a root branch, splits root catastrophe,
 single-step, and sacrifice branches, explores high score bands first, requeues remaining score intervals, and skips
-branches that cannot reach the current cutoff. The branch explorer still uses the legal builder and existing policy
+branches that cannot reach the current cutoff. Yellow sacrifices now split broad branches by exact reachable
+catastrophe goal set before score intervals are split, so a branch can mean "trigger `S0y!` and `S1r!`", "`S0y!`
+only", or "none of the scheduled catastrophes." The branch explorer still uses the legal builder and existing policy
 predicates, so legal move generation remains unchanged.
 
 Diagnostics now include goal branch counters and a bounded text report in eval big-move reports. Focused tests cover
-score-quality behavior, branch counters, score splitting/requeueing, and the updated eval/probe output. Validation
-passed with `make`, focused Homeworlds/eval/probe tests, and `make test-local` unsandboxed; the local target ignored one
-known non-reproducible GTK failure after the isolated rerun passed.
+score-quality behavior, branch counters, score splitting/requeueing, yellow goal partition labels, and the updated
+eval/probe output. Validation passed with `make`, focused Homeworlds/eval/probe tests, and `make test-local`
+unsandboxed; the local target ignored one known non-reproducible GTK failure after the isolated rerun passed.
 
 ## Context and Orientation
 
@@ -101,10 +120,11 @@ keeps moves within 50 static-eval points of the best static score found so far. 
 catastrophes that are positive from the moving side's perspective. The yellow-sacrifice proof computes an optimistic
 bound for a branch after any yellow sacrifice. These helpers should be reused rather than rewritten.
 
-A goal branch is a scheduled unit of move generation. It owns a copied builder state, a generation context, a
-side-aware score interval, a conservative upper bound on leaf count, and a reason string for diagnostics. A branch can
-be split into children by tactical category, or split into score intervals. A score interval uses normal integer static
-scores: for player 1, higher is better; for player 2, lower is better.
+A goal branch is a scheduled unit of move generation. It owns a copied builder state, a generation context, optional
+required/excluded catastrophe goals, a side-aware score interval, a conservative upper bound on leaf count, and a reason
+string for diagnostics. A branch can be split into children by tactical category, split into exact yellow-sacrifice
+goal-set partitions, or split into score intervals. A score interval uses normal integer static scores: for player 1,
+higher is better; for player 2, lower is better.
 
 ## Plan of Work
 
@@ -187,3 +207,6 @@ significant refactors and to record the score-interval split decision.
 
 Revision note, 2026-06-23 13:29Z: Updated progress, discoveries, decisions, and outcome after implementing and
 validating the goal-tree scheduler.
+
+Revision note, 2026-06-25 11:20Z: Updated the plan after changing yellow-sacrifice scheduling to split broad branches
+by exact reachable catastrophe goal set before applying score-band scheduling.

@@ -723,12 +723,16 @@ that sacrifice, prune catastrophe-before-sacrifice spellings, and drop equivalen
 hashes for the whole move tree. The backend `good_moves()` collector schedules play-position exploration as a goal
 tree. Branches hold copied builder states, conservative score intervals, and upper bounds on possible leaves; the
 scheduler explores the best current score band first, requeues any remaining band, and skips branches whose optimistic
-bound cannot reach the current cutoff. During active yellow sacrifices, the same optimistic proof bound is used
-both for branch pruning and for local continuation ordering. Forced sacrifice branches also estimate a conservative
-leaf upper bound from the current set of possible forced steps plus reachable positive catastrophes: green counts build
-choices, red counts attacks, blue counts trades, and yellow counts one-hop moves/discoveries. Empty or very small
-forced-action trees can therefore be reported and explored directly. Complete leaves are still scored exactly before
-entering the 512-move static-prune buffer, so memory remains bounded even when millions of legal leaves exist.
+bound cannot reach the current cutoff. Root-level single-action moves are collected and scored directly before
+sacrifice branches are queued, so they can seed the cutoff without paying the goal-branch scheduling cost. During
+active yellow sacrifices, reachable positive catastrophes become explicit goal-set partitions before score intervals
+are split further; a completed move belongs only to the branch matching exactly the scheduled catastrophe goals it
+played. The same optimistic proof bound is used for branch pruning and local continuation ordering. Forced sacrifice
+branches also estimate a conservative leaf upper bound from the current set of possible forced steps plus reachable
+positive catastrophes: green counts build choices, red counts attacks, blue counts trades, and yellow counts one-hop
+moves/discoveries. Empty or very small forced-action trees can therefore be reported and explored directly. Complete
+leaves are still scored exactly before entering the 512-move static-prune buffer, so memory remains bounded even when
+millions of legal leaves exist.
 `GameBackend`
 exposes an optional streamed all-move API for diagnostics; Homeworlds
 implements it by walking complete generated move paths without materializing a `GameBackendMoveList`. The

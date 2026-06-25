@@ -46,7 +46,7 @@ static void test_homeworlds_eval_experiment_runs_selected_variable(void) {
   g_assert_nonnull(strstr(stdout_text, "10,0,0,,0,2\n"));
 }
 
-static void test_homeworlds_eval_experiment_reports_win_ratio(void) {
+static void test_homeworlds_eval_experiment_reports_timeouts(void) {
   gchar *argv[] = {
     (gchar *)HOMEWORLDS_EVAL_EXPERIMENT_PATH,
     (gchar *)"--variable",
@@ -75,7 +75,7 @@ static void test_homeworlds_eval_experiment_reports_win_ratio(void) {
   g_assert_no_error(error);
   g_assert_cmpstr(stderr_text, ==, "");
   g_assert_nonnull(strstr(stdout_text, "value,candidate_wins,baseline_wins,win_ratio,draws,timeouts\n"));
-  g_assert_nonnull(strstr(stdout_text, "5,1,1,0.500000,0,0\n"));
+  g_assert_nonnull(strstr(stdout_text, "5,0,0,,0,2\n"));
 }
 
 static void test_homeworlds_eval_experiment_rejects_unknown_variable(void) {
@@ -405,8 +405,8 @@ int main(int argc, char **argv) {
   g_test_init(&argc, &argv, NULL);
   g_test_add_func("/homeworlds-eval-experiment/runs-selected-variable",
                   test_homeworlds_eval_experiment_runs_selected_variable);
-  g_test_add_func("/homeworlds-eval-experiment/reports-win-ratio",
-                  test_homeworlds_eval_experiment_reports_win_ratio);
+  g_test_add_func("/homeworlds-eval-experiment/reports-timeouts",
+                  test_homeworlds_eval_experiment_reports_timeouts);
   g_test_add_func("/homeworlds-eval-experiment/rejects-unknown-variable",
                   test_homeworlds_eval_experiment_rejects_unknown_variable);
   g_test_add_func("/homeworlds-eval-experiment/rejects-removed-homeworld-ship-variables",

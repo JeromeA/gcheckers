@@ -280,6 +280,63 @@ static void test_prepare_homeworld_orphaning_yellow_catastrophe_position(Homewor
   homeworlds_position_rebuild_color_counts(position);
 }
 
+static void test_prepare_two_goal_yellow_catastrophe_position(HomeworldsPosition *position) {
+  assert(position != NULL);
+
+  homeworlds_position_init(position);
+  position->phase = HOMEWORLDS_PHASE_PLAY;
+  position->turn = 0;
+  memset(position->bank, 0, sizeof(position->bank));
+  memset(position->systems, 0, sizeof(position->systems));
+  position->systems[0] = (HomeworldsSystem){
+    .stars = {
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL),
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE),
+    },
+    .ships = {
+      [0] = {
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_LARGE),
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL),
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL),
+      },
+    },
+  };
+  position->systems[1] = (HomeworldsSystem){
+    .stars = {
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_MEDIUM),
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE),
+    },
+    .ships = {
+      [1] = {
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE),
+      },
+    },
+  };
+  position->systems[2] = (HomeworldsSystem){
+    .stars = {
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_MEDIUM),
+    },
+    .ships = {
+      [1] = {
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_MEDIUM),
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_LARGE),
+      },
+    },
+  };
+  position->systems[3] = (HomeworldsSystem){
+    .stars = {
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_MEDIUM),
+    },
+    .ships = {
+      [1] = {
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_MEDIUM),
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE),
+      },
+    },
+  };
+  homeworlds_position_rebuild_color_counts(position);
+}
+
 static gint test_score_after_move(const HomeworldsPosition *position, const HomeworldsMove *move) {
   HomeworldsPosition child = {0};
   GameBackendOutcome outcome = GAME_BACKEND_OUTCOME_ONGOING;
@@ -1641,6 +1698,8 @@ static void test_backend_good_move_trace_records_pruning(void) {
   assert(capture.trace.goal_branches_skipped > 0);
   assert(capture.trace.goal_branches_exhausted <= capture.trace.goal_branches_direct);
   assert(capture.goal_report != NULL);
+  assert(strstr(capture.goal_report, "direct-result #0 single-steps") != NULL);
+  assert(strstr(capture.goal_report, " single-step interval=") == NULL);
   assert(strstr(capture.goal_report, "score-split #") != NULL);
   assert(strstr(capture.goal_report, "explore-result #") != NULL);
 
@@ -1763,6 +1822,29 @@ static void test_backend_good_move_trace_bounds_yellow_sacrifices(void) {
   assert(strstr(capture.goal_report, "leaves<=unknown prefix=[H1y2-]") == NULL);
   assert(strstr(capture.goal_report, "yellow-sacrifice interval=[-2147483648,") == NULL);
   assert(strstr(capture.goal_report, "parent_" "delta") == NULL);
+
+  backend->move_list_free(&good_moves);
+  homeworlds_backend_set_good_move_trace(NULL, NULL);
+  g_free(capture.goal_report);
+}
+
+static void test_backend_good_move_trace_partitions_yellow_sacrifice_goals(void) {
+  const GameBackend *backend = &homeworlds_game_backend;
+  HomeworldsPosition position = {0};
+  GameBackendMoveList good_moves = {0};
+  TestGoodMoveTraceCapture capture = {0};
+
+  test_prepare_two_goal_yellow_catastrophe_position(&position);
+  homeworlds_backend_set_good_move_trace(test_capture_good_move_trace, &capture);
+
+  good_moves = backend->list_good_moves(&position, 0);
+  assert(capture.called);
+  assert(capture.goal_report != NULL);
+  assert(strstr(capture.goal_report, "goal=[S0y!+S1r!]") != NULL);
+  assert(strstr(capture.goal_report, "goal=[S1r!]") != NULL);
+  assert(strstr(capture.goal_report, "goal=[S0y!]") != NULL);
+  assert(strstr(capture.goal_report, "goal=[no scheduled catastrophe]") != NULL);
+  assert(strstr(capture.goal_report, "inside_interval+=") != NULL);
 
   backend->move_list_free(&good_moves);
   homeworlds_backend_set_good_move_trace(NULL, NULL);
@@ -2825,6 +2907,7 @@ int main(void) {
   test_backend_good_move_trace_bounds_empty_green_sacrifice_builds();
   test_backend_good_move_trace_bounds_red_and_blue_sacrifices();
   test_backend_good_move_trace_bounds_yellow_sacrifices();
+  test_backend_good_move_trace_partitions_yellow_sacrifice_goals();
   test_backend_good_moves_follow_setup_policy_without_truncation();
   test_backend_good_moves_first_turn_always_builds();
   test_backend_good_moves_use_symbolic_build_notation();

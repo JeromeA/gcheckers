@@ -495,10 +495,11 @@ static void homeworlds_proof_probe_print_create_group(const HomeworldsProofProbe
   g_print("\n");
 }
 
-static void homeworlds_proof_probe_print_explore_result(const char *line) {
+static void homeworlds_proof_probe_print_collection_result(const char *line, const char *summary) {
   char covered[16] = {0};
   char leaves[32] = {0};
   char scored[32] = {0};
+  char inside_interval[32] = {0};
   char kept[32] = {0};
   char best[64] = {0};
   char cutoff[64] = {0};
@@ -507,6 +508,7 @@ static void homeworlds_proof_probe_print_explore_result(const char *line) {
   char duplicate[32] = {0};
   char step_reject[32] = {0};
   char bad_move[32] = {0};
+  char goal_filter_reject[32] = {0};
   char root_cat_reject[32] = {0};
   char interval_reject[32] = {0};
   char window_reject[32] = {0};
@@ -514,6 +516,7 @@ static void homeworlds_proof_probe_print_explore_result(const char *line) {
   gboolean showed_filter = FALSE;
 
   g_return_if_fail(line != NULL);
+  g_return_if_fail(summary != NULL);
 
   if (!homeworlds_proof_probe_extract_token_value(line, "covered=", covered, sizeof(covered)) ||
       !homeworlds_proof_probe_extract_token_value(line, "leaves+=", leaves, sizeof(leaves)) ||
@@ -526,11 +529,19 @@ static void homeworlds_proof_probe_print_explore_result(const char *line) {
     g_print("    result: %s\n", line);
     return;
   }
+  if (!homeworlds_proof_probe_extract_token_value(line,
+                                                  "inside_interval+=",
+                                                  inside_interval,
+                                                  sizeof(inside_interval))) {
+    g_strlcpy(inside_interval, scored, sizeof(inside_interval));
+  }
 
-  g_print("    result: exhausted selected interval; leaves +%s, scored +%s, kept %s, best %s, cutoff %s, "
+  g_print("    result: %s; leaves +%s, scored +%s, inside interval +%s, kept %s, best %s, cutoff %s, "
           "pruned descendants +%s, created goal branches +%s",
+          summary,
           leaves,
           scored,
+          inside_interval,
           kept,
           best,
           cutoff,
@@ -539,6 +550,10 @@ static void homeworlds_proof_probe_print_explore_result(const char *line) {
   homeworlds_proof_probe_extract_token_value(line, "duplicate+=", duplicate, sizeof(duplicate));
   homeworlds_proof_probe_extract_token_value(line, "step_reject+=", step_reject, sizeof(step_reject));
   homeworlds_proof_probe_extract_token_value(line, "bad_move+=", bad_move, sizeof(bad_move));
+  homeworlds_proof_probe_extract_token_value(line,
+                                             "goal_filter_reject+=",
+                                             goal_filter_reject,
+                                             sizeof(goal_filter_reject));
   homeworlds_proof_probe_extract_token_value(line, "root_cat_reject+=", root_cat_reject, sizeof(root_cat_reject));
   homeworlds_proof_probe_extract_token_value(line, "interval_reject+=", interval_reject, sizeof(interval_reject));
   homeworlds_proof_probe_extract_token_value(line, "window_reject+=", window_reject, sizeof(window_reject));
@@ -546,6 +561,7 @@ static void homeworlds_proof_probe_print_explore_result(const char *line) {
   if ((duplicate[0] != '\0' && g_strcmp0(duplicate, "0") != 0) ||
       (step_reject[0] != '\0' && g_strcmp0(step_reject, "0") != 0) ||
       (bad_move[0] != '\0' && g_strcmp0(bad_move, "0") != 0) ||
+      (goal_filter_reject[0] != '\0' && g_strcmp0(goal_filter_reject, "0") != 0) ||
       (root_cat_reject[0] != '\0' && g_strcmp0(root_cat_reject, "0") != 0) ||
       (interval_reject[0] != '\0' && g_strcmp0(interval_reject, "0") != 0) ||
       (window_reject[0] != '\0' && g_strcmp0(window_reject, "0") != 0) ||
@@ -561,6 +577,10 @@ static void homeworlds_proof_probe_print_explore_result(const char *line) {
     }
     if (bad_move[0] != '\0' && g_strcmp0(bad_move, "0") != 0) {
       g_print("%s bad-move +%s", showed_filter ? "," : ":", bad_move);
+      showed_filter = TRUE;
+    }
+    if (goal_filter_reject[0] != '\0' && g_strcmp0(goal_filter_reject, "0") != 0) {
+      g_print("%s outside-goal +%s", showed_filter ? "," : ":", goal_filter_reject);
       showed_filter = TRUE;
     }
     if (root_cat_reject[0] != '\0' && g_strcmp0(root_cat_reject, "0") != 0) {
@@ -601,6 +621,7 @@ static void homeworlds_proof_probe_print_later_iterations(char **lines,
     char interval_text[64] = {0};
     char leaf_text[32] = {0};
     char prefix[128] = {0};
+    char goal[128] = {0};
     gsize id = 0;
     gint interval_min = 0;
     gint interval_max = 0;
@@ -621,9 +642,13 @@ static void homeworlds_proof_probe_print_later_iterations(char **lines,
     homeworlds_proof_probe_format_interval(interval_min, interval_max, interval_text, sizeof(interval_text));
     homeworlds_proof_probe_format_leaf_bound(leaf_upper_bound, leaf_text, sizeof(leaf_text));
     homeworlds_proof_probe_extract_bracket_value(lines[index], "prefix=[", prefix, sizeof(prefix));
+    homeworlds_proof_probe_extract_bracket_value(lines[index], "goal=[", goal, sizeof(goal));
     g_print("  select #%zu %s %s leaves<=%s", id, kind, interval_text, leaf_text);
     if (prefix[0] != '\0') {
       g_print(" prefix=%s", prefix);
+    }
+    if (goal[0] != '\0') {
+      g_print(" goal=%s", goal);
     }
     g_print("\n");
     shown++;
@@ -642,6 +667,11 @@ static void homeworlds_proof_probe_print_later_iterations(char **lines,
         index++;
         continue;
       }
+    }
+
+    if (index < line_count && g_str_has_prefix(lines[index], "goal-split-fallback #")) {
+      g_print("    result: kept as one broad yellow branch because the goal split was not bounded enough\n");
+      index++;
     }
 
     if (index < line_count) {
@@ -710,7 +740,8 @@ static void homeworlds_proof_probe_print_later_iterations(char **lines,
         g_print("    action: recursively explore this branch in the selected interval\n");
         index++;
         if (index < line_count && g_str_has_prefix(lines[index], "explore-result #")) {
-          homeworlds_proof_probe_print_explore_result(lines[index]);
+          homeworlds_proof_probe_print_collection_result(lines[index],
+                                                         "finished traversal with selected score filter");
           index++;
         }
       }
@@ -769,6 +800,16 @@ static void homeworlds_proof_probe_print_iteration_report(const char *goal_repor
   while (index < line_count) {
     HomeworldsProofProbeCreateEvent event = {0};
 
+    if (g_str_has_prefix(lines[index], "direct-result #0 single-steps")) {
+      homeworlds_proof_probe_print_collection_result(lines[index], "directly collected root single-step moves");
+      index++;
+      continue;
+    }
+    if (g_str_has_prefix(lines[index], "direct-result #0 pass-fallback")) {
+      homeworlds_proof_probe_print_collection_result(lines[index], "directly collected root pass fallback");
+      index++;
+      continue;
+    }
     if (homeworlds_proof_probe_parse_split_result_line(lines[index], &split_id, &split_created, &split_queue) &&
         split_id == 0) {
       index++;

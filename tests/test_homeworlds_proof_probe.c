@@ -86,6 +86,8 @@ static void test_homeworlds_proof_probe_prints_iteration_report(void) {
   g_assert_nonnull(strstr(stdout_text, "cutoff="));
   g_assert_nonnull(strstr(stdout_text, "\nIteration 1:\n"));
   g_assert_nonnull(strstr(stdout_text, "#0 expansion:"));
+  g_assert_nonnull(strstr(stdout_text, "directly collected root single-step moves"));
+  g_assert_nonnull(strstr(stdout_text, "inside interval"));
   g_assert_nonnull(strstr(stdout_text, "\nIterations 2+:\n"));
   g_assert_nonnull(strstr(stdout_text, "selected branches after iteration 1:"));
   g_assert_null(strstr(stdout_text, "root expansion:"));
