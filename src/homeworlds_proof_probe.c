@@ -413,6 +413,31 @@ static void homeworlds_proof_probe_print_create_event(const HomeworldsProofProbe
   g_print("\n");
 }
 
+static void homeworlds_proof_probe_format_change_field(const char *value, char *buffer, gsize buffer_size) {
+  const char *arrow = NULL;
+  g_autofree char *old_value = NULL;
+  const char *new_value = NULL;
+
+  g_return_if_fail(value != NULL);
+  g_return_if_fail(buffer != NULL);
+  g_return_if_fail(buffer_size > 0);
+
+  arrow = strstr(value, "->");
+  if (arrow == NULL) {
+    g_strlcpy(buffer, value, buffer_size);
+    return;
+  }
+
+  old_value = g_strndup(value, (gsize)(arrow - value));
+  new_value = arrow + 2;
+  if (g_strcmp0(old_value, new_value) == 0) {
+    g_snprintf(buffer, buffer_size, "%s=", old_value);
+    return;
+  }
+
+  g_strlcpy(buffer, value, buffer_size);
+}
+
 static void homeworlds_proof_probe_print_collection_result(const char *line,
                                                            const char *summary,
                                                            const char *indent) {
@@ -423,6 +448,9 @@ static void homeworlds_proof_probe_print_collection_result(const char *line,
   char kept[32] = {0};
   char best[64] = {0};
   char cutoff[64] = {0};
+  char kept_text[32] = {0};
+  char best_text[64] = {0};
+  char cutoff_text[64] = {0};
   char pruned[32] = {0};
   char created[32] = {0};
   char duplicate[32] = {0};
@@ -456,17 +484,22 @@ static void homeworlds_proof_probe_print_collection_result(const char *line,
                                                   sizeof(inside_interval))) {
     g_strlcpy(inside_interval, scored, sizeof(inside_interval));
   }
+  homeworlds_proof_probe_format_change_field(kept, kept_text, sizeof(kept_text));
+  homeworlds_proof_probe_format_change_field(best, best_text, sizeof(best_text));
+  homeworlds_proof_probe_format_change_field(cutoff, cutoff_text, sizeof(cutoff_text));
 
-  g_print("%sresult: %s; leaves +%s, scored +%s, inside interval +%s, kept %s, best %s, cutoff %s, "
-          "pruned descendants +%s, created goal branches +%s",
-          indent,
-          summary,
+  g_print("%sresult:", indent);
+  if (summary[0] != '\0') {
+    g_print(" %s;", summary);
+  }
+  g_print(" leaves +%s, scored +%s, inside interval +%s, kept %s, best %s, cutoff %s, pruned descendants +%s, "
+          "created goal branches +%s",
           leaves,
           scored,
           inside_interval,
-          kept,
-          best,
-          cutoff,
+          kept_text,
+          best_text,
+          cutoff_text,
           pruned,
           created);
   homeworlds_proof_probe_extract_token_value(line, "duplicate+=", duplicate, sizeof(duplicate));
@@ -520,9 +553,6 @@ static void homeworlds_proof_probe_print_collection_result(const char *line,
     if (full_reject[0] != '\0' && g_strcmp0(full_reject, "0") != 0) {
       g_print("%s full-buffer +%s", showed_filter ? "," : ":", full_reject);
     }
-  }
-  if (g_strcmp0(covered, "1") == 0) {
-    g_print("; recursive pruning covered some descendants");
   }
   g_print("\n");
 }
@@ -668,13 +698,19 @@ static void homeworlds_proof_probe_print_later_iterations(char **lines,
                                                    &explore_max,
                                                    &explore_leaf_upper_bound) &&
           explore_id == id) {
-        g_print("  action: recursively explore this branch in the selected interval\n");
+        char explore_interval_text[64] = {0};
+
+        homeworlds_proof_probe_format_interval(explore_min,
+                                                explore_max,
+                                                explore_interval_text,
+                                                sizeof(explore_interval_text));
+        g_print("  action: recursively explore this branch in %s\n", explore_interval_text);
         index++;
         continue;
       }
       if (g_str_has_prefix(lines[index], "explore-result #")) {
         homeworlds_proof_probe_print_collection_result(lines[index],
-                                                       "finished traversal with selected score filter",
+                                                       "",
                                                        "  ");
         index++;
         break;
