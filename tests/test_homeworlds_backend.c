@@ -1723,7 +1723,8 @@ static void test_backend_good_move_trace_bounds_empty_green_sacrifice_builds(voi
   good_moves = backend->list_good_moves(&position, 0);
   assert(capture.called);
   assert(capture.goal_report != NULL);
-  assert(strstr(capture.goal_report, "leaves<=0 prefix=[H1g3-]") != NULL);
+  assert(strstr(capture.goal_report, "leaves<=1 prefix=[H1g3-]") != NULL);
+  assert(strstr(capture.goal_report, "leaves<=0 prefix=[H1g3-]") == NULL);
 
   backend->move_list_free(&good_moves);
   homeworlds_backend_set_good_move_trace(NULL, NULL);
@@ -1770,8 +1771,10 @@ static void test_backend_good_move_trace_bounds_red_and_blue_sacrifices(void) {
   good_moves = backend->list_good_moves(&position, 0);
   assert(capture.called);
   assert(capture.goal_report != NULL);
-  assert(strstr(capture.goal_report, "leaves<=0 prefix=[H1r3-]") != NULL);
-  assert(strstr(capture.goal_report, "leaves<=0 prefix=[H1b3-]") != NULL);
+  assert(strstr(capture.goal_report, "leaves<=1 prefix=[H1r3-]") != NULL);
+  assert(strstr(capture.goal_report, "leaves<=2 prefix=[H1b3-]") != NULL);
+  assert(strstr(capture.goal_report, "leaves<=0 prefix=[H1r3-]") == NULL);
+  assert(strstr(capture.goal_report, "leaves<=0 prefix=[H1b3-]") == NULL);
 
   backend->move_list_free(&good_moves);
   homeworlds_backend_set_good_move_trace(NULL, NULL);

@@ -2684,22 +2684,27 @@ static guint homeworlds_backend_forced_action_pyramid_bank_count(const Homeworld
   return homeworlds_backend_bank_pyramid_count(position, pyramid);
 }
 
-static gsize homeworlds_backend_saturating_permutation(gsize choices, guint length) {
-  gsize result = 1;
+static gsize homeworlds_backend_saturating_permutation_prefix_sum(gsize choices, guint max_length) {
+  gsize total = 1;
+  gsize prefix = 1;
 
-  if (choices < length) {
-    return 0;
-  }
+  for (guint length = 1; length <= max_length; ++length) {
+    gsize factor = 0;
 
-  for (guint i = 0; i < length; ++i) {
-    gsize factor = choices - i;
-
-    if (factor != 0 && result > G_MAXSIZE / factor) {
+    if (choices < length) {
+      break;
+    }
+    factor = choices - length + 1;
+    if (factor != 0 && prefix > G_MAXSIZE / factor) {
       return G_MAXSIZE;
     }
-    result *= factor;
+    prefix *= factor;
+    total = homeworlds_backend_saturating_add(total, prefix);
+    if (total == G_MAXSIZE) {
+      return G_MAXSIZE;
+    }
   }
-  return result;
+  return total;
 }
 
 static gsize homeworlds_backend_count_current_positive_catastrophe_steps(
@@ -3252,7 +3257,7 @@ static gsize homeworlds_backend_estimate_forced_sacrifice_leaf_upper_bound(
   catastrophe_steps = homeworlds_backend_count_reachable_positive_catastrophe_steps(state, FALSE);
   forced_steps = homeworlds_backend_count_forced_sacrifice_steps(state, FALSE);
   choices = homeworlds_backend_saturating_add(forced_steps, catastrophe_steps);
-  return homeworlds_backend_saturating_permutation(choices, state->pending_actions_remaining);
+  return homeworlds_backend_saturating_permutation_prefix_sum(choices, state->pending_actions_remaining);
 }
 
 static gboolean homeworlds_backend_build_candidate_order(const HomeworldsPosition *root_position,

@@ -95,7 +95,8 @@ not match the branch's exact goal set are rejected by that branch. A branch also
 the best branch can reach `+50` and the next best branch can reach only `+30`, the scheduler explores the best branch's
 `+30` to `+50` band first and requeues the lower band as a separate branch. For player 2 the same comparison is
 reversed because lower scores are better. Branches with a conservative leaf upper bound of 50 or less are explored
-directly instead of being split further.
+directly instead of being split further. Sacrifice branch leaf bounds include every possible early pass-completion
+prefix, because the builder can finish a sacrifice by appending passes for all remaining sacrifice actions.
 
 Setup moves are filtered to prefer playable starts: three distinct colors across the two stars and starting ship, a
 large starting ship, two different homeworld star sizes, green included for player 1, and a different star-size

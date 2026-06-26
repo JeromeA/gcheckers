@@ -1483,3 +1483,15 @@ replace a depth-4 node report while walking through the game.
 The fix adds a shared current-node reuse check. Current-position analysis skips immediately when the selected node is
 already deep enough, resumes at the next missing depth when it is not, and full-game analysis marks reused nodes as
 processed while preserving their stored reports for parent child-score reuse.
+
+## Homeworlds sacrifice branch leaf bounds ignored early pass completions
+
+The Homeworlds goal scheduler's sacrifice branch report should never show a conservative `leaves<=0` estimate for a
+branch that can still finish by passing the remaining sacrifice actions.
+
+The leaf estimator counted exact-length permutations of forced actions and reachable profitable catastrophes for the
+whole remaining sacrifice size. A sacrifice can instead complete after any shorter prefix by appending passes for all
+remaining actions, so a red sacrifice with one possible attack and two actions left could be reported as `leaves<=0`
+while direct exploration found the immediate pass leaf and the attack-then-pass leaf.
+
+The fix estimates the sum of all forced-action prefix lengths, including the zero-action immediate pass completion.
