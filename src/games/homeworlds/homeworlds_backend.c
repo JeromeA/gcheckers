@@ -4011,6 +4011,36 @@ static gint homeworlds_backend_score_with_gain_bound(guint side, gint score, gui
   return (gint)bound;
 }
 
+static gboolean homeworlds_backend_goal_mask_terminal_win_score(const HomeworldsGoalCatastrophe *goals,
+                                                                guint goal_count,
+                                                                guint mask,
+                                                                guint side,
+                                                                gint *out_score) {
+  guint opponent = 0;
+
+  g_return_val_if_fail(goals != NULL, FALSE);
+  g_return_val_if_fail(goal_count <= HOMEWORLDS_GOAL_BRANCH_MAX_CATASTROPHE_GOALS, FALSE);
+  g_return_val_if_fail(side < 2, FALSE);
+  g_return_val_if_fail(out_score != NULL, FALSE);
+
+  opponent = side == 0 ? 1 : 0;
+  for (guint i = 0; i < goal_count; ++i) {
+    const HomeworldsSystemRef *system_ref = &goals[i].catastrophe.system_ref;
+
+    if ((mask & (1u << i)) == 0 ||
+        system_ref->kind != HOMEWORLDS_SYSTEM_REF_HOMEWORLD ||
+        system_ref->homeworld_side != opponent) {
+      continue;
+    }
+    *out_score = homeworlds_position_terminal_score(side == 0
+                                                    ? GAME_BACKEND_OUTCOME_SIDE_0_WIN
+                                                    : GAME_BACKEND_OUTCOME_SIDE_1_WIN,
+                                                    1);
+    return TRUE;
+  }
+  return FALSE;
+}
+
 static gboolean homeworlds_backend_goal_branch_apply_yellow_goal_bound(HomeworldsGoalBranch *branch, guint side) {
   const HomeworldsEvalWeights *weights = NULL;
   guint buildable_count = 0;
@@ -4018,7 +4048,10 @@ static gboolean homeworlds_backend_goal_branch_apply_yellow_goal_bound(Homeworld
   guint goal_gain = 0;
   guint total_gain = 0;
   gint current_score = 0;
-  gint bound = 0;
+  gint guaranteed_bound = 0;
+  gint optimistic_bound = 0;
+  gint terminal_score = 0;
+  gboolean can_win_terminally = FALSE;
 
   g_return_val_if_fail(branch != NULL, FALSE);
   g_return_val_if_fail(side < 2, FALSE);
@@ -4029,50 +4062,68 @@ static gboolean homeworlds_backend_goal_branch_apply_yellow_goal_bound(Homeworld
 
   weights = homeworlds_eval_weights_active();
   g_return_val_if_fail(weights != NULL, FALSE);
-  if (weights->buildable_color_value <= 0) {
-    return TRUE;
-  }
 
-  buildable_count = homeworlds_backend_buildable_color_count_for_side(&branch->state.working_position, side);
-  buildable_gain = (guint)(HOMEWORLDS_COLOR_BLUE + 1 - buildable_count) * (guint)weights->buildable_color_value;
+  if (weights->buildable_color_value > 0) {
+    buildable_count = homeworlds_backend_buildable_color_count_for_side(&branch->state.working_position, side);
+    buildable_gain = (guint)(HOMEWORLDS_COLOR_BLUE + 1 - buildable_count) * (guint)weights->buildable_color_value;
+  }
   goal_gain = homeworlds_backend_goal_mask_gain(branch->goal_catastrophes,
                                                 branch->goal_count,
                                                 branch->goal_required_mask);
   total_gain = (guint)MIN((guint64)G_MAXUINT, (guint64)buildable_gain + goal_gain);
   current_score = homeworlds_position_evaluate_static(&branch->state.working_position);
-  bound = homeworlds_backend_score_with_gain_bound(side, current_score, total_gain);
+  guaranteed_bound = homeworlds_backend_score_with_gain_bound(side, current_score, goal_gain);
+  optimistic_bound = homeworlds_backend_score_with_gain_bound(side, current_score, total_gain);
+  can_win_terminally = homeworlds_backend_goal_mask_terminal_win_score(branch->goal_catastrophes,
+                                                                       branch->goal_count,
+                                                                       branch->goal_required_mask,
+                                                                       side,
+                                                                       &terminal_score);
   if (side == 0) {
-    branch->interval_max = MIN(branch->interval_max, bound);
+    if (can_win_terminally) {
+      guaranteed_bound = MIN(guaranteed_bound, terminal_score);
+      optimistic_bound = MAX(optimistic_bound, terminal_score);
+    }
+    branch->interval_min = MAX(branch->interval_min, guaranteed_bound);
+    branch->interval_max = MIN(branch->interval_max, optimistic_bound);
   } else {
-    branch->interval_min = MAX(branch->interval_min, bound);
+    if (can_win_terminally) {
+      guaranteed_bound = MAX(guaranteed_bound, terminal_score);
+      optimistic_bound = MIN(optimistic_bound, terminal_score);
+    }
+    branch->interval_min = MAX(branch->interval_min, optimistic_bound);
+    branch->interval_max = MIN(branch->interval_max, guaranteed_bound);
   }
   return TRUE;
 }
 
-static HomeworldsGoalBranch *homeworlds_backend_goal_branch_clone_for_yellow_goals(
+static gboolean homeworlds_backend_goal_branch_clone_for_yellow_goals(
     HomeworldsGoalQueue *queue,
     const HomeworldsGoalBranch *branch,
     const HomeworldsGoalCatastrophe *goals,
     guint goal_count,
     guint required_mask,
     guint excluded_mask,
-    guint side) {
+    guint side,
+    HomeworldsGoalBranch **out_branch) {
   HomeworldsGoalBranch *clone = NULL;
 
-  g_return_val_if_fail(queue != NULL, NULL);
-  g_return_val_if_fail(branch != NULL, NULL);
-  g_return_val_if_fail(goals != NULL, NULL);
-  g_return_val_if_fail(goal_count > 0, NULL);
-  g_return_val_if_fail(goal_count <= HOMEWORLDS_GOAL_BRANCH_MAX_CATASTROPHE_GOALS, NULL);
-  g_return_val_if_fail(side < 2, NULL);
+  g_return_val_if_fail(queue != NULL, FALSE);
+  g_return_val_if_fail(branch != NULL, FALSE);
+  g_return_val_if_fail(goals != NULL, FALSE);
+  g_return_val_if_fail(goal_count > 0, FALSE);
+  g_return_val_if_fail(goal_count <= HOMEWORLDS_GOAL_BRANCH_MAX_CATASTROPHE_GOALS, FALSE);
+  g_return_val_if_fail(side < 2, FALSE);
+  g_return_val_if_fail(out_branch != NULL, FALSE);
 
+  *out_branch = NULL;
   clone = homeworlds_backend_goal_branch_clone_for_interval(queue,
                                                             branch,
                                                             branch->interval_min,
                                                             branch->interval_max,
                                                             "yellow goal partition");
   if (clone == NULL) {
-    return NULL;
+    return FALSE;
   }
 
   memcpy(clone->goal_catastrophes, goals, goal_count * sizeof(goals[0]));
@@ -4082,9 +4133,14 @@ static HomeworldsGoalBranch *homeworlds_backend_goal_branch_clone_for_yellow_goa
   homeworlds_backend_goal_branch_format_goal_label(clone);
   if (!homeworlds_backend_goal_branch_apply_yellow_goal_bound(clone, side)) {
     homeworlds_backend_goal_branch_free(clone);
-    return NULL;
+    return FALSE;
   }
-  return clone;
+  if (clone->interval_min > clone->interval_max) {
+    homeworlds_backend_goal_branch_free(clone);
+    return TRUE;
+  }
+  *out_branch = clone;
+  return TRUE;
 }
 
 static gboolean homeworlds_backend_goal_split_yellow_sacrifice_goals(const HomeworldsPosition *root_position,
@@ -4139,19 +4195,21 @@ static gboolean homeworlds_backend_goal_split_yellow_sacrifice_goals(const Homew
   for (guint offset = 0; offset <= full_mask; ++offset) {
     guint required_mask = full_mask - offset;
     guint excluded_mask = full_mask & ~required_mask;
-    HomeworldsGoalBranch *child_branch =
-        homeworlds_backend_goal_branch_clone_for_yellow_goals(queue,
-                                                              branch,
-                                                              goals,
-                                                              goal_count,
-                                                              required_mask,
-                                                              excluded_mask,
-                                                              root_position->turn);
+    HomeworldsGoalBranch *child_branch = NULL;
 
-    if (child_branch == NULL) {
+    if (!homeworlds_backend_goal_branch_clone_for_yellow_goals(queue,
+                                                               branch,
+                                                               goals,
+                                                               goal_count,
+                                                               required_mask,
+                                                               excluded_mask,
+                                                               root_position->turn,
+                                                               &child_branch)) {
       return FALSE;
     }
-    homeworlds_backend_goal_enqueue_branch(queue, context, child_branch);
+    if (child_branch != NULL) {
+      homeworlds_backend_goal_enqueue_branch(queue, context, child_branch);
+    }
   }
 
   context->goal_branches_split++;

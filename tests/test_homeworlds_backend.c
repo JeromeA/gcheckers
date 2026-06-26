@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "../src/games/homeworlds/homeworlds_backend.h"
@@ -823,6 +824,36 @@ static void test_capture_good_move_trace(const HomeworldsGoodMoveTrace *trace, g
   g_free(capture->goal_report);
   capture->goal_report = g_strdup(trace->goal_report);
   capture->called = TRUE;
+}
+
+static gboolean test_goal_report_find_goal_interval(const char *report,
+                                                    const char *goal_label,
+                                                    gint *out_min,
+                                                    gint *out_max) {
+  char needle[128] = {0};
+  const char *match = NULL;
+
+  assert(report != NULL);
+  assert(goal_label != NULL);
+  assert(out_min != NULL);
+  assert(out_max != NULL);
+
+  g_snprintf(needle, sizeof(needle), "goal=[%s]", goal_label);
+  match = report;
+  while ((match = strstr(match, needle)) != NULL) {
+    const char *line = match;
+    const char *interval = NULL;
+
+    while (line > report && line[-1] != '\n') {
+      line--;
+    }
+    interval = strstr(line, "interval=[");
+    if (interval != NULL && interval < match && sscanf(interval, "interval=[%d,%d]", out_min, out_max) == 2) {
+      return TRUE;
+    }
+    match += strlen(needle);
+  }
+  return FALSE;
 }
 
 static const HomeworldsMoveCandidate *test_find_trade_color_candidate(const GameBackend *backend,
@@ -1836,6 +1867,14 @@ static void test_backend_good_move_trace_partitions_yellow_sacrifice_goals(void)
   HomeworldsPosition position = {0};
   GameBackendMoveList good_moves = {0};
   TestGoodMoveTraceCapture capture = {0};
+  gint both_min = 0;
+  gint both_max = 0;
+  gint red_min = 0;
+  gint red_max = 0;
+  gint yellow_min = 0;
+  gint yellow_max = 0;
+  gint none_min = 0;
+  gint none_max = 0;
 
   test_prepare_two_goal_yellow_catastrophe_position(&position);
   homeworlds_backend_set_good_move_trace(test_capture_good_move_trace, &capture);
@@ -1848,6 +1887,20 @@ static void test_backend_good_move_trace_partitions_yellow_sacrifice_goals(void)
   assert(strstr(capture.goal_report, "goal=[S0y!]") != NULL);
   assert(strstr(capture.goal_report, "goal=[no scheduled catastrophe]") != NULL);
   assert(strstr(capture.goal_report, "inside_interval+=") != NULL);
+  assert(test_goal_report_find_goal_interval(capture.goal_report, "S0y!+S1r!", &both_min, &both_max));
+  assert(test_goal_report_find_goal_interval(capture.goal_report, "S1r!", &red_min, &red_max));
+  assert(test_goal_report_find_goal_interval(capture.goal_report, "S0y!", &yellow_min, &yellow_max));
+  assert(test_goal_report_find_goal_interval(capture.goal_report,
+                                             "no scheduled catastrophe",
+                                             &none_min,
+                                             &none_max));
+  assert(both_min <= both_max);
+  assert(red_min <= red_max);
+  assert(yellow_min <= yellow_max);
+  assert(none_min <= none_max);
+  assert(both_min > none_min);
+  assert(red_min > none_min);
+  assert(yellow_min > none_min);
 
   backend->move_list_free(&good_moves);
   homeworlds_backend_set_good_move_trace(NULL, NULL);

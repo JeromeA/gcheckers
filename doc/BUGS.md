@@ -1495,3 +1495,17 @@ remaining actions, so a red sacrifice with one possible attack and two actions l
 while direct exploration found the immediate pass leaf and the attack-then-pass leaf.
 
 The fix estimates the sum of all forced-action prefix lengths, including the zero-action immediate pass completion.
+
+## Homeworlds yellow goal partitions kept the parent lower score bound
+
+A yellow-sacrifice goal branch that requires a specific profitable catastrophe should report and schedule only scores
+that include that guaranteed catastrophe gain.
+
+The goal partition code used required catastrophes only for the optimistic side of the score interval. In a branch that
+required two catastrophes, the upper bound reflected both catastrophes, but the lower bound still matched the parent
+branch and the "no scheduled catastrophe" partition. That made the report misleading and could make the scheduler spend
+time on impossible low-score bands for a branch whose contract required the catastrophes.
+
+The fix applies required goal gains to the guaranteed side of the interval too. Goal partitions that fall completely
+outside the selected score band are skipped, and terminal homeworld wins keep their terminal score in range so they are
+not filtered out by a static-material lower bound.

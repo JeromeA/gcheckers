@@ -727,7 +727,9 @@ bound cannot reach the current cutoff. Root-level single-action moves are collec
 sacrifice branches are queued, so they can seed the cutoff without paying the goal-branch scheduling cost. During
 active yellow sacrifices, reachable positive catastrophes become explicit goal-set partitions before score intervals
 are split further; a completed move belongs only to the branch matching exactly the scheduled catastrophe goals it
-played. The same optimistic proof bound is used for branch pruning and local continuation ordering. Forced sacrifice
+played. Required goal gains tighten both the guaranteed and optimistic sides of the interval, while terminal homeworld
+wins remain in range even when their terminal score is below the branch's static material bound. The same optimistic
+proof bound is used for branch pruning and local continuation ordering. Forced sacrifice
 branches also estimate a conservative leaf upper bound from the current set of possible forced steps plus reachable
 positive catastrophes: green counts build choices, red counts attacks, blue counts trades, and yellow counts one-hop
 moves/discoveries. The leaf bound includes every early pass-completion prefix, because a sacrifice can stop before

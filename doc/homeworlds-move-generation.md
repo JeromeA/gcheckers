@@ -112,7 +112,10 @@ sacrifice-scoped builder-state deduper instead of by color-specific adjacent-ste
 Yellow sacrifice branches also use a conservative proof bound during branch scheduling and branch exploration. The
 same reachability proof identifies the concrete catastrophe goals used for goal-set partitioning. Score intervals are
 secondary to those goals: a goal branch may still be split into score bands, but score bands do not define the tactical
-branch. When the bound cannot reach the current static-prune cutoff or the active score interval, the branch is not
+branch. Required goal catastrophes tighten both ends of the branch's score interval: the guaranteed goal gain raises the
+lower side for player 1 or lowers the upper side for player 2, while optional remaining upside still sets the optimistic
+side. If a required goal can win by hitting the opponent homeworld, the interval also keeps the terminal win score in
+range. When the bound cannot reach the current static-prune cutoff or the active score interval, the branch is not
 explored.
 
 The catastrophe policy distinguishes profitable and unfavorable catastrophes from the moving side's perspective. A
