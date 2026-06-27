@@ -727,10 +727,12 @@ overlapping bucket, requeues any remaining band, and skips branches whose optimi
 cutoff. Root-level single-action moves are collected and scored directly before
 sacrifice branches are queued, so they can seed the cutoff without paying the goal-branch scheduling cost. During
 active yellow sacrifices, reachable positive catastrophes become explicit goal-set partitions before score intervals
-are split further; a completed move belongs only to the branch matching exactly the scheduled catastrophe goals it
-played. Required goal gains tighten both the guaranteed and optimistic sides of the interval, while terminal homeworld
-wins remain in range even when their terminal score is below the branch's static material bound. The same optimistic
-proof bound is used for branch pruning and local continuation ordering. Forced sacrifice
+are split further; if one reachable goal wins by destroying the opponent homeworld, the split is just that terminal
+goal versus all non-terminal goal combinations. Required non-terminal goal gains tighten both the guaranteed and
+optimistic sides of the interval, while terminal homeworld wins set an exact terminal-score interval and are never
+added to material gains. Once a terminal winning move is scored, `good_moves()` keeps that move and stops exploring
+because no deeper or sibling branch can beat it. The same optimistic proof bound is used for branch pruning and local
+continuation ordering. Forced sacrifice
 branches also estimate a conservative leaf upper bound from the current set of possible forced steps plus reachable
 positive catastrophes: green counts build choices, red counts attacks, blue counts trades, and yellow counts one-hop
 moves/discoveries. The leaf bound includes every early pass-completion prefix, because a sacrifice can stop before
@@ -814,15 +816,19 @@ commutation is proven from local ship, bank, and color counts, while green build
 built-ship candidate because bank supply can make the built size ambiguous.
 During play, `good_moves()` scores each candidate by the one-ply static or terminal value, orders it from the current
 player's perspective, and keeps only the first 512 moves that are within 50 points of the best one. A very good
-completed move therefore raises an early score-window cutoff even before the buffer contains 512 moves.
+completed move therefore raises an early score-window cutoff even before the buffer contains 512 moves. A terminal
+winning score clears the buffer to that move and stops generation immediately. Completed leaves that cannot be replayed
+from the root position are counted as rejected moves instead of aborting the whole buffer.
 Before exploring sacrifice branches from a normal ship-selection state, the ordered collector first walks all complete
 one-step attack, move, build, and trade continuations so ordinary moves can populate that score window early.
 Active yellow sacrifice branches are skipped when either that score-window cutoff or the full 512-move cutoff is
 available and a conservative bound proves that no remaining yellow continuation can reach it. The bound adds possible
 buildable-color gains, immediate catastrophe gains, and only the own catastrophe losses that remaining yellow actions
 could still avoid by moving doomed ships away first. Future positive catastrophes count opponent ships that would be
-orphaned by star destruction and signed homeworld-star effects, and count only when enough same-color own ships can
-reach the target system without spending the whole gain.
+orphaned by star destruction and signed non-terminal homeworld-star effects, subtract the cheapest same-color own ships
+that must be moved into the system to create the catastrophe, and count only when enough such ships can reach the target
+system without spending the whole gain. A future catastrophe that wins by destroying the opponent homeworld contributes
+the terminal score as an alternative bound instead of an additive material gain.
 Profitable catastrophes available at the start of a turn are required somewhere in the final move, while profitable
 catastrophes created by an earlier step are forced immediately in the staged walk.
 `doc/homeworlds-move-generation.md` describes how the legal builder, diagnostic move report, profiling CLI,

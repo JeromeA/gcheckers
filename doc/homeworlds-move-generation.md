@@ -89,15 +89,17 @@ catastrophe-first order.
 The current Homeworlds `good_moves()` scheduler creates goal branches, then explores each selected branch with the
 same staged builder used by the UI. Branches can represent root catastrophe policy, directly collected root
 single-step actions, sacrifices, yellow sacrifice goal partitions, or a generic fallback. A yellow sacrifice with
-reachable positive catastrophe goals is split by exact goal set first. With two scheduled goals, for example, the
-partitions are "both goals", "first goal only", "second goal only", and "none of those goals"; completed moves that do
-not match the branch's exact goal set are rejected by that branch. A branch also stores an integer score interval. If
-the best branch can reach `+50` and the next best branch can reach only `+30`, the scheduler explores every 10-point
-bucket that is exclusive to the best branch, plus one overlapping 10-point bucket, and requeues the lower band as a
-separate branch. For player 2 the same comparison is reversed because lower scores are better. Branches with a
-conservative leaf upper bound of 50 or less are explored directly instead of being split further. Sacrifice branch leaf
-bounds include every possible early pass-completion prefix, because the builder can finish a sacrifice by appending
-passes for all remaining sacrifice actions.
+reachable positive catastrophe goals is split by exact goal set first. With two non-terminal scheduled goals, for
+example, the partitions are "both goals", "first goal only", "second goal only", and "none of those goals"; completed
+moves that do not match the branch's exact goal set are rejected by that branch. If one scheduled goal wins by
+destroying the opponent homeworld, that terminal goal absorbs the other goals: the scheduler creates one branch
+requiring the win, then branches for the non-terminal combinations with the win excluded. A branch also stores an
+integer score interval. If the best branch can reach `+50` and the next best branch can reach only `+30`, the scheduler
+explores every 10-point bucket that is exclusive to the best branch, plus one overlapping 10-point bucket, and requeues
+the lower band as a separate branch. For player 2 the same comparison is reversed because lower scores are better.
+Branches with a conservative leaf upper bound of 50 or less are explored directly instead of being split further.
+Sacrifice branch leaf bounds include every possible early pass-completion prefix, because the builder can finish a
+sacrifice by appending passes for all remaining sacrifice actions.
 
 Setup moves are filtered to prefer playable starts: three distinct colors across the two stars and starting ship, a
 large starting ship, two different homeworld star sizes, green included for player 1, and a different star-size
@@ -114,10 +116,12 @@ Yellow sacrifice branches also use a conservative proof bound during branch sche
 same reachability proof identifies the concrete catastrophe goals used for goal-set partitioning. Score intervals are
 secondary to those goals: a goal branch may still be split into score bands, but score bands do not define the tactical
 branch. Required goal catastrophes tighten both ends of the branch's score interval: the guaranteed goal gain raises the
-lower side for player 1 or lowers the upper side for player 2, while optional remaining upside still sets the optimistic
-side. If a required goal can win by hitting the opponent homeworld, the interval also keeps the terminal win score in
-range. When the bound cannot reach the current static-prune cutoff or the active score interval, the branch is not
-explored.
+lower side for player 1 or lowers the upper side for player 2, while optional remaining upside still sets the
+optimistic side. For future catastrophes created by yellow moves, the goal gain is net of the cheapest reachable
+same-color own ships that must be moved into the system. If a required goal can win by hitting the opponent homeworld,
+the interval is the exact terminal win score; it is not combined with material gains or other catastrophes. Once a
+terminal winning move is scored, `good_moves()` clears the buffer to that move and stops exploring. When the bound
+cannot reach the current static-prune cutoff or the active score interval, the branch is not explored.
 
 The catastrophe policy distinguishes profitable and unfavorable catastrophes from the moving side's perspective. A
 profitable catastrophe destroys more opponent ship pips than own ship pips. If such a catastrophe exists at the start
