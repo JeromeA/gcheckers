@@ -14,7 +14,7 @@ enum {
 typedef enum {
   HOMEWORLDS_PROOF_PROBE_SECTION_NONE = 0,
   HOMEWORLDS_PROOF_PROBE_SECTION_REPLAY_MOVES,
-  HOMEWORLDS_PROOF_PROBE_SECTION_ALL_MOVES,
+  HOMEWORLDS_PROOF_PROBE_SECTION_REPORT_MOVES,
 } HomeworldsProofProbeReportSection;
 
 typedef struct {
@@ -47,6 +47,8 @@ static void homeworlds_proof_probe_capture_trace(const HomeworldsGoodMoveTrace *
   g_free(capture->goal_report);
   capture->goal_report = g_strdup(trace->goal_report);
   capture->trace = *trace;
+  capture->trace.moves = NULL;
+  capture->trace.move_count = 0;
   capture->trace.goal_report = capture->goal_report;
   capture->called = TRUE;
 }
@@ -902,7 +904,7 @@ static gboolean homeworlds_proof_probe_read_report(const char *path,
   g_autoptr(GError) error = NULL;
   HomeworldsProofProbeReportSection section = HOMEWORLDS_PROOF_PROBE_SECTION_NONE;
   gsize default_sample_count = 0;
-  gboolean saw_all_moves = FALSE;
+  gboolean saw_report_moves = FALSE;
 
   g_return_val_if_fail(path != NULL, FALSE);
   g_return_val_if_fail(position != NULL, FALSE);
@@ -935,13 +937,14 @@ static gboolean homeworlds_proof_probe_read_report(const char *path,
       section = HOMEWORLDS_PROOF_PROBE_SECTION_REPLAY_MOVES;
       continue;
     }
-    if (g_strcmp0(stripped_line, "all_moves:") == 0) {
-      section = HOMEWORLDS_PROOF_PROBE_SECTION_ALL_MOVES;
-      saw_all_moves = TRUE;
+    if (g_strcmp0(stripped_line, "all_moves:") == 0 || g_strcmp0(stripped_line, "good_moves:") == 0) {
+      section = HOMEWORLDS_PROOF_PROBE_SECTION_REPORT_MOVES;
+      saw_report_moves = TRUE;
       continue;
     }
     if (g_strcmp0(stripped_line, "position:") == 0 ||
-        g_str_has_prefix(stripped_line, "all_moves_streamed:")) {
+        g_str_has_prefix(stripped_line, "all_moves_streamed:") ||
+        g_str_has_prefix(stripped_line, "good_moves_count:")) {
       section = HOMEWORLDS_PROOF_PROBE_SECTION_NONE;
       continue;
     }
@@ -966,7 +969,7 @@ static gboolean homeworlds_proof_probe_read_report(const char *path,
       continue;
     }
 
-    if (section == HOMEWORLDS_PROOF_PROBE_SECTION_ALL_MOVES) {
+    if (section == HOMEWORLDS_PROOF_PROBE_SECTION_REPORT_MOVES) {
       g_autofree char *notation = NULL;
       guint number = 0;
 
@@ -987,17 +990,17 @@ static gboolean homeworlds_proof_probe_read_report(const char *path,
   }
 
   if (use_default_sample && moves->len == 0) {
-    g_printerr("No all_moves rows found in %s.\n", path);
+    g_printerr("No report move rows found in %s.\n", path);
     homeworlds_position_clear(position);
     return FALSE;
   }
   if (!use_default_sample && homeworlds_proof_probe_has_unresolved_rows(moves)) {
-    g_printerr("One or more requested all_moves rows were not found in %s.\n", path);
+    g_printerr("One or more requested report move rows were not found in %s.\n", path);
     homeworlds_position_clear(position);
     return FALSE;
   }
-  if (!saw_all_moves && use_default_sample) {
-    g_printerr("No all_moves section found in %s.\n", path);
+  if (!saw_report_moves && use_default_sample) {
+    g_printerr("No report move section found in %s.\n", path);
     homeworlds_position_clear(position);
     return FALSE;
   }
@@ -1285,9 +1288,9 @@ static gboolean homeworlds_proof_probe_run_move(const HomeworldsPosition *positi
 }
 
 static void homeworlds_proof_probe_print_usage(const char *program_name) {
-  g_printerr("usage: %s [--iterations COUNT] REPORT [ALL_MOVE_ROW | MOVE_NOTATION]...\n", program_name);
+  g_printerr("usage: %s [--iterations COUNT] REPORT [REPORT_MOVE_ROW | MOVE_NOTATION]...\n", program_name);
   g_printerr("  --iterations COUNT  print #0 expansion, then COUNT selected scheduler branches.\n");
-  g_printerr("If no rows or moves are provided, the first %u all_moves rows are probed.\n",
+  g_printerr("If no rows or moves are provided, the first %u report move rows are probed.\n",
              HOMEWORLDS_PROOF_PROBE_DEFAULT_SAMPLE_COUNT);
 }
 

@@ -263,7 +263,6 @@ static void test_homeworlds_eval_experiment_writes_big_move_report(void) {
   g_assert_nonnull(tmp_dir);
 
   envp = g_environ_setenv(envp, "GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_THRESHOLD", "0", TRUE);
-  envp = g_environ_setenv(envp, "GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_MIN_TOTAL_MOVES", "0", TRUE);
   g_assert_true(g_spawn_sync(tmp_dir, argv, envp, G_SPAWN_DEFAULT, NULL, NULL,
                              &stdout_text, &stderr_text, &wait_status, &error));
   g_strfreev(envp);
@@ -296,8 +295,10 @@ static void test_homeworlds_eval_experiment_writes_big_move_report(void) {
   g_assert_nonnull(strstr(report_text, "goal_tree:\n"));
   g_assert_nonnull(strstr(report_text, "\nmoves:\n<none>\n\nposition:\nNo systems.\n"));
   g_assert_nonnull(strstr(report_text, "position:\nNo systems.\n"));
-  g_assert_nonnull(strstr(report_text, "\nall_moves:\n"));
-  g_assert_nonnull(strstr(report_text, "all_moves_streamed: "));
+  g_assert_nonnull(strstr(report_text, "\ngood_moves:\n1. "));
+  g_assert_nonnull(strstr(report_text, "\ngood_moves_count: "));
+  g_assert_null(strstr(report_text, "\nall_moves:\n"));
+  g_assert_null(strstr(report_text, "all_moves_streamed: "));
   g_assert_null(strstr(report_text, "good_moves():"));
   g_assert_null(strstr(report_text, "good_moves_pruning_mode:"));
   g_assert_null(strstr(report_text, "good_moves_pruning_would_prune_branches:"));
@@ -338,7 +339,6 @@ static void test_homeworlds_eval_experiment_big_move_report_includes_played_move
   g_assert_nonnull(tmp_dir);
 
   envp = g_environ_setenv(envp, "GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_THRESHOLD", "0", TRUE);
-  envp = g_environ_setenv(envp, "GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_MIN_TOTAL_MOVES", "0", TRUE);
   g_assert_true(g_spawn_sync(tmp_dir, argv, envp, G_SPAWN_DEFAULT, NULL, NULL,
                              &stdout_text, &stderr_text, &wait_status, &error));
   g_strfreev(envp);
@@ -354,16 +354,18 @@ static void test_homeworlds_eval_experiment_big_move_report_includes_played_move
   g_assert_no_error(error);
   g_assert_nonnull(strstr(report_text, "\nmoves:\n1. "));
   g_assert_nonnull(strstr(report_text, "\n\nposition:\n"));
+  g_assert_nonnull(strstr(report_text, "\ngood_moves:\n"));
   g_assert_cmpint(g_remove(first_report_path), ==, 0);
   g_assert_cmpint(g_remove(second_report_path), ==, 0);
   g_assert_cmpint(g_rmdir(tmp_dir), ==, 0);
 }
 
-static void test_homeworlds_eval_experiment_discards_small_big_move_report(void) {
+static void test_homeworlds_eval_experiment_keeps_report_without_all_move_cutoff(void) {
   g_autoptr(GError) error = NULL;
   g_autofree gchar *tmp_dir = g_dir_make_tmp("homeworlds-big-move-report-XXXXXX", &error);
   g_autofree gchar *tool_path = g_canonicalize_filename(HOMEWORLDS_EVAL_EXPERIMENT_PATH, NULL);
   g_autofree gchar *report_path = NULL;
+  g_autofree gchar *report_text = NULL;
   gchar *argv[] = {
     tool_path,
     (gchar *)"--variable",
@@ -397,7 +399,11 @@ static void test_homeworlds_eval_experiment_discards_small_big_move_report(void)
   g_assert_cmpstr(stderr_text, ==, "");
 
   report_path = g_build_filename(tmp_dir, "big_move_report_001.txt", NULL);
-  g_assert_false(g_file_test(report_path, G_FILE_TEST_EXISTS));
+  g_assert_true(g_file_get_contents(report_path, &report_text, NULL, &error));
+  g_assert_no_error(error);
+  g_assert_nonnull(strstr(report_text, "\ngood_moves:\n"));
+  g_assert_null(strstr(report_text, "\nall_moves:\n"));
+  g_assert_cmpint(g_remove(report_path), ==, 0);
   g_assert_cmpint(g_rmdir(tmp_dir), ==, 0);
 }
 
@@ -421,7 +427,7 @@ int main(int argc, char **argv) {
                   test_homeworlds_eval_experiment_writes_big_move_report);
   g_test_add_func("/homeworlds-eval-experiment/big-move-report-includes-played-moves",
                   test_homeworlds_eval_experiment_big_move_report_includes_played_moves);
-  g_test_add_func("/homeworlds-eval-experiment/discards-small-big-move-report",
-                  test_homeworlds_eval_experiment_discards_small_big_move_report);
+  g_test_add_func("/homeworlds-eval-experiment/keeps-report-without-all-move-cutoff",
+                  test_homeworlds_eval_experiment_keeps_report_without_all_move_cutoff);
   return g_test_run();
 }

@@ -766,16 +766,14 @@ can force that progress display with `always`, disable it with `never`, or leave
 behavior. If a `good_moves()` call generates more than 500,000 deduplicated complete leaves, it writes
 `big_move_report_###.txt` in the current
 directory with the `good_moves()` trace, pruning counts, ordering counts, goal-tree branch counts, a bounded
-human-readable goal-tree report, and the same move-report body used by `homeworlds_profile_moves`: the moves leading
-to the reported position, the ASCII position, and a streamed dump of all generated move paths. After the stream
-finishes, reports below the default 5,000,000 streamed-move cutoff are deleted.
+human-readable goal-tree report, the moves leading to the reported position, the ASCII position, and the kept
+`good_moves()` rows. It does not stream the full legal move list for these reports.
 The `build/tools/homeworlds_proof_probe` CLI reads one of those move reports and recomputes the current `good_moves()`
 cutoff. With `--iterations COUNT`, it prints a compact goal-tree report with the initial `#0` expansion and the next
 COUNT selected scheduler branches, listing each created branch and summarizing what each selected branch did. With
-requested `all_moves` row numbers or quoted move notations, it prints the yellow-sacrifice proof status after each
-step. The
-`GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_THRESHOLD` and `GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_MIN_TOTAL_MOVES`
-environment variables can override those thresholds for diagnostic runs and tests. It frees any
+requested report row numbers or quoted move notations, it prints the yellow-sacrifice proof status after each step.
+The `GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_THRESHOLD` environment variable can override the report threshold for
+diagnostic runs and tests. It frees any
 generated candidate list before leaving an error path. The Homeworlds board host also syncs its
 last-move label and previous-move board markers from SGF current-node changes so timeline
 navigation and direct play report the same move. The board markers reuse the reconstructed parent position to mark

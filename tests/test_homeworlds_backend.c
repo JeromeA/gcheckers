@@ -969,6 +969,9 @@ static void test_capture_good_move_trace(const HomeworldsGoodMoveTrace *trace, g
   capture->trace = *trace;
   g_free(capture->goal_report);
   capture->goal_report = g_strdup(trace->goal_report);
+  capture->trace.moves = NULL;
+  capture->trace.move_count = 0;
+  capture->trace.goal_report = capture->goal_report;
   capture->called = TRUE;
 }
 

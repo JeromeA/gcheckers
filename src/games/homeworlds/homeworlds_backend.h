@@ -37,6 +37,8 @@ typedef struct {
   gsize goal_branches_direct;
   gsize goal_branches_skipped;
   gsize goal_branches_exhausted;
+  const HomeworldsMove *moves;
+  gsize move_count;
   const char *goal_report;
 } HomeworldsGoodMoveTrace;
 

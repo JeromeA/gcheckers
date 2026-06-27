@@ -5845,8 +5845,10 @@ static void homeworlds_backend_trace_good_moves(const HomeworldsPosition *positi
                                                 gsize generated_leaves,
                                                 gsize scored_moves,
                                                 gsize kept_moves,
+                                                const HomeworldsMove *moves,
                                                 const HomeworldsGoodMoveContext *context) {
   g_return_if_fail(position != NULL);
+  g_return_if_fail(kept_moves == 0 || moves != NULL);
   g_return_if_fail(context != NULL);
 
   if (homeworlds_backend_good_move_trace_func == NULL) {
@@ -5875,6 +5877,8 @@ static void homeworlds_backend_trace_good_moves(const HomeworldsPosition *positi
     .goal_branches_direct = context->goal_branches_direct,
     .goal_branches_skipped = context->goal_branches_skipped,
     .goal_branches_exhausted = context->goal_branches_exhausted,
+    .moves = moves,
+    .move_count = kept_moves,
     .goal_report = context->goal_report != NULL ? context->goal_report->str : NULL,
   };
 
@@ -5923,6 +5927,7 @@ static GameBackendMoveList homeworlds_backend_list_good_moves(gconstpointer posi
                                       buffer.leaves_seen,
                                       buffer.scored_moves,
                                       count,
+                                      moves,
                                       &context);
 
   homeworlds_move_builder_clear(&builder);

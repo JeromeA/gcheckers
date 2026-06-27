@@ -1,7 +1,7 @@
 #include "ai_search.h"
 #include "games/homeworlds/homeworlds_backend.h"
 #include "games/homeworlds/homeworlds_game.h"
-#include "games/homeworlds/homeworlds_move_report.h"
+#include "games/homeworlds/homeworlds_position_text.h"
 
 #include <errno.h>
 #include <glib/gstdio.h>
@@ -16,14 +16,11 @@ enum {
   HOMEWORLDS_EXPERIMENT_DEPTH = 1,
   HOMEWORLDS_EXPERIMENT_DEFAULT_GAMES = 100,
   HOMEWORLDS_EXPERIMENT_DEFAULT_MAX_PLIES = 300,
-  HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_THRESHOLD = 500000,
-  HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_MIN_TOTAL_MOVES = 5000000,
+  HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_THRESHOLD = 100000,
 };
 
 static const char *HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_THRESHOLD_ENV =
     "GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_THRESHOLD";
-static const char *HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_MIN_TOTAL_MOVES_ENV =
-    "GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_MIN_TOTAL_MOVES";
 static const char *HOMEWORLDS_EXPERIMENT_PROGRESS_ENV = "GCHECKERS_HOMEWORLDS_EVAL_PROGRESS";
 
 typedef enum {
@@ -201,20 +198,6 @@ static gsize homeworlds_experiment_big_move_report_threshold(void) {
   return threshold;
 }
 
-static gsize homeworlds_experiment_big_move_report_min_total_moves(void) {
-  const char *min_total_moves_text = g_getenv(HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_MIN_TOTAL_MOVES_ENV);
-  gsize min_total_moves = HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_MIN_TOTAL_MOVES;
-
-  if (min_total_moves_text == NULL) {
-    return min_total_moves;
-  }
-  if (!homeworlds_experiment_parse_gsize(min_total_moves_text, &min_total_moves)) {
-    g_debug("Ignoring invalid %s value", HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_MIN_TOTAL_MOVES_ENV);
-    return HOMEWORLDS_EXPERIMENT_BIG_MOVE_REPORT_MIN_TOTAL_MOVES;
-  }
-  return min_total_moves;
-}
-
 static char *homeworlds_experiment_next_big_move_report_path(void) {
   while (homeworlds_experiment_big_move_report_counter < G_MAXUINT) {
     g_autofree char *path =
@@ -330,13 +313,102 @@ static GameBackendOutcome homeworlds_experiment_no_move_outcome(const Homeworlds
       : GAME_BACKEND_OUTCOME_SIDE_0_WIN;
 }
 
+static gboolean homeworlds_experiment_write_report_text(FILE *file, const char *text) {
+  g_return_val_if_fail(file != NULL, FALSE);
+  g_return_val_if_fail(text != NULL, FALSE);
+
+  return fputs(text, file) >= 0;
+}
+
+static gboolean homeworlds_experiment_write_report_played_moves(FILE *file, const GArray *played_moves) {
+  g_return_val_if_fail(file != NULL, FALSE);
+
+  if (!homeworlds_experiment_write_report_text(file, "moves:\n")) {
+    return FALSE;
+  }
+  if (played_moves == NULL || played_moves->len == 0) {
+    return homeworlds_experiment_write_report_text(file, "<none>\n\n");
+  }
+
+  for (guint i = 0; i < played_moves->len; ++i) {
+    const HomeworldsMove *move = &g_array_index(played_moves, HomeworldsMove, i);
+    char notation[128] = {0};
+
+    if (!homeworlds_move_format(move, notation, sizeof(notation))) {
+      if (fprintf(file, "%u. <unformattable move>\n", i + 1) < 0) {
+        return FALSE;
+      }
+      continue;
+    }
+    if (fprintf(file, "%u. %s\n", i + 1, notation) < 0) {
+      return FALSE;
+    }
+  }
+
+  return homeworlds_experiment_write_report_text(file, "\n");
+}
+
+static gboolean homeworlds_experiment_write_report_position(FILE *file, const HomeworldsPosition *position) {
+  g_autofree char *ascii = NULL;
+
+  g_return_val_if_fail(file != NULL, FALSE);
+  g_return_val_if_fail(position != NULL, FALSE);
+
+  ascii = homeworlds_position_format_ascii(position);
+  if (ascii == NULL) {
+    g_debug("Failed to format Homeworlds position for big move report");
+    return FALSE;
+  }
+
+  if (fprintf(file, "position:\n%s", ascii) < 0) {
+    return FALSE;
+  }
+  if (!g_str_has_suffix(ascii, "\n") && !homeworlds_experiment_write_report_text(file, "\n")) {
+    return FALSE;
+  }
+  return homeworlds_experiment_write_report_text(file, "\n");
+}
+
+static gboolean homeworlds_experiment_write_report_good_moves(FILE *file, const HomeworldsGoodMoveTrace *trace) {
+  const char *word = NULL;
+
+  g_return_val_if_fail(file != NULL, FALSE);
+  g_return_val_if_fail(trace != NULL, FALSE);
+  g_return_val_if_fail(trace->move_count == 0 || trace->moves != NULL, FALSE);
+
+  if (!homeworlds_experiment_write_report_text(file, "good_moves:\n")) {
+    return FALSE;
+  }
+  if (trace->move_count == 0) {
+    if (!homeworlds_experiment_write_report_text(file, "<none>\n")) {
+      return FALSE;
+    }
+  }
+
+  for (gsize i = 0; i < trace->move_count; ++i) {
+    char notation[128] = {0};
+
+    if (!homeworlds_move_format(&trace->moves[i], notation, sizeof(notation))) {
+      g_debug("Failed to format Homeworlds good move for big move report");
+      if (fprintf(file, "%" G_GSIZE_FORMAT ". <unformattable move>\n", i + 1) < 0) {
+        return FALSE;
+      }
+      continue;
+    }
+    if (fprintf(file, "%" G_GSIZE_FORMAT ". %s\n", i + 1, notation) < 0) {
+      return FALSE;
+    }
+  }
+
+  word = trace->move_count == 1 ? "move" : "moves";
+  return fprintf(file, "\ngood_moves_count: %" G_GSIZE_FORMAT " %s\n", trace->move_count, word) >= 0;
+}
+
 static void homeworlds_experiment_write_big_move_report(const HomeworldsGoodMoveTrace *trace,
                                                         const HomeworldsExperimentMoveTraceContext *context) {
   g_autofree char *path = NULL;
   FILE *file = NULL;
   gboolean report_written = FALSE;
-  gsize all_move_count = 0;
-  gsize min_total_moves = 0;
 
   g_return_if_fail(trace != NULL);
   g_return_if_fail(trace->position != NULL);
@@ -390,24 +462,13 @@ static void homeworlds_experiment_write_big_move_report(const HomeworldsGoodMove
   if (trace->goal_report != NULL && trace->goal_report[0] != '\0') {
     fprintf(file, "goal_tree:\n%s\n", trace->goal_report);
   }
-  report_written = homeworlds_move_report_write(file, trace->position, context->played_moves, &all_move_count);
+  report_written = homeworlds_experiment_write_report_played_moves(file, context->played_moves) &&
+                   homeworlds_experiment_write_report_position(file, trace->position) &&
+                   homeworlds_experiment_write_report_good_moves(file, trace);
 
   if (fclose(file) != 0 || !report_written) {
     homeworlds_experiment_progress_clear(context->progress);
     g_printerr("Failed to finish %s Homeworlds big move report.\n", path);
-    return;
-  }
-
-  min_total_moves = homeworlds_experiment_big_move_report_min_total_moves();
-  if (all_move_count < min_total_moves) {
-    if (g_remove(path) != 0) {
-      homeworlds_experiment_progress_clear(context->progress);
-      g_printerr("Failed to delete %s Homeworlds big move report with only %" G_GSIZE_FORMAT " total moves.\n",
-                 path,
-                 all_move_count);
-      return;
-    }
-
     return;
   }
 }

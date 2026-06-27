@@ -19,9 +19,9 @@ static gchar *test_homeworlds_proof_probe_create_report(void) {
       "\n"
       "H1: - G1R2 b3\n"
       "\n"
-      "all_moves:\n"
+      "good_moves:\n"
       "1. H1b+\n"
-      "all_moves_streamed: 1\n";
+      "good_moves_count: 1 move\n";
   g_autoptr(GError) error = NULL;
   gchar *path = NULL;
   gint fd = g_file_open_tmp("homeworlds-proof-probe-XXXXXX.txt", &path, &error);
@@ -114,7 +114,7 @@ static void test_homeworlds_proof_probe_rejects_missing_report_row(void) {
   g_assert_no_error(error);
   g_assert_false(g_spawn_check_wait_status(wait_status, NULL));
   g_assert_cmpstr(stdout_text, ==, "");
-  g_assert_nonnull(strstr(stderr_text, "requested all_moves rows were not found"));
+  g_assert_nonnull(strstr(stderr_text, "requested report move rows were not found"));
   g_assert_cmpint(g_remove(report_path), ==, 0);
 }
 
