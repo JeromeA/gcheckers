@@ -856,6 +856,28 @@ static gboolean test_goal_report_find_goal_interval(const char *report,
   return FALSE;
 }
 
+static guint test_goal_report_assert_score_split_buckets(const char *report) {
+  const char *cursor = NULL;
+  guint count = 0;
+
+  assert(report != NULL);
+
+  cursor = report;
+  while ((cursor = strstr(cursor, "score-split #")) != NULL) {
+    const char *explore = strstr(cursor, "explore=[");
+    gint min = 0;
+    gint max = 0;
+
+    assert(explore != NULL);
+    assert(sscanf(explore, "explore=[%d,%d]", &min, &max) == 2);
+    assert(min <= max);
+    assert((gint64) max - min + 1 >= 10);
+    count++;
+    cursor = explore + strlen("explore=[");
+  }
+  return count;
+}
+
 static const HomeworldsMoveCandidate *test_find_trade_color_candidate(const GameBackend *backend,
                                                                       const GameBackendMoveList *candidates,
                                                                       HomeworldsColor color) {
@@ -1732,6 +1754,7 @@ static void test_backend_good_move_trace_records_pruning(void) {
   assert(strstr(capture.goal_report, "direct-result #0 single-steps") != NULL);
   assert(strstr(capture.goal_report, " single-step interval=") == NULL);
   assert(strstr(capture.goal_report, "score-split #") != NULL);
+  assert(test_goal_report_assert_score_split_buckets(capture.goal_report) > 0);
   assert(strstr(capture.goal_report, "explore-result #") != NULL);
 
   backend->move_list_free(&good_moves);

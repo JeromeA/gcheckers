@@ -92,11 +92,12 @@ single-step actions, sacrifices, yellow sacrifice goal partitions, or a generic 
 reachable positive catastrophe goals is split by exact goal set first. With two scheduled goals, for example, the
 partitions are "both goals", "first goal only", "second goal only", and "none of those goals"; completed moves that do
 not match the branch's exact goal set are rejected by that branch. A branch also stores an integer score interval. If
-the best branch can reach `+50` and the next best branch can reach only `+30`, the scheduler explores the best branch's
-`+30` to `+50` band first and requeues the lower band as a separate branch. For player 2 the same comparison is
-reversed because lower scores are better. Branches with a conservative leaf upper bound of 50 or less are explored
-directly instead of being split further. Sacrifice branch leaf bounds include every possible early pass-completion
-prefix, because the builder can finish a sacrifice by appending passes for all remaining sacrifice actions.
+the best branch can reach `+50` and the next best branch can reach only `+30`, the scheduler explores every 10-point
+bucket that is exclusive to the best branch, plus one overlapping 10-point bucket, and requeues the lower band as a
+separate branch. For player 2 the same comparison is reversed because lower scores are better. Branches with a
+conservative leaf upper bound of 50 or less are explored directly instead of being split further. Sacrifice branch leaf
+bounds include every possible early pass-completion prefix, because the builder can finish a sacrifice by appending
+passes for all remaining sacrifice actions.
 
 Setup moves are filtered to prefer playable starts: three distinct colors across the two stars and starting ship, a
 large starting ship, two different homeworld star sizes, green included for player 1, and a different star-size

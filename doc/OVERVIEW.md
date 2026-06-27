@@ -722,8 +722,9 @@ a shared sacrifice-scoped state deduper: generated sacrifice branches keep one t
 that sacrifice, prune catastrophe-before-sacrifice spellings, and drop equivalent continuation states without storing
 hashes for the whole move tree. The backend `good_moves()` collector schedules play-position exploration as a goal
 tree. Branches hold copied builder states, conservative score intervals, and upper bounds on possible leaves; the
-scheduler explores the best current score band first, requeues any remaining band, and skips branches whose optimistic
-bound cannot reach the current cutoff. Root-level single-action moves are collected and scored directly before
+scheduler explores the best current score band first, including all exclusive 10-point score buckets plus one
+overlapping bucket, requeues any remaining band, and skips branches whose optimistic bound cannot reach the current
+cutoff. Root-level single-action moves are collected and scored directly before
 sacrifice branches are queued, so they can seed the cutoff without paying the goal-branch scheduling cost. During
 active yellow sacrifices, reachable positive catastrophes become explicit goal-set partitions before score intervals
 are split further; a completed move belongs only to the branch matching exactly the scheduled catastrophe goals it

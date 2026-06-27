@@ -11,6 +11,7 @@ enum {
   HOMEWORLDS_GOOD_MOVE_STATIC_PRUNE_LIMIT = 512,
   HOMEWORLDS_GOOD_MOVE_STATIC_PRUNE_WINDOW = 50,
   HOMEWORLDS_GOAL_BRANCH_SMALL_LEAF_LIMIT = 50,
+  HOMEWORLDS_GOAL_BRANCH_SCORE_BUCKET_SIZE = 10,
   HOMEWORLDS_GOAL_REPORT_MAX_LINES = 2048,
   HOMEWORLDS_GOAL_BRANCH_MAX_CATASTROPHE_GOALS = 4,
 };
@@ -584,6 +585,26 @@ static gboolean homeworlds_backend_goal_branch_can_reach_cutoff(guint side,
 
 static gboolean homeworlds_backend_goal_bound_is_finite(gint bound) {
   return bound != G_MININT && bound != G_MAXINT;
+}
+
+static gint homeworlds_backend_goal_bucket_min_ending_at(gint score) {
+  gint64 bucket_min = 0;
+
+  bucket_min = (gint64) score - HOMEWORLDS_GOAL_BRANCH_SCORE_BUCKET_SIZE + 1;
+  if (bucket_min < G_MININT) {
+    return G_MININT;
+  }
+  return (gint) bucket_min;
+}
+
+static gint homeworlds_backend_goal_bucket_max_starting_at(gint score) {
+  gint64 bucket_max = 0;
+
+  bucket_max = (gint64) score + HOMEWORLDS_GOAL_BRANCH_SCORE_BUCKET_SIZE - 1;
+  if (bucket_max > G_MAXINT) {
+    return G_MAXINT;
+  }
+  return (gint) bucket_max;
 }
 
 static void homeworlds_backend_format_optional_goal_score(gboolean has_score,
@@ -5136,9 +5157,9 @@ static gboolean homeworlds_backend_goal_branch_split_score_interval(HomeworldsGo
   old_min = branch->interval_min;
   old_max = branch->interval_max;
   if (side == 0) {
-    gint top_min = MAX(old_min, second_best_bound);
+    gint top_min = MAX(old_min, homeworlds_backend_goal_bucket_min_ending_at(second_best_bound));
 
-    if (top_min <= old_min || top_min > old_max || top_min == G_MININT) {
+    if (top_min <= old_min || top_min > old_max) {
       return TRUE;
     }
     remainder = homeworlds_backend_goal_branch_clone_for_interval(queue,
@@ -5151,9 +5172,9 @@ static gboolean homeworlds_backend_goal_branch_split_score_interval(HomeworldsGo
     }
     branch->interval_min = top_min;
   } else {
-    gint top_max = MIN(old_max, second_best_bound);
+    gint top_max = MIN(old_max, homeworlds_backend_goal_bucket_max_starting_at(second_best_bound));
 
-    if (top_max >= old_max || top_max < old_min || top_max == G_MAXINT) {
+    if (top_max >= old_max || top_max < old_min) {
       return TRUE;
     }
     remainder = homeworlds_backend_goal_branch_clone_for_interval(queue,
