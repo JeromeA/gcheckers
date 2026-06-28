@@ -454,7 +454,6 @@ static void homeworlds_proof_probe_print_collection_result(const char *line,
   char best_text[64] = {0};
   char cutoff_text[64] = {0};
   char pruned[32] = {0};
-  char created[32] = {0};
   char duplicate[32] = {0};
   char step_reject[32] = {0};
   char bad_move[32] = {0};
@@ -475,8 +474,7 @@ static void homeworlds_proof_probe_print_collection_result(const char *line,
       !homeworlds_proof_probe_extract_token_value(line, "kept=", kept, sizeof(kept)) ||
       !homeworlds_proof_probe_extract_token_value(line, "best=", best, sizeof(best)) ||
       !homeworlds_proof_probe_extract_token_value(line, "cutoff=", cutoff, sizeof(cutoff)) ||
-      !homeworlds_proof_probe_extract_token_value(line, "pruned+=", pruned, sizeof(pruned)) ||
-      !homeworlds_proof_probe_extract_token_value(line, "created+=", created, sizeof(created))) {
+      !homeworlds_proof_probe_extract_token_value(line, "pruned+=", pruned, sizeof(pruned))) {
     g_print("%sresult: %s\n", indent, line);
     return;
   }
@@ -494,16 +492,14 @@ static void homeworlds_proof_probe_print_collection_result(const char *line,
   if (summary[0] != '\0') {
     g_print(" %s;", summary);
   }
-  g_print(" leaves +%s, scored +%s, inside interval +%s, kept %s, best %s, cutoff %s, pruned descendants +%s, "
-          "created goal branches +%s",
+  g_print(" leaves +%s, scored +%s, inside interval +%s, kept %s, best %s, cutoff %s, pruned descendants +%s",
           leaves,
           scored,
           inside_interval,
           kept_text,
           best_text,
           cutoff_text,
-          pruned,
-          created);
+          pruned);
   homeworlds_proof_probe_extract_token_value(line, "duplicate+=", duplicate, sizeof(duplicate));
   homeworlds_proof_probe_extract_token_value(line, "step_reject+=", step_reject, sizeof(step_reject));
   homeworlds_proof_probe_extract_token_value(line, "bad_move+=", bad_move, sizeof(bad_move));

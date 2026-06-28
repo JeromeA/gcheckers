@@ -99,7 +99,6 @@ typedef struct {
   gsize scored_moves;
   gsize kept_moves;
   gsize pruned_branches;
-  gsize created_branches;
   gsize duplicate_states;
   gsize rejected_steps;
   gsize rejected_bad_moves;
@@ -761,7 +760,6 @@ static void homeworlds_backend_goal_collection_snapshot_take(HomeworldsGoalColle
     .scored_moves = buffer->scored_moves,
     .kept_moves = buffer->count,
     .pruned_branches = context->pruning_pruned_branches,
-    .created_branches = context->goal_branches_created,
     .duplicate_states = context->goal_duplicate_states,
     .rejected_steps = context->goal_rejected_steps,
     .rejected_bad_moves = context->goal_rejected_bad_moves,
@@ -804,7 +802,7 @@ static void homeworlds_backend_goal_report_collection_result(HomeworldsGoodMoveC
   homeworlds_backend_goal_report_append(context,
                                         "%s #%zu%s covered=%u leaves+=%zu scored+=%zu inside_interval+=%zu "
                                         "kept=%zu->%zu "
-                                        "best=%s->%s cutoff=%s->%s pruned+=%zu created+=%zu duplicate+=%zu "
+                                        "best=%s->%s cutoff=%s->%s pruned+=%zu duplicate+=%zu "
                                         "step_reject+=%zu bad_move+=%zu goal_filter_reject+=%zu "
                                         "root_cat_reject+=%zu interval_reject+=%zu window_reject+=%zu "
                                         "full_reject+=%zu",
@@ -824,7 +822,6 @@ static void homeworlds_backend_goal_report_collection_result(HomeworldsGoodMoveC
                                         snapshot->cutoff_text,
                                         new_cutoff_text,
                                         context->pruning_pruned_branches - snapshot->pruned_branches,
-                                        context->goal_branches_created - snapshot->created_branches,
                                         context->goal_duplicate_states - snapshot->duplicate_states,
                                         context->goal_rejected_steps - snapshot->rejected_steps,
                                         context->goal_rejected_bad_moves - snapshot->rejected_bad_moves,
