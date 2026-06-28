@@ -75,7 +75,7 @@ static void test_homeworlds_eval_experiment_reports_timeouts(void) {
   g_assert_no_error(error);
   g_assert_cmpstr(stderr_text, ==, "");
   g_assert_nonnull(strstr(stdout_text, "value,candidate_wins,baseline_wins,win_ratio,draws,timeouts\n"));
-  g_assert_nonnull(strstr(stdout_text, "5,1,1,0.500000,0,0\n"));
+  g_assert_nonnull(strstr(stdout_text, "5,0,0,,0,2\n"));
 }
 
 static void test_homeworlds_eval_experiment_rejects_unknown_variable(void) {
@@ -193,7 +193,7 @@ static void test_homeworlds_eval_experiment_traces_move_counts(void) {
                           "ordering_reordered_candidates,ordering_single_step_passes,"
                           "ordering_single_step_moves,"
                           "goal_branches_created,goal_branches_selected,goal_branches_split,"
-                          "goal_branches_requeued,goal_branches_direct,goal_branches_skipped,"
+                          "goal_branches_direct,goal_branches_skipped,"
                           "goal_branches_exhausted\n"));
   g_assert_nonnull(strstr(stderr_text, "move-count,5,"));
 }
@@ -288,7 +288,7 @@ static void test_homeworlds_eval_experiment_writes_big_move_report(void) {
   g_assert_nonnull(strstr(report_text, "good_moves_goal_branches_created: "));
   g_assert_nonnull(strstr(report_text, "good_moves_goal_branches_selected: "));
   g_assert_nonnull(strstr(report_text, "good_moves_goal_branches_split: "));
-  g_assert_nonnull(strstr(report_text, "good_moves_goal_branches_requeued: "));
+  g_assert_null(strstr(report_text, "good_moves_goal_branches_requeued: "));
   g_assert_nonnull(strstr(report_text, "good_moves_goal_branches_direct: "));
   g_assert_nonnull(strstr(report_text, "good_moves_goal_branches_skipped: "));
   g_assert_nonnull(strstr(report_text, "good_moves_goal_branches_exhausted: "));

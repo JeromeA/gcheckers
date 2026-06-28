@@ -455,7 +455,6 @@ static void homeworlds_experiment_write_big_move_report(const HomeworldsGoodMove
   fprintf(file, "good_moves_goal_branches_created: %" G_GSIZE_FORMAT "\n", trace->goal_branches_created);
   fprintf(file, "good_moves_goal_branches_selected: %" G_GSIZE_FORMAT "\n", trace->goal_branches_selected);
   fprintf(file, "good_moves_goal_branches_split: %" G_GSIZE_FORMAT "\n", trace->goal_branches_split);
-  fprintf(file, "good_moves_goal_branches_requeued: %" G_GSIZE_FORMAT "\n", trace->goal_branches_requeued);
   fprintf(file, "good_moves_goal_branches_direct: %" G_GSIZE_FORMAT "\n", trace->goal_branches_direct);
   fprintf(file, "good_moves_goal_branches_skipped: %" G_GSIZE_FORMAT "\n", trace->goal_branches_skipped);
   fprintf(file, "good_moves_goal_branches_exhausted: %" G_GSIZE_FORMAT "\n\n", trace->goal_branches_exhausted);
@@ -485,7 +484,7 @@ static void homeworlds_experiment_trace_move_generation(const HomeworldsGoodMove
                ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT
                ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT
                ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT
-               ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT "\n",
+               ",%" G_GSIZE_FORMAT ",%" G_GSIZE_FORMAT "\n",
                context->value,
                context->game,
                context->seed,
@@ -507,7 +506,6 @@ static void homeworlds_experiment_trace_move_generation(const HomeworldsGoodMove
                trace->goal_branches_created,
                trace->goal_branches_selected,
                trace->goal_branches_split,
-               trace->goal_branches_requeued,
                trace->goal_branches_direct,
                trace->goal_branches_skipped,
                trace->goal_branches_exhausted);
@@ -851,7 +849,7 @@ int main(int argc, char **argv) {
                "pruning_checked_branches,pruning_window_cutoff_branches,pruning_pruned_branches,"
                "ordering_candidate_lists,ordering_reordered_candidate_lists,ordering_reordered_candidates,"
                "ordering_single_step_passes,ordering_single_step_moves,"
-               "goal_branches_created,goal_branches_selected,goal_branches_split,goal_branches_requeued,"
+               "goal_branches_created,goal_branches_selected,goal_branches_split,"
                "goal_branches_direct,goal_branches_skipped,goal_branches_exhausted\n");
   }
 

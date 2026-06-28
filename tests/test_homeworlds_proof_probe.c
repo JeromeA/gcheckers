@@ -86,11 +86,13 @@ static void test_homeworlds_proof_probe_prints_iteration_report(void) {
   g_assert_nonnull(strstr(stdout_text, "cutoff="));
   g_assert_nonnull(strstr(stdout_text, "#0 expansion:"));
   g_assert_nonnull(strstr(stdout_text, "directly collected root single-step moves"));
-  g_assert_nonnull(strstr(stdout_text, "inside interval"));
+  g_assert_nonnull(strstr(stdout_text, "scored +"));
   g_assert_null(strstr(stdout_text, "root expansion:"));
   g_assert_null(strstr(stdout_text, "Selected branches after #0 expansion"));
   g_assert_null(strstr(stdout_text, "finished traversal with selected score filter"));
   g_assert_null(strstr(stdout_text, "recursive pruning covered some descendants"));
+  g_assert_null(strstr(stdout_text, "score split"));
+  g_assert_null(strstr(stdout_text, "outside-interval"));
   g_assert_null(strstr(stdout_text, "same-shape branches"));
   g_assert_null(strstr(stdout_text, "parent_" "delta"));
   g_assert_cmpint(g_remove(report_path), ==, 0);

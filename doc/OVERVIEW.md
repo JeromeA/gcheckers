@@ -721,18 +721,18 @@ all-move generator without calling the AI-oriented `good_moves()` path. Both all
 a shared sacrifice-scoped state deduper: generated sacrifice branches keep one temporary table for the descendants of
 that sacrifice, prune catastrophe-before-sacrifice spellings, and drop equivalent continuation states without storing
 hashes for the whole move tree. The backend `good_moves()` collector schedules play-position exploration as a goal
-tree. Branches hold copied builder states, conservative score intervals, and upper bounds on possible leaves; the
-scheduler explores the best current score band first, including all exclusive 10-point score buckets plus one
-overlapping bucket, requeues any remaining band, and skips branches whose optimistic bound cannot reach the current
-cutoff. Root-level single-action moves are collected and scored directly before
+tree. Branches hold copied builder states, conservative score bounds, and upper bounds on possible leaves; the
+scheduler explores the branch whose best bound is most useful, splits only by tactical goals, and otherwise explores
+selected branches in full. Branches whose optimistic bound cannot reach the current cutoff are skipped. Root-level
+single-action moves are collected and scored directly before
 sacrifice branches are queued, so they can seed the cutoff without paying the goal-branch scheduling cost. During
-active yellow sacrifices, reachable positive catastrophes become explicit goal-set partitions before score intervals
-are split further; if one reachable goal wins by destroying the opponent homeworld, the split is just that terminal
-goal versus all non-terminal goal combinations. Required non-terminal goal gains tighten both the guaranteed and
-optimistic sides of the interval, while terminal homeworld wins set an exact terminal-score interval and are never
-added to material gains. Once a terminal winning move is scored, `good_moves()` keeps that move and stops exploring
-because no deeper or sibling branch can beat it. The same optimistic proof bound is used for branch pruning and local
-continuation ordering. Forced sacrifice
+active yellow sacrifices, reachable positive catastrophes become explicit goal-set partitions; if one reachable goal
+wins by destroying the opponent homeworld, the split is just that terminal goal versus all non-terminal goal
+combinations. Required non-terminal goal gains tighten both the guaranteed and optimistic sides of the score bounds,
+while terminal homeworld wins collapse the bounds to the exact terminal score and are never added to material gains.
+Once a terminal winning move is scored, `good_moves()` keeps that move and stops exploring because no deeper or sibling
+branch can beat it. The same optimistic proof bound is used for branch pruning and local continuation ordering. Forced
+sacrifice
 branches also estimate a conservative leaf upper bound from the current set of possible forced steps plus reachable
 positive catastrophes: green counts build choices, red counts attacks, blue counts trades, and yellow counts one-hop
 moves/discoveries. The leaf bound includes every early pass-completion prefix, because a sacrifice can stop before

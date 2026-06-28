@@ -22,11 +22,11 @@ position and rejects invalid moves. For Homeworlds, the generic model cannot val
 Homeworlds intentionally does not expose a full legal move list.
 
 `homeworlds_backend.c` implements `list_good_moves()`. It uses the staged builder as the legal next-choice source, but
-it schedules AI exploration through a goal tree. A goal branch owns a copied builder state, a side-aware score interval,
-and an optimistic leaf-count bound. The scheduler explores the branch whose best score bound is currently most useful,
-splits it by score band when another branch becomes competitive, and skips branches whose upper bound cannot enter the
-static-prune buffer. That means `good_moves()` is not the same thing as legal move generation: it is legal move
-generation plus AI policy, branch ordering, and pruning.
+it schedules AI exploration through a goal tree. A goal branch owns a copied builder state, conservative side-aware
+score bounds, and an optimistic leaf-count bound. The scheduler explores the branch whose best score bound is currently
+most useful, splits a large branch only when it can create more specific tactical goal branches, and skips branches
+whose optimistic bound cannot enter the static-prune buffer. That means `good_moves()` is not the same thing as legal
+move generation: it is legal move generation plus AI policy, branch ordering, and pruning.
 
 `homeworlds_move_report.c` has a separate diagnostic collector for the text panel and profiling tools. It recursively
 walks the builder to show the legal moves, then displays a count header for `good_moves()` and all moves before listing
@@ -94,12 +94,11 @@ example, the partitions are "both goals", "first goal only", "second goal only",
 moves that do not match the branch's exact goal set are rejected by that branch. If one scheduled goal wins by
 destroying the opponent homeworld, that terminal goal absorbs the other goals: the scheduler creates one branch
 requiring the win, then branches for the non-terminal combinations with the win excluded. A branch also stores an
-integer score interval. If the best branch can reach `+50` and the next best branch can reach only `+30`, the scheduler
-explores every 10-point bucket that is exclusive to the best branch, plus one overlapping 10-point bucket, and requeues
-the lower band as a separate branch. For player 2 the same comparison is reversed because lower scores are better.
-Branches with a conservative leaf upper bound of 50 or less are explored directly instead of being split further.
-Sacrifice branch leaf bounds include every possible early pass-completion prefix, because the builder can finish a
-sacrifice by appending passes for all remaining sacrifice actions.
+integer score-bound range used for ordering and cutoff checks. The range is not a filter: after goal splitting is no
+longer possible or useful, the selected branch is explored in full. Branches with a conservative leaf upper bound of 50
+or less are explored directly instead of being split further. Sacrifice branch leaf bounds include every possible early
+pass-completion prefix, because the builder can finish a sacrifice by appending passes for all remaining sacrifice
+actions.
 
 Setup moves are filtered to prefer playable starts: three distinct colors across the two stars and starting ship, a
 large starting ship, two different homeworld star sizes, green included for player 1, and a different star-size
@@ -113,16 +112,15 @@ rejects builds that create an unfavorable catastrophe, and rejects a small sacri
 was already available at that system. Equivalent continuations inside a sacrifice are pruned by the shared
 sacrifice-scoped builder-state deduper instead of by color-specific adjacent-step rules.
 Yellow sacrifice branches also use a conservative proof bound during branch scheduling and branch exploration. The
-same reachability proof identifies the concrete catastrophe goals used for goal-set partitioning. Score intervals are
-secondary to those goals: a goal branch may still be split into score bands, but score bands do not define the tactical
-branch. Required goal catastrophes tighten both ends of the branch's score interval: the guaranteed goal gain raises the
-lower side for player 1 or lowers the upper side for player 2, while optional remaining upside still sets the
-optimistic side. For future catastrophes created by yellow moves, the goal gain is net of the cheapest reachable
-same-color own ships that must be moved into the system, and includes favorable buildability changes from the
-catastrophe as well as material and non-terminal homeworld-star effects. If a required goal can win by hitting the
-opponent homeworld, the interval is the exact terminal win score; it is not combined with material gains or other
-catastrophes. Once a terminal winning move is scored, `good_moves()` clears the buffer to that move and stops exploring.
-When the bound cannot reach the current static-prune cutoff or the active score interval, the branch is not explored.
+same reachability proof identifies the concrete catastrophe goals used for goal-set partitioning. Required goal
+catastrophes tighten both ends of the branch's score bounds: the guaranteed goal gain raises the lower side for player
+1 or lowers the upper side for player 2, while optional remaining upside still sets the optimistic side. For future
+catastrophes created by yellow moves, the goal gain is net of the cheapest reachable same-color own ships that must be
+moved into the system, and includes favorable buildability changes from the catastrophe as well as material and
+non-terminal homeworld-star effects. If a required goal can win by hitting the opponent homeworld, the bounds collapse
+to the exact terminal win score; it is not combined with material gains or other catastrophes. Once a terminal winning
+move is scored, `good_moves()` clears the buffer to that move and stops exploring. When the optimistic bound cannot
+reach the current static-prune cutoff, the branch is not explored.
 
 The catastrophe policy distinguishes profitable and unfavorable catastrophes from the moving side's perspective. A
 profitable catastrophe destroys more opponent ship pips than own ship pips. If such a catastrophe exists at the start
@@ -138,8 +136,8 @@ candidates in the builder, so that branch naturally fails to produce a completed
 ## Good Move Policy Shape
 
 The branch explorer keeps policy in named predicates rather than hiding it in traversal mechanics. The important
-decision points are pass handling, child-state checks after an appended step, branch score-interval filtering, and
-completed-move checks:
+decision points are pass handling, child-state checks after an appended step, goal-contract checks, and completed-move
+checks:
 
 ```c
 if (candidate_is_pass(candidate)) {
@@ -154,15 +152,12 @@ if (!child_state_is_good_after_step(state, child)) {
 if (!completed_move_satisfies_root_catastrophe_requirement(context, move)) {
   prune;
 }
-if (!completed_score_is_inside_active_branch_interval(context, score)) {
-  discard;
-}
 ```
 
 The exact helper names are not important. Child-state predicates say why the consequence of a choice is unsafe.
-Completed-move predicates say what whole-turn obligation remains. Score intervals decide exploration order and early
-discarding only; every completed leaf that can enter the buffer is still scored exactly from the root position before
-being kept.
+Completed-move predicates say what whole-turn obligation remains. Score bounds decide branch ordering and cutoff
+skipping only; every completed leaf in an explored branch is scored exactly from the root position before buffer
+retention is decided.
 
 ## Alpha-Beta Interaction
 

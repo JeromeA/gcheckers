@@ -10,7 +10,6 @@
 enum {
   HOMEWORLDS_GOOD_MOVE_STATIC_PRUNE_LIMIT = 512,
   HOMEWORLDS_GOAL_BRANCH_SMALL_LEAF_LIMIT = 50,
-  HOMEWORLDS_GOAL_BRANCH_SCORE_BUCKET_SIZE = 10,
   HOMEWORLDS_GOAL_REPORT_MAX_LINES = 2048,
   HOMEWORLDS_GOAL_BRANCH_MAX_CATASTROPHE_GOALS = 4,
 };
@@ -34,9 +33,6 @@ typedef struct {
   guint active_goal_count;
   guint active_goal_required_mask;
   guint active_goal_excluded_mask;
-  gboolean has_score_interval;
-  gint score_interval_min;
-  gint score_interval_max;
   gboolean defer_root_catastrophes;
   guint root_defer_step_count;
   gsize pruning_checked_branches;
@@ -50,7 +46,6 @@ typedef struct {
   gsize goal_branches_created;
   gsize goal_branches_selected;
   gsize goal_branches_split;
-  gsize goal_branches_requeued;
   gsize goal_branches_direct;
   gsize goal_branches_skipped;
   gsize goal_branches_exhausted;
@@ -59,7 +54,6 @@ typedef struct {
   gsize goal_rejected_bad_moves;
   gsize goal_rejected_goal_filters;
   gsize goal_rejected_root_catastrophes;
-  gsize goal_rejected_score_intervals;
   gsize goal_rejected_score_windows;
   gsize goal_rejected_full_buffer;
   GString *goal_report;
@@ -104,7 +98,6 @@ typedef struct {
   gsize rejected_bad_moves;
   gsize rejected_goal_filters;
   gsize rejected_root_catastrophes;
-  gsize rejected_score_intervals;
   gsize rejected_score_windows;
   gsize rejected_full_buffer;
   gint best_score;
@@ -143,8 +136,8 @@ typedef struct {
   HomeworldsMoveBuilderState state;
   HomeworldsGenerationContext generation_context;
   HomeworldsGoalDedupeRef *dedupe_ref;
-  gint interval_min;
-  gint interval_max;
+  gint score_min_bound;
+  gint score_max_bound;
   gsize leaf_upper_bound;
   HomeworldsGoalCatastrophe goal_catastrophes[HOMEWORLDS_GOAL_BRANCH_MAX_CATASTROPHE_GOALS];
   guint goal_count;
@@ -594,20 +587,11 @@ static gint homeworlds_backend_score_improvement_for_side(guint side, gint from_
   return side == 0 ? to_score - from_score : from_score - to_score;
 }
 
-static gboolean homeworlds_backend_score_interval_contains(guint side,
-                                                           gint score,
-                                                           gint interval_min,
-                                                           gint interval_max) {
-  g_return_val_if_fail(side < 2, FALSE);
-
-  return score >= interval_min && score <= interval_max;
-}
-
 static gint homeworlds_backend_goal_branch_best_bound(guint side, const HomeworldsGoalBranch *branch) {
   g_return_val_if_fail(side < 2, 0);
   g_return_val_if_fail(branch != NULL, 0);
 
-  return side == 0 ? branch->interval_max : branch->interval_min;
+  return side == 0 ? branch->score_max_bound : branch->score_min_bound;
 }
 
 static gboolean homeworlds_backend_goal_branch_can_reach_cutoff(guint side,
@@ -619,30 +603,6 @@ static gboolean homeworlds_backend_goal_branch_can_reach_cutoff(guint side,
   return homeworlds_backend_score_reaches_cutoff(side,
                                                  homeworlds_backend_goal_branch_best_bound(side, branch),
                                                  cutoff);
-}
-
-static gboolean homeworlds_backend_goal_bound_is_finite(gint bound) {
-  return bound != G_MININT && bound != G_MAXINT;
-}
-
-static gint homeworlds_backend_goal_bucket_min_ending_at(gint score) {
-  gint64 bucket_min = 0;
-
-  bucket_min = (gint64) score - HOMEWORLDS_GOAL_BRANCH_SCORE_BUCKET_SIZE + 1;
-  if (bucket_min < G_MININT) {
-    return G_MININT;
-  }
-  return (gint) bucket_min;
-}
-
-static gint homeworlds_backend_goal_bucket_max_starting_at(gint score) {
-  gint64 bucket_max = 0;
-
-  bucket_max = (gint64) score + HOMEWORLDS_GOAL_BRANCH_SCORE_BUCKET_SIZE - 1;
-  if (bucket_max > G_MAXINT) {
-    return G_MAXINT;
-  }
-  return (gint) bucket_max;
 }
 
 static void homeworlds_backend_format_optional_goal_score(gboolean has_score,
@@ -765,7 +725,6 @@ static void homeworlds_backend_goal_collection_snapshot_take(HomeworldsGoalColle
     .rejected_bad_moves = context->goal_rejected_bad_moves,
     .rejected_goal_filters = context->goal_rejected_goal_filters,
     .rejected_root_catastrophes = context->goal_rejected_root_catastrophes,
-    .rejected_score_intervals = context->goal_rejected_score_intervals,
     .rejected_score_windows = context->goal_rejected_score_windows,
     .rejected_full_buffer = context->goal_rejected_full_buffer,
     .best_score = buffer->best_score,
@@ -800,21 +759,17 @@ static void homeworlds_backend_goal_report_collection_result(HomeworldsGoodMoveC
                                                 sizeof(new_best_text));
   homeworlds_backend_format_goal_cutoff(buffer, new_cutoff_text, sizeof(new_cutoff_text));
   homeworlds_backend_goal_report_append(context,
-                                        "%s #%zu%s covered=%u leaves+=%zu scored+=%zu inside_interval+=%zu "
+                                        "%s #%zu%s covered=%u leaves+=%zu scored+=%zu "
                                         "kept=%zu->%zu "
                                         "best=%s->%s cutoff=%s->%s pruned+=%zu duplicate+=%zu "
                                         "step_reject+=%zu bad_move+=%zu goal_filter_reject+=%zu "
-                                        "root_cat_reject+=%zu interval_reject+=%zu window_reject+=%zu "
-                                        "full_reject+=%zu",
+                                        "root_cat_reject+=%zu window_reject+=%zu full_reject+=%zu",
                                         event,
                                         id,
                                         detail,
                                         covered ? 1 : 0,
                                         buffer->leaves_seen - snapshot->leaves_seen,
                                         buffer->scored_moves - snapshot->scored_moves,
-                                        buffer->scored_moves - snapshot->scored_moves -
-                                            (context->goal_rejected_score_intervals -
-                                             snapshot->rejected_score_intervals),
                                         snapshot->kept_moves,
                                         buffer->count,
                                         snapshot->best_text,
@@ -829,8 +784,6 @@ static void homeworlds_backend_goal_report_collection_result(HomeworldsGoodMoveC
                                             snapshot->rejected_goal_filters,
                                         context->goal_rejected_root_catastrophes -
                                             snapshot->rejected_root_catastrophes,
-                                        context->goal_rejected_score_intervals -
-                                            snapshot->rejected_score_intervals,
                                         context->goal_rejected_score_windows - snapshot->rejected_score_windows,
                                         context->goal_rejected_full_buffer - snapshot->rejected_full_buffer);
 }
@@ -885,8 +838,8 @@ static HomeworldsGoalBranch *homeworlds_backend_goal_branch_new(HomeworldsGoalQu
   branch->state = *state;
   branch->generation_context = *generation_context;
   branch->dedupe_ref = dedupe_ref != NULL ? homeworlds_backend_goal_dedupe_ref_ref(dedupe_ref) : NULL;
-  branch->interval_min = G_MININT;
-  branch->interval_max = G_MAXINT;
+  branch->score_min_bound = G_MININT;
+  branch->score_max_bound = G_MAXINT;
   branch->leaf_upper_bound = G_MAXSIZE;
   if (reason != NULL) {
     g_strlcpy(branch->reason, reason, sizeof(branch->reason));
@@ -934,22 +887,22 @@ static void homeworlds_backend_goal_queue_push(HomeworldsGoalQueue *queue,
   homeworlds_backend_goal_branch_format_prefix(branch, prefix, sizeof(prefix));
   if (branch->goal_label[0] != '\0') {
     homeworlds_backend_goal_report_append(context,
-                                          "create #%zu %s interval=[%d,%d] leaves<=%zu prefix=[%s] goal=[%s] %s",
+                                          "create #%zu %s bounds=[%d,%d] leaves<=%zu prefix=[%s] goal=[%s] %s",
                                           branch->id,
                                           homeworlds_backend_goal_branch_kind_name(branch->kind),
-                                          branch->interval_min,
-                                          branch->interval_max,
+                                          branch->score_min_bound,
+                                          branch->score_max_bound,
                                           branch->leaf_upper_bound,
                                           prefix,
                                           branch->goal_label,
                                           branch->reason);
   } else {
     homeworlds_backend_goal_report_append(context,
-                                          "create #%zu %s interval=[%d,%d] leaves<=%zu prefix=[%s] %s",
+                                          "create #%zu %s bounds=[%d,%d] leaves<=%zu prefix=[%s] %s",
                                           branch->id,
                                           homeworlds_backend_goal_branch_kind_name(branch->kind),
-                                          branch->interval_min,
-                                          branch->interval_max,
+                                          branch->score_min_bound,
+                                          branch->score_max_bound,
                                           branch->leaf_upper_bound,
                                           prefix,
                                           branch->reason);
@@ -957,16 +910,16 @@ static void homeworlds_backend_goal_queue_push(HomeworldsGoalQueue *queue,
   g_ptr_array_add(queue->branches, branch);
 }
 
-static HomeworldsGoalBranch *homeworlds_backend_goal_branch_clone_for_interval(HomeworldsGoalQueue *queue,
+static HomeworldsGoalBranch *homeworlds_backend_goal_branch_clone_for_bounds(HomeworldsGoalQueue *queue,
                                                                                const HomeworldsGoalBranch *branch,
-                                                                               gint interval_min,
-                                                                               gint interval_max,
+                                                                               gint score_min_bound,
+                                                                               gint score_max_bound,
                                                                                const char *reason) {
   HomeworldsGoalBranch *clone = NULL;
 
   g_return_val_if_fail(queue != NULL, NULL);
   g_return_val_if_fail(branch != NULL, NULL);
-  g_return_val_if_fail(interval_min <= interval_max, NULL);
+  g_return_val_if_fail(score_min_bound <= score_max_bound, NULL);
 
   clone = homeworlds_backend_goal_branch_new(queue,
                                              branch->kind,
@@ -975,8 +928,8 @@ static HomeworldsGoalBranch *homeworlds_backend_goal_branch_clone_for_interval(H
                                              NULL,
                                              reason);
   g_return_val_if_fail(clone != NULL, NULL);
-  clone->interval_min = interval_min;
-  clone->interval_max = interval_max;
+  clone->score_min_bound = score_min_bound;
+  clone->score_max_bound = score_max_bound;
   clone->leaf_upper_bound = branch->leaf_upper_bound;
   memcpy(clone->goal_catastrophes, branch->goal_catastrophes, sizeof(clone->goal_catastrophes));
   clone->goal_count = branch->goal_count;
@@ -1039,24 +992,6 @@ static HomeworldsGoalBranch *homeworlds_backend_goal_queue_pop_best(HomeworldsGo
   branch = g_ptr_array_index(queue->branches, best_index);
   g_ptr_array_steal_index(queue->branches, best_index);
   return branch;
-}
-
-static gboolean homeworlds_backend_goal_queue_best_bound(const HomeworldsGoalQueue *queue,
-                                                         guint side,
-                                                         gint *out_bound) {
-  g_return_val_if_fail(queue != NULL, FALSE);
-  g_return_val_if_fail(queue->branches != NULL, FALSE);
-  g_return_val_if_fail(side < 2, FALSE);
-  g_return_val_if_fail(out_bound != NULL, FALSE);
-
-  if (queue->branches->len == 0) {
-    return FALSE;
-  }
-
-  *out_bound = homeworlds_backend_goal_branch_best_bound(
-      side,
-      g_ptr_array_index(queue->branches, homeworlds_backend_goal_queue_best_index(queue, side)));
-  return TRUE;
 }
 
 static gint homeworlds_backend_scored_move_order_compare(guint side,
@@ -1220,15 +1155,6 @@ static gboolean homeworlds_backend_move_buffer_append_scored(
   }
 
   buffer->scored_moves++;
-  if (!homeworlds_backend_score_is_terminal_win_for_side(buffer->side, score) &&
-      context->has_score_interval &&
-      !homeworlds_backend_score_interval_contains(buffer->side,
-                                                  score,
-                                                  context->score_interval_min,
-                                                  context->score_interval_max)) {
-    context->goal_rejected_score_intervals++;
-    return TRUE;
-  }
 
   scored_move = (HomeworldsScoredMove){
     .move = *move,
@@ -2480,15 +2406,6 @@ static gboolean homeworlds_backend_prepare_pruning_for_child(
 
   *out_prune_child = FALSE;
   has_cutoff = homeworlds_backend_move_buffer_current_cutoff(buffer, &cutoff, &cutoff_kind);
-  if (context->has_score_interval) {
-    gint interval_cutoff = buffer->side == 0 ? context->score_interval_min : context->score_interval_max;
-
-    if (!has_cutoff || homeworlds_backend_score_is_better(buffer->side, interval_cutoff, cutoff)) {
-      cutoff = interval_cutoff;
-      cutoff_kind = HOMEWORLDS_GOOD_MOVE_CUTOFF_SCORE_WINDOW;
-      has_cutoff = TRUE;
-    }
-  }
   if (!has_cutoff) {
     return TRUE;
   }
@@ -3736,16 +3653,16 @@ static gsize homeworlds_backend_goal_estimate_leaf_upper_bound(const HomeworldsM
   return G_MAXSIZE;
 }
 
-static void homeworlds_backend_goal_branch_set_interval_from_bound(HomeworldsGoalBranch *branch,
+static void homeworlds_backend_goal_branch_set_best_bound(HomeworldsGoalBranch *branch,
                                                                    guint side,
                                                                    gint bound) {
   g_return_if_fail(branch != NULL);
   g_return_if_fail(side < 2);
 
   if (side == 0) {
-    branch->interval_max = bound;
+    branch->score_max_bound = bound;
   } else {
-    branch->interval_min = bound;
+    branch->score_min_bound = bound;
   }
 }
 
@@ -3809,11 +3726,11 @@ static gboolean homeworlds_backend_goal_branch_apply_sacrifice_pass_floor(
   }
 
   if (side == 0) {
-    branch->interval_max = MAX(branch->interval_max, pass_score);
-    branch->interval_min = MAX(branch->interval_min, pass_score);
+    branch->score_max_bound = MAX(branch->score_max_bound, pass_score);
+    branch->score_min_bound = MAX(branch->score_min_bound, pass_score);
   } else {
-    branch->interval_min = MIN(branch->interval_min, pass_score);
-    branch->interval_max = MIN(branch->interval_max, pass_score);
+    branch->score_min_bound = MIN(branch->score_min_bound, pass_score);
+    branch->score_max_bound = MIN(branch->score_max_bound, pass_score);
   }
   return TRUE;
 }
@@ -3839,8 +3756,8 @@ static gboolean homeworlds_backend_goal_branch_update_estimate(const HomeworldsP
   if (branch->kind != HOMEWORLDS_GOAL_BRANCH_ROOT &&
       branch->kind != HOMEWORLDS_GOAL_BRANCH_ROOT_CATASTROPHE_NOW &&
       branch->kind != HOMEWORLDS_GOAL_BRANCH_ROOT_CATASTROPHE_POSTPONE &&
-      branch->interval_min == G_MININT &&
-      branch->interval_max == G_MAXINT) {
+      branch->score_min_bound == G_MININT &&
+      branch->score_max_bound == G_MAXINT) {
     base_step_count = branch->state.move.kind == HOMEWORLDS_MOVE_KIND_TURN ? branch->state.move.step_count : 0;
     if (homeworlds_backend_candidate_order_find_priority(root_position,
                                                          &branch->state,
@@ -3849,7 +3766,7 @@ static gboolean homeworlds_backend_goal_branch_update_estimate(const HomeworldsP
                                                          4,
                                                          &order) &&
         order.has_priority) {
-      homeworlds_backend_goal_branch_set_interval_from_bound(branch, side, order.bound);
+      homeworlds_backend_goal_branch_set_best_bound(branch, side, order.bound);
     }
   }
 
@@ -3862,7 +3779,7 @@ static gboolean homeworlds_backend_goal_branch_update_estimate(const HomeworldsP
     switch (status.result) {
       case HOMEWORLDS_GOOD_MOVE_PROOF_KEEP:
       case HOMEWORLDS_GOOD_MOVE_PROOF_REJECT:
-        homeworlds_backend_goal_branch_set_interval_from_bound(branch, side, status.bound);
+        homeworlds_backend_goal_branch_set_best_bound(branch, side, status.bound);
         break;
       case HOMEWORLDS_GOOD_MOVE_PROOF_UNCERTAIN:
         break;
@@ -4443,19 +4360,19 @@ static gboolean homeworlds_backend_goal_branch_apply_yellow_goal_bound(Homeworld
                                                                        side,
                                                                        &terminal_score);
   if (can_win_terminally) {
-    branch->interval_min = MAX(branch->interval_min, terminal_score);
-    branch->interval_max = MIN(branch->interval_max, terminal_score);
+    branch->score_min_bound = MAX(branch->score_min_bound, terminal_score);
+    branch->score_max_bound = MIN(branch->score_max_bound, terminal_score);
     return TRUE;
   }
 
   guaranteed_bound = homeworlds_backend_score_with_gain_bound(side, current_score, goal_gain);
   optimistic_bound = homeworlds_backend_score_with_gain_bound(side, current_score, total_gain);
   if (side == 0) {
-    branch->interval_min = MAX(branch->interval_min, guaranteed_bound);
-    branch->interval_max = MIN(branch->interval_max, optimistic_bound);
+    branch->score_min_bound = MAX(branch->score_min_bound, guaranteed_bound);
+    branch->score_max_bound = MIN(branch->score_max_bound, optimistic_bound);
   } else {
-    branch->interval_min = MAX(branch->interval_min, optimistic_bound);
-    branch->interval_max = MIN(branch->interval_max, guaranteed_bound);
+    branch->score_min_bound = MAX(branch->score_min_bound, optimistic_bound);
+    branch->score_max_bound = MIN(branch->score_max_bound, guaranteed_bound);
   }
   return TRUE;
 }
@@ -4480,10 +4397,10 @@ static gboolean homeworlds_backend_goal_branch_clone_for_yellow_goals(
   g_return_val_if_fail(out_branch != NULL, FALSE);
 
   *out_branch = NULL;
-  clone = homeworlds_backend_goal_branch_clone_for_interval(queue,
+  clone = homeworlds_backend_goal_branch_clone_for_bounds(queue,
                                                             branch,
-                                                            branch->interval_min,
-                                                            branch->interval_max,
+                                                            branch->score_min_bound,
+                                                            branch->score_max_bound,
                                                             "yellow goal partition");
   if (clone == NULL) {
     return FALSE;
@@ -4498,7 +4415,7 @@ static gboolean homeworlds_backend_goal_branch_clone_for_yellow_goals(
     homeworlds_backend_goal_branch_free(clone);
     return FALSE;
   }
-  if (clone->interval_min > clone->interval_max) {
+  if (clone->score_min_bound > clone->score_max_bound) {
     homeworlds_backend_goal_branch_free(clone);
     return TRUE;
   }
@@ -5652,72 +5569,6 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(
   return TRUE;
 }
 
-static gboolean homeworlds_backend_goal_branch_split_score_interval(HomeworldsGoalQueue *queue,
-                                                                    HomeworldsGoodMoveContext *context,
-                                                                    HomeworldsGoalBranch *branch,
-                                                                    guint side,
-                                                                    gint second_best_bound) {
-  HomeworldsGoalBranch *remainder = NULL;
-  gint old_min = 0;
-  gint old_max = 0;
-
-  g_return_val_if_fail(queue != NULL, FALSE);
-  g_return_val_if_fail(context != NULL, FALSE);
-  g_return_val_if_fail(branch != NULL, FALSE);
-  g_return_val_if_fail(side < 2, FALSE);
-
-  if (!homeworlds_backend_goal_bound_is_finite(second_best_bound) ||
-      !homeworlds_backend_goal_bound_is_finite(homeworlds_backend_goal_branch_best_bound(side, branch))) {
-    return TRUE;
-  }
-
-  old_min = branch->interval_min;
-  old_max = branch->interval_max;
-  if (side == 0) {
-    gint top_min = MAX(old_min, homeworlds_backend_goal_bucket_min_ending_at(second_best_bound));
-
-    if (top_min <= old_min || top_min > old_max) {
-      return TRUE;
-    }
-    remainder = homeworlds_backend_goal_branch_clone_for_interval(queue,
-                                                                  branch,
-                                                                  old_min,
-                                                                  top_min - 1,
-                                                                  "remaining lower score band");
-    if (remainder == NULL) {
-      return FALSE;
-    }
-    branch->interval_min = top_min;
-  } else {
-    gint top_max = MIN(old_max, homeworlds_backend_goal_bucket_max_starting_at(second_best_bound));
-
-    if (top_max >= old_max || top_max < old_min) {
-      return TRUE;
-    }
-    remainder = homeworlds_backend_goal_branch_clone_for_interval(queue,
-                                                                  branch,
-                                                                  top_max + 1,
-                                                                  old_max,
-                                                                  "remaining higher score band");
-    if (remainder == NULL) {
-      return FALSE;
-    }
-    branch->interval_max = top_max;
-  }
-
-  context->goal_branches_split++;
-  context->goal_branches_requeued++;
-  homeworlds_backend_goal_report_append(context,
-                                        "score-split #%zu explore=[%d,%d] requeue=[%d,%d]",
-                                        branch->id,
-                                        branch->interval_min,
-                                        branch->interval_max,
-                                        remainder->interval_min,
-                                        remainder->interval_max);
-  homeworlds_backend_goal_queue_push(queue, context, remainder);
-  return TRUE;
-}
-
 static gboolean homeworlds_backend_goal_branch_is_cutoff_skipped(const HomeworldsMoveBuffer *buffer,
                                                                  const HomeworldsGoalBranch *branch,
                                                                  gint *out_cutoff) {
@@ -5739,9 +5590,6 @@ static gboolean homeworlds_backend_goal_branch_is_cutoff_skipped(const Homeworld
 static gboolean homeworlds_backend_goal_explore_branch(HomeworldsGoodMoveContext *context,
                                                        HomeworldsMoveBuffer *buffer,
                                                        const HomeworldsGoalBranch *branch) {
-  gboolean old_has_score_interval = FALSE;
-  gint old_score_interval_min = 0;
-  gint old_score_interval_max = 0;
   HomeworldsGoalCatastrophe old_goal_catastrophes[HOMEWORLDS_GOAL_BRANCH_MAX_CATASTROPHE_GOALS] = {0};
   guint old_goal_count = 0;
   guint old_goal_required_mask = 0;
@@ -5756,9 +5604,6 @@ static gboolean homeworlds_backend_goal_explore_branch(HomeworldsGoodMoveContext
   g_return_val_if_fail(buffer != NULL, FALSE);
   g_return_val_if_fail(branch != NULL, FALSE);
 
-  old_has_score_interval = context->has_score_interval;
-  old_score_interval_min = context->score_interval_min;
-  old_score_interval_max = context->score_interval_max;
   memcpy(old_goal_catastrophes, context->active_goal_catastrophes, sizeof(old_goal_catastrophes));
   old_goal_count = context->active_goal_count;
   old_goal_required_mask = context->active_goal_required_mask;
@@ -5768,9 +5613,6 @@ static gboolean homeworlds_backend_goal_explore_branch(HomeworldsGoodMoveContext
   homeworlds_backend_goal_collection_snapshot_take(&snapshot, context, buffer);
   homeworlds_backend_goal_branch_format_prefix(branch, prefix, sizeof(prefix));
 
-  context->has_score_interval = TRUE;
-  context->score_interval_min = branch->interval_min;
-  context->score_interval_max = branch->interval_max;
   memcpy(context->active_goal_catastrophes,
          branch->goal_catastrophes,
          sizeof(context->active_goal_catastrophes));
@@ -5783,21 +5625,21 @@ static gboolean homeworlds_backend_goal_explore_branch(HomeworldsGoodMoveContext
   context->goal_branches_direct++;
   if (branch->goal_label[0] != '\0') {
     homeworlds_backend_goal_report_append(context,
-                                          "explore #%zu %s interval=[%d,%d] leaves<=%zu prefix=[%s] goal=[%s]",
+                                          "explore #%zu %s bounds=[%d,%d] leaves<=%zu prefix=[%s] goal=[%s]",
                                           branch->id,
                                           homeworlds_backend_goal_branch_kind_name(branch->kind),
-                                          branch->interval_min,
-                                          branch->interval_max,
+                                          branch->score_min_bound,
+                                          branch->score_max_bound,
                                           branch->leaf_upper_bound,
                                           prefix,
                                           branch->goal_label);
   } else {
     homeworlds_backend_goal_report_append(context,
-                                          "explore #%zu %s interval=[%d,%d] leaves<=%zu prefix=[%s]",
+                                          "explore #%zu %s bounds=[%d,%d] leaves<=%zu prefix=[%s]",
                                           branch->id,
                                           homeworlds_backend_goal_branch_kind_name(branch->kind),
-                                          branch->interval_min,
-                                          branch->interval_max,
+                                          branch->score_min_bound,
+                                          branch->score_max_bound,
                                           branch->leaf_upper_bound,
                                           prefix);
   }
@@ -5807,9 +5649,6 @@ static gboolean homeworlds_backend_goal_explore_branch(HomeworldsGoodMoveContext
                                                        buffer,
                                                        branch->allow_pass_move,
                                                        &covered)) {
-    context->has_score_interval = old_has_score_interval;
-    context->score_interval_min = old_score_interval_min;
-    context->score_interval_max = old_score_interval_max;
     memcpy(context->active_goal_catastrophes, old_goal_catastrophes, sizeof(context->active_goal_catastrophes));
     context->active_goal_count = old_goal_count;
     context->active_goal_required_mask = old_goal_required_mask;
@@ -5827,9 +5666,6 @@ static gboolean homeworlds_backend_goal_explore_branch(HomeworldsGoodMoveContext
                                                    "",
                                                    branch->id,
                                                    covered);
-  context->has_score_interval = old_has_score_interval;
-  context->score_interval_min = old_score_interval_min;
-  context->score_interval_max = old_score_interval_max;
   memcpy(context->active_goal_catastrophes, old_goal_catastrophes, sizeof(context->active_goal_catastrophes));
   context->active_goal_count = old_goal_count;
   context->active_goal_required_mask = old_goal_required_mask;
@@ -5872,7 +5708,6 @@ static gboolean homeworlds_backend_goal_collect_good_moves(const HomeworldsPosit
   while (ok && queue.branches->len > 0 && !homeworlds_backend_move_buffer_has_terminal_win(buffer)) {
     HomeworldsGoalBranch *branch = homeworlds_backend_goal_queue_pop_best(&queue, root_position->turn);
     gint cutoff = 0;
-    gint second_best_bound = 0;
     gsize created_before_split = 0;
     char prefix[256] = {0};
     gboolean split = FALSE;
@@ -5881,21 +5716,21 @@ static gboolean homeworlds_backend_goal_collect_good_moves(const HomeworldsPosit
     context->goal_branches_selected++;
     if (branch->goal_label[0] != '\0') {
       homeworlds_backend_goal_report_append(context,
-                                            "select #%zu %s interval=[%d,%d] leaves<=%zu prefix=[%s] goal=[%s]",
+                                            "select #%zu %s bounds=[%d,%d] leaves<=%zu prefix=[%s] goal=[%s]",
                                             branch->id,
                                             homeworlds_backend_goal_branch_kind_name(branch->kind),
-                                            branch->interval_min,
-                                            branch->interval_max,
+                                            branch->score_min_bound,
+                                            branch->score_max_bound,
                                             branch->leaf_upper_bound,
                                             prefix,
                                             branch->goal_label);
     } else {
       homeworlds_backend_goal_report_append(context,
-                                            "select #%zu %s interval=[%d,%d] leaves<=%zu prefix=[%s]",
+                                            "select #%zu %s bounds=[%d,%d] leaves<=%zu prefix=[%s]",
                                             branch->id,
                                             homeworlds_backend_goal_branch_kind_name(branch->kind),
-                                            branch->interval_min,
-                                            branch->interval_max,
+                                            branch->score_min_bound,
+                                            branch->score_max_bound,
                                             branch->leaf_upper_bound,
                                             prefix);
     }
@@ -5903,11 +5738,11 @@ static gboolean homeworlds_backend_goal_collect_good_moves(const HomeworldsPosit
     if (homeworlds_backend_goal_branch_is_cutoff_skipped(buffer, branch, &cutoff)) {
       context->goal_branches_skipped++;
       homeworlds_backend_goal_report_append(context,
-                                            "skip #%zu cutoff=%d interval=[%d,%d] prefix=[%s]",
+                                            "skip #%zu cutoff=%d bounds=[%d,%d] prefix=[%s]",
                                             branch->id,
                                             cutoff,
-                                            branch->interval_min,
-                                            branch->interval_max,
+                                            branch->score_min_bound,
+                                            branch->score_max_bound,
                                             prefix);
       homeworlds_backend_goal_branch_free(branch);
       continue;
@@ -5928,17 +5763,6 @@ static gboolean homeworlds_backend_goal_collect_good_moves(const HomeworldsPosit
                                             queue.branches->len);
       homeworlds_backend_goal_branch_free(branch);
       continue;
-    }
-
-    if (homeworlds_backend_goal_queue_best_bound(&queue, root_position->turn, &second_best_bound) &&
-        !homeworlds_backend_goal_branch_split_score_interval(&queue,
-                                                             context,
-                                                             branch,
-                                                             root_position->turn,
-                                                             second_best_bound)) {
-      homeworlds_backend_goal_branch_free(branch);
-      ok = FALSE;
-      break;
     }
 
     ok = homeworlds_backend_goal_explore_branch(context, buffer, branch);
@@ -6021,7 +5845,6 @@ static void homeworlds_backend_trace_good_moves(const HomeworldsPosition *positi
     .goal_branches_created = context->goal_branches_created,
     .goal_branches_selected = context->goal_branches_selected,
     .goal_branches_split = context->goal_branches_split,
-    .goal_branches_requeued = context->goal_branches_requeued,
     .goal_branches_direct = context->goal_branches_direct,
     .goal_branches_skipped = context->goal_branches_skipped,
     .goal_branches_exhausted = context->goal_branches_exhausted,

@@ -1066,10 +1066,10 @@ static void test_capture_good_move_trace(const HomeworldsGoodMoveTrace *trace, g
   capture->called = TRUE;
 }
 
-static gboolean test_goal_report_find_goal_interval(const char *report,
-                                                    const char *goal_label,
-                                                    gint *out_min,
-                                                    gint *out_max) {
+static gboolean test_goal_report_find_goal_bounds(const char *report,
+                                                  const char *goal_label,
+                                                  gint *out_min,
+                                                  gint *out_max) {
   char needle[128] = {0};
   const char *match = NULL;
 
@@ -1082,13 +1082,13 @@ static gboolean test_goal_report_find_goal_interval(const char *report,
   match = report;
   while ((match = strstr(match, needle)) != NULL) {
     const char *line = match;
-    const char *interval = NULL;
+    const char *bounds = NULL;
 
     while (line > report && line[-1] != '\n') {
       line--;
     }
-    interval = strstr(line, "interval=[");
-    if (interval != NULL && interval < match && sscanf(interval, "interval=[%d,%d]", out_min, out_max) == 2) {
+    bounds = strstr(line, "bounds=[");
+    if (bounds != NULL && bounds < match && sscanf(bounds, "bounds=[%d,%d]", out_min, out_max) == 2) {
       return TRUE;
     }
     match += strlen(needle);
@@ -2017,8 +2017,10 @@ static void test_backend_good_move_trace_records_pruning(void) {
   assert(capture.trace.goal_branches_exhausted <= capture.trace.goal_branches_direct);
   assert(capture.goal_report != NULL);
   assert(strstr(capture.goal_report, "direct-result #0 single-steps") != NULL);
-  assert(strstr(capture.goal_report, " single-step interval=") == NULL);
+  assert(strstr(capture.goal_report, " single-step bounds=") == NULL);
   assert(strstr(capture.goal_report, "explore-result #") != NULL);
+  assert(strstr(capture.goal_report, "score-split #") == NULL);
+  assert(strstr(capture.goal_report, "interval_reject+=") == NULL);
 
   backend->move_list_free(&good_moves);
   homeworlds_backend_set_good_move_trace(NULL, NULL);
@@ -2140,7 +2142,7 @@ static void test_backend_good_move_trace_bounds_yellow_sacrifices(void) {
   assert(strstr(capture.goal_report, "yellow-sacrifice") != NULL);
   assert(strstr(capture.goal_report, "prefix=[H1y2-]") != NULL);
   assert(strstr(capture.goal_report, "leaves<=unknown prefix=[H1y2-]") == NULL);
-  assert(strstr(capture.goal_report, "yellow-sacrifice interval=[-2147483648,") == NULL);
+  assert(strstr(capture.goal_report, "yellow-sacrifice bounds=[-2147483648,") == NULL);
   assert(strstr(capture.goal_report, "parent_" "delta") == NULL);
 
   backend->move_list_free(&good_moves);
@@ -2172,14 +2174,15 @@ static void test_backend_good_move_trace_partitions_yellow_sacrifice_goals(void)
   assert(strstr(capture.goal_report, "goal=[S1r!]") != NULL);
   assert(strstr(capture.goal_report, "goal=[S0y!]") != NULL);
   assert(strstr(capture.goal_report, "goal=[no scheduled catastrophe]") != NULL);
-  assert(strstr(capture.goal_report, "inside_interval+=") != NULL);
-  assert(test_goal_report_find_goal_interval(capture.goal_report, "S0y!+S1r!", &both_min, &both_max));
-  assert(test_goal_report_find_goal_interval(capture.goal_report, "S1r!", &red_min, &red_max));
-  assert(test_goal_report_find_goal_interval(capture.goal_report, "S0y!", &yellow_min, &yellow_max));
-  assert(test_goal_report_find_goal_interval(capture.goal_report,
-                                             "no scheduled catastrophe",
-                                             &none_min,
-                                             &none_max));
+  assert(strstr(capture.goal_report, "inside_interval+=") == NULL);
+  assert(strstr(capture.goal_report, "score-split #") == NULL);
+  assert(test_goal_report_find_goal_bounds(capture.goal_report, "S0y!+S1r!", &both_min, &both_max));
+  assert(test_goal_report_find_goal_bounds(capture.goal_report, "S1r!", &red_min, &red_max));
+  assert(test_goal_report_find_goal_bounds(capture.goal_report, "S0y!", &yellow_min, &yellow_max));
+  assert(test_goal_report_find_goal_bounds(capture.goal_report,
+                                           "no scheduled catastrophe",
+                                           &none_min,
+                                           &none_max));
   assert(both_min <= both_max);
   assert(red_min <= red_max);
   assert(yellow_min <= yellow_max);
@@ -2316,12 +2319,12 @@ static void test_backend_good_move_trace_terminal_yellow_goal_is_absorbing(void)
   assert(test_score_after_move(&position, backend->move_list_get(&good_moves, 0)) ==
          homeworlds_position_terminal_score(GAME_BACKEND_OUTCOME_SIDE_0_WIN, 1));
   assert(strstr(capture.goal_report, "goal=[H2y!+S3r!]") == NULL);
-  assert(test_goal_report_find_goal_interval(capture.goal_report, "H2y!", &win_min, &win_max));
-  assert(test_goal_report_find_goal_interval(capture.goal_report, "S3r!", &red_min, &red_max));
-  assert(test_goal_report_find_goal_interval(capture.goal_report,
-                                             "no scheduled catastrophe",
-                                             &none_min,
-                                             &none_max));
+  assert(test_goal_report_find_goal_bounds(capture.goal_report, "H2y!", &win_min, &win_max));
+  assert(test_goal_report_find_goal_bounds(capture.goal_report, "S3r!", &red_min, &red_max));
+  assert(test_goal_report_find_goal_bounds(capture.goal_report,
+                                           "no scheduled catastrophe",
+                                           &none_min,
+                                           &none_max));
   assert(win_min == homeworlds_position_terminal_score(GAME_BACKEND_OUTCOME_SIDE_0_WIN, 1));
   assert(win_max == win_min);
   assert(red_min == red_max);

@@ -33,7 +33,6 @@ typedef struct {
   gsize goal_branches_created;
   gsize goal_branches_selected;
   gsize goal_branches_split;
-  gsize goal_branches_requeued;
   gsize goal_branches_direct;
   gsize goal_branches_skipped;
   gsize goal_branches_exhausted;
