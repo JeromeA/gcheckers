@@ -118,10 +118,11 @@ secondary to those goals: a goal branch may still be split into score bands, but
 branch. Required goal catastrophes tighten both ends of the branch's score interval: the guaranteed goal gain raises the
 lower side for player 1 or lowers the upper side for player 2, while optional remaining upside still sets the
 optimistic side. For future catastrophes created by yellow moves, the goal gain is net of the cheapest reachable
-same-color own ships that must be moved into the system. If a required goal can win by hitting the opponent homeworld,
-the interval is the exact terminal win score; it is not combined with material gains or other catastrophes. Once a
-terminal winning move is scored, `good_moves()` clears the buffer to that move and stops exploring. When the bound
-cannot reach the current static-prune cutoff or the active score interval, the branch is not explored.
+same-color own ships that must be moved into the system, and includes favorable buildability changes from the
+catastrophe as well as material and non-terminal homeworld-star effects. If a required goal can win by hitting the
+opponent homeworld, the interval is the exact terminal win score; it is not combined with material gains or other
+catastrophes. Once a terminal winning move is scored, `good_moves()` clears the buffer to that move and stops exploring.
+When the bound cannot reach the current static-prune cutoff or the active score interval, the branch is not explored.
 
 The catastrophe policy distinguishes profitable and unfavorable catastrophes from the moving side's perspective. A
 profitable catastrophe destroys more opponent ship pips than own ship pips. If such a catastrophe exists at the start

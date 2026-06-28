@@ -826,11 +826,13 @@ one-step attack, move, build, and trade continuations so ordinary moves can popu
 Active yellow sacrifice branches are skipped when either that score-window cutoff or the full 512-move cutoff is
 available and a conservative bound proves that no remaining yellow continuation can reach it. The bound adds possible
 buildable-color gains, immediate catastrophe gains, and only the own catastrophe losses that remaining yellow actions
-could still avoid by moving doomed ships away first. Future positive catastrophes count opponent ships that would be
-orphaned by star destruction and signed non-terminal homeworld-star effects, subtract the cheapest same-color own ships
-that must be moved into the system to create the catastrophe, and count only when enough such ships can reach the target
-system without spending the whole gain. A future catastrophe that wins by destroying the opponent homeworld contributes
-the terminal score as an alternative bound instead of an additive material gain.
+could still avoid by moving doomed ships away first. Immediate catastrophes are scored by applying the catastrophe to a
+copy of the position, so material, orphaned ships, homeworld-star effects, and buildability changes all contribute.
+Future positive catastrophes count opponent ships that would be orphaned by star destruction, signed non-terminal
+homeworld-star effects, and favorable buildability changes already visible in the current position, subtract the
+cheapest same-color own ships that must be moved into the system to create the catastrophe, and count only when enough
+such ships can reach the target system without spending the whole gain. A future catastrophe that wins by destroying
+the opponent homeworld contributes the terminal score as an alternative bound instead of an additive material gain.
 Profitable catastrophes available at the start of a turn are required somewhere in the final move, while profitable
 catastrophes created by an earlier step are forced immediately in the staged walk.
 `doc/homeworlds-move-generation.md` describes how the legal builder, diagnostic move report, profiling CLI,

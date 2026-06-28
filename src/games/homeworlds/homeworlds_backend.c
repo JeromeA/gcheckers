@@ -1466,9 +1466,9 @@ static gboolean homeworlds_backend_system_has_unfavorable_catastrophe(const Home
   return FALSE;
 }
 
-static guint homeworlds_backend_buildable_color_count_for_side(const HomeworldsPosition *position, guint side) {
+static guint homeworlds_backend_buildable_color_mask_for_side(const HomeworldsPosition *position, guint side) {
   gboolean buildable[HOMEWORLDS_COLOR_BLUE + 1] = {FALSE};
-  guint count = 0;
+  guint mask = 0;
 
   g_return_val_if_fail(position != NULL, 0);
   g_return_val_if_fail(side < 2, 0);
@@ -1488,9 +1488,73 @@ static guint homeworlds_backend_buildable_color_count_for_side(const HomeworldsP
   }
 
   for (HomeworldsColor color = HOMEWORLDS_COLOR_RED; color <= HOMEWORLDS_COLOR_BLUE; ++color) {
-    count += buildable[color];
+    if (buildable[color]) {
+      mask |= 1u << color;
+    }
+  }
+  return mask;
+}
+
+static guint homeworlds_backend_count_color_mask_bits(guint mask) {
+  guint count = 0;
+
+  while (mask != 0) {
+    count += mask & 1u;
+    mask >>= 1;
   }
   return count;
+}
+
+static guint homeworlds_backend_buildable_color_count_for_side(const HomeworldsPosition *position, guint side) {
+  g_return_val_if_fail(position != NULL, 0);
+  g_return_val_if_fail(side < 2, 0);
+
+  return homeworlds_backend_count_color_mask_bits(homeworlds_backend_buildable_color_mask_for_side(position, side));
+}
+
+static void homeworlds_backend_remove_star_color(HomeworldsSystem *system, HomeworldsColor color) {
+  guint write = 0;
+
+  g_return_if_fail(system != NULL);
+  g_return_if_fail(color <= HOMEWORLDS_COLOR_BLUE);
+
+  for (guint read = 0; read < HOMEWORLDS_STAR_SLOT_COUNT; ++read) {
+    HomeworldsPyramid star = system->stars[read];
+
+    if (!homeworlds_pyramid_is_valid(star) || homeworlds_pyramid_color(star) == color) {
+      continue;
+    }
+    system->stars[write++] = star;
+  }
+  while (write < HOMEWORLDS_STAR_SLOT_COUNT) {
+    system->stars[write++] = 0;
+  }
+}
+
+static void homeworlds_backend_remove_ship_color(HomeworldsSystem *system, guint side, HomeworldsColor color) {
+  guint write = 0;
+
+  g_return_if_fail(system != NULL);
+  g_return_if_fail(side < 2);
+  g_return_if_fail(color <= HOMEWORLDS_COLOR_BLUE);
+
+  for (guint read = 0; read < HOMEWORLDS_SHIP_SLOT_COUNT; ++read) {
+    HomeworldsPyramid ship = system->ships[side][read];
+
+    if (!homeworlds_pyramid_is_valid(ship) || homeworlds_pyramid_color(ship) == color) {
+      continue;
+    }
+    system->ships[side][write++] = ship;
+  }
+  while (write < HOMEWORLDS_SHIP_SLOT_COUNT) {
+    system->ships[side][write++] = 0;
+  }
+}
+
+static void homeworlds_backend_remove_all_ships(HomeworldsSystem *system) {
+  g_return_if_fail(system != NULL);
+
+  memset(system->ships, 0, sizeof(system->ships));
 }
 
 static gboolean homeworlds_backend_state_has_active_sacrifice(const HomeworldsMoveBuilderState *state,
@@ -1801,6 +1865,42 @@ static gboolean homeworlds_backend_catastrophe_terminal_score(const HomeworldsSy
   return FALSE;
 }
 
+static gboolean homeworlds_backend_exact_catastrophe_gain(const HomeworldsMoveBuilderState *state,
+                                                          guint system_index,
+                                                          HomeworldsColor color,
+                                                          guint side,
+                                                          gint *out_gain) {
+  const HomeworldsSystem *system = NULL;
+  HomeworldsPosition child = {0};
+  gint current_score = 0;
+  gint catastrophe_score = 0;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
+  g_return_val_if_fail(color <= HOMEWORLDS_COLOR_BLUE, FALSE);
+  g_return_val_if_fail(side < 2, FALSE);
+  g_return_val_if_fail(out_gain != NULL, FALSE);
+
+  system = &state->working_position.systems[system_index];
+  if (homeworlds_system_color_count(system, color) < 4) {
+    return FALSE;
+  }
+
+  current_score = homeworlds_position_evaluate_static(&state->working_position);
+  if (homeworlds_backend_catastrophe_terminal_score(system, system_index, color, side, &catastrophe_score)) {
+    *out_gain = homeworlds_backend_score_improvement_for_side(side, current_score, catastrophe_score);
+    return TRUE;
+  }
+
+  child = state->working_position;
+  if (!homeworlds_position_apply_catastrophe(&child, system_index, color)) {
+    return FALSE;
+  }
+  catastrophe_score = homeworlds_position_evaluate_static(&child);
+  *out_gain = homeworlds_backend_score_improvement_for_side(side, current_score, catastrophe_score);
+  return TRUE;
+}
+
 /* For a catastrophe we may create later, use the most optimistic material result the future can still arrange. */
 static gint homeworlds_backend_future_catastrophe_ship_gain_ceiling(const HomeworldsSystem *system,
                                                                     HomeworldsColor color,
@@ -1828,13 +1928,56 @@ static gint homeworlds_backend_future_catastrophe_ship_gain_ceiling(const Homewo
   return star_removal_gain;
 }
 
+static guint homeworlds_backend_future_catastrophe_buildable_gain_ceiling(const HomeworldsMoveBuilderState *state,
+                                                                          guint system_index,
+                                                                          HomeworldsColor color,
+                                                                          guint side) {
+  const HomeworldsEvalWeights *weights = NULL;
+  HomeworldsPosition child = {0};
+  HomeworldsSystem *system = NULL;
+  gint before_score = 0;
+  gint after_score = 0;
+  gint gain = 0;
+
+  g_return_val_if_fail(state != NULL, 0);
+  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, 0);
+  g_return_val_if_fail(color <= HOMEWORLDS_COLOR_BLUE, 0);
+  g_return_val_if_fail(side < 2, 0);
+
+  weights = homeworlds_eval_weights_active();
+  g_return_val_if_fail(weights != NULL, 0);
+  if (weights->buildable_color_value <= 0) {
+    return 0;
+  }
+
+  before_score = (gint)homeworlds_backend_buildable_color_count_for_side(&state->working_position, 0) *
+                 weights->buildable_color_value -
+                 (gint)homeworlds_backend_buildable_color_count_for_side(&state->working_position, 1) *
+                 weights->buildable_color_value;
+  child = state->working_position;
+  system = &child.systems[system_index];
+  homeworlds_backend_remove_star_color(system, color);
+  homeworlds_backend_remove_ship_color(system, 0, color);
+  homeworlds_backend_remove_ship_color(system, 1, color);
+  if (!homeworlds_system_has_star(system)) {
+    homeworlds_backend_remove_all_ships(system);
+  }
+  homeworlds_position_rebuild_color_counts(&child);
+  after_score = (gint)homeworlds_backend_buildable_color_count_for_side(&child, 0) *
+                weights->buildable_color_value -
+                (gint)homeworlds_backend_buildable_color_count_for_side(&child, 1) *
+                weights->buildable_color_value;
+
+  gain = homeworlds_backend_score_improvement_for_side(side, before_score, after_score);
+  return gain > 0 ? (guint)gain : 0;
+}
+
 /* For an existing catastrophe, taking it now also orphans ships when all stars disappear. */
 static gint homeworlds_backend_immediate_catastrophe_gain(const HomeworldsMoveBuilderState *state,
                                                           guint system_index,
                                                           HomeworldsColor color,
                                                           guint side) {
   const HomeworldsEvalWeights *weights = NULL;
-  const HomeworldsSystem *system = NULL;
   gint gain = 0;
 
   g_return_val_if_fail(state != NULL, 0);
@@ -1847,23 +1990,10 @@ static gint homeworlds_backend_immediate_catastrophe_gain(const HomeworldsMoveBu
   if (!homeworlds_backend_ship_values_are_nonnegative(weights)) {
     return G_MAXINT;
   }
-  system = &state->working_position.systems[system_index];
-  if (homeworlds_backend_catastrophe_terminal_score(system, system_index, color, side, &gain)) {
-    return homeworlds_backend_score_improvement_for_side(side,
-                                                         homeworlds_position_evaluate_static(
-                                                             &state->working_position),
-                                                         gain);
-  }
-  if (homeworlds_backend_catastrophe_removes_all_stars(system, color)) {
-    guint opponent = side == 0 ? 1 : 0;
 
-    gain = (gint)homeworlds_backend_system_ship_value_for_side(system, opponent, weights) -
-           (gint)homeworlds_backend_system_ship_value_for_side(system, side, weights);
-  } else {
-    gain = homeworlds_backend_future_catastrophe_ship_gain_ceiling(system, color, side, weights);
+  if (!homeworlds_backend_exact_catastrophe_gain(state, system_index, color, side, &gain)) {
+    return 0;
   }
-
-  gain += homeworlds_backend_homeworld_star_gain(system, system_index, color, side, weights);
   return gain;
 }
 
@@ -1893,9 +2023,13 @@ static gint homeworlds_backend_future_catastrophe_gain_ceiling(const HomeworldsM
                                                              &state->working_position),
                                                          gain);
   }
+  if (homeworlds_system_color_count(system, color) >= 4) {
+    return homeworlds_backend_immediate_catastrophe_gain(state, system_index, color, side);
+  }
 
   gain = homeworlds_backend_future_catastrophe_ship_gain_ceiling(system, color, side, weights);
   gain += homeworlds_backend_homeworld_star_gain(system, system_index, color, side, weights);
+  gain += (gint)homeworlds_backend_future_catastrophe_buildable_gain_ceiling(state, system_index, color, side);
   return gain;
 }
 
