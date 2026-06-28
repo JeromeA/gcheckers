@@ -219,7 +219,7 @@ static gboolean homeworlds_profile_apply_random_good_move(HomeworldsPosition *po
     return FALSE;
   }
 
-  moves = homeworlds_game_backend.list_good_moves(position, 0);
+  moves = homeworlds_game_backend.list_good_moves(position, 0, GAME_BACKEND_DEFAULT_GOOD_MOVE_SCORE_WINDOW);
   if (moves.count == 0) {
     g_printerr("No good moves after %u moves.\n", move_number);
     homeworlds_game_backend.move_list_free(&moves);

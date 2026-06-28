@@ -167,7 +167,9 @@ being kept.
 
 The generic search in `src/ai_search.c` asks the backend for candidates through `game_ai_search_list_candidate_moves()`.
 If a backend exposes `list_good_moves()`, that list is used. Homeworlds does expose `list_good_moves()`, so alpha-beta
-never searches the diagnostic "all possible moves" list.
+never searches the diagnostic "all possible moves" list. The caller also passes a score window to `list_good_moves()`;
+the default keeps moves near the current best exact leaf score, while a zero window keeps only exact-best moves and
+equal-score ties.
 
 At the root, `game_ai_search_analyze_moves()` gets the good moves, applies each one to a copied position, evaluates the
 child with alpha-beta, then sorts the scored moves best-to-worst for side 0 and worst-to-best for side 1. Force Play and

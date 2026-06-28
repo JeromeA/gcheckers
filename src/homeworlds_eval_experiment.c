@@ -538,10 +538,11 @@ static gboolean homeworlds_experiment_choose_move(const HomeworldsPosition *posi
 
   homeworlds_backend_set_good_move_trace(homeworlds_experiment_trace_move_generation, (gpointer)trace_context);
   homeworlds_eval_weights_set_active(weights);
-  found = game_ai_search_analyze_moves(&homeworlds_game_backend,
-                                       position,
-                                       HOMEWORLDS_EXPERIMENT_DEPTH,
-                                       &moves);
+  found = game_ai_search_analyze_moves_with_good_move_score_window(&homeworlds_game_backend,
+                                                                   position,
+                                                                   HOMEWORLDS_EXPERIMENT_DEPTH,
+                                                                   0,
+                                                                   &moves);
   homeworlds_eval_weights_reset_active();
   homeworlds_backend_set_good_move_trace(NULL, NULL);
   if (!found) {

@@ -1055,7 +1055,7 @@ static gboolean homeworlds_proof_probe_find_cutoff(const HomeworldsPosition *pos
   g_return_val_if_fail(out_trace != NULL, FALSE);
 
   homeworlds_backend_set_good_move_trace(homeworlds_proof_probe_capture_trace, &trace_capture);
-  moves = homeworlds_game_backend.list_good_moves(position, 0);
+  moves = homeworlds_game_backend.list_good_moves(position, 0, GAME_BACKEND_DEFAULT_GOOD_MOVE_SCORE_WINDOW);
   homeworlds_backend_set_good_move_trace(NULL, NULL);
   if (moves.count == 0) {
     g_printerr("No good moves are available from the report position.\n");

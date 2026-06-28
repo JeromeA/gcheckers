@@ -956,7 +956,9 @@ GameBackendMoveList boop_position_list_moves(const BoopPosition *position) {
   };
 }
 
-GameBackendMoveList boop_position_list_good_moves(const BoopPosition *position, guint /*depth_hint*/) {
+GameBackendMoveList boop_position_list_good_moves(const BoopPosition *position,
+                                                  guint /*depth_hint*/,
+                                                  guint /*score_window*/) {
   return boop_position_list_moves(position);
 }
 

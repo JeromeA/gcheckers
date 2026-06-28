@@ -738,7 +738,9 @@ positive catastrophes: green counts build choices, red counts attacks, blue coun
 moves/discoveries. The leaf bound includes every early pass-completion prefix, because a sacrifice can stop before
 spending every action by appending passes for the remaining actions. Empty or very small forced-action trees can
 therefore be reported and explored directly. Complete leaves are still scored exactly before entering the 512-move
-static-prune buffer, so memory remains bounded even when millions of legal leaves exist.
+static-prune buffer, so memory remains bounded even when millions of legal leaves exist. AI callers pass a
+`good_moves()` score window; the normal window keeps moves near the current best static score, while a zero window
+keeps only moves with the exact best score and still includes equal-score ties.
 `GameBackend`
 exposes an optional streamed all-move API for diagnostics; Homeworlds
 implements it by walking complete generated move paths without materializing a `GameBackendMoveList`. The
@@ -767,7 +769,9 @@ behavior. If a `good_moves()` call generates more than 500,000 deduplicated comp
 `big_move_report_###.txt` in the current
 directory with the `good_moves()` trace, pruning counts, ordering counts, goal-tree branch counts, a bounded
 human-readable goal-tree report, the moves leading to the reported position, the ASCII position, and the kept
-`good_moves()` rows. It does not stream the full legal move list for these reports.
+`good_moves()` rows. Eval experiments request a zero `good_moves()` score window because depth-1 self-play only needs
+the exact best static-score moves for the active candidate or baseline weights. It does not stream the full legal move
+list for these reports.
 The `build/tools/homeworlds_proof_probe` CLI reads one of those move reports and recomputes the current `good_moves()`
 cutoff. With `--iterations COUNT`, it prints a compact goal-tree report with the initial `#0` expansion and the next
 COUNT selected scheduler branches, listing each created branch and summarizing what each selected branch did. With
@@ -902,7 +906,8 @@ formatting APIs into that generic table. `src/games/homeworlds/homeworlds_backen
 Homeworlds engine and staged move builder, advertises `supports_move_builder = TRUE`, `supports_move_list = FALSE`,
 `supports_ai_search = TRUE`, opts into numbered ASCII game files with the `.txt` extension, and implements
 `list_good_moves` by exploring the builder in heuristic order while filtering nonsensical setup, pass, unsafe
-homeworld, and unsafe catastrophe-triggering build choices. The good-move collector shares the all-move
+homeworld, and unsafe catastrophe-triggering build choices. Its caller-provided score window controls how far from the
+best exact leaf score a move can remain eligible. The good-move collector shares the all-move
 sacrifice-scope deduper rather than keeping a global duplicate table. The playable Homeworlds UI uses the same builder
 directly rather than asking this backend for full move enumeration.
 `src/games/boop/boop_backend.c` adapts the boop engine, advertises move lists, staged

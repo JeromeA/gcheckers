@@ -30,7 +30,7 @@ gboolean boop_position_normalize(BoopPosition *position, GError **error);
 GameBackendOutcome boop_position_outcome(const BoopPosition *position);
 guint boop_position_turn(const BoopPosition *position);
 GameBackendMoveList boop_position_list_moves(const BoopPosition *position);
-GameBackendMoveList boop_position_list_good_moves(const BoopPosition *position, guint depth_hint);
+GameBackendMoveList boop_position_list_good_moves(const BoopPosition *position, guint depth_hint, guint score_window);
 void boop_move_list_free(GameBackendMoveList *moves);
 const BoopMove *boop_move_list_get(const GameBackendMoveList *moves, gsize index);
 gboolean boop_moves_equal(const BoopMove *left, const BoopMove *right);

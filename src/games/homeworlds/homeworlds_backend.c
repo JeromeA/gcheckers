@@ -9,7 +9,6 @@
 
 enum {
   HOMEWORLDS_GOOD_MOVE_STATIC_PRUNE_LIMIT = 512,
-  HOMEWORLDS_GOOD_MOVE_STATIC_PRUNE_WINDOW = 50,
   HOMEWORLDS_GOAL_BRANCH_SMALL_LEAF_LIMIT = 50,
   HOMEWORLDS_GOAL_BRANCH_SCORE_BUCKET_SIZE = 10,
   HOMEWORLDS_GOAL_REPORT_MAX_LINES = 2048,
@@ -91,6 +90,7 @@ typedef struct {
   guint side;
   gint best_score;
   gboolean has_best_score;
+  guint score_window;
   gboolean prune_by_score;
 } HomeworldsMoveBuffer;
 
@@ -172,7 +172,10 @@ static gboolean homeworlds_backend_score_after_move(const HomeworldsPosition *po
 static gint homeworlds_backend_terminal_win_score_for_side(guint side);
 static gboolean homeworlds_backend_score_is_terminal_win_for_side(guint side, gint score);
 static gint homeworlds_backend_score_improvement_for_side(guint side, gint from_score, gint to_score);
-static gboolean homeworlds_backend_score_is_inside_prune_window(guint side, gint score, gint best_score);
+static gboolean homeworlds_backend_score_is_inside_prune_window(guint side,
+                                                                gint score,
+                                                                gint best_score,
+                                                                guint score_window);
 static gboolean homeworlds_backend_move_buffer_current_cutoff(const HomeworldsMoveBuffer *buffer,
                                                               gint *out_cutoff,
                                                               HomeworldsGoodMoveCutoffKind *out_cutoff_kind);
@@ -532,16 +535,20 @@ static void homeworlds_backend_move_buffer_clear(HomeworldsMoveBuffer *buffer) {
   buffer->side = 0;
   buffer->best_score = 0;
   buffer->has_best_score = FALSE;
+  buffer->score_window = 0;
   buffer->prune_by_score = FALSE;
 }
 
-static void homeworlds_backend_move_buffer_init(HomeworldsMoveBuffer *buffer, const HomeworldsPosition *position) {
+static void homeworlds_backend_move_buffer_init(HomeworldsMoveBuffer *buffer,
+                                                const HomeworldsPosition *position,
+                                                guint score_window) {
   g_return_if_fail(buffer != NULL);
   g_return_if_fail(position != NULL);
 
   memset(buffer, 0, sizeof(*buffer));
   buffer->position = position;
   buffer->side = position->turn;
+  buffer->score_window = score_window;
   buffer->prune_by_score = position->phase == HOMEWORLDS_PHASE_PLAY;
 }
 
@@ -1122,8 +1129,8 @@ static gboolean homeworlds_backend_move_buffer_current_cutoff(const HomeworldsMo
   }
 
   *out_cutoff = buffer->side == 0
-      ? buffer->best_score - HOMEWORLDS_GOOD_MOVE_STATIC_PRUNE_WINDOW
-      : buffer->best_score + HOMEWORLDS_GOOD_MOVE_STATIC_PRUNE_WINDOW;
+      ? buffer->best_score - (gint)buffer->score_window
+      : buffer->best_score + (gint)buffer->score_window;
   *out_cutoff_kind = HOMEWORLDS_GOOD_MOVE_CUTOFF_SCORE_WINDOW;
   return TRUE;
 }
@@ -1146,7 +1153,10 @@ static void homeworlds_backend_move_buffer_prune_score_window(HomeworldsMoveBuff
   g_return_if_fail(buffer != NULL);
 
   while (i < buffer->count) {
-    if (homeworlds_backend_score_is_inside_prune_window(buffer->side, buffer->moves[i].score, buffer->best_score)) {
+    if (homeworlds_backend_score_is_inside_prune_window(buffer->side,
+                                                        buffer->moves[i].score,
+                                                        buffer->best_score,
+                                                        buffer->score_window)) {
       i++;
       continue;
     }
@@ -1240,7 +1250,10 @@ static gboolean homeworlds_backend_move_buffer_append_scored(
     buffer->best_score = score;
     buffer->has_best_score = TRUE;
     homeworlds_backend_move_buffer_prune_score_window(buffer);
-  } else if (!homeworlds_backend_score_is_inside_prune_window(buffer->side, score, buffer->best_score)) {
+  } else if (!homeworlds_backend_score_is_inside_prune_window(buffer->side,
+                                                             score,
+                                                             buffer->best_score,
+                                                             buffer->score_window)) {
     context->goal_rejected_score_windows++;
     return TRUE;
   }
@@ -5830,13 +5843,17 @@ static gboolean homeworlds_backend_score_after_move(const HomeworldsPosition *po
   return TRUE;
 }
 
-static gboolean homeworlds_backend_score_is_inside_prune_window(guint side, gint score, gint best_score) {
+static gboolean homeworlds_backend_score_is_inside_prune_window(guint side,
+                                                                gint score,
+                                                                gint best_score,
+                                                                guint score_window) {
   g_return_val_if_fail(side < 2, FALSE);
+  g_return_val_if_fail(score_window <= G_MAXINT, FALSE);
 
   if (side == 0) {
-    return score >= best_score - HOMEWORLDS_GOOD_MOVE_STATIC_PRUNE_WINDOW;
+    return score >= best_score - (gint)score_window;
   }
-  return score <= best_score + HOMEWORLDS_GOOD_MOVE_STATIC_PRUNE_WINDOW;
+  return score <= best_score + (gint)score_window;
 }
 
 static void homeworlds_backend_trace_good_moves(const HomeworldsPosition *position,
@@ -5885,7 +5902,9 @@ static void homeworlds_backend_trace_good_moves(const HomeworldsPosition *positi
   homeworlds_backend_good_move_trace_func(&trace, homeworlds_backend_good_move_trace_user_data);
 }
 
-static GameBackendMoveList homeworlds_backend_list_good_moves(gconstpointer position, guint depth_hint) {
+static GameBackendMoveList homeworlds_backend_list_good_moves(gconstpointer position,
+                                                              guint depth_hint,
+                                                              guint score_window) {
   const HomeworldsPosition *homeworlds_position = position;
   GameBackendMoveBuilder builder = {0};
   HomeworldsGenerationContext generation_context = {0};
@@ -5895,8 +5914,9 @@ static GameBackendMoveList homeworlds_backend_list_good_moves(gconstpointer posi
   gsize count = 0;
 
   g_return_val_if_fail(homeworlds_position != NULL, (GameBackendMoveList){0});
+  g_return_val_if_fail(score_window <= G_MAXINT, (GameBackendMoveList){0});
 
-  homeworlds_backend_move_buffer_init(&buffer, homeworlds_position);
+  homeworlds_backend_move_buffer_init(&buffer, homeworlds_position, score_window);
   if (!homeworlds_move_builder_init(homeworlds_position, &builder)) {
     homeworlds_backend_move_buffer_clear(&buffer);
     return (GameBackendMoveList){0};

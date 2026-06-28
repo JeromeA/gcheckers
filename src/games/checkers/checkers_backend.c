@@ -165,7 +165,8 @@ static GameBackendMoveList checkers_backend_list_moves(gconstpointer position) {
 }
 
 static GameBackendMoveList checkers_backend_list_good_moves(gconstpointer position,
-                                                            guint /*depth_hint*/) {
+                                                            guint /*depth_hint*/,
+                                                            guint /*score_window*/) {
   return checkers_backend_list_moves(position);
 }
 

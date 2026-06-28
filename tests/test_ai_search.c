@@ -28,6 +28,7 @@ typedef struct {
 } TestAiKnownRootScoreState;
 
 static guint test_good_move_only_list_good_moves_calls = 0;
+static guint test_good_move_only_last_score_window = 0;
 static guint test_good_move_only_static_evaluate_calls = 0;
 static GPtrArray *test_good_move_only_retired_move_lists = NULL;
 
@@ -264,7 +265,9 @@ static guint test_good_move_only_position_turn(gconstpointer position) {
   return good_position->turn;
 }
 
-static GameBackendMoveList test_good_move_only_list_good_moves(gconstpointer position, guint /*depth_hint*/) {
+static GameBackendMoveList test_good_move_only_list_good_moves(gconstpointer position,
+                                                               guint /*depth_hint*/,
+                                                               guint score_window) {
   const TestGoodMoveOnlyPosition *good_position = position;
   TestGoodMoveOnlyMove *moves = NULL;
   gsize count = 0;
@@ -272,6 +275,7 @@ static GameBackendMoveList test_good_move_only_list_good_moves(gconstpointer pos
   g_return_val_if_fail(good_position != NULL, (GameBackendMoveList){0});
 
   test_good_move_only_list_good_moves_calls++;
+  test_good_move_only_last_score_window = score_window;
   if (good_position->total >= 2) {
     return (GameBackendMoveList){0};
   }
@@ -398,9 +402,20 @@ static void test_ai_search_accepts_good_move_only_backend(void) {
   TestGoodMoveOnlyMove selected = {0};
 
   test_good_move_only_position_init(&position, NULL);
+  test_good_move_only_last_score_window = 0;
   assert(game_ai_search_analyze_moves(&test_good_move_only_backend, &position, 2, &scored_moves));
   assert(scored_moves.count == 2);
   assert(((TestGoodMoveOnlyMove *) scored_moves.moves[0].move)->delta == 2);
+  assert(test_good_move_only_last_score_window == GAME_BACKEND_DEFAULT_GOOD_MOVE_SCORE_WINDOW);
+  game_ai_scored_move_list_free(&scored_moves);
+
+  assert(game_ai_search_analyze_moves_with_good_move_score_window(&test_good_move_only_backend,
+                                                                  &position,
+                                                                  2,
+                                                                  0,
+                                                                  &scored_moves));
+  assert(scored_moves.count == 2);
+  assert(test_good_move_only_last_score_window == 0);
   game_ai_scored_move_list_free(&scored_moves);
 
   assert(game_ai_search_choose_move(&test_good_move_only_backend, &position, 2, &selected));

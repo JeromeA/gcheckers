@@ -93,12 +93,12 @@ static GameBackendMoveList boop_backend_list_moves(gconstpointer position) {
   return boop_position_list_moves(boop_position);
 }
 
-static GameBackendMoveList boop_backend_list_good_moves(gconstpointer position, guint depth_hint) {
+static GameBackendMoveList boop_backend_list_good_moves(gconstpointer position, guint depth_hint, guint score_window) {
   const BoopPosition *boop_position = position;
 
   g_return_val_if_fail(boop_position != NULL, (GameBackendMoveList){0});
 
-  return boop_position_list_good_moves(boop_position, depth_hint);
+  return boop_position_list_good_moves(boop_position, depth_hint, score_window);
 }
 
 static void boop_backend_move_list_free(GameBackendMoveList *moves) {

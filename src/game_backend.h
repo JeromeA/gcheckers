@@ -40,6 +40,10 @@ typedef struct {
 
 typedef gboolean (*GameBackendMoveStreamFunc)(gconstpointer move, gpointer user_data);
 
+enum {
+  GAME_BACKEND_DEFAULT_GOOD_MOVE_SCORE_WINDOW = 50,
+};
+
 typedef struct {
   gpointer builder_state;
   gsize builder_state_size;
@@ -73,7 +77,7 @@ typedef struct {
 
   GameBackendMoveList (*list_moves)(gconstpointer position);
   gboolean (*stream_moves)(gconstpointer position, GameBackendMoveStreamFunc stream_func, gpointer user_data);
-  GameBackendMoveList (*list_good_moves)(gconstpointer position, guint depth_hint);
+  GameBackendMoveList (*list_good_moves)(gconstpointer position, guint depth_hint, guint score_window);
   void (*move_list_free)(GameBackendMoveList *moves);
   const void *(*move_list_get)(const GameBackendMoveList *moves, gsize index);
   gboolean (*moves_equal)(gconstpointer left, gconstpointer right);

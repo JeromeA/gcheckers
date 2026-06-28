@@ -69,6 +69,11 @@ gboolean game_ai_search_analyze_moves(const GameBackend *backend,
                                       gconstpointer position,
                                       guint max_depth,
                                       GameAiScoredMoveList *out_moves);
+gboolean game_ai_search_analyze_moves_with_good_move_score_window(const GameBackend *backend,
+                                                                  gconstpointer position,
+                                                                  guint max_depth,
+                                                                  guint good_move_score_window,
+                                                                  GameAiScoredMoveList *out_moves);
 gboolean game_ai_search_analyze_moves_cancellable(const GameBackend *backend,
                                                   gconstpointer position,
                                                   guint max_depth,

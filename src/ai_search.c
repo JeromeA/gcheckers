@@ -30,16 +30,18 @@ typedef struct {
   gpointer progress_user_data;
   GameAiSearchStats *stats;
   GameAiTranspositionTable *tt;
+  guint good_move_score_window;
 } GameAiSearchContext;
 
 static GameBackendMoveList game_ai_search_list_candidate_moves(const GameBackend *backend,
                                                                gconstpointer position,
-                                                               guint depth_hint) {
+                                                               guint depth_hint,
+                                                               guint good_move_score_window) {
   g_return_val_if_fail(backend != NULL, (GameBackendMoveList){0});
   g_return_val_if_fail(position != NULL, (GameBackendMoveList){0});
 
   if (backend->list_good_moves != NULL) {
-    return backend->list_good_moves(position, depth_hint);
+    return backend->list_good_moves(position, depth_hint, good_move_score_window);
   }
 
   g_return_val_if_fail(backend->list_moves != NULL, (GameBackendMoveList){0});
@@ -353,7 +355,10 @@ static gint game_ai_search_recursive(gpointer position,
     return score;
   }
 
-  GameBackendMoveList moves = game_ai_search_list_candidate_moves(backend, position, depth_remaining);
+  GameBackendMoveList moves = game_ai_search_list_candidate_moves(backend,
+                                                                  position,
+                                                                  depth_remaining,
+                                                                  ctx->good_move_score_window);
   if (moves.count == 0) {
     gint score = backend->terminal_score(position, game_ai_search_derived_outcome(backend, position), ply_depth);
     backend->move_list_free(&moves);
@@ -556,11 +561,48 @@ void game_ai_scored_move_list_free(GameAiScoredMoveList *list) {
   list->count = 0;
 }
 
+static gboolean game_ai_search_analyze_moves_full(const GameBackend *backend,
+                                                  gconstpointer position,
+                                                  guint max_depth,
+                                                  GameAiScoredMoveList *out_moves,
+                                                  GameAiCancelFunc should_cancel,
+                                                  gpointer user_data,
+                                                  GameAiProgressFunc on_progress,
+                                                  gpointer progress_user_data,
+                                                  GameAiKnownRootScoreFunc known_score,
+                                                  gpointer known_score_user_data,
+                                                  guint good_move_score_window,
+                                                  GameAiTranspositionTable *tt,
+                                                  GameAiSearchStats *out_stats);
+
 gboolean game_ai_search_analyze_moves(const GameBackend *backend,
                                       gconstpointer position,
                                       guint max_depth,
                                       GameAiScoredMoveList *out_moves) {
   return game_ai_search_analyze_moves_cancellable(backend, position, max_depth, out_moves, NULL, NULL);
+}
+
+gboolean game_ai_search_analyze_moves_with_good_move_score_window(const GameBackend *backend,
+                                                                  gconstpointer position,
+                                                                  guint max_depth,
+                                                                  guint good_move_score_window,
+                                                                  GameAiScoredMoveList *out_moves) {
+  GameAiSearchStats stats = {0};
+
+  game_ai_search_stats_clear(&stats);
+  return game_ai_search_analyze_moves_full(backend,
+                                           position,
+                                           max_depth,
+                                           out_moves,
+                                           NULL,
+                                           NULL,
+                                           NULL,
+                                           NULL,
+                                           NULL,
+                                           NULL,
+                                           good_move_score_window,
+                                           NULL,
+                                           &stats);
 }
 
 gboolean game_ai_search_analyze_moves_cancellable(const GameBackend *backend,
@@ -620,6 +662,34 @@ gboolean game_ai_search_analyze_moves_cancellable_with_tt_and_known_scores(const
                                                                            gpointer known_score_user_data,
                                                                            GameAiTranspositionTable *tt,
                                                                            GameAiSearchStats *out_stats) {
+  return game_ai_search_analyze_moves_full(backend,
+                                           position,
+                                           max_depth,
+                                           out_moves,
+                                           should_cancel,
+                                           user_data,
+                                           on_progress,
+                                           progress_user_data,
+                                           known_score,
+                                           known_score_user_data,
+                                           GAME_BACKEND_DEFAULT_GOOD_MOVE_SCORE_WINDOW,
+                                           tt,
+                                           out_stats);
+}
+
+static gboolean game_ai_search_analyze_moves_full(const GameBackend *backend,
+                                                  gconstpointer position,
+                                                  guint max_depth,
+                                                  GameAiScoredMoveList *out_moves,
+                                                  GameAiCancelFunc should_cancel,
+                                                  gpointer user_data,
+                                                  GameAiProgressFunc on_progress,
+                                                  gpointer progress_user_data,
+                                                  GameAiKnownRootScoreFunc known_score,
+                                                  gpointer known_score_user_data,
+                                                  guint good_move_score_window,
+                                                  GameAiTranspositionTable *tt,
+                                                  GameAiSearchStats *out_stats) {
   g_return_val_if_fail(backend != NULL, FALSE);
   g_return_val_if_fail(position != NULL, FALSE);
   g_return_val_if_fail(out_moves != NULL, FALSE);
@@ -645,7 +715,10 @@ gboolean game_ai_search_analyze_moves_cancellable_with_tt_and_known_scores(const
   out_moves->moves = NULL;
   out_moves->count = 0;
 
-  GameBackendMoveList moves = game_ai_search_list_candidate_moves(backend, position, max_depth);
+  GameBackendMoveList moves = game_ai_search_list_candidate_moves(backend,
+                                                                  position,
+                                                                  max_depth,
+                                                                  good_move_score_window);
   if (moves.count == 0) {
     backend->move_list_free(&moves);
     g_debug("No available moves for alpha-beta analysis");
@@ -667,6 +740,7 @@ gboolean game_ai_search_analyze_moves_cancellable_with_tt_and_known_scores(const
       .progress_user_data = progress_user_data,
       .stats = out_stats,
       .tt = tt,
+      .good_move_score_window = good_move_score_window,
   };
 
   for (gsize i = 0; i < moves.count; ++i) {
@@ -781,6 +855,7 @@ gboolean game_ai_search_evaluate_position(const GameBackend *backend,
   game_ai_search_stats_clear(&stats);
   ctx.backend = backend;
   ctx.stats = &stats;
+  ctx.good_move_score_window = GAME_BACKEND_DEFAULT_GOOD_MOVE_SCORE_WINDOW;
 
   *out_score = game_ai_search_recursive(root, max_depth, 0, INT_MIN, INT_MAX, &ctx, &cancelled);
   backend->position_clear(root);
