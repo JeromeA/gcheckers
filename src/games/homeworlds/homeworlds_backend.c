@@ -72,6 +72,7 @@ typedef enum {
   HOMEWORLDS_GOOD_MOVE_CUTOFF_NONE = 0,
   HOMEWORLDS_GOOD_MOVE_CUTOFF_SCORE_WINDOW,
   HOMEWORLDS_GOOD_MOVE_CUTOFF_FULL_BUFFER,
+  HOMEWORLDS_GOOD_MOVE_CUTOFF_FULL_BUFFER_UNREACHABLE,
 } HomeworldsGoodMoveCutoffKind;
 
 typedef struct {
@@ -713,6 +714,27 @@ static gboolean homeworlds_backend_score_reaches_cutoff(guint side, gint score, 
   return side == 0 ? score >= cutoff : score <= cutoff;
 }
 
+static gboolean homeworlds_backend_score_strict_improvement_cutoff(guint side,
+                                                                   gint score,
+                                                                   gint *out_cutoff) {
+  g_return_val_if_fail(side < 2, FALSE);
+  g_return_val_if_fail(out_cutoff != NULL, FALSE);
+
+  if (side == 0) {
+    if (score == G_MAXINT) {
+      return FALSE;
+    }
+    *out_cutoff = score + 1;
+    return TRUE;
+  }
+
+  if (score == G_MININT) {
+    return FALSE;
+  }
+  *out_cutoff = score - 1;
+  return TRUE;
+}
+
 static gint homeworlds_backend_terminal_win_score_for_side(guint side) {
   g_return_val_if_fail(side < 2, 0);
 
@@ -788,6 +810,9 @@ static void homeworlds_backend_format_goal_cutoff(const HomeworldsMoveBuffer *bu
       return;
     case HOMEWORLDS_GOOD_MOVE_CUTOFF_FULL_BUFFER:
       g_snprintf(buffer_text, buffer_text_size, "%d/full", cutoff);
+      return;
+    case HOMEWORLDS_GOOD_MOVE_CUTOFF_FULL_BUFFER_UNREACHABLE:
+      g_strlcpy(buffer_text, "unreachable/full", buffer_text_size);
       return;
     case HOMEWORLDS_GOOD_MOVE_CUTOFF_NONE:
     default:
@@ -1203,7 +1228,13 @@ static gboolean homeworlds_backend_move_buffer_current_cutoff(const HomeworldsMo
   }
 
   if (buffer->count >= HOMEWORLDS_GOOD_MOVE_STATIC_PRUNE_LIMIT) {
-    *out_cutoff = buffer->moves[buffer->count - 1].score;
+    gint worst_kept_score = buffer->moves[buffer->count - 1].score;
+
+    if (!homeworlds_backend_score_strict_improvement_cutoff(buffer->side, worst_kept_score, out_cutoff)) {
+      *out_cutoff = worst_kept_score;
+      *out_cutoff_kind = HOMEWORLDS_GOOD_MOVE_CUTOFF_FULL_BUFFER_UNREACHABLE;
+      return TRUE;
+    }
     *out_cutoff_kind = HOMEWORLDS_GOOD_MOVE_CUTOFF_FULL_BUFFER;
     return TRUE;
   }
@@ -2872,6 +2903,11 @@ static gboolean homeworlds_backend_prepare_pruning_for_child(
   context->pruning_checked_branches++;
   if (cutoff_kind == HOMEWORLDS_GOOD_MOVE_CUTOFF_SCORE_WINDOW) {
     context->pruning_window_cutoff_branches++;
+  }
+  if (cutoff_kind == HOMEWORLDS_GOOD_MOVE_CUTOFF_FULL_BUFFER_UNREACHABLE) {
+    *out_prune_child = TRUE;
+    context->pruning_pruned_branches++;
+    return TRUE;
   }
   if (!homeworlds_backend_yellow_sacrifice_bound_prunes(child_state, buffer->side, cutoff, &prune_child)) {
     return FALSE;
@@ -7009,6 +7045,9 @@ static gboolean homeworlds_backend_goal_branch_is_cutoff_skipped(const Homeworld
   }
 
   *out_cutoff = cutoff;
+  if (cutoff_kind == HOMEWORLDS_GOOD_MOVE_CUTOFF_FULL_BUFFER_UNREACHABLE) {
+    return TRUE;
+  }
   return !homeworlds_backend_goal_branch_can_reach_cutoff(buffer->side, branch, cutoff);
 }
 

@@ -130,7 +130,9 @@ changes from the catastrophe as well as material and non-terminal homeworld-star
 by hitting the opponent homeworld, the bounds collapse to the exact terminal win score; it is not combined with
 material gains, buildability changes, or other catastrophes. Once a terminal winning move is scored, `good_moves()`
 clears the buffer to that move and stops exploring. When the optimistic bound cannot reach the current static-prune
-cutoff, the branch is not explored.
+cutoff, the branch is not explored. The cutoff value is always inclusive. For the score window, that is the weakest
+score still inside the window; once the 512-move buffer is full, the cutoff is adjusted one score past the current
+worst kept move because newly generated equal-score moves are later in buffer order and cannot enter.
 Non-terminal yellow goal partitions are created only when their required catastrophes can still be reached by legal
 yellow moves within the remaining sacrifice actions. Unreachable combinations and partitions whose tightened bounds
 are empty are summarized in the goal report before branch allocation, so skipped combinations do not consume branch ids

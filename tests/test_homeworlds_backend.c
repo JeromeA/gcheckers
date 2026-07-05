@@ -459,6 +459,113 @@ static void test_prepare_large_yellow_goal_report_position(HomeworldsPosition *p
   homeworlds_position_rebuild_color_counts(position);
 }
 
+static void test_prepare_full_buffer_cutoff_position(HomeworldsPosition *position) {
+  HomeworldsPyramid bank[] = {
+    homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_MEDIUM),
+    homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_MEDIUM),
+  };
+
+  assert(position != NULL);
+
+  homeworlds_position_init(position);
+  position->phase = HOMEWORLDS_PHASE_PLAY;
+  position->turn = 1;
+  memset(position->bank, 0, sizeof(position->bank));
+  memset(position->systems, 0, sizeof(position->systems));
+  memcpy(position->bank, bank, sizeof(bank));
+  position->systems[0] = (HomeworldsSystem){
+    .stars = {
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE),
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_MEDIUM),
+    },
+    .ships = {
+      [0] = {
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL),
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL),
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL),
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL),
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL),
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL),
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_MEDIUM),
+      },
+    },
+  };
+  position->systems[1] = (HomeworldsSystem){
+    .stars = {
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_SMALL),
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_MEDIUM),
+    },
+    .ships = {
+      [1] = {
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL),
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_SMALL),
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_MEDIUM),
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_MEDIUM),
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_MEDIUM),
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL),
+      },
+    },
+  };
+  position->systems[2] = (HomeworldsSystem){
+    .stars = {
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE),
+    },
+    .ships = {
+      [1] = {
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE),
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_MEDIUM),
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE),
+      },
+    },
+  };
+  position->systems[3] = (HomeworldsSystem){
+    .stars = {
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_LARGE),
+    },
+    .ships = {
+      [1] = {
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_MEDIUM),
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL),
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_LARGE),
+      },
+    },
+  };
+  position->systems[4] = (HomeworldsSystem){
+    .stars = {
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_RED, HOMEWORLDS_SIZE_LARGE),
+    },
+    .ships = {
+      [1] = {
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_SMALL),
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_LARGE),
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_MEDIUM),
+      },
+    },
+  };
+  position->systems[5] = (HomeworldsSystem){
+    .stars = {
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE),
+    },
+    .ships = {
+      [1] = {
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_YELLOW, HOMEWORLDS_SIZE_LARGE),
+      },
+    },
+  };
+  position->systems[7] = (HomeworldsSystem){
+    .stars = {
+      homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE),
+    },
+    .ships = {
+      [1] = {
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_MEDIUM),
+        homeworlds_pyramid_make(HOMEWORLDS_COLOR_GREEN, HOMEWORLDS_SIZE_LARGE),
+      },
+    },
+  };
+  homeworlds_position_rebuild_color_counts(position);
+}
+
 static void test_prepare_buildability_goal_position(HomeworldsPosition *position) {
   HomeworldsPyramid bank[] = {
     homeworlds_pyramid_make(HOMEWORLDS_COLOR_BLUE, HOMEWORLDS_SIZE_SMALL),
@@ -2620,6 +2727,30 @@ static void test_backend_good_move_trace_branch_limit_stops_scheduler(void) {
   g_free(capture.goal_report);
 }
 
+static void test_backend_good_move_trace_skips_equal_full_buffer_cutoff(void) {
+  const GameBackend *backend = &homeworlds_game_backend;
+  HomeworldsPosition position = {0};
+  GameBackendMoveList good_moves = {0};
+  TestGoodMoveTraceCapture capture = {0};
+
+  test_prepare_full_buffer_cutoff_position(&position);
+  homeworlds_backend_set_good_move_trace(test_capture_good_move_trace, &capture);
+  homeworlds_backend_set_good_move_trace_branch_limit(16);
+
+  good_moves = backend->list_good_moves(&position, 0, GAME_BACKEND_DEFAULT_GOOD_MOVE_SCORE_WINDOW);
+  homeworlds_backend_set_good_move_trace_branch_limit(0);
+
+  assert(capture.called);
+  assert(capture.goal_report != NULL);
+  assert(strstr(capture.goal_report, "cutoff=-260/window->-271/full") != NULL);
+  assert(strstr(capture.goal_report, "skip #20 cutoff=-271 bounds=[-270,-270] prefix=[S2y2-]") != NULL);
+  assert(strstr(capture.goal_report, "explore #20 ") == NULL);
+
+  backend->move_list_free(&good_moves);
+  homeworlds_backend_set_good_move_trace(NULL, NULL);
+  g_free(capture.goal_report);
+}
+
 static void test_backend_good_moves_follow_setup_policy_without_truncation(void) {
   const GameBackend *backend = &homeworlds_game_backend;
   HomeworldsPosition position = {0};
@@ -3756,6 +3887,7 @@ int main(void) {
   test_backend_good_moves_keep_buffer_when_goal_leaf_is_unreplayable();
   test_backend_good_move_trace_terminal_yellow_goal_is_absorbing();
   test_backend_good_move_trace_branch_limit_stops_scheduler();
+  test_backend_good_move_trace_skips_equal_full_buffer_cutoff();
   test_backend_good_moves_follow_setup_policy_without_truncation();
   test_backend_good_moves_first_turn_always_builds();
   test_backend_good_moves_use_symbolic_build_notation();

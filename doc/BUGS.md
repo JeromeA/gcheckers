@@ -1528,3 +1528,17 @@ capturing the trace for `--iterations`. Normal `good_moves()` calls remain unlim
 now also check required-catastrophe reachability before they enter the queue. Rejected yellow goal partitions are
 reported as a compact discard summary before branch allocation, so the report no longer shows large branch-id jumps for
 combinations that never entered the queue.
+
+## Homeworlds full-buffer cutoff kept exploring equal-score branches
+
+Once the Homeworlds good-move buffer is full, a queued branch whose best possible score only equals the current worst
+kept move cannot add anything: newly generated equal-score moves are later in buffer order and are rejected by the
+full-buffer check.
+
+The scheduler used the same inclusive cutoff value for score-window pruning and full-buffer pruning. That was correct
+for the score window, where an edge score is still accepted, but wrong for a full buffer. A branch with an exact score
+equal to the current worst kept score could be explored fully only for every leaf to be rejected by the full-buffer
+filter.
+
+The fix keeps cutoff comparisons inclusive but adjusts the full-buffer cutoff one score beyond the current worst kept
+move. A branch now has to prove that it can beat the worst kept move before it is explored.
