@@ -4904,6 +4904,533 @@ static gboolean homeworlds_backend_collect_child_state(
   return TRUE;
 }
 
+static gboolean homeworlds_backend_yellow_goal_branch_is_active(const HomeworldsMoveBuilderState *state,
+                                                                const HomeworldsGoodMoveContext *context) {
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(context != NULL, FALSE);
+
+  return context->active_goal_count > 0 &&
+         context->active_goal_required_mask != 0 &&
+         state->stage == HOMEWORLDS_BUILDER_STAGE_SELECT_SHIP &&
+         homeworlds_backend_state_has_active_sacrifice(state, HOMEWORLDS_COLOR_YELLOW);
+}
+
+static gboolean homeworlds_backend_find_pending_required_yellow_goal(
+    const HomeworldsMoveBuilderState *state,
+    const HomeworldsGoodMoveContext *context,
+    const HomeworldsGoalCatastrophe **out_goal,
+    guint *out_system_index,
+    gboolean *out_goal_blocked) {
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(context != NULL, FALSE);
+  g_return_val_if_fail(out_goal != NULL, FALSE);
+  g_return_val_if_fail(out_system_index != NULL, FALSE);
+  g_return_val_if_fail(out_goal_blocked != NULL, FALSE);
+
+  *out_goal = NULL;
+  *out_system_index = HOMEWORLDS_INVALID_INDEX;
+  *out_goal_blocked = FALSE;
+  for (guint i = 0; i < context->active_goal_count; ++i) {
+    const HomeworldsGoalCatastrophe *goal = &context->active_goal_catastrophes[i];
+    guint mask = 1u << i;
+    guint system_index = HOMEWORLDS_INVALID_INDEX;
+
+    if ((context->active_goal_required_mask & mask) == 0 ||
+        homeworlds_backend_move_has_profitable_catastrophe(&state->move, &goal->catastrophe)) {
+      continue;
+    }
+    if (!homeworlds_position_resolve_system_ref(&state->working_position,
+                                                &goal->catastrophe.system_ref,
+                                                &system_index) ||
+        system_index >= HOMEWORLDS_SYSTEM_SLOT_COUNT ||
+        homeworlds_system_is_empty(&state->working_position.systems[system_index])) {
+      *out_goal_blocked = TRUE;
+      return FALSE;
+    }
+
+    *out_goal = goal;
+    *out_system_index = system_index;
+    return TRUE;
+  }
+  return FALSE;
+}
+
+static gboolean homeworlds_backend_yellow_goal_apply_existing_move(
+    const HomeworldsMoveBuilderState *state,
+    guint source_index,
+    HomeworldsPyramid ship,
+    guint target_index,
+    HomeworldsMoveBuilderState *out_child_state) {
+  HomeworldsMoveBuilderState child_state = {0};
+  GameBackendMoveBuilder child = {0};
+  HomeworldsMoveCandidate select_candidate = {0};
+  HomeworldsMoveCandidate target_candidate = {0};
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(source_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
+  g_return_val_if_fail(homeworlds_pyramid_is_valid(ship), FALSE);
+  g_return_val_if_fail(target_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
+  g_return_val_if_fail(out_child_state != NULL, FALSE);
+
+  child_state = *state;
+  child = (GameBackendMoveBuilder){
+    .builder_state = &child_state,
+    .builder_state_size = sizeof(child_state),
+  };
+  select_candidate = (HomeworldsMoveCandidate){
+    .data = {
+      .kind = HOMEWORLDS_CANDIDATE_SELECT_SHIP,
+      .system_index = source_index,
+      .ship_owner = state->working_position.turn,
+      .pyramid = ship,
+    },
+  };
+  target_candidate = (HomeworldsMoveCandidate){
+    .data = {
+      .kind = HOMEWORLDS_CANDIDATE_MOVE_TARGET,
+      .target_system_index = target_index,
+    },
+  };
+
+  if (!homeworlds_move_builder_step(&child, &select_candidate) ||
+      child_state.stage != HOMEWORLDS_BUILDER_STAGE_SELECT_MOVE_TARGET ||
+      !homeworlds_move_builder_step(&child, &target_candidate)) {
+    return FALSE;
+  }
+
+  *out_child_state = child_state;
+  return TRUE;
+}
+
+static gboolean homeworlds_backend_collect_yellow_goal_child(
+    const HomeworldsMoveBuilderState *state,
+    const HomeworldsGenerationContext *generation_context,
+    HomeworldsGoodMoveContext *context,
+    HomeworldsMoveBuffer *buffer,
+    gboolean allow_pass_move,
+    const HomeworldsMoveBuilderState *child_state,
+    gboolean *inout_covered) {
+  gboolean child_covered = FALSE;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(generation_context != NULL, FALSE);
+  g_return_val_if_fail(context != NULL, FALSE);
+  g_return_val_if_fail(buffer != NULL, FALSE);
+  g_return_val_if_fail(child_state != NULL, FALSE);
+  g_return_val_if_fail(inout_covered != NULL, FALSE);
+
+  if (!homeworlds_backend_collect_child_state(state,
+                                              generation_context,
+                                              context,
+                                              buffer,
+                                              allow_pass_move,
+                                              child_state,
+                                              &child_covered)) {
+    return FALSE;
+  }
+  *inout_covered = *inout_covered || child_covered;
+  return TRUE;
+}
+
+static gboolean homeworlds_backend_goal_catastrophe_current_gain_reaches(
+    const HomeworldsMoveBuilderState *state,
+    const HomeworldsGoalCatastrophe *goal,
+    guint system_index) {
+  gint immediate_gain = 0;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(goal != NULL, FALSE);
+  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
+
+  if (goal->wins_game || goal->gain == 0) {
+    return TRUE;
+  }
+  immediate_gain = homeworlds_backend_immediate_catastrophe_gain(state,
+                                                                 system_index,
+                                                                 goal->catastrophe.color,
+                                                                 state->working_position.turn);
+  return immediate_gain != G_MAXINT && immediate_gain >= (gint)goal->gain;
+}
+
+static gboolean homeworlds_backend_yellow_goal_should_defer_forced_catastrophe(
+    const HomeworldsMoveBuilderState *state,
+    const HomeworldsGoodMoveContext *context,
+    const HomeworldsProfitableCatastrophe *catastrophe) {
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(context != NULL, FALSE);
+  g_return_val_if_fail(catastrophe != NULL, FALSE);
+
+  if (!homeworlds_backend_yellow_goal_branch_is_active(state, context)) {
+    return FALSE;
+  }
+
+  for (guint i = 0; i < context->active_goal_count; ++i) {
+    const HomeworldsGoalCatastrophe *goal = &context->active_goal_catastrophes[i];
+    guint mask = 1u << i;
+
+    if ((context->active_goal_required_mask & mask) == 0 ||
+        homeworlds_backend_move_has_profitable_catastrophe(&state->move, &goal->catastrophe) ||
+        !homeworlds_backend_profitable_catastrophes_equal(catastrophe, &goal->catastrophe)) {
+      continue;
+    }
+    return !homeworlds_backend_goal_catastrophe_current_gain_reaches(state, goal, catastrophe->system_index);
+  }
+  return FALSE;
+}
+
+static gboolean homeworlds_backend_yellow_goal_state_can_still_reach_gain(
+    const HomeworldsMoveBuilderState *state,
+    const HomeworldsGoalCatastrophe *goal,
+    guint system_index) {
+  const HomeworldsSystem *system = NULL;
+  guint side = 0;
+  guint color_count = 0;
+  guint needed_pyramids = 0;
+  guint material_cost = 0;
+  gint future_gain = 0;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(goal != NULL, FALSE);
+  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
+
+  side = state->working_position.turn;
+  g_return_val_if_fail(side < 2, FALSE);
+  system = &state->working_position.systems[system_index];
+  color_count = homeworlds_system_color_count(system, goal->catastrophe.color);
+  if (color_count >= 4) {
+    guint gain = 0;
+
+    if (goal->wins_game || goal->gain == 0) {
+      return TRUE;
+    }
+    gain = homeworlds_backend_existing_catastrophe_gain_ceiling(state,
+                                                                system_index,
+                                                                goal->catastrophe.color,
+                                                                side,
+                                                                state->pending_actions_remaining);
+    return gain == G_MAXUINT || gain >= goal->gain;
+  }
+
+  needed_pyramids = 4 - color_count;
+  if (needed_pyramids > state->pending_actions_remaining) {
+    return FALSE;
+  }
+  if (goal->wins_game) {
+    return homeworlds_backend_yellow_required_material_cost_to_create_catastrophe(state,
+                                                                                  system_index,
+                                                                                  goal->catastrophe.color,
+                                                                                  side,
+                                                                                  needed_pyramids,
+                                                                                  state->pending_actions_remaining,
+                                                                                  &material_cost);
+  }
+
+  future_gain =
+      homeworlds_backend_future_catastrophe_gain_ceiling(state, system_index, goal->catastrophe.color, side);
+  if (future_gain == G_MAXINT) {
+    return TRUE;
+  }
+  if (future_gain <= 0 ||
+      !homeworlds_backend_yellow_required_material_cost_to_create_catastrophe(state,
+                                                                              system_index,
+                                                                              goal->catastrophe.color,
+                                                                              side,
+                                                                              needed_pyramids,
+                                                                              state->pending_actions_remaining,
+                                                                              &material_cost) ||
+      material_cost >= (guint)future_gain) {
+    return FALSE;
+  }
+  return (guint)future_gain - material_cost >= goal->gain;
+}
+
+static gboolean homeworlds_backend_yellow_goal_ship_is_doomed_by_catastrophe(
+    const HomeworldsMoveBuilderState *state,
+    const HomeworldsGoalCatastrophe *goal,
+    guint system_index,
+    HomeworldsPyramid ship) {
+  const HomeworldsSystem *system = NULL;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(goal != NULL, FALSE);
+  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
+  g_return_val_if_fail(homeworlds_pyramid_is_valid(ship), FALSE);
+
+  system = &state->working_position.systems[system_index];
+  return homeworlds_backend_catastrophe_removes_all_stars(system, goal->catastrophe.color) ||
+         homeworlds_pyramid_color(ship) == goal->catastrophe.color;
+}
+
+static gboolean homeworlds_backend_collect_yellow_goal_move_away_children(
+    const HomeworldsMoveBuilderState *state,
+    const HomeworldsGenerationContext *generation_context,
+    HomeworldsGoodMoveContext *context,
+    HomeworldsMoveBuffer *buffer,
+    gboolean allow_pass_move,
+    const HomeworldsGoalCatastrophe *goal,
+    guint system_index,
+    gboolean *out_handled,
+    gboolean *out_covered) {
+  const HomeworldsSystem *system = NULL;
+  gboolean covered = FALSE;
+  gboolean handled = TRUE;
+  gboolean seen_pyramids[13] = {FALSE};
+  guint side = 0;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(generation_context != NULL, FALSE);
+  g_return_val_if_fail(context != NULL, FALSE);
+  g_return_val_if_fail(buffer != NULL, FALSE);
+  g_return_val_if_fail(goal != NULL, FALSE);
+  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
+  g_return_val_if_fail(out_handled != NULL, FALSE);
+  g_return_val_if_fail(out_covered != NULL, FALSE);
+
+  *out_handled = FALSE;
+  *out_covered = FALSE;
+  side = state->working_position.turn;
+  system = &state->working_position.systems[system_index];
+  for (guint ship_slot = 0; ship_slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++ship_slot) {
+    HomeworldsPyramid ship = system->ships[side][ship_slot];
+    HomeworldsMoveBuilderState selected_state = {0};
+    GameBackendMoveBuilder selected_builder = {0};
+    HomeworldsMoveCandidate select_candidate = {0};
+    GameBackendMoveList targets = {0};
+
+    if (!homeworlds_pyramid_is_valid(ship)) {
+      break;
+    }
+    if (seen_pyramids[ship] ||
+        !homeworlds_backend_yellow_goal_ship_is_doomed_by_catastrophe(state, goal, system_index, ship)) {
+      continue;
+    }
+    seen_pyramids[ship] = TRUE;
+
+    selected_state = *state;
+    selected_builder = (GameBackendMoveBuilder){
+      .builder_state = &selected_state,
+      .builder_state_size = sizeof(selected_state),
+    };
+    select_candidate = (HomeworldsMoveCandidate){
+      .data = {
+        .kind = HOMEWORLDS_CANDIDATE_SELECT_SHIP,
+        .system_index = system_index,
+        .ship_owner = side,
+        .pyramid = ship,
+      },
+    };
+    if (!homeworlds_move_builder_step(&selected_builder, &select_candidate) ||
+        selected_state.stage != HOMEWORLDS_BUILDER_STAGE_SELECT_MOVE_TARGET) {
+      continue;
+    }
+
+    targets = homeworlds_move_builder_list_candidates(&selected_builder);
+    for (gsize i = 0; i < targets.count; ++i) {
+      const HomeworldsMoveCandidate *target = &((const HomeworldsMoveCandidate *) targets.moves)[i];
+      HomeworldsMoveBuilderState child_state = selected_state;
+      GameBackendMoveBuilder child = {
+        .builder_state = &child_state,
+        .builder_state_size = sizeof(child_state),
+      };
+
+      if (target == NULL ||
+          target->data.kind != HOMEWORLDS_CANDIDATE_MOVE_TARGET ||
+          target->data.target_system_index == system_index ||
+          !homeworlds_move_builder_step(&child, target) ||
+          !homeworlds_backend_yellow_goal_state_can_still_reach_gain(&child_state, goal, system_index)) {
+        continue;
+      }
+      if (!homeworlds_backend_collect_yellow_goal_child(state,
+                                                        generation_context,
+                                                        context,
+                                                        buffer,
+                                                        allow_pass_move,
+                                                        &child_state,
+                                                        &covered)) {
+        homeworlds_backend_move_list_free(&targets);
+        return FALSE;
+      }
+      if (homeworlds_backend_move_buffer_has_terminal_win(buffer)) {
+        homeworlds_backend_move_list_free(&targets);
+        *out_handled = TRUE;
+        *out_covered = TRUE;
+        return TRUE;
+      }
+    }
+    homeworlds_backend_move_list_free(&targets);
+  }
+
+  *out_handled = handled;
+  *out_covered = covered;
+  return TRUE;
+}
+
+static gboolean homeworlds_backend_collect_yellow_goal_move_in_children(
+    const HomeworldsMoveBuilderState *state,
+    const HomeworldsGenerationContext *generation_context,
+    HomeworldsGoodMoveContext *context,
+    HomeworldsMoveBuffer *buffer,
+    gboolean allow_pass_move,
+    const HomeworldsGoalCatastrophe *goal,
+    guint target_index,
+    gboolean *out_handled,
+    gboolean *out_covered) {
+  gboolean covered = FALSE;
+  gboolean handled = FALSE;
+  guint side = 0;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(generation_context != NULL, FALSE);
+  g_return_val_if_fail(context != NULL, FALSE);
+  g_return_val_if_fail(buffer != NULL, FALSE);
+  g_return_val_if_fail(goal != NULL, FALSE);
+  g_return_val_if_fail(target_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
+  g_return_val_if_fail(out_handled != NULL, FALSE);
+  g_return_val_if_fail(out_covered != NULL, FALSE);
+
+  *out_handled = FALSE;
+  *out_covered = FALSE;
+  side = state->working_position.turn;
+  for (guint source_index = 0; source_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++source_index) {
+    const HomeworldsSystem *source = &state->working_position.systems[source_index];
+    gboolean seen_pyramids[13] = {FALSE};
+
+    if (source_index == target_index || homeworlds_system_is_empty(source)) {
+      continue;
+    }
+    for (guint ship_slot = 0; ship_slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++ship_slot) {
+      HomeworldsPyramid ship = source->ships[side][ship_slot];
+      HomeworldsMoveBuilderState child_state = {0};
+
+      if (!homeworlds_pyramid_is_valid(ship)) {
+        break;
+      }
+      if (seen_pyramids[ship] || homeworlds_pyramid_color(ship) != goal->catastrophe.color) {
+        continue;
+      }
+      seen_pyramids[ship] = TRUE;
+      if (!homeworlds_backend_yellow_goal_apply_existing_move(state,
+                                                              source_index,
+                                                              ship,
+                                                              target_index,
+                                                              &child_state) ||
+          !homeworlds_backend_yellow_goal_state_can_still_reach_gain(&child_state, goal, target_index)) {
+        continue;
+      }
+
+      handled = TRUE;
+      if (!homeworlds_backend_collect_yellow_goal_child(state,
+                                                        generation_context,
+                                                        context,
+                                                        buffer,
+                                                        allow_pass_move,
+                                                        &child_state,
+                                                        &covered)) {
+        return FALSE;
+      }
+      if (homeworlds_backend_move_buffer_has_terminal_win(buffer)) {
+        *out_handled = TRUE;
+        *out_covered = TRUE;
+        return TRUE;
+      }
+    }
+  }
+
+  *out_handled = handled;
+  *out_covered = covered;
+  return TRUE;
+}
+
+static gboolean homeworlds_backend_collect_yellow_goal_constrained(
+    const HomeworldsMoveBuilderState *state,
+    const HomeworldsGenerationContext *generation_context,
+    HomeworldsGoodMoveContext *context,
+    HomeworldsMoveBuffer *buffer,
+    gboolean allow_pass_move,
+    gboolean *out_handled,
+    gboolean *out_covered) {
+  const HomeworldsGoalCatastrophe *goal = NULL;
+  const HomeworldsSystem *system = NULL;
+  guint system_index = HOMEWORLDS_INVALID_INDEX;
+  guint color_count = 0;
+  gboolean goal_blocked = FALSE;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(generation_context != NULL, FALSE);
+  g_return_val_if_fail(context != NULL, FALSE);
+  g_return_val_if_fail(buffer != NULL, FALSE);
+  g_return_val_if_fail(out_handled != NULL, FALSE);
+  g_return_val_if_fail(out_covered != NULL, FALSE);
+
+  *out_handled = FALSE;
+  *out_covered = FALSE;
+  if (!homeworlds_backend_yellow_goal_branch_is_active(state, context)) {
+    return TRUE;
+  }
+  if (!homeworlds_backend_find_pending_required_yellow_goal(state,
+                                                            context,
+                                                            &goal,
+                                                            &system_index,
+                                                            &goal_blocked)) {
+    if (goal_blocked) {
+      *out_handled = TRUE;
+    }
+    return TRUE;
+  }
+
+  system = &state->working_position.systems[system_index];
+  color_count = homeworlds_system_color_count(system, goal->catastrophe.color);
+  if (color_count >= 4 &&
+      !homeworlds_backend_goal_catastrophe_current_gain_reaches(state, goal, system_index)) {
+    return homeworlds_backend_collect_yellow_goal_move_away_children(state,
+                                                                     generation_context,
+                                                                     context,
+                                                                     buffer,
+                                                                     allow_pass_move,
+                                                                     goal,
+                                                                     system_index,
+                                                                     out_handled,
+                                                                     out_covered);
+  }
+
+  if (color_count >= 4) {
+    HomeworldsMoveBuilderState child_state = *state;
+    HomeworldsProfitableCatastrophe catastrophe = goal->catastrophe;
+    gboolean covered = FALSE;
+
+    catastrophe.system_index = system_index;
+    if (!homeworlds_backend_apply_profitable_catastrophe(&child_state, &catastrophe)) {
+      return TRUE;
+    }
+    *out_handled = TRUE;
+    if (!homeworlds_backend_collect_yellow_goal_child(state,
+                                                      generation_context,
+                                                      context,
+                                                      buffer,
+                                                      allow_pass_move,
+                                                      &child_state,
+                                                      &covered)) {
+      return FALSE;
+    }
+    *out_covered = covered;
+    return TRUE;
+  }
+
+  if (state->pending_actions_remaining < 4 - color_count) {
+    *out_handled = TRUE;
+    return TRUE;
+  }
+  return homeworlds_backend_collect_yellow_goal_move_in_children(state,
+                                                                 generation_context,
+                                                                 context,
+                                                                 buffer,
+                                                                 allow_pass_move,
+                                                                 goal,
+                                                                 system_index,
+                                                                 out_handled,
+                                                                 out_covered);
+}
+
 static gboolean homeworlds_backend_collect_single_step_action(
     const HomeworldsMoveBuilderState *state,
     const HomeworldsGenerationContext *generation_context,
@@ -5284,7 +5811,8 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(
       gboolean prune_child = FALSE;
       gboolean child_covered = FALSE;
 
-      if (homeworlds_backend_catastrophe_is_root_required(context, &catastrophes[i])) {
+      if (homeworlds_backend_catastrophe_is_root_required(context, &catastrophes[i]) ||
+          homeworlds_backend_yellow_goal_should_defer_forced_catastrophe(state, context, &catastrophes[i])) {
         continue;
       }
       forced_catastrophe_seen = TRUE;
@@ -5337,6 +5865,7 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(
     if (!homeworlds_backend_catastrophe_is_root_required(context, &catastrophes[i]) ||
         (context->defer_root_catastrophes &&
          state->move.step_count <= context->root_defer_step_count) ||
+        homeworlds_backend_yellow_goal_should_defer_forced_catastrophe(state, context, &catastrophes[i]) ||
         homeworlds_backend_move_has_profitable_catastrophe(&state->move, &catastrophes[i]) ||
         !homeworlds_backend_apply_profitable_catastrophe(&child_state, &catastrophes[i])) {
       continue;
@@ -5395,6 +5924,25 @@ static gboolean homeworlds_backend_collect_good_moves_recursive(
     }
     *out_covered = TRUE;
     return TRUE;
+  }
+
+  {
+    gboolean goal_handled = FALSE;
+    gboolean goal_covered = FALSE;
+
+    if (!homeworlds_backend_collect_yellow_goal_constrained(state,
+                                                            generation_context,
+                                                            context,
+                                                            buffer,
+                                                            allow_pass_move,
+                                                            &goal_handled,
+                                                            &goal_covered)) {
+      return FALSE;
+    }
+    if (goal_handled) {
+      *out_covered = goal_covered;
+      return TRUE;
+    }
   }
 
   if (homeworlds_backend_state_should_collect_single_steps_first(state)) {

@@ -730,6 +730,13 @@ active yellow sacrifices, reachable positive catastrophes become explicit goal-s
 wins by destroying the opponent homeworld, the split is just that terminal goal versus all non-terminal goal
 combinations. Required non-terminal goal gains tighten both the guaranteed and optimistic sides of the score bounds,
 while terminal homeworld wins collapse the bounds to the exact terminal score and are never added to material gains.
+When exploring a required yellow goal branch, the collector tries to build that required catastrophe directly before
+ordinary traversal: it fires already-good catastrophes, moves doomed own material away when that is needed to reach the
+branch's goal quality, and moves same-color ships into the target system when the catastrophe is not ready yet.
+Candidate children that cannot still reach the stored goal gain after remaining material costs are
+rejected immediately; if the target is gone, too few yellow actions remain, or no quality-improving move-away exists,
+the required branch is exhausted. The completed-move goal filter remains a correctness guard and enforces
+exclusion/no-goal branches.
 Once a terminal winning move is scored, `good_moves()` keeps that move and stops exploring because no deeper or sibling
 branch can beat it. The same optimistic proof bound is used for branch pruning and local continuation ordering. Forced
 sacrifice

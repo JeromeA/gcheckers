@@ -639,7 +639,7 @@ static void homeworlds_proof_probe_print_later_iterations(char **lines,
                                              explore_max,
                                              explore_bound_text,
                                              sizeof(explore_bound_text));
-        g_print("  action: recursively explore this full branch (%s)\n", explore_bound_text);
+        g_print("  action: recursively explore this branch (%s)\n", explore_bound_text);
         index++;
         continue;
       }

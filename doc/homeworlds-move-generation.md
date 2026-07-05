@@ -90,15 +90,21 @@ The current Homeworlds `good_moves()` scheduler creates goal branches, then expl
 same staged builder used by the UI. Branches can represent root catastrophe policy, directly collected root
 single-step actions, sacrifices, yellow sacrifice goal partitions, or a generic fallback. A yellow sacrifice with
 reachable positive catastrophe goals is split by exact goal set first. With two non-terminal scheduled goals, for
-example, the partitions are "both goals", "first goal only", "second goal only", and "none of those goals"; completed
-moves that do not match the branch's exact goal set are rejected by that branch. If one scheduled goal wins by
-destroying the opponent homeworld, that terminal goal absorbs the other goals: the scheduler creates one branch
-requiring the win, then branches for the non-terminal combinations with the win excluded. A branch also stores an
-integer score-bound range used for ordering and cutoff checks. The range is not a filter: after goal splitting is no
-longer possible or useful, the selected branch is explored in full. Branches with a conservative leaf upper bound of 50
-or less are explored directly instead of being split further. Sacrifice branch leaf bounds include every possible early
-pass-completion prefix, because the builder can finish a sacrifice by appending passes for all remaining sacrifice
-actions.
+example, the partitions are "both goals", "first goal only", "second goal only", and "none of those goals". Required
+yellow-goal branches then try to construct the pending required catastrophe before generic traversal: if the target
+system already has four of the goal color, the branch either fires the catastrophe or first moves away doomed own
+material needed to reach the advertised goal quality; otherwise it moves same-color own ships into the target system.
+Constructed child steps must still be able to reach the branch's stored goal gain after remaining material costs are
+paid. If a required goal target is gone, not enough yellow actions remain, or no quality-improving move-away child
+exists, the branch is exhausted instead of falling back to an unconstrained scan. Exclusion and "none of those goals"
+branches still use the completed-move goal filter as their contract. If one scheduled goal wins by destroying the
+opponent homeworld, that terminal goal absorbs the other goals: the scheduler creates one branch requiring the win,
+then branches for the non-terminal combinations with the win excluded. A branch also stores an integer score-bound
+range used for ordering and cutoff checks. The range is not a leaf filter: after goal splitting and goal construction
+are no longer possible or useful, the selected branch is explored in full. Branches with a conservative leaf upper
+bound of 50 or less are explored directly instead of being split further. Sacrifice branch leaf bounds include every
+possible early pass-completion prefix, because the builder can finish a sacrifice by appending passes for all remaining
+sacrifice actions.
 
 Setup moves are filtered to prefer playable starts: three distinct colors across the two stars and starting ship, a
 large starting ship, two different homeworld star sizes, green included for player 1, and a different star-size
