@@ -776,7 +776,7 @@ without mixing them into the CSV summary. During
 interactive runs, it also renders one stderr progress line for the current value/game/ply using carriage return plus
 ANSI clear-line control and clears that line before each result row is shown. `GCHECKERS_HOMEWORLDS_EVAL_PROGRESS`
 can force that progress display with `always`, disable it with `never`, or leave the default terminal-only `auto`
-behavior. If a `good_moves()` call generates more than 500,000 deduplicated complete leaves, it writes
+behavior. If a `good_moves()` call generates more than 1,000 deduplicated complete leaves, it writes
 `big_move_report_###.txt` in the current
 directory with the `good_moves()` trace, pruning counts, ordering counts, goal-tree branch counts, a bounded
 human-readable goal-tree report, the moves leading to the reported position, the ASCII position, and the kept
