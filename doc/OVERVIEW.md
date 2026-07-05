@@ -846,7 +846,8 @@ cheapest same-color own ships that must be moved into the system to create the c
 such ships can reach the target system without spending the whole gain. A future catastrophe that wins by destroying
 the opponent homeworld contributes the terminal score as an alternative bound instead of an additive material gain.
 Non-terminal yellow goal partitions are skipped when their required catastrophes cannot be reached by legal yellow moves
-with the remaining sacrifice actions.
+with the remaining sacrifice actions. Those skipped yellow goal partitions are summarized in the goal report before
+branch ids are assigned, so discarded combinations do not create gaps in the reported branch sequence.
 Red, green, and blue sacrifices use simpler conservative best-score bounds for scheduler cutoff checks: red counts
 capture upside, green counts build/buildability upside, and blue counts buildability and catastrophe upside without
 assigning material value to same-size trades.

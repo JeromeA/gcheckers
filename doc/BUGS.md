@@ -1525,4 +1525,6 @@ to reject every leaf as outside the goal contract.
 
 The fix adds a trace-only selected-branch limit to the Homeworlds backend and has the proof probe set it while
 capturing the trace for `--iterations`. Normal `good_moves()` calls remain unlimited. Nonterminal yellow goal branches
-now also check required-catastrophe reachability before they enter the queue.
+now also check required-catastrophe reachability before they enter the queue. Rejected yellow goal partitions are
+reported as a compact discard summary before branch allocation, so the report no longer shows large branch-id jumps for
+combinations that never entered the queue.

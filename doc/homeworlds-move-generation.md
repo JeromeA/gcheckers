@@ -132,7 +132,9 @@ material gains, buildability changes, or other catastrophes. Once a terminal win
 clears the buffer to that move and stops exploring. When the optimistic bound cannot reach the current static-prune
 cutoff, the branch is not explored.
 Non-terminal yellow goal partitions are created only when their required catastrophes can still be reached by legal
-yellow moves within the remaining sacrifice actions; unreachable combinations are skipped before they enter the queue.
+yellow moves within the remaining sacrifice actions. Unreachable combinations and partitions whose tightened bounds
+are empty are summarized in the goal report before branch allocation, so skipped combinations do not consume branch ids
+or appear as branch rows.
 
 Red, green, and blue sacrifice branches do not yet split into goal contracts, but they also get conservative best-score
 bounds. Red bounds count optimistic capture upside, green bounds count optimistic build material and buildability

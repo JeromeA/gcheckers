@@ -1214,6 +1214,29 @@ static gboolean test_goal_report_has_skip_for_prefix(const char *report, const c
   return FALSE;
 }
 
+static gboolean test_goal_report_create_ids_are_contiguous(const char *report) {
+  g_auto(GStrv) lines = NULL;
+  gsize expected_id = 0;
+  gboolean saw_create = FALSE;
+
+  assert(report != NULL);
+
+  lines = g_strsplit(report, "\n", -1);
+  for (guint i = 0; lines[i] != NULL; ++i) {
+    gsize id = 0;
+
+    if (sscanf(lines[i], "create #%zu", &id) != 1) {
+      continue;
+    }
+    if (id != expected_id) {
+      return FALSE;
+    }
+    expected_id++;
+    saw_create = TRUE;
+  }
+  return saw_create;
+}
+
 static const HomeworldsMoveCandidate *test_find_trade_color_candidate(const GameBackend *backend,
                                                                       const GameBackendMoveList *candidates,
                                                                       HomeworldsColor color) {
@@ -2346,6 +2369,8 @@ static void test_backend_good_move_trace_partitions_yellow_sacrifice_goals(void)
   assert(strstr(capture.goal_report, "goal=[S0y!]") != NULL);
   assert(strstr(capture.goal_report, "goal=[no scheduled effect]") != NULL);
   assert(strstr(capture.goal_report, "goal=[S0y!+S1r!]") == NULL);
+  assert(strstr(capture.goal_report, "yellow-goal-partitions") != NULL);
+  assert(test_goal_report_create_ids_are_contiguous(capture.goal_report));
   assert(strstr(capture.goal_report, "inside_interval+=") == NULL);
   assert(strstr(capture.goal_report, "score-split #") == NULL);
   assert(test_goal_report_find_goal_bounds(capture.goal_report, "S1r!", &red_min, &red_max));

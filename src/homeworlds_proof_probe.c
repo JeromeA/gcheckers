@@ -240,6 +240,44 @@ static gboolean homeworlds_proof_probe_parse_split_result_line(const char *line,
   return sscanf(line, "split-result #%zu created+=%zu queue=%u", out_id, out_created, out_queue) == 3;
 }
 
+static gboolean homeworlds_proof_probe_parse_yellow_goal_discard_line(const char *line,
+                                                                      gsize *out_id,
+                                                                      gsize *out_total,
+                                                                      gsize *out_unreachable,
+                                                                      gsize *out_invalid_bounds) {
+  g_return_val_if_fail(line != NULL, FALSE);
+  g_return_val_if_fail(out_id != NULL, FALSE);
+  g_return_val_if_fail(out_total != NULL, FALSE);
+  g_return_val_if_fail(out_unreachable != NULL, FALSE);
+  g_return_val_if_fail(out_invalid_bounds != NULL, FALSE);
+
+  return sscanf(line,
+                "discard #%zu yellow-goal-partitions total=%zu unreachable=%zu invalid_bounds=%zu",
+                out_id,
+                out_total,
+                out_unreachable,
+                out_invalid_bounds) == 4;
+}
+
+static void homeworlds_proof_probe_print_yellow_goal_discards(gsize total,
+                                                              gsize unreachable,
+                                                              gsize invalid_bounds) {
+  gboolean printed_detail = FALSE;
+
+  g_print("  result: discarded %zu yellow goal partitions", total);
+  if (unreachable > 0 || invalid_bounds > 0) {
+    g_print(":");
+  }
+  if (unreachable > 0) {
+    g_print(" unreachable +%zu", unreachable);
+    printed_detail = TRUE;
+  }
+  if (invalid_bounds > 0) {
+    g_print("%s invalid-bounds +%zu", printed_detail ? "," : "", invalid_bounds);
+  }
+  g_print("\n");
+}
+
 static gboolean homeworlds_proof_probe_parse_skip_line(const char *line,
                                                        gsize *out_id,
                                                        gint *out_cutoff,
@@ -576,6 +614,10 @@ static void homeworlds_proof_probe_print_later_iterations(char **lines,
       gsize split_id = 0;
       gsize created = 0;
       guint queue = 0;
+      gsize discard_id = 0;
+      gsize discard_total = 0;
+      gsize discard_unreachable = 0;
+      gsize discard_invalid_bounds = 0;
       gsize skip_id = 0;
       gint cutoff = 0;
       gint skip_min = 0;
@@ -608,6 +650,18 @@ static void homeworlds_proof_probe_print_later_iterations(char **lines,
                 queue);
         index++;
         break;
+      }
+      if (homeworlds_proof_probe_parse_yellow_goal_discard_line(lines[index],
+                                                                &discard_id,
+                                                                &discard_total,
+                                                                &discard_unreachable,
+                                                                &discard_invalid_bounds) &&
+          discard_id == id) {
+        homeworlds_proof_probe_print_yellow_goal_discards(discard_total,
+                                                          discard_unreachable,
+                                                          discard_invalid_bounds);
+        index++;
+        continue;
       }
       if (g_str_has_prefix(lines[index], "goal-split-fallback #")) {
         g_print("  result: kept as one broad yellow branch because the goal split was not bounded enough\n");

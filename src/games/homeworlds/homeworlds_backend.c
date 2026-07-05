@@ -114,6 +114,11 @@ typedef struct {
 } HomeworldsGoalCollectionSnapshot;
 
 typedef struct {
+  gsize unreachable;
+  gsize invalid_bounds;
+} HomeworldsYellowGoalDiscardStats;
+
+typedef struct {
   gsize index;
   gboolean is_pass;
   gboolean has_priority;
@@ -4884,7 +4889,9 @@ static gboolean homeworlds_backend_goal_branch_clone_for_yellow_goals(
     guint buildable_loss_required_mask,
     guint buildable_loss_excluded_mask,
     guint side,
+    HomeworldsYellowGoalDiscardStats *discard_stats,
     HomeworldsGoalBranch **out_branch) {
+  HomeworldsGoalBranch candidate = {0};
   HomeworldsGoalBranch *clone = NULL;
   guint terminal_mask = 0;
 
@@ -4893,44 +4900,62 @@ static gboolean homeworlds_backend_goal_branch_clone_for_yellow_goals(
   g_return_val_if_fail(goals != NULL || goal_count == 0, FALSE);
   g_return_val_if_fail(goal_count <= HOMEWORLDS_GOAL_BRANCH_MAX_CATASTROPHE_GOALS, FALSE);
   g_return_val_if_fail(side < 2, FALSE);
+  g_return_val_if_fail(discard_stats != NULL, FALSE);
   g_return_val_if_fail(out_branch != NULL, FALSE);
 
   *out_branch = NULL;
+
+  candidate = *branch;
+  if (goal_count > 0) {
+    memcpy(candidate.goal_catastrophes, goals, goal_count * sizeof(goals[0]));
+  }
+  candidate.goal_count = goal_count;
+  candidate.goal_required_mask = required_mask;
+  candidate.goal_excluded_mask = excluded_mask;
+  candidate.goal_buildable_start_mask = buildable_start_mask;
+  candidate.goal_buildable_gain_required_mask = buildable_gain_required_mask;
+  candidate.goal_buildable_gain_excluded_mask = buildable_gain_excluded_mask;
+  candidate.goal_buildable_loss_required_mask = buildable_loss_required_mask;
+  candidate.goal_buildable_loss_excluded_mask = buildable_loss_excluded_mask;
+  homeworlds_backend_goal_branch_format_goal_label(&candidate);
+
+  terminal_mask = goal_count > 0 ? homeworlds_backend_goal_terminal_win_mask(goals, goal_count) : 0;
+  if ((required_mask & ~terminal_mask) != 0 &&
+      !homeworlds_backend_yellow_required_goal_contract_reachable(&candidate.state,
+                                                                  goals,
+                                                                  goal_count,
+                                                                  required_mask)) {
+    discard_stats->unreachable++;
+    return TRUE;
+  }
+  if (!homeworlds_backend_goal_branch_apply_yellow_goal_bound(&candidate, side)) {
+    return FALSE;
+  }
+  if (candidate.score_min_bound > candidate.score_max_bound) {
+    discard_stats->invalid_bounds++;
+    return TRUE;
+  }
+
   clone = homeworlds_backend_goal_branch_clone_for_bounds(queue,
-                                                            branch,
-                                                            branch->score_min_bound,
-                                                            branch->score_max_bound,
-                                                            "yellow goal partition");
+                                                          branch,
+                                                          candidate.score_min_bound,
+                                                          candidate.score_max_bound,
+                                                          "yellow goal partition");
   if (clone == NULL) {
     return FALSE;
   }
-
   if (goal_count > 0) {
-    memcpy(clone->goal_catastrophes, goals, goal_count * sizeof(goals[0]));
+    memcpy(clone->goal_catastrophes, candidate.goal_catastrophes, goal_count * sizeof(candidate.goal_catastrophes[0]));
   }
-  clone->goal_count = goal_count;
-  clone->goal_required_mask = required_mask;
-  clone->goal_excluded_mask = excluded_mask;
-  clone->goal_buildable_start_mask = buildable_start_mask;
-  clone->goal_buildable_gain_required_mask = buildable_gain_required_mask;
-  clone->goal_buildable_gain_excluded_mask = buildable_gain_excluded_mask;
-  clone->goal_buildable_loss_required_mask = buildable_loss_required_mask;
-  clone->goal_buildable_loss_excluded_mask = buildable_loss_excluded_mask;
-  homeworlds_backend_goal_branch_format_goal_label(clone);
-  terminal_mask = goal_count > 0 ? homeworlds_backend_goal_terminal_win_mask(goals, goal_count) : 0;
-  if ((required_mask & ~terminal_mask) != 0 &&
-      !homeworlds_backend_yellow_required_goal_contract_reachable(&clone->state, goals, goal_count, required_mask)) {
-    homeworlds_backend_goal_branch_free(clone);
-    return TRUE;
-  }
-  if (!homeworlds_backend_goal_branch_apply_yellow_goal_bound(clone, side)) {
-    homeworlds_backend_goal_branch_free(clone);
-    return FALSE;
-  }
-  if (clone->score_min_bound > clone->score_max_bound) {
-    homeworlds_backend_goal_branch_free(clone);
-    return TRUE;
-  }
+  clone->goal_count = candidate.goal_count;
+  clone->goal_required_mask = candidate.goal_required_mask;
+  clone->goal_excluded_mask = candidate.goal_excluded_mask;
+  clone->goal_buildable_start_mask = candidate.goal_buildable_start_mask;
+  clone->goal_buildable_gain_required_mask = candidate.goal_buildable_gain_required_mask;
+  clone->goal_buildable_gain_excluded_mask = candidate.goal_buildable_gain_excluded_mask;
+  clone->goal_buildable_loss_required_mask = candidate.goal_buildable_loss_required_mask;
+  clone->goal_buildable_loss_excluded_mask = candidate.goal_buildable_loss_excluded_mask;
+  g_strlcpy(clone->goal_label, candidate.goal_label, sizeof(clone->goal_label));
   *out_branch = clone;
   return TRUE;
 }
@@ -5011,6 +5036,7 @@ static gboolean homeworlds_backend_goal_enqueue_yellow_goal_child(HomeworldsGoal
                                                                   guint buildable_gain_excluded_mask,
                                                                   guint buildable_loss_required_mask,
                                                                   guint buildable_loss_excluded_mask,
+                                                                  HomeworldsYellowGoalDiscardStats *discard_stats,
                                                                   guint side) {
   HomeworldsGoalBranch *child_branch = NULL;
 
@@ -5019,6 +5045,7 @@ static gboolean homeworlds_backend_goal_enqueue_yellow_goal_child(HomeworldsGoal
   g_return_val_if_fail(branch != NULL, FALSE);
   g_return_val_if_fail(goals != NULL || goal_count == 0, FALSE);
   g_return_val_if_fail(goal_count <= HOMEWORLDS_GOAL_BRANCH_MAX_CATASTROPHE_GOALS, FALSE);
+  g_return_val_if_fail(discard_stats != NULL, FALSE);
   g_return_val_if_fail(side < 2, FALSE);
 
   if (!homeworlds_backend_goal_branch_clone_for_yellow_goals(queue,
@@ -5033,6 +5060,7 @@ static gboolean homeworlds_backend_goal_enqueue_yellow_goal_child(HomeworldsGoal
                                                              buildable_loss_required_mask,
                                                              buildable_loss_excluded_mask,
                                                              side,
+                                                             discard_stats,
                                                              &child_branch)) {
     return FALSE;
   }
@@ -5040,6 +5068,30 @@ static gboolean homeworlds_backend_goal_enqueue_yellow_goal_child(HomeworldsGoal
     homeworlds_backend_goal_enqueue_branch(queue, context, child_branch);
   }
   return TRUE;
+}
+
+static void homeworlds_backend_goal_report_yellow_goal_discards(
+    HomeworldsGoodMoveContext *context,
+    const HomeworldsGoalBranch *branch,
+    const HomeworldsYellowGoalDiscardStats *discard_stats) {
+  gsize total = 0;
+
+  g_return_if_fail(context != NULL);
+  g_return_if_fail(branch != NULL);
+  g_return_if_fail(discard_stats != NULL);
+
+  total = discard_stats->unreachable + discard_stats->invalid_bounds;
+  if (total == 0) {
+    return;
+  }
+
+  homeworlds_backend_goal_report_append(context,
+                                        "discard #%zu yellow-goal-partitions total=%zu "
+                                        "unreachable=%zu invalid_bounds=%zu",
+                                        branch->id,
+                                        total,
+                                        discard_stats->unreachable,
+                                        discard_stats->invalid_bounds);
 }
 
 static gboolean homeworlds_backend_goal_split_yellow_terminal_goals(HomeworldsGoalQueue *queue,
@@ -5051,6 +5103,7 @@ static gboolean homeworlds_backend_goal_split_yellow_terminal_goals(HomeworldsGo
                                                                     guint buildable_start_mask,
                                                                     guint buildable_gain_discovered_mask,
                                                                     guint buildable_loss_discovered_mask,
+                                                                    HomeworldsYellowGoalDiscardStats *discard_stats,
                                                                     guint side) {
   guint full_mask = 0;
   guint nonterminal_mask = 0;
@@ -5062,6 +5115,7 @@ static gboolean homeworlds_backend_goal_split_yellow_terminal_goals(HomeworldsGo
   g_return_val_if_fail(goals != NULL, FALSE);
   g_return_val_if_fail(goal_count <= HOMEWORLDS_GOAL_BRANCH_MAX_CATASTROPHE_GOALS, FALSE);
   g_return_val_if_fail(terminal_mask != 0, FALSE);
+  g_return_val_if_fail(discard_stats != NULL, FALSE);
   g_return_val_if_fail(side < 2, FALSE);
 
   full_mask = (1u << goal_count) - 1u;
@@ -5084,6 +5138,7 @@ static gboolean homeworlds_backend_goal_split_yellow_terminal_goals(HomeworldsGo
                                                            0,
                                                            0,
                                                            0,
+                                                           discard_stats,
                                                            side)) {
       return FALSE;
     }
@@ -5109,6 +5164,7 @@ static gboolean homeworlds_backend_goal_split_yellow_terminal_goals(HomeworldsGo
                                                                buildable_gain_discovered_mask & ~gain_required,
                                                                loss_required,
                                                                buildable_loss_discovered_mask & ~loss_required,
+                                                               discard_stats,
                                                                side)) {
           return FALSE;
         }
@@ -5138,12 +5194,14 @@ static gboolean homeworlds_backend_goal_split_yellow_nonterminal_contracts(
     guint buildable_start_mask,
     guint buildable_gain_discovered_mask,
     guint buildable_loss_discovered_mask,
+    HomeworldsYellowGoalDiscardStats *discard_stats,
     guint side) {
   g_return_val_if_fail(queue != NULL, FALSE);
   g_return_val_if_fail(context != NULL, FALSE);
   g_return_val_if_fail(branch != NULL, FALSE);
   g_return_val_if_fail(goals != NULL || goal_count == 0, FALSE);
   g_return_val_if_fail(goal_count <= HOMEWORLDS_GOAL_BRANCH_MAX_CATASTROPHE_GOALS, FALSE);
+  g_return_val_if_fail(discard_stats != NULL, FALSE);
   g_return_val_if_fail(side < 2, FALSE);
 
   for (guint required_mask = catastrophe_discovered_mask;; required_mask =
@@ -5166,6 +5224,7 @@ static gboolean homeworlds_backend_goal_split_yellow_nonterminal_contracts(
                                                                buildable_gain_discovered_mask & ~gain_required,
                                                                loss_required,
                                                                buildable_loss_discovered_mask & ~loss_required,
+                                                               discard_stats,
                                                                side)) {
           return FALSE;
         }
@@ -5196,6 +5255,7 @@ static gboolean homeworlds_backend_goal_split_yellow_sacrifice_goals(const Homew
   guint buildable_start_mask = 0;
   guint buildable_gain_discovered_mask = 0;
   guint buildable_loss_discovered_mask = 0;
+  HomeworldsYellowGoalDiscardStats discard_stats = {0};
   gboolean uncertain = FALSE;
 
   g_return_val_if_fail(root_position != NULL, FALSE);
@@ -5257,9 +5317,11 @@ static gboolean homeworlds_backend_goal_split_yellow_sacrifice_goals(const Homew
                                                              buildable_start_mask,
                                                              buildable_gain_discovered_mask,
                                                              buildable_loss_discovered_mask,
+                                                             &discard_stats,
                                                              root_position->turn)) {
       return FALSE;
     }
+    homeworlds_backend_goal_report_yellow_goal_discards(context, branch, &discard_stats);
     context->goal_branches_split++;
     *out_split = TRUE;
     return TRUE;
@@ -5275,10 +5337,12 @@ static gboolean homeworlds_backend_goal_split_yellow_sacrifice_goals(const Homew
                                                                   buildable_start_mask,
                                                                   buildable_gain_discovered_mask,
                                                                   buildable_loss_discovered_mask,
+                                                                  &discard_stats,
                                                                   root_position->turn)) {
     return FALSE;
   }
 
+  homeworlds_backend_goal_report_yellow_goal_discards(context, branch, &discard_stats);
   context->goal_branches_split++;
   *out_split = TRUE;
   return TRUE;
