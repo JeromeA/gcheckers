@@ -1167,59 +1167,6 @@ static gboolean test_goal_report_find_goal_bounds(const char *report,
   return FALSE;
 }
 
-static gboolean test_goal_report_find_selected_goal_rejects(const char *report,
-                                                            const char *goal_label,
-                                                            gsize *out_reject_count) {
-  g_auto(GStrv) lines = NULL;
-  g_autofree gchar *needle = NULL;
-  gboolean found = FALSE;
-
-  assert(report != NULL);
-  assert(goal_label != NULL);
-  assert(out_reject_count != NULL);
-
-  *out_reject_count = 0;
-  needle = g_strdup_printf("goal=[%s]", goal_label);
-  assert(needle != NULL);
-  lines = g_strsplit(report, "\n", -1);
-  for (guint i = 0; lines[i] != NULL; ++i) {
-    gsize id = 0;
-    char result_prefix[64] = {0};
-    gboolean found_result = FALSE;
-
-    if (!g_str_has_prefix(lines[i], "select #") ||
-        strstr(lines[i], needle) == NULL ||
-        sscanf(lines[i], "select #%zu", &id) != 1) {
-      continue;
-    }
-
-    g_snprintf(result_prefix, sizeof(result_prefix), "explore-result #%zu", id);
-    for (guint j = i + 1; lines[j] != NULL && !g_str_has_prefix(lines[j], "select #"); ++j) {
-      const char *rejects = NULL;
-
-      if (!g_str_has_prefix(lines[j], result_prefix)) {
-        continue;
-      }
-      rejects = strstr(lines[j], "goal_filter_reject+=");
-      if (rejects != NULL) {
-        gsize reject_count = 0;
-
-        if (sscanf(rejects, "goal_filter_reject+=%zu", &reject_count) != 1) {
-          return FALSE;
-        }
-        *out_reject_count += reject_count;
-      }
-      found = TRUE;
-      found_result = TRUE;
-      break;
-    }
-    if (!found_result) {
-      return FALSE;
-    }
-  }
-  return found;
-}
-
 static const HomeworldsMoveCandidate *test_find_trade_color_candidate(const GameBackend *backend,
                                                                       const GameBackendMoveList *candidates,
                                                                       HomeworldsColor color) {
@@ -2297,14 +2244,14 @@ static void test_backend_good_move_trace_partitions_yellow_sacrifice_goals(void)
   assert(strstr(capture.goal_report, "goal=[S0y!+S1r!]") != NULL);
   assert(strstr(capture.goal_report, "goal=[S1r!]") != NULL);
   assert(strstr(capture.goal_report, "goal=[S0y!]") != NULL);
-  assert(strstr(capture.goal_report, "goal=[no scheduled catastrophe]") != NULL);
+  assert(strstr(capture.goal_report, "goal=[no scheduled effect]") != NULL);
   assert(strstr(capture.goal_report, "inside_interval+=") == NULL);
   assert(strstr(capture.goal_report, "score-split #") == NULL);
   assert(test_goal_report_find_goal_bounds(capture.goal_report, "S0y!+S1r!", &both_min, &both_max));
   assert(test_goal_report_find_goal_bounds(capture.goal_report, "S1r!", &red_min, &red_max));
   assert(test_goal_report_find_goal_bounds(capture.goal_report, "S0y!", &yellow_min, &yellow_max));
   assert(test_goal_report_find_goal_bounds(capture.goal_report,
-                                           "no scheduled catastrophe",
+                                           "no scheduled effect",
                                            &none_min,
                                            &none_max));
   assert(both_min <= both_max);
@@ -2402,12 +2349,21 @@ static void test_backend_yellow_proof_counts_catastrophe_buildability_gain(void)
   homeworlds_position_clear(&position);
 }
 
-static void test_backend_good_move_trace_constrains_required_yellow_goals(void) {
+static void test_backend_good_move_trace_splits_yellow_goals_by_buildability(void) {
   const GameBackend *backend = &homeworlds_game_backend;
   HomeworldsPosition position = {0};
   GameBackendMoveList good_moves = {0};
   TestGoodMoveTraceCapture capture = {0};
-  gsize goal_rejects = 0;
+  gint goal_min = 0;
+  gint goal_max = 0;
+  gint green_loss_min = 0;
+  gint green_loss_max = 0;
+  gint yellow_loss_min = 0;
+  gint yellow_loss_max = 0;
+  gint both_loss_min = 0;
+  gint both_loss_max = 0;
+  gint none_min = 0;
+  gint none_max = 0;
 
   test_prepare_buildability_goal_position(&position);
   homeworlds_backend_set_good_move_trace(test_capture_good_move_trace, &capture);
@@ -2415,8 +2371,27 @@ static void test_backend_good_move_trace_constrains_required_yellow_goals(void) 
   good_moves = backend->list_good_moves(&position, 0, GAME_BACKEND_DEFAULT_GOOD_MOVE_SCORE_WINDOW);
   assert(capture.called);
   assert(capture.goal_report != NULL);
-  assert(test_goal_report_find_selected_goal_rejects(capture.goal_report, "H1g!", &goal_rejects));
-  assert(goal_rejects == 0);
+  assert(test_goal_report_find_goal_bounds(capture.goal_report, "H1g!", &goal_min, &goal_max));
+  assert(test_goal_report_find_goal_bounds(capture.goal_report, "H1g! -g+", &green_loss_min, &green_loss_max));
+  assert(test_goal_report_find_goal_bounds(capture.goal_report, "H1g! -y+", &yellow_loss_min, &yellow_loss_max));
+  assert(test_goal_report_find_goal_bounds(capture.goal_report,
+                                           "H1g! -y+ -g+",
+                                           &both_loss_min,
+                                           &both_loss_max));
+  assert(test_goal_report_find_goal_bounds(capture.goal_report,
+                                           "no scheduled effect",
+                                           &none_min,
+                                           &none_max));
+  assert(goal_min == goal_max);
+  assert(green_loss_min == green_loss_max);
+  assert(yellow_loss_min == yellow_loss_max);
+  assert(both_loss_min == both_loss_max);
+  assert(none_min == none_max);
+  assert(green_loss_min > goal_min);
+  assert(yellow_loss_min > goal_min);
+  assert(both_loss_min > green_loss_min);
+  assert(both_loss_min > yellow_loss_min);
+  assert(none_min > both_loss_min);
 
   backend->move_list_free(&good_moves);
   homeworlds_backend_set_good_move_trace(NULL, NULL);
@@ -2484,7 +2459,7 @@ static void test_backend_good_move_trace_terminal_yellow_goal_is_absorbing(void)
   assert(test_goal_report_find_goal_bounds(capture.goal_report, "H2y!", &win_min, &win_max));
   assert(test_goal_report_find_goal_bounds(capture.goal_report, "S3r!", &red_min, &red_max));
   assert(test_goal_report_find_goal_bounds(capture.goal_report,
-                                           "no scheduled catastrophe",
+                                           "no scheduled effect",
                                            &none_min,
                                            &none_max));
   assert(win_min == homeworlds_position_terminal_score(GAME_BACKEND_OUTCOME_SIDE_0_WIN, 1));
@@ -3172,9 +3147,11 @@ static void test_backend_good_moves_keep_homeworld_orphaning_yellow_catastrophe(
   test_assert_move_notation_is_legal(&position, winning_move);
 
   good_moves = backend->list_good_moves(&position, 0, GAME_BACKEND_DEFAULT_GOOD_MOVE_SCORE_WINDOW);
-  assert(good_moves.count == 1);
-  assert(test_score_after_move(&position, backend->move_list_get(&good_moves, 0)) ==
-         homeworlds_position_terminal_score(GAME_BACKEND_OUTCOME_SIDE_0_WIN, 1));
+  assert(good_moves.count > 0);
+  for (gsize i = 0; i < good_moves.count; ++i) {
+    assert(test_score_after_move(&position, backend->move_list_get(&good_moves, i)) ==
+           homeworlds_position_terminal_score(GAME_BACKEND_OUTCOME_SIDE_0_WIN, 1));
+  }
   assert(test_good_moves_contains_equivalent_notation(backend, &position, &good_moves, winning_move));
   backend->move_list_free(&good_moves);
 }
@@ -3627,7 +3604,7 @@ int main(void) {
   test_backend_good_move_trace_partitions_yellow_sacrifice_goals();
   test_backend_yellow_proof_subtracts_required_material();
   test_backend_yellow_proof_counts_catastrophe_buildability_gain();
-  test_backend_good_move_trace_constrains_required_yellow_goals();
+  test_backend_good_move_trace_splits_yellow_goals_by_buildability();
   test_backend_good_moves_constrain_required_yellow_goal_quality();
   test_backend_good_moves_keep_buffer_when_goal_leaf_is_unreplayable();
   test_backend_good_move_trace_terminal_yellow_goal_is_absorbing();

@@ -726,10 +726,14 @@ scheduler explores the branch whose best bound is most useful, splits only by ta
 selected branches in full. Branches whose optimistic bound cannot reach the current cutoff are skipped. Root-level
 single-action moves are collected and scored directly before
 sacrifice branches are queued, so they can seed the cutoff without paying the goal-branch scheduling cost. During
-active yellow sacrifices, reachable positive catastrophes become explicit goal-set partitions; if one reachable goal
-wins by destroying the opponent homeworld, the split is just that terminal goal versus all non-terminal goal
-combinations. Required non-terminal goal gains tighten both the guaranteed and optimistic sides of the score bounds,
-while terminal homeworld wins collapse the bounds to the exact terminal score and are never added to material gains.
+active yellow sacrifices, reachable positive catastrophes and final buildability changes become explicit complete
+effect contracts. Required buildability gains are shown as `+b+`, `+r+`, and similar tokens; required losses are shown
+as `-b+`, `-r+`, and similar tokens. Any discovered effect omitted from a contract is excluded, so
+`goal=[no scheduled effect]` means no discovered catastrophe or buildability change may happen. If one reachable goal
+wins by destroying the opponent homeworld, the terminal branch requires only that win and does not combine it with
+material or buildability effects; non-terminal branches exclude the win. Required non-terminal catastrophe gains and
+buildability changes tighten both sides of the score bounds, while terminal homeworld wins collapse the bounds to the
+exact terminal score.
 When exploring a required yellow goal branch, the collector tries to build that required catastrophe directly before
 ordinary traversal: it fires already-good catastrophes, moves doomed own material away when that is needed to reach the
 branch's goal quality, and moves same-color ships into the target system when the catastrophe is not ready yet.

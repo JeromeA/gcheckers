@@ -88,23 +88,27 @@ catastrophe-first order.
 
 The current Homeworlds `good_moves()` scheduler creates goal branches, then explores each selected branch with the
 same staged builder used by the UI. Branches can represent root catastrophe policy, directly collected root
-single-step actions, sacrifices, yellow sacrifice goal partitions, or a generic fallback. A yellow sacrifice with
-reachable positive catastrophe goals is split by exact goal set first. With two non-terminal scheduled goals, for
-example, the partitions are "both goals", "first goal only", "second goal only", and "none of those goals". Required
-yellow-goal branches then try to construct the pending required catastrophe before generic traversal: if the target
-system already has four of the goal color, the branch either fires the catastrophe or first moves away doomed own
-material needed to reach the advertised goal quality; otherwise it moves same-color own ships into the target system.
-Constructed child steps must still be able to reach the branch's stored goal gain after remaining material costs are
-paid. If a required goal target is gone, not enough yellow actions remain, or no quality-improving move-away child
-exists, the branch is exhausted instead of falling back to an unconstrained scan. Exclusion and "none of those goals"
-branches still use the completed-move goal filter as their contract. If one scheduled goal wins by destroying the
-opponent homeworld, that terminal goal absorbs the other goals: the scheduler creates one branch requiring the win,
-then branches for the non-terminal combinations with the win excluded. A branch also stores an integer score-bound
-range used for ordering and cutoff checks. The range is not a leaf filter: after goal splitting and goal construction
-are no longer possible or useful, the selected branch is explored in full. Branches with a conservative leaf upper
-bound of 50 or less are explored directly instead of being split further. Sacrifice branch leaf bounds include every
-possible early pass-completion prefix, because the builder can finish a sacrifice by appending passes for all remaining
-sacrifice actions.
+single-step actions, sacrifices, yellow sacrifice goal partitions, or a generic fallback. A yellow sacrifice is split
+by a complete effect contract. The discovered effects are reachable positive catastrophes and final buildability
+changes for the moving side. Required buildability gains are printed as `+b+`, `+r+`, and so on; required losses are
+printed as `-b+`, `-r+`, and so on. Omitted discovered effects are excluded, so `goal=[H1g!]` means `H1g!` must happen
+and every other discovered catastrophe or buildability change must not happen. `goal=[no scheduled effect]` means no
+discovered effect may happen.
+
+Required yellow-goal catastrophe branches then try to construct the pending required catastrophe before generic
+traversal: if the target system already has four of the goal color, the branch either fires the catastrophe or first
+moves away doomed own material needed to reach the advertised goal quality; otherwise it moves same-color own ships
+into the target system. Constructed child steps must still be able to reach the branch's stored goal gain after
+remaining material costs are paid. If a required goal target is gone, not enough yellow actions remain, or no
+quality-improving move-away child exists, the branch is exhausted instead of falling back to an unconstrained scan.
+Exclusion and buildability contracts still use the completed-move goal filter as their correctness guard. If one
+scheduled goal wins by destroying the opponent homeworld, that terminal goal absorbs other effects: the scheduler
+creates a branch requiring the win, then branches for the non-terminal combinations with the win excluded. A branch
+also stores an integer score-bound range used for ordering and cutoff checks. The range is not a leaf filter: after
+goal splitting and goal construction are no longer possible or useful, the selected branch is explored in full.
+Branches with a conservative leaf upper bound of 50 or less are explored directly instead of being split further.
+Sacrifice branch leaf bounds include every possible early pass-completion prefix, because the builder can finish a
+sacrifice by appending passes for all remaining sacrifice actions.
 
 Setup moves are filtered to prefer playable starts: three distinct colors across the two stars and starting ship, a
 large starting ship, two different homeworld star sizes, green included for player 1, and a different star-size
@@ -118,15 +122,15 @@ rejects builds that create an unfavorable catastrophe, and rejects a small sacri
 was already available at that system. Equivalent continuations inside a sacrifice are pruned by the shared
 sacrifice-scoped builder-state deduper instead of by color-specific adjacent-step rules.
 Yellow sacrifice branches also use a conservative proof bound during branch scheduling and branch exploration. The
-same reachability proof identifies the concrete catastrophe goals used for goal-set partitioning. Required goal
-catastrophes tighten both ends of the branch's score bounds: the guaranteed goal gain raises the lower side for player
-1 or lowers the upper side for player 2, while optional remaining upside still sets the optimistic side. For future
-catastrophes created by yellow moves, the goal gain is net of the cheapest reachable same-color own ships that must be
-moved into the system, and includes favorable buildability changes from the catastrophe as well as material and
-non-terminal homeworld-star effects. If a required goal can win by hitting the opponent homeworld, the bounds collapse
-to the exact terminal win score; it is not combined with material gains or other catastrophes. Once a terminal winning
-move is scored, `good_moves()` clears the buffer to that move and stops exploring. When the optimistic bound cannot
-reach the current static-prune cutoff, the branch is not explored.
+same reachability proof identifies the concrete catastrophe goals used for goal partitioning. Required non-terminal
+catastrophes and required buildability changes tighten both ends of the branch's score bounds; excluded buildability
+changes no longer contribute optional upside. For future catastrophes created by yellow moves, the goal gain is net of
+the cheapest reachable same-color own ships that must be moved into the system, and includes favorable buildability
+changes from the catastrophe as well as material and non-terminal homeworld-star effects. If a required goal can win
+by hitting the opponent homeworld, the bounds collapse to the exact terminal win score; it is not combined with
+material gains, buildability changes, or other catastrophes. Once a terminal winning move is scored, `good_moves()`
+clears the buffer to that move and stops exploring. When the optimistic bound cannot reach the current static-prune
+cutoff, the branch is not explored.
 
 The catastrophe policy distinguishes profitable and unfavorable catastrophes from the moving side's perspective. A
 profitable catastrophe destroys more opponent ship pips than own ship pips. If such a catastrophe exists at the start
