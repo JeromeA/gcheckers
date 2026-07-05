@@ -975,11 +975,13 @@ static gboolean homeworlds_proof_probe_score_reaches_cutoff(guint side, gint sco
 
 static gboolean homeworlds_proof_probe_find_cutoff(const HomeworldsPosition *position,
                                                    guint side,
+                                                   guint iteration_limit,
                                                    gint *out_cutoff,
                                                    HomeworldsGoodMoveTrace *out_trace) {
   GameBackendMoveList moves = {0};
   const HomeworldsMove *cutoff_move = NULL;
   HomeworldsProofProbeTraceCapture trace_capture = {0};
+  gsize selected_branch_limit = 0;
   gboolean score_ok = FALSE;
 
   g_return_val_if_fail(position != NULL, FALSE);
@@ -987,8 +989,13 @@ static gboolean homeworlds_proof_probe_find_cutoff(const HomeworldsPosition *pos
   g_return_val_if_fail(out_cutoff != NULL, FALSE);
   g_return_val_if_fail(out_trace != NULL, FALSE);
 
+  if (iteration_limit > 0) {
+    selected_branch_limit = (gsize)iteration_limit + 1;
+  }
   homeworlds_backend_set_good_move_trace(homeworlds_proof_probe_capture_trace, &trace_capture);
+  homeworlds_backend_set_good_move_trace_branch_limit(selected_branch_limit);
   moves = homeworlds_game_backend.list_good_moves(position, 0, GAME_BACKEND_DEFAULT_GOOD_MOVE_SCORE_WINDOW);
+  homeworlds_backend_set_good_move_trace_branch_limit(0);
   homeworlds_backend_set_good_move_trace(NULL, NULL);
   if (moves.count == 0) {
     g_printerr("No good moves are available from the report position.\n");
@@ -1299,7 +1306,7 @@ int main(int argc, char **argv) {
   }
 
   side = homeworlds_position_turn(&position);
-  if (!homeworlds_proof_probe_find_cutoff(&position, side, &cutoff, &trace)) {
+  if (!homeworlds_proof_probe_find_cutoff(&position, side, iteration_limit, &cutoff, &trace)) {
     homeworlds_position_clear(&position);
     return 1;
   }

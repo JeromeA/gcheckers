@@ -130,7 +130,8 @@ opponent homeworld star also orphaned opponent ships and won the game.
 
 The fix gives catastrophe scoring a signed homeworld-star component and counts opponent ships orphaned by star
 destruction while still treating the mover's non-color ships as potentially saveable before a future catastrophe. The
-same score now feeds the unsafe-catastrophe filter, profitable-catastrophe expansion, and yellow-sacrifice pruning proof.
+same score now feeds the unsafe-catastrophe filter, profitable-catastrophe expansion, and yellow-sacrifice pruning
+proof.
 
 ## Homeworlds good-move generation read staged candidates with the move accessor
 
@@ -1509,3 +1510,19 @@ time on impossible low-score bands for a branch whose contract required the cata
 The fix applies required goal gains to the guaranteed side of the interval too. Goal partitions that fall completely
 outside the selected score band are skipped, and terminal homeworld wins keep their terminal score in range so they are
 not filtered out by a static-material lower bound.
+
+## Homeworlds proof probe iteration limit still ran full move generation
+
+`homeworlds_proof_probe --iterations N` should be a quick diagnostic for the first N selected goal-scheduler branches
+from a big move report.
+
+The probe used the iteration count only when compact-printing the captured goal report. Before it could print anything,
+it still recomputed a full `good_moves()` trace for the report position, so pathological positions could spend minutes
+inside later yellow-sacrifice exploration even when the user requested only the first few scheduler iterations.
+Even after adding that cap, the first few iterations could still be slow because yellow goal splitting created
+nonterminal combinations that legal yellow moves could not actually reach; each such branch was fully enumerated only
+to reject every leaf as outside the goal contract.
+
+The fix adds a trace-only selected-branch limit to the Homeworlds backend and has the proof probe set it while
+capturing the trace for `--iterations`. Normal `good_moves()` calls remain unlimited. Nonterminal yellow goal branches
+now also check required-catastrophe reachability before they enter the queue.

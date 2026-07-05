@@ -784,9 +784,10 @@ human-readable goal-tree report, the moves leading to the reported position, the
 the exact best static-score moves for the active candidate or baseline weights. It does not stream the full legal move
 list for these reports.
 The `build/tools/homeworlds_proof_probe` CLI reads one of those move reports and recomputes the current `good_moves()`
-cutoff. With `--iterations COUNT`, it prints a compact goal-tree report with the initial `#0` expansion and the next
-COUNT selected scheduler branches, listing each created branch and summarizing what each selected branch did. With
-requested report row numbers or quoted move notations, it prints the yellow-sacrifice proof status after each step.
+cutoff. With `--iterations COUNT`, it caps recomputation after the initial `#0` expansion plus COUNT selected scheduler
+branches, then prints a compact goal-tree report listing each created branch and summarizing what each selected branch
+did. With requested report row numbers or quoted move notations, it prints the yellow-sacrifice proof status after each
+step.
 The `GCHECKERS_HOMEWORLDS_BIG_MOVE_REPORT_THRESHOLD` environment variable can override the report threshold for
 diagnostic runs and tests. It frees any
 generated candidate list before leaving an error path. The Homeworlds board host also syncs its
@@ -844,6 +845,11 @@ homeworld-star effects, and favorable buildability changes already visible in th
 cheapest same-color own ships that must be moved into the system to create the catastrophe, and count only when enough
 such ships can reach the target system without spending the whole gain. A future catastrophe that wins by destroying
 the opponent homeworld contributes the terminal score as an alternative bound instead of an additive material gain.
+Non-terminal yellow goal partitions are skipped when their required catastrophes cannot be reached by legal yellow moves
+with the remaining sacrifice actions.
+Red, green, and blue sacrifices use simpler conservative best-score bounds for scheduler cutoff checks: red counts
+capture upside, green counts build/buildability upside, and blue counts buildability and catastrophe upside without
+assigning material value to same-size trades.
 Profitable catastrophes available at the start of a turn are required somewhere in the final move, while profitable
 catastrophes created by an earlier step are forced immediately in the staged walk.
 `doc/homeworlds-move-generation.md` describes how the legal builder, diagnostic move report, profiling CLI,

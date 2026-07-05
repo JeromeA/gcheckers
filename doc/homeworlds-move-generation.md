@@ -131,6 +131,15 @@ by hitting the opponent homeworld, the bounds collapse to the exact terminal win
 material gains, buildability changes, or other catastrophes. Once a terminal winning move is scored, `good_moves()`
 clears the buffer to that move and stops exploring. When the optimistic bound cannot reach the current static-prune
 cutoff, the branch is not explored.
+Non-terminal yellow goal partitions are created only when their required catastrophes can still be reached by legal
+yellow moves within the remaining sacrifice actions; unreachable combinations are skipped before they enter the queue.
+
+Red, green, and blue sacrifice branches do not yet split into goal contracts, but they also get conservative best-score
+bounds. Red bounds count optimistic capture upside, green bounds count optimistic build material and buildability
+upside, and blue bounds count buildability upside without treating trades as material improvements. These branches also
+include optimistic positive-catastrophe upside when it can be bounded from the current forced-action state. If any part
+is uncertain, the branch stays unbounded; otherwise the scheduler can skip it when the finite best bound cannot reach
+the current cutoff.
 
 The catastrophe policy distinguishes profitable and unfavorable catastrophes from the moving side's perspective. A
 profitable catastrophe destroys more opponent ship pips than own ship pips. If such a catastrophe exists at the start

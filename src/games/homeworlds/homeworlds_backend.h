@@ -57,6 +57,7 @@ typedef void (*HomeworldsGoodMoveTraceFunc)(const HomeworldsGoodMoveTrace *trace
 extern const GameBackend homeworlds_game_backend;
 
 void homeworlds_backend_set_good_move_trace(HomeworldsGoodMoveTraceFunc trace_func, gpointer user_data);
+void homeworlds_backend_set_good_move_trace_branch_limit(gsize selected_branch_limit);
 gboolean homeworlds_backend_describe_yellow_sacrifice_proof(const HomeworldsMoveBuilderState *state,
                                                             guint side,
                                                             gint cutoff,

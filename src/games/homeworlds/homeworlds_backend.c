@@ -64,6 +64,7 @@ typedef struct {
   gsize goal_rejected_full_buffer;
   GString *goal_report;
   gsize goal_report_lines;
+  gsize goal_trace_selected_branch_limit;
   gboolean goal_report_truncated;
 } HomeworldsGoodMoveContext;
 
@@ -168,6 +169,7 @@ typedef struct {
 
 static HomeworldsGoodMoveTraceFunc homeworlds_backend_good_move_trace_func = NULL;
 static gpointer homeworlds_backend_good_move_trace_user_data = NULL;
+static gsize homeworlds_backend_good_move_trace_branch_limit = 0;
 
 static gboolean homeworlds_backend_score_after_move(const HomeworldsPosition *position,
                                                     const HomeworldsMove *move,
@@ -175,14 +177,22 @@ static gboolean homeworlds_backend_score_after_move(const HomeworldsPosition *po
 static gint homeworlds_backend_terminal_win_score_for_side(guint side);
 static gboolean homeworlds_backend_score_is_terminal_win_for_side(guint side, gint score);
 static gint homeworlds_backend_score_improvement_for_side(guint side, gint from_score, gint to_score);
+static gint homeworlds_backend_score_with_signed_improvement(guint side, gint score, gint improvement);
 static guint homeworlds_backend_buildable_color_mask_for_side(const HomeworldsPosition *position, guint side);
 static gboolean homeworlds_backend_score_is_inside_prune_window(guint side,
                                                                 gint score,
                                                                 gint best_score,
                                                                 guint score_window);
+static guint homeworlds_backend_saturating_guint_add(guint left, guint right);
 static gboolean homeworlds_backend_move_buffer_current_cutoff(const HomeworldsMoveBuffer *buffer,
                                                               gint *out_cutoff,
                                                               HomeworldsGoodMoveCutoffKind *out_cutoff_kind);
+static guint homeworlds_backend_forced_green_build_count_for_system(const HomeworldsMoveBuilderState *state,
+                                                                    guint system_index,
+                                                                    HomeworldsColor color);
+static guint homeworlds_backend_forced_blue_trade_count_for_system_color(const HomeworldsMoveBuilderState *state,
+                                                                         guint system_index,
+                                                                         HomeworldsColor target_color);
 static gint homeworlds_backend_future_catastrophe_gain_ceiling(const HomeworldsMoveBuilderState *state,
                                                                guint system_index,
                                                                HomeworldsColor color,
@@ -190,10 +200,27 @@ static gint homeworlds_backend_future_catastrophe_gain_ceiling(const HomeworldsM
 static guint homeworlds_backend_collect_profitable_catastrophes(const HomeworldsMoveBuilderState *state,
                                                                 HomeworldsProfitableCatastrophe *out_catastrophes,
                                                                 guint max_catastrophes);
+static gboolean homeworlds_backend_goal_catastrophe_current_gain_reaches(
+    const HomeworldsMoveBuilderState *state,
+    const HomeworldsGoalCatastrophe *goal,
+    guint system_index);
+static gboolean homeworlds_backend_yellow_goal_state_can_still_reach_gain(
+    const HomeworldsMoveBuilderState *state,
+    const HomeworldsGoalCatastrophe *goal,
+    guint system_index);
+static guint homeworlds_backend_goal_terminal_win_mask(const HomeworldsGoalCatastrophe *goals, guint goal_count);
+static gboolean homeworlds_backend_yellow_required_goal_contract_reachable(const HomeworldsMoveBuilderState *state,
+                                                                           const HomeworldsGoalCatastrophe *goals,
+                                                                           guint goal_count,
+                                                                           guint required_mask);
 
 void homeworlds_backend_set_good_move_trace(HomeworldsGoodMoveTraceFunc trace_func, gpointer user_data) {
   homeworlds_backend_good_move_trace_func = trace_func;
   homeworlds_backend_good_move_trace_user_data = user_data;
+}
+
+void homeworlds_backend_set_good_move_trace_branch_limit(gsize selected_branch_limit) {
+  homeworlds_backend_good_move_trace_branch_limit = selected_branch_limit;
 }
 
 static const char *homeworlds_backend_side_label(guint side) {
@@ -2342,6 +2369,215 @@ static guint homeworlds_backend_existing_catastrophe_gain_ceiling(const Homeworl
   return MAX(0, immediate_gain + (gint)avoidable_loss);
 }
 
+static guint homeworlds_backend_buildability_gain_ceiling(const HomeworldsPosition *position,
+                                                          guint side,
+                                                          gboolean include_opponent_loss,
+                                                          const HomeworldsEvalWeights *weights) {
+  guint own_buildable = 0;
+  guint gain_count = 0;
+
+  g_return_val_if_fail(position != NULL, 0);
+  g_return_val_if_fail(side < 2, 0);
+  g_return_val_if_fail(weights != NULL, 0);
+
+  if (weights->buildable_color_value <= 0) {
+    return 0;
+  }
+
+  own_buildable = homeworlds_backend_buildable_color_mask_for_side(position, side);
+  gain_count = (HOMEWORLDS_COLOR_BLUE + 1) - homeworlds_backend_count_color_mask_bits(own_buildable);
+  if (include_opponent_loss) {
+    guint opponent = side == 0 ? 1 : 0;
+    guint opponent_buildable = homeworlds_backend_buildable_color_mask_for_side(position, opponent);
+
+    gain_count += homeworlds_backend_count_color_mask_bits(opponent_buildable);
+  }
+
+  if (gain_count > G_MAXUINT / (guint)weights->buildable_color_value) {
+    return G_MAXUINT;
+  }
+  return gain_count * (guint)weights->buildable_color_value;
+}
+
+static guint homeworlds_backend_sum_top_values(const guint *values, guint value_count) {
+  guint total = 0;
+
+  g_return_val_if_fail(values != NULL || value_count == 0, 0);
+
+  for (guint i = 0; i < value_count; ++i) {
+    total = homeworlds_backend_saturating_guint_add(total, values[i]);
+  }
+  return total;
+}
+
+static guint homeworlds_backend_red_capture_gain_ceiling(const HomeworldsMoveBuilderState *state,
+                                                         guint side,
+                                                         guint remaining_actions,
+                                                         const HomeworldsEvalWeights *weights) {
+  guint opponent = 0;
+  guint top_values[HOMEWORLDS_SYSTEM_SLOT_COUNT * HOMEWORLDS_SHIP_SLOT_COUNT] = {0};
+  guint value_count = 0;
+  guint material_gain = 0;
+  guint buildability_gain = 0;
+
+  g_return_val_if_fail(state != NULL, 0);
+  g_return_val_if_fail(side < 2, 0);
+  g_return_val_if_fail(weights != NULL, 0);
+
+  opponent = side == 0 ? 1 : 0;
+  value_count = MIN(remaining_actions, G_N_ELEMENTS(top_values));
+  for (guint system_index = 0; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
+    const HomeworldsSystem *system = &state->working_position.systems[system_index];
+
+    for (guint slot = 0; slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++slot) {
+      HomeworldsPyramid ship = system->ships[opponent][slot];
+      guint ship_value = 0;
+
+      if (!homeworlds_pyramid_is_valid(ship)) {
+        break;
+      }
+      ship_value = homeworlds_backend_ship_eval_value(ship, weights);
+      homeworlds_backend_insert_descending_value(top_values,
+                                                 value_count,
+                                                 homeworlds_backend_saturating_guint_add(ship_value, ship_value));
+    }
+  }
+
+  material_gain = homeworlds_backend_sum_top_values(top_values, value_count);
+  buildability_gain = homeworlds_backend_buildability_gain_ceiling(&state->working_position, side, TRUE, weights);
+  return homeworlds_backend_saturating_guint_add(material_gain, buildability_gain);
+}
+
+static guint homeworlds_backend_green_build_gain_ceiling(const HomeworldsMoveBuilderState *state,
+                                                         guint side,
+                                                         guint remaining_actions,
+                                                         const HomeworldsEvalWeights *weights) {
+  guint top_values[HOMEWORLDS_BANK_SLOT_COUNT] = {0};
+  guint value_count = 0;
+  guint material_gain = 0;
+  guint buildability_gain = 0;
+
+  g_return_val_if_fail(state != NULL, 0);
+  g_return_val_if_fail(side < 2, 0);
+  g_return_val_if_fail(weights != NULL, 0);
+
+  value_count = MIN(remaining_actions, G_N_ELEMENTS(top_values));
+  for (guint bank_slot = 0; bank_slot < HOMEWORLDS_BANK_SLOT_COUNT; ++bank_slot) {
+    HomeworldsPyramid pyramid = state->working_position.bank[bank_slot];
+
+    if (!homeworlds_pyramid_is_valid(pyramid)) {
+      continue;
+    }
+    homeworlds_backend_insert_descending_value(top_values,
+                                               value_count,
+                                               homeworlds_backend_ship_eval_value(pyramid, weights));
+  }
+
+  material_gain = homeworlds_backend_sum_top_values(top_values, value_count);
+  buildability_gain = homeworlds_backend_buildability_gain_ceiling(&state->working_position, side, FALSE, weights);
+  return homeworlds_backend_saturating_guint_add(material_gain, buildability_gain);
+}
+
+static guint homeworlds_backend_blue_trade_gain_ceiling(const HomeworldsMoveBuilderState *state,
+                                                        guint side,
+                                                        const HomeworldsEvalWeights *weights) {
+  g_return_val_if_fail(state != NULL, 0);
+  g_return_val_if_fail(side < 2, 0);
+  g_return_val_if_fail(weights != NULL, 0);
+
+  return homeworlds_backend_buildability_gain_ceiling(&state->working_position, side, FALSE, weights);
+}
+
+static gboolean homeworlds_backend_forced_action_can_create_catastrophe(const HomeworldsMoveBuilderState *state,
+                                                                        HomeworldsColor forced_color,
+                                                                        guint system_index,
+                                                                        HomeworldsColor catastrophe_color,
+                                                                        guint needed_pyramids) {
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(forced_color <= HOMEWORLDS_COLOR_BLUE, FALSE);
+  g_return_val_if_fail(system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT, FALSE);
+  g_return_val_if_fail(catastrophe_color <= HOMEWORLDS_COLOR_BLUE, FALSE);
+
+  switch (forced_color) {
+    case HOMEWORLDS_COLOR_GREEN:
+      return homeworlds_backend_forced_green_build_count_for_system(state,
+                                                                    system_index,
+                                                                    catastrophe_color) >= needed_pyramids;
+    case HOMEWORLDS_COLOR_BLUE:
+      return homeworlds_backend_forced_blue_trade_count_for_system_color(state,
+                                                                         system_index,
+                                                                         catastrophe_color) >= needed_pyramids;
+    case HOMEWORLDS_COLOR_RED:
+    case HOMEWORLDS_COLOR_YELLOW:
+    default:
+      return FALSE;
+  }
+}
+
+static guint homeworlds_backend_nonyellow_catastrophe_gain_ceiling(
+    const HomeworldsMoveBuilderState *state,
+    HomeworldsColor forced_color,
+    guint side,
+    gboolean *out_uncertain) {
+  guint remaining_actions = 0;
+  guint total_gain = 0;
+
+  g_return_val_if_fail(state != NULL, G_MAXUINT);
+  g_return_val_if_fail(forced_color <= HOMEWORLDS_COLOR_BLUE, G_MAXUINT);
+  g_return_val_if_fail(side < 2, G_MAXUINT);
+  g_return_val_if_fail(out_uncertain != NULL, G_MAXUINT);
+
+  *out_uncertain = FALSE;
+  remaining_actions = state->pending_actions_remaining;
+  for (guint system_index = 0; system_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++system_index) {
+    const HomeworldsSystem *system = &state->working_position.systems[system_index];
+
+    for (HomeworldsColor color = HOMEWORLDS_COLOR_RED; color <= HOMEWORLDS_COLOR_BLUE; ++color) {
+      guint current_count = homeworlds_system_color_count(system, color);
+      guint needed_pyramids = 0;
+      gint future_gain = 0;
+      guint gain = 0;
+
+      if (current_count >= 4) {
+        gain = homeworlds_backend_existing_catastrophe_gain_ceiling(state,
+                                                                    system_index,
+                                                                    color,
+                                                                    side,
+                                                                    remaining_actions);
+        if (gain == G_MAXUINT) {
+          *out_uncertain = TRUE;
+          return G_MAXUINT;
+        }
+        total_gain = homeworlds_backend_saturating_guint_add(total_gain, gain);
+        continue;
+      }
+      if (current_count == 0 ||
+          forced_color == HOMEWORLDS_COLOR_RED) {
+        continue;
+      }
+
+      needed_pyramids = 4 - current_count;
+      if (needed_pyramids > remaining_actions ||
+          !homeworlds_backend_forced_action_can_create_catastrophe(state,
+                                                                   forced_color,
+                                                                   system_index,
+                                                                   color,
+                                                                   needed_pyramids)) {
+        continue;
+      }
+      future_gain = homeworlds_backend_future_catastrophe_gain_ceiling(state, system_index, color, side);
+      if (future_gain == G_MAXINT) {
+        *out_uncertain = TRUE;
+        return G_MAXUINT;
+      }
+      if (future_gain > 0) {
+        total_gain = homeworlds_backend_saturating_guint_add(total_gain, (guint)future_gain);
+      }
+    }
+  }
+  return total_gain;
+}
+
 /* Sum independent optimistic gains; overestimating is safe because it only makes pruning less eager. */
 static guint homeworlds_backend_yellow_sacrifice_catastrophe_gain_ceiling(const HomeworldsMoveBuilderState *state,
                                                                           guint *out_terminal_gain) {
@@ -2483,6 +2719,100 @@ gboolean homeworlds_backend_describe_yellow_sacrifice_proof(const HomeworldsMove
   max_gain = out_status->buildable_gain + (gint)out_status->catastrophe_gain;
   max_gain = MAX(max_gain, (gint)terminal_gain);
   out_status->bound = side == 0 ? out_status->current_score + max_gain : out_status->current_score - max_gain;
+  out_status->result = side == 0
+      ? (out_status->bound < cutoff ? HOMEWORLDS_GOOD_MOVE_PROOF_REJECT : HOMEWORLDS_GOOD_MOVE_PROOF_KEEP)
+      : (out_status->bound > cutoff ? HOMEWORLDS_GOOD_MOVE_PROOF_REJECT : HOMEWORLDS_GOOD_MOVE_PROOF_KEEP);
+  return TRUE;
+}
+
+static gboolean homeworlds_backend_describe_nonyellow_sacrifice_bound(const HomeworldsMoveBuilderState *state,
+                                                                      guint side,
+                                                                      gint cutoff,
+                                                                      HomeworldsGoodMoveProofStatus *out_status) {
+  const HomeworldsEvalWeights *weights = NULL;
+  HomeworldsColor forced_color = HOMEWORLDS_COLOR_RED;
+  guint action_gain = 0;
+  guint catastrophe_gain = 0;
+  guint max_gain = 0;
+  gboolean uncertain = FALSE;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(side < 2, FALSE);
+  g_return_val_if_fail(out_status != NULL, FALSE);
+
+  *out_status = (HomeworldsGoodMoveProofStatus){
+    .result = HOMEWORLDS_GOOD_MOVE_PROOF_NOT_ACTIVE,
+    .pending_actions_remaining = state->pending_actions_remaining,
+    .step_count = state->move.step_count,
+    .cutoff = cutoff,
+    .current_score = homeworlds_position_evaluate_static(&state->working_position),
+  };
+
+  if (!homeworlds_backend_state_has_active_sacrifice_any_color(state) ||
+      state->forced_action_color > HOMEWORLDS_COLOR_BLUE) {
+    return TRUE;
+  }
+  forced_color = (HomeworldsColor)state->forced_action_color;
+  if (forced_color == HOMEWORLDS_COLOR_YELLOW) {
+    return TRUE;
+  }
+  if (state->working_position.phase != HOMEWORLDS_PHASE_PLAY) {
+    out_status->result = HOMEWORLDS_GOOD_MOVE_PROOF_NOT_PLAY;
+    return TRUE;
+  }
+  if (state->stage == HOMEWORLDS_BUILDER_STAGE_COMPLETE) {
+    out_status->result = HOMEWORLDS_GOOD_MOVE_PROOF_COMPLETE;
+    return TRUE;
+  }
+
+  weights = homeworlds_eval_weights_active();
+  g_return_val_if_fail(weights != NULL, FALSE);
+  if (!homeworlds_backend_ship_values_are_nonnegative(weights) ||
+      weights->buildable_color_value < 0) {
+    out_status->result = HOMEWORLDS_GOOD_MOVE_PROOF_UNSUPPORTED_WEIGHTS;
+    return TRUE;
+  }
+
+  switch (forced_color) {
+    case HOMEWORLDS_COLOR_RED:
+      action_gain = homeworlds_backend_red_capture_gain_ceiling(state,
+                                                                side,
+                                                                state->pending_actions_remaining,
+                                                                weights);
+      break;
+    case HOMEWORLDS_COLOR_GREEN:
+      action_gain = homeworlds_backend_green_build_gain_ceiling(state,
+                                                                side,
+                                                                state->pending_actions_remaining,
+                                                                weights);
+      break;
+    case HOMEWORLDS_COLOR_BLUE:
+      action_gain = homeworlds_backend_blue_trade_gain_ceiling(state, side, weights);
+      break;
+    case HOMEWORLDS_COLOR_YELLOW:
+    default:
+      return TRUE;
+  }
+
+  catastrophe_gain = homeworlds_backend_nonyellow_catastrophe_gain_ceiling(state,
+                                                                           forced_color,
+                                                                           side,
+                                                                           &uncertain);
+  if (uncertain) {
+    out_status->result = HOMEWORLDS_GOOD_MOVE_PROOF_UNCERTAIN;
+    return TRUE;
+  }
+
+  max_gain = homeworlds_backend_saturating_guint_add(action_gain, catastrophe_gain);
+  if (max_gain > (guint)G_MAXINT) {
+    out_status->result = HOMEWORLDS_GOOD_MOVE_PROOF_UNCERTAIN;
+    return TRUE;
+  }
+
+  out_status->buildable_gain = (gint)action_gain;
+  out_status->catastrophe_gain = catastrophe_gain;
+  out_status->bound =
+      homeworlds_backend_score_with_signed_improvement(side, out_status->current_score, (gint)max_gain);
   out_status->result = side == 0
       ? (out_status->bound < cutoff ? HOMEWORLDS_GOOD_MOVE_PROOF_REJECT : HOMEWORLDS_GOOD_MOVE_PROOF_KEEP)
       : (out_status->bound > cutoff ? HOMEWORLDS_GOOD_MOVE_PROOF_REJECT : HOMEWORLDS_GOOD_MOVE_PROOF_KEEP);
@@ -2886,6 +3216,10 @@ static gboolean homeworlds_backend_candidate_order_set_proof_bound(const Homewor
   if (!homeworlds_backend_describe_yellow_sacrifice_proof(state, side, 0, &status)) {
     return FALSE;
   }
+  if (status.result == HOMEWORLDS_GOOD_MOVE_PROOF_NOT_ACTIVE &&
+      !homeworlds_backend_describe_nonyellow_sacrifice_bound(state, side, 0, &status)) {
+    return FALSE;
+  }
 
   switch (status.result) {
     case HOMEWORLDS_GOOD_MOVE_PROOF_KEEP:
@@ -2983,6 +3317,13 @@ static gboolean homeworlds_backend_candidate_order_find_priority(const Homeworld
 static gsize homeworlds_backend_saturating_add(gsize left, gsize right) {
   if (left > G_MAXSIZE - right) {
     return G_MAXSIZE;
+  }
+  return left + right;
+}
+
+static guint homeworlds_backend_saturating_guint_add(guint left, guint right) {
+  if (left > G_MAXUINT - right) {
+    return G_MAXUINT;
   }
   return left + right;
 }
@@ -3911,6 +4252,27 @@ static gboolean homeworlds_backend_goal_branch_update_estimate(const HomeworldsP
         break;
     }
   }
+  if (homeworlds_backend_state_has_active_sacrifice_any_color(&branch->state) &&
+      !homeworlds_backend_state_has_active_sacrifice(&branch->state, HOMEWORLDS_COLOR_YELLOW)) {
+    HomeworldsGoodMoveProofStatus status = {0};
+
+    if (!homeworlds_backend_describe_nonyellow_sacrifice_bound(&branch->state, side, 0, &status)) {
+      return FALSE;
+    }
+    switch (status.result) {
+      case HOMEWORLDS_GOOD_MOVE_PROOF_KEEP:
+      case HOMEWORLDS_GOOD_MOVE_PROOF_REJECT:
+        homeworlds_backend_goal_branch_set_best_bound(branch, side, status.bound);
+        break;
+      case HOMEWORLDS_GOOD_MOVE_PROOF_UNCERTAIN:
+      case HOMEWORLDS_GOOD_MOVE_PROOF_NOT_ACTIVE:
+      case HOMEWORLDS_GOOD_MOVE_PROOF_NOT_PLAY:
+      case HOMEWORLDS_GOOD_MOVE_PROOF_COMPLETE:
+      case HOMEWORLDS_GOOD_MOVE_PROOF_UNSUPPORTED_WEIGHTS:
+      default:
+        break;
+    }
+  }
 
   if (!homeworlds_backend_goal_branch_apply_sacrifice_pass_floor(root_position, context, side, branch)) {
     return FALSE;
@@ -4524,6 +4886,7 @@ static gboolean homeworlds_backend_goal_branch_clone_for_yellow_goals(
     guint side,
     HomeworldsGoalBranch **out_branch) {
   HomeworldsGoalBranch *clone = NULL;
+  guint terminal_mask = 0;
 
   g_return_val_if_fail(queue != NULL, FALSE);
   g_return_val_if_fail(branch != NULL, FALSE);
@@ -4554,6 +4917,12 @@ static gboolean homeworlds_backend_goal_branch_clone_for_yellow_goals(
   clone->goal_buildable_loss_required_mask = buildable_loss_required_mask;
   clone->goal_buildable_loss_excluded_mask = buildable_loss_excluded_mask;
   homeworlds_backend_goal_branch_format_goal_label(clone);
+  terminal_mask = goal_count > 0 ? homeworlds_backend_goal_terminal_win_mask(goals, goal_count) : 0;
+  if ((required_mask & ~terminal_mask) != 0 &&
+      !homeworlds_backend_yellow_required_goal_contract_reachable(&clone->state, goals, goal_count, required_mask)) {
+    homeworlds_backend_goal_branch_free(clone);
+    return TRUE;
+  }
   if (!homeworlds_backend_goal_branch_apply_yellow_goal_bound(clone, side)) {
     homeworlds_backend_goal_branch_free(clone);
     return FALSE;
@@ -5298,6 +5667,152 @@ static gboolean homeworlds_backend_yellow_goal_apply_existing_move(
 
   *out_child_state = child_state;
   return TRUE;
+}
+
+static guint homeworlds_backend_yellow_goal_pending_required_mask(const HomeworldsMoveBuilderState *state,
+                                                                  const HomeworldsGoalCatastrophe *goals,
+                                                                  guint goal_count,
+                                                                  guint required_mask) {
+  guint pending_mask = 0;
+
+  g_return_val_if_fail(state != NULL, 0);
+  g_return_val_if_fail(goals != NULL || goal_count == 0, 0);
+  g_return_val_if_fail(goal_count <= HOMEWORLDS_GOAL_BRANCH_MAX_CATASTROPHE_GOALS, 0);
+
+  for (guint i = 0; i < goal_count; ++i) {
+    guint mask = 1u << i;
+
+    if ((required_mask & mask) == 0 ||
+        homeworlds_backend_move_has_profitable_catastrophe(&state->move, &goals[i].catastrophe)) {
+      continue;
+    }
+    pending_mask |= mask;
+  }
+  return pending_mask;
+}
+
+static gboolean homeworlds_backend_yellow_required_goal_contract_reachable(
+    const HomeworldsMoveBuilderState *state,
+    const HomeworldsGoalCatastrophe *goals,
+    guint goal_count,
+    guint required_mask) {
+  guint pending_mask = 0;
+  guint goal_index = 0;
+  guint system_index = HOMEWORLDS_INVALID_INDEX;
+  const HomeworldsGoalCatastrophe *goal = NULL;
+  const HomeworldsSystem *system = NULL;
+  guint color_count = 0;
+  guint side = 0;
+  gboolean found_current_goal = FALSE;
+
+  g_return_val_if_fail(state != NULL, FALSE);
+  g_return_val_if_fail(goals != NULL || goal_count == 0, FALSE);
+  g_return_val_if_fail(goal_count <= HOMEWORLDS_GOAL_BRANCH_MAX_CATASTROPHE_GOALS, FALSE);
+
+  pending_mask = homeworlds_backend_yellow_goal_pending_required_mask(state, goals, goal_count, required_mask);
+  if (pending_mask == 0) {
+    return TRUE;
+  }
+  if (!homeworlds_backend_state_has_active_sacrifice(state, HOMEWORLDS_COLOR_YELLOW)) {
+    return FALSE;
+  }
+
+  for (guint i = 0; i < goal_count; ++i) {
+    guint mask = 1u << i;
+    guint candidate_system_index = HOMEWORLDS_INVALID_INDEX;
+    const HomeworldsGoalCatastrophe *candidate_goal = &goals[i];
+    const HomeworldsSystem *candidate_system = NULL;
+
+    if ((pending_mask & mask) == 0) {
+      continue;
+    }
+    if (!homeworlds_position_resolve_system_ref(&state->working_position,
+                                                &candidate_goal->catastrophe.system_ref,
+                                                &candidate_system_index) ||
+        candidate_system_index >= HOMEWORLDS_SYSTEM_SLOT_COUNT ||
+        homeworlds_system_is_empty(&state->working_position.systems[candidate_system_index])) {
+      return FALSE;
+    }
+
+    candidate_system = &state->working_position.systems[candidate_system_index];
+    if (homeworlds_system_color_count(candidate_system, candidate_goal->catastrophe.color) >= 4) {
+      goal_index = i;
+      system_index = candidate_system_index;
+      found_current_goal = TRUE;
+      break;
+    }
+  }
+  if (!found_current_goal) {
+    goal_index = (guint)g_bit_nth_lsf(pending_mask, -1);
+    g_return_val_if_fail(goal_index < goal_count, FALSE);
+    goal = &goals[goal_index];
+    if (!homeworlds_position_resolve_system_ref(&state->working_position,
+                                                &goal->catastrophe.system_ref,
+                                                &system_index) ||
+        system_index >= HOMEWORLDS_SYSTEM_SLOT_COUNT ||
+        homeworlds_system_is_empty(&state->working_position.systems[system_index])) {
+      return FALSE;
+    }
+  }
+
+  goal = &goals[goal_index];
+  side = state->working_position.turn;
+  g_return_val_if_fail(side < 2, FALSE);
+  system = &state->working_position.systems[system_index];
+  color_count = homeworlds_system_color_count(system, goal->catastrophe.color);
+  if (color_count >= 4) {
+    HomeworldsMoveBuilderState child_state = *state;
+    HomeworldsProfitableCatastrophe catastrophe = goal->catastrophe;
+
+    if (!homeworlds_backend_goal_catastrophe_current_gain_reaches(state, goal, system_index)) {
+      return TRUE;
+    }
+
+    catastrophe.system_index = system_index;
+    if (!homeworlds_backend_apply_profitable_catastrophe(&child_state, &catastrophe)) {
+      return FALSE;
+    }
+    return homeworlds_backend_yellow_required_goal_contract_reachable(&child_state,
+                                                                      goals,
+                                                                      goal_count,
+                                                                      pending_mask & ~(1u << goal_index));
+  }
+
+  if (state->pending_actions_remaining < 4 - color_count) {
+    return FALSE;
+  }
+
+  for (guint source_index = 0; source_index < HOMEWORLDS_SYSTEM_SLOT_COUNT; ++source_index) {
+    const HomeworldsSystem *source = &state->working_position.systems[source_index];
+    gboolean seen_pyramids[13] = {FALSE};
+
+    if (source_index == system_index || homeworlds_system_is_empty(source)) {
+      continue;
+    }
+    for (guint ship_slot = 0; ship_slot < HOMEWORLDS_SHIP_SLOT_COUNT; ++ship_slot) {
+      HomeworldsPyramid ship = source->ships[side][ship_slot];
+      HomeworldsMoveBuilderState child_state = {0};
+
+      if (!homeworlds_pyramid_is_valid(ship)) {
+        break;
+      }
+      if (seen_pyramids[ship] || homeworlds_pyramid_color(ship) != goal->catastrophe.color) {
+        continue;
+      }
+      seen_pyramids[ship] = TRUE;
+      if (!homeworlds_backend_yellow_goal_apply_existing_move(state, source_index, ship, system_index, &child_state) ||
+          !homeworlds_backend_yellow_goal_state_can_still_reach_gain(&child_state, goal, system_index)) {
+        continue;
+      }
+      if (homeworlds_backend_yellow_required_goal_contract_reachable(&child_state,
+                                                                     goals,
+                                                                     goal_count,
+                                                                     pending_mask)) {
+        return TRUE;
+      }
+    }
+  }
+  return FALSE;
 }
 
 static gboolean homeworlds_backend_collect_yellow_goal_child(
@@ -6583,6 +7098,16 @@ static gboolean homeworlds_backend_goal_collect_good_moves(const HomeworldsPosit
     char prefix[256] = {0};
     gboolean split = FALSE;
 
+    if (context->goal_trace_selected_branch_limit > 0 &&
+        context->goal_branches_selected >= context->goal_trace_selected_branch_limit) {
+      homeworlds_backend_goal_report_append(context,
+                                            "trace-stop selected-branch-limit=%zu queue=%u",
+                                            context->goal_trace_selected_branch_limit,
+                                            queue.branches->len + 1);
+      homeworlds_backend_goal_branch_free(branch);
+      break;
+    }
+
     homeworlds_backend_goal_branch_format_prefix(branch, prefix, sizeof(prefix));
     context->goal_branches_selected++;
     if (branch->goal_label[0] != '\0') {
@@ -6750,6 +7275,7 @@ static GameBackendMoveList homeworlds_backend_list_good_moves(gconstpointer posi
       builder.builder_state,
       context.root_catastrophes,
       G_N_ELEMENTS(context.root_catastrophes));
+  context.goal_trace_selected_branch_limit = homeworlds_backend_good_move_trace_branch_limit;
   homeworlds_generation_context_init(&generation_context);
   if (!homeworlds_backend_goal_collect_good_moves(homeworlds_position,
                                                   builder.builder_state,
